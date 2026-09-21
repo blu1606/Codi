@@ -1,5 +1,6 @@
 # ---- local working files, not published ----
-database/
+# schema, migrations and scripts ARE tracked; only generated artefacts are not
+database/exports/
 *.drawio
 *.drawio.bkp
 
