@@ -50,6 +50,39 @@ mỗi phase một issue.
 
 ---
 
+## Cấu trúc Monorepo & Khởi chạy
+
+Dự án được tổ chức theo mô hình TypeScript Monorepo quản lý bởi `pnpm`:
+
+- `apps/web`: Ứng dụng Next.js (App Router, Better-Auth, Tailwind CSS v4, AI SDK, v.v.)
+- `packages/auth`: Cấu hình và logic xác thực (Better-Auth)
+- `packages/db`: Drizzle ORM kết nối PostgreSQL
+- `packages/ui`: Thư viện component giao diện chia sẻ (shadcn/ui primitives)
+- `packages/config`: Các cấu hình dùng chung (TypeScript, ESLint)
+
+### Cài đặt & Chạy ứng dụng
+
+1. **Cài đặt dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+2. **Cấu hình môi trường**:
+   Sao chép hoặc chỉnh sửa file `apps/web/.env` với các kết nối cần thiết (Database URL, Google OAuth, Resend, Cloudflare R2, v.v.).
+
+3. **Đồng bộ cơ sở dữ liệu**:
+   ```bash
+   pnpm run db:push
+   ```
+
+4. **Chạy server phát triển**:
+   ```bash
+   pnpm run dev
+   ```
+   Ứng dụng web sẽ chạy tại [http://localhost:3001](http://localhost:3001).
+
+---
+
 ## Giấy phép
 
 Đồ án môn học. Không dùng lại cho mục đích khác.

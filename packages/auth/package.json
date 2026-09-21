@@ -1,0 +1,23 @@
+{
+  "name": "@codi-1/auth",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.5",
+    "@codi-1/db": "workspace:*",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "resend": "^6.28.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@codi-1/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
