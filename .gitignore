@@ -1,0 +1,77 @@
+# ---- local working files, not published ----
+plans/
+database/
+*.drawio
+*.drawio.bkp
+
+# ---- secrets ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- node / next.js ----
+node_modules/
+.next/
+out/
+build/
+dist/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# ---- package managers ----
+.pnpm-store/
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/versions
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- test / coverage ----
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# ---- python tooling (database scripts) ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# ---- docker / local data ----
+.docker-data/
+postgres-data/
+
+# ---- local uploads (avatars in dev, before object storage) ----
+/public/uploads/
+/storage/
+
+
+# ---- editor / os ----
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+
+# ---- office lock files ----
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# ---- vercel ----
+.vercel/
