@@ -1,0 +1,48 @@
+{
+  "name": "codi-1",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm -r dev",
+    "build": "pnpm -r --if-present build",
+    "check-types": "pnpm -r check-types",
+    "check:standards": "tsx scripts/check-design-standards.ts",
+    "dev:web": "pnpm --filter web dev",
+    "start": "pnpm --filter web start",
+    "start:web": "pnpm --filter web start",
+    "db:push": "pnpm --filter @codi-1/db db:push",
+    "db:studio": "pnpm --filter @codi-1/db db:studio",
+    "db:generate": "pnpm --filter @codi-1/db db:generate",
+    "db:migrate": "pnpm --filter @codi-1/db db:migrate",
+    "db:start": "pnpm --filter @codi-1/db db:start",
+    "db:watch": "pnpm --filter @codi-1/db db:watch",
+    "db:stop": "pnpm --filter @codi-1/db db:stop",
+    "db:down": "pnpm --filter @codi-1/db db:down",
+    "deploy:setup": "vercel link",
+    "dev:vercel": "vercel dev -L",
+    "env:preview": "tsx scripts/sync-vercel-env.ts preview",
+    "env:production": "tsx scripts/sync-vercel-env.ts production",
+    "deploy": "vercel deploy",
+    "deploy:prod": "vercel deploy --prod",
+    "deploy:check": "vercel deploy --dry",
+    "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "auth:generate": "cd apps/web && pnpm run auth:generate"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@codi-1/config": "workspace:*",
+    "@types/node": "catalog:",
+    "tsx": "^4.23.13",
+    "typescript": "catalog:",
+    "varlock": "catalog:",
+    "vercel": "^59.11.7"
+  },
+  "packageManager": "pnpm@11.9.0"
+}
