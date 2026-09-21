@@ -62,11 +62,18 @@ is the mitigation that makes the accepted trade-off actually bounded rather than
 
 Confirm the decision (`plan.md` open question 1) before implementing.
 
-**GitHub returns no email when the user has it set to private.** This is common among
-developers, which is exactly this platform's audience, so it is a likely path rather than an
-edge case. Request the `user:email` scope and read the primary verified address from the
-emails endpoint. If still absent, send the user to a "supply an email" step rather than
-failing with a stack trace.
+**GitHub private email is already handled by the library — do not re-implement it.**
+Verified by reading `@better-auth/core` 1.7.5 `social-providers/github.ts`: the provider
+requests `["read:user", "user:email"]` by default, calls `/user/emails` when `profile.email`
+is null, takes the `primary` address, falls back `name || login`, and derives `emailVerified`
+from the emails list. Google normalises to the same shape from `email_verified` and `picture`.
+
+So both providers hand us `{ name, email, image, emailVerified }` already. Custom mapping, if
+ever needed, goes through the official per-provider `mapProfileToUser` hook — not through a
+mapping layer of our own.
+
+The residual case is a GitHub account with **no verified email at all**. Rare, but it yields
+a null email, so the sign-in must fail with a translated message rather than a stack trace.
 
 **Two open upstream bugs** land on precisely the flow we enabled:
 
@@ -100,7 +107,11 @@ this.
 2. Add both providers to the config and set `trustedOrigins` (**not** `allowedHosts`, which
    applies only to dynamic base-URL patterns).
 3. Add the buttons with official brand marks and accessible labels; both locales.
-4. Request `user:email` from GitHub and implement the primary-verified-email fallback.
+4. Add a small provider list driving the buttons and the conditional env validation. Keep it
+   to `{ id, labelKey, icon }` plus an enabled-from-env check — **no profile mapping layer**,
+   which would duplicate what the library already does. Use `mapProfileToUser` if a custom
+   field is ever genuinely needed. Handle the one residual case: a GitHub account with no
+   verified email at all yields a null email and must fail with a translated message.
 5. Ensure the Phase 4 role hook grants `LEARNER` to OAuth users too, and remains idempotent
    when an existing account is linked.
 6. **Establish actual behaviour of #11321 and #11138 before writing mitigations.** Both were
