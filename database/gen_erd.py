@@ -1,16 +1,16 @@
-"""Generate ERD.drawio straight from schema-v6.sql, so the diagram can never
+"""Generate ERD.drawio straight from database/schema.sql, so the diagram can never
 drift from the DDL. One tab per subject area plus an overview."""
 import html
 import io
 import re
 from collections import defaultdict
 
-SQL = r"D:\CODE\Study\FPT\Ki_5\SWP391\database\schema-v6.sql"
-OUT = r"D:\CODE\Study\FPT\Ki_5\SWP391\database\ERD.drawio"
+SQL = r"database/schema.sql"
+OUT = r"database/ERD.drawio"
 
 AREAS = [
     ("2. Identity and Access", "#dae8fc", "#6c8ebf",
-     ["roles", "users", "user_roles"]),
+     ["roles", "users", "user_roles", "session", "account", "verification"]),
     ("3. Course and Content", "#d5e8d4", "#82b366",
      ["courses", "chapters", "lessons", "lesson_materials",
       "course_publication_requests"]),
@@ -45,8 +45,8 @@ S_NOTE = ("shape=note;whiteSpace=wrap;html=1;size=16;fontSize=11;align=left;"
           "spacingLeft=6;verticalAlign=top;")
 
 TYPE_RE = re.compile(
-    r"^\s*(\w+)\s+((?:BIGINT|INT|TINYINT|BIT|DECIMAL\([\d,]+\)|N?VARCHAR\((?:MAX|\d+)\)"
-    r"|DATETIME2\(\d\)|DATE))(?=\s|,|$)(.*)$", re.I)
+    r"^\s*(\w+)\s+((?:BIGINT|INT|SMALLINT|BOOLEAN|DECIMAL\([\d,]+\)|VARCHAR\(\d+\)|TEXT"
+    r"|TIMESTAMPTZ\(\d\)|DATE))(?=\s|,|$)(.*)$", re.I)
 
 
 def parse():
