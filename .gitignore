@@ -1,8 +1,10 @@
 # ---- local working files, not published ----
-plans/
 database/
 *.drawio
 *.drawio.bkp
+
+# agent scratch, not a deliverable
+.claude/
 
 # ---- secrets ----
 .env
