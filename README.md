@@ -45,7 +45,8 @@ Hệ thống thiết kế (màu, font, accessibility): [`docs/design-guidelines.
 | 3 | Thanh toán | Kế hoạch |
 | 4 | Cá nhân hoá lộ trình bằng AI | Kế hoạch |
 
-Công việc được theo dõi bằng GitHub Issues, mỗi phase một issue.
+Công việc được theo dõi trên [Codi — Product Board](https://github.com/users/blu1606/projects/1),
+mỗi phase một issue.
 
 ---
 
