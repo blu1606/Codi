@@ -76,5 +76,13 @@ desktop.ini
 ~$*.xlsx
 ~$*.pptx
 
-# ---- vercel ----
+# ---- vercel & better-t-stack ----
 .vercel/
+.alchemy
+local.db
+local.db-*
+.pnp
+.pnp.js
+.nx
+.evlog/
+apps/web/src/routeTree.gen.ts
