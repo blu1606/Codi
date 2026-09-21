@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: codi-postgres
+    environment:
+      POSTGRES_DB: codi
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "codi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - codi-network
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: codi-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - codi-network
+
+  # app service — Phase 7 fills in the Dockerfile
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: codi-app
+  #   environment:
+  #     DATABASE_URL: postgresql://postgres:postgres@postgres:5432/codi
+  #     NODE_ENV: development
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     mailpit:
+  #       condition: service_started
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - codi-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  codi-network:
+    driver: bridge

@@ -1,0 +1,11 @@
+* text=auto
+
+# Force LF for shell scripts, SQL files, and Dockerfiles
+*.sh text eol=lf
+*.sql text eol=lf
+Dockerfile* text eol=lf
+
+# Ensure git always converts to LF on checkout and to CRLF on commit on Windows
+*.sh working-tree-encoding=UTF-8
+*.sql working-tree-encoding=UTF-8
+Dockerfile* working-tree-encoding=UTF-8
