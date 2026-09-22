@@ -1,7 +1,17 @@
 services:
+  # Dev database is Supabase (cloud) — point DATABASE_URL at it in .env, see
+  # .env.example. This local Postgres is kept for the *production* Docker
+  # deployment planned later (self-hosted, not yet built) and for anyone who
+  # wants to work offline without a Supabase project. It's opt-in via a
+  # compose profile so `docker compose up -d` does not start it by default:
+  #
+  #   docker compose --profile local-db up -d
+  #
+  # then point DATABASE_URL at postgresql://postgres:postgres@localhost:${POSTGRES_HOST_PORT:-5433}/codi
   postgres:
     image: postgres:16-alpine
     container_name: codi-postgres
+    profiles: ["local-db"]
     environment:
       POSTGRES_DB: codi
       POSTGRES_USER: postgres
@@ -27,18 +37,19 @@ services:
     networks:
       - codi-network
 
-  # app service — Phase 7 fills in the Dockerfile
+  # app service — production self-hosted Docker target, planned for later (see
+  # plans/260921-1313-codi-postgresql-port-and-authentication-slice). DATABASE_URL
+  # is read from the environment, not hardcoded here — it can point at Supabase,
+  # the local-db profile above, or any other Postgres, unchanged.
   # app:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile
   #   container_name: codi-app
   #   environment:
-  #     DATABASE_URL: postgresql://postgres:postgres@postgres:5432/codi
-  #     NODE_ENV: development
+  #     DATABASE_URL: ${DATABASE_URL}
+  #     NODE_ENV: production
   #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
   #     mailpit:
   #       condition: service_started
   #   ports:

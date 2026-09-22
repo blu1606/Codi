@@ -12,10 +12,10 @@
     "db:migrate:deploy": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "drizzle-kit migrate",
-    "db:start": "docker compose up -d",
-    "db:watch": "docker compose up",
-    "db:stop": "docker compose stop",
-    "db:down": "docker compose down"
+    "db:start": "docker compose -f ../../docker-compose.yml --profile local-db up -d postgres",
+    "db:watch": "docker compose -f ../../docker-compose.yml --profile local-db up postgres",
+    "db:stop": "docker compose -f ../../docker-compose.yml --profile local-db stop postgres",
+    "db:down": "docker compose -f ../../docker-compose.yml --profile local-db down"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
