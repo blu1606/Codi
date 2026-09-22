@@ -28,8 +28,8 @@ dữ liệu lịch sử nên chạy được ngay từ khoá học đầu tiên.
 
 ## Công nghệ
 
-Next.js 15 (App Router) · TypeScript · PostgreSQL 16 · Kysely · Better Auth ·
-Tailwind v4 + shadcn/ui · next-intl (vi/en) · Docker · Vercel + Render
+Next.js (App Router) · TypeScript · PostgreSQL 16 (Supabase, dev) · Drizzle ORM · Better Auth ·
+Tailwind v4 + shadcn/ui · Vercel · Docker (production, kế hoạch sau)
 
 Lý do chọn và các quyết định kỹ thuật: [`docs/tech-stack.md`](./docs/tech-stack.md)
 Hệ thống thiết kế (màu, font, accessibility): [`docs/design-guidelines.md`](./docs/design-guidelines.md)
