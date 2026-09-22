@@ -86,3 +86,8 @@ local.db-*
 .nx
 .evlog/
 apps/web/src/routeTree.gen.ts
+.vercel
+.env*
+
+# Working notes for this session/agent — not a shared deliverable
+plans/
