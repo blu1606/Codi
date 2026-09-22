@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@codi-1/ui/components/card";
 import { LogOut } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,7 +19,17 @@ import ChangePasswordCard from "@/components/profile/change-password-card";
 import ProfileCard from "@/components/profile/profile-card";
 import { authClient } from "@/lib/auth-client";
 
-export default function Dashboard({ session }: { session: typeof authClient.$Infer.Session }) {
+export type DashboardNavItem = { label: string; href?: string; disabled?: boolean };
+
+export default function Dashboard({
+  session,
+  roles = [],
+  navItems,
+}: {
+  session: typeof authClient.$Infer.Session;
+  roles?: string[];
+  navItems?: DashboardNavItem[];
+}) {
   const router = useRouter();
   const [resendingEmail, setResendingEmail] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -116,7 +127,41 @@ export default function Dashboard({ session }: { session: typeof authClient.$Inf
       </div>
 
       {/* Profile Card (Xem & Edit Profile, Đổi ảnh đại diện R2) */}
-      <ProfileCard user={session.user} />
+      <ProfileCard user={session.user} roles={roles} />
+
+      {navItems && navItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Chức năng</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {navItems.map((item) =>
+                item.href && !item.disabled ? (
+                  <li key={item.label}>
+                    <Link
+                      href={item.href as any}
+                      className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                    >
+                      <span>{item.label}</span>
+                    </Link>
+                  </li>
+                ) : (
+                  <li
+                    key={item.label}
+                    className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
+                  >
+                    <span className={item.disabled ? "text-muted-foreground" : ""}>{item.label}</span>
+                    {item.disabled && (
+                      <span className="text-xs text-muted-foreground">Sắp ra mắt</span>
+                    )}
+                  </li>
+                )
+              )}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* OTP Verification Card for unverified user */}
       {showOtpModal && !session.user.emailVerified && (

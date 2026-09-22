@@ -25,6 +25,7 @@
     "ai": "^7.0.93",
     "babel-plugin-react-compiler": "^1.0.0",
     "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
     "lucide-react": "catalog:",
     "next": "^16.3.4",
     "next-themes": "catalog:",

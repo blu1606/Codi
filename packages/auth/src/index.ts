@@ -1,12 +1,16 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@codi-1/db";
 import * as schema from "@codi-1/db/schema/auth";
+import { userRoles } from "@codi-1/db/schema/roles";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins";
 import { Resend } from "resend";
 
 import { getResetPasswordOTPEmailHtml, getVerificationOTPEmailHtml } from "./email-templates";
+import { ROLE } from "./rbac";
+
+export * from "./rbac";
 
 export type AuthConfig = {
   BETTER_AUTH_URL: string;
@@ -15,6 +19,8 @@ export type AuthConfig = {
   EMAIL_FROM?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
 };
 
 export function createAuth(env: AuthConfig, database: Database) {
@@ -32,6 +38,20 @@ export function createAuth(env: AuthConfig, database: Database) {
     },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            // idempotent via onConflictDoNothing, not check-then-insert: a retried hook
+            // call (or future OAuth account linking) can safely race this same insert.
+            await database
+              .insert(userRoles)
+              .values({ userId: user.id, roleId: ROLE.LEARNER, grantedBy: null })
+              .onConflictDoNothing();
+          },
+        },
+      },
+    },
     plugins: [
       nextCookies(),
       emailOTP({
@@ -77,6 +97,14 @@ export function createAuth(env: AuthConfig, database: Database) {
             google: {
               clientId: env.GOOGLE_CLIENT_ID,
               clientSecret: env.GOOGLE_CLIENT_SECRET,
+            },
+          }
+        : {}),
+      ...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+        ? {
+            github: {
+              clientId: env.GITHUB_CLIENT_ID,
+              clientSecret: env.GITHUB_CLIENT_SECRET,
             },
           }
         : {}),
