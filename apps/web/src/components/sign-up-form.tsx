@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
 import OtpInput from "./otp-input";
@@ -176,7 +177,10 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <GoogleSignInButton text="Đăng ký với Google" />
+          <div className="space-y-2">
+            <GoogleSignInButton text="Đăng ký với Google" />
+            <GitHubSignInButton text="Đăng ký với GitHub" />
+          </div>
 
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">
