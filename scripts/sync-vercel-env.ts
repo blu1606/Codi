@@ -6,8 +6,22 @@ const DEFAULT_ENVIRONMENT = "preview";
 const VALID_ENVIRONMENTS = new Set(["development", "preview", "production"]);
 const VERCEL_COMMAND = ["pnpm", "exec", "vercel"] as const;
 const DEFAULT_FILES = ["apps/web/.env"];
-const SKIP_KEYS = new Set(["BETTER_AUTH_URL", "CORS_ORIGIN", "NODE_ENV"]);
-const OVERRIDE_KEYS = new Map([]);
+const SKIP_KEYS = new Set(["CORS_ORIGIN", "NODE_ENV"]);
+
+// BETTER_AUTH_URL's schema fallback ($VERCEL_ORIGIN, from VERCEL_URL/VERCEL_ENV)
+// only resolves during a build that Vercel's own infra runs — `vercel build` in
+// GitHub Actions (this project's deploy.yml) is an external build, so those
+// System Environment Variables come back empty there too. Set it explicitly per
+// environment instead. Preview doesn't have one fixed URL per deploy; reusing
+// the production domain keeps the build/app working, at the cost of Google
+// OAuth's redirect_uri not matching on preview deploys (email/password auth is
+// unaffected).
+const PRODUCTION_URL = "https://codi.hoangblue.dev";
+const OVERRIDE_KEYS_BY_ENVIRONMENT: Record<string, Map<string, string>> = {
+  production: new Map([["BETTER_AUTH_URL", PRODUCTION_URL]]),
+  preview: new Map([["BETTER_AUTH_URL", PRODUCTION_URL]]),
+  development: new Map(),
+};
 
 const args = process.argv.slice(2);
 const separatorIndex = args.indexOf("--");
@@ -32,6 +46,7 @@ for (const arg of remainingArgs) {
 const vercelArgs = [...passthroughArgs, ...forwardedArgs];
 const envFiles = files.length > 0 ? files : DEFAULT_FILES;
 
+const overrideKeys = OVERRIDE_KEYS_BY_ENVIRONMENT[environment] ?? new Map<string, string>();
 const env = new Map<string, string>();
 
 for (const file of envFiles) {
@@ -42,7 +57,7 @@ for (const file of envFiles) {
 
   for (const [key, value] of Object.entries(parseEnv(readFileSync(file, "utf8")))) {
     if (SKIP_KEYS.has(key)) continue;
-    env.set(key, OVERRIDE_KEYS.get(key) ?? value);
+    env.set(key, overrideKeys.get(key) ?? value);
   }
 }
 
@@ -74,6 +89,12 @@ for (const [key, value] of env.entries()) {
       "--force",
       "--yes",
       "--non-interactive",
+      // Vercel's CLI defaults env vars to type "Secret" (sensitive), which is
+      // write-only outside Vercel's own build infra — `vercel pull`/`vercel
+      // build` (what the GitHub Actions deploy job runs) gets a "[SENSITIVE]"
+      // placeholder instead of the real value. Store as Config so a prebuilt,
+      // externally-built deploy actually has real values to build/run with.
+      "--no-sensitive",
       ...vercelArgs,
     ],
     {
