@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "codi-1",
-  description: "codi-1",
+  title: "Codi",
+  description: "Nền tảng học lập trình trực tuyến cá nhân hoá lộ trình bằng AI.",
 };
 
 export default function RootLayout({
