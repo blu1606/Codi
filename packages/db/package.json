@@ -12,6 +12,8 @@
     "db:migrate:deploy": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed-roles": "tsx src/seed-roles.ts",
+    "db:seed-admin": "tsx src/seed-admin.ts",
     "db:start": "docker compose -f ../../docker-compose.yml --profile local-db up -d postgres",
     "db:watch": "docker compose -f ../../docker-compose.yml --profile local-db up postgres",
     "db:stop": "docker compose -f ../../docker-compose.yml --profile local-db stop postgres",

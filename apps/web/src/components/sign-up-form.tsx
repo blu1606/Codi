@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
 import OtpInput from "./otp-input";
@@ -118,7 +119,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
   // Step 2: OTP Verification Screen
   if (signedUpEmail) {
     return (
-      <div className="mx-auto w-full mt-10 max-w-md p-4">
+      <div className="w-full">
         <Card>
           <CardHeader className="text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-2">
@@ -168,7 +169,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
 
   // Step 1: Sign Up Form
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-4">
+    <div className="w-full">
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">Tạo tài khoản</CardTitle>
@@ -176,7 +177,10 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <GoogleSignInButton text="Đăng ký với Google" />
+          <div className="space-y-2">
+            <GoogleSignInButton text="Đăng ký với Google" />
+            <GitHubSignInButton text="Đăng ký với GitHub" />
+          </div>
 
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">

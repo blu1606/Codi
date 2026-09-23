@@ -28,6 +28,12 @@ import { toast } from "sonner";
 
 import AvatarPicker from "./avatar-picker";
 
+const ROLE_LABEL: Record<string, string> = {
+  LEARNER: "Learner",
+  LECTURER: "Lecturer",
+  ADMIN: "Admin",
+};
+
 interface ProfileCardProps {
   user: {
     id: string;
@@ -37,9 +43,10 @@ interface ProfileCardProps {
     image?: string | null;
     createdAt?: Date | string;
   };
+  roles?: string[];
 }
 
-export default function ProfileCard({ user }: ProfileCardProps) {
+export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user.name);
@@ -48,7 +55,7 @@ export default function ProfileCard({ user }: ProfileCardProps) {
 
   const defaultAvatar =
     avatarUrl ||
-    `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(name || "Codi")}&backgroundColor=0ea5e9`;
+    `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(name || "Codi")}`;
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,6 +154,14 @@ export default function ProfileCard({ user }: ProfileCardProps) {
             <div className="space-y-2 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-xl font-bold tracking-tight">{name}</h3>
+                {roles.map((roleId) => (
+                  <span
+                    key={roleId}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border border-border"
+                  >
+                    {ROLE_LABEL[roleId] ?? roleId}
+                  </span>
+                ))}
                 {user.emailVerified ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                     <ShieldCheck className="w-3.5 h-3.5" /> Đã xác thực

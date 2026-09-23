@@ -35,7 +35,12 @@ import { ArrowUpIcon, Loader2, MessageCircleDashedIcon, RotateCwIcon } from "luc
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { Streamdown } from "streamdown";
 
-import { ENV } from "../../env";
+const SUGGESTED_PROMPTS = [
+  "Tôi là người mới bắt đầu, nên học khóa nào trước?",
+  "Tư vấn lộ trình trở thành Fullstack Web Developer",
+  "Khóa học ôn luyện Cấu trúc dữ liệu & Giải thuật cho OJT",
+  "Lộ trình học AI Engineer & phát triển AI Agent",
+];
 
 export default function AIPage() {
   const [input, setInput] = useState("");
@@ -52,6 +57,11 @@ export default function AIPage() {
     if (!text || isSending) return;
     sendMessage({ text });
     setInput("");
+  };
+
+  const handleSelectPrompt = (promptText: string) => {
+    if (isSending) return;
+    sendMessage({ text: promptText });
   };
 
   const handlePromptKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -72,8 +82,8 @@ export default function AIPage() {
         <header className="shrink-0 border-b px-4 py-3">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="text-sm font-medium">New Chat</h1>
-              <p className="text-xs/relaxed text-muted-foreground">How can I help you today?</p>
+              <h1 className="text-sm font-medium">Codi AI Course Advisor</h1>
+              <p className="text-xs/relaxed text-muted-foreground">Tư vấn định hướng lộ trình & khoá học lập trình cá nhân hoá</p>
             </div>
             <div className="shrink-0">
               <Tooltip>
@@ -98,14 +108,28 @@ export default function AIPage() {
         </header>
         <main className="min-h-0 flex-1">
           {messages.length === 0 && !isSending ? (
-            <Empty className="mx-auto h-full max-w-3xl px-4">
+            <Empty className="mx-auto h-full max-w-3xl px-4 flex flex-col justify-center">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <MessageCircleDashedIcon />
                 </EmptyMedia>
-                <EmptyTitle>Morning, codi-1!</EmptyTitle>
-                <EmptyDescription>What are we working on today?</EmptyDescription>
+                <EmptyTitle>Chào bạn! Codi có thể giúp gì cho bạn?</EmptyTitle>
+                <EmptyDescription>
+                  Hãy chia sẻ mục tiêu học tập, định hướng nghề nghiệp hoặc chọn gợi ý bên dưới để nhận tư vấn lộ trình và khóa học phù hợp nhất.
+                </EmptyDescription>
               </EmptyHeader>
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-xl">
+                {SUGGESTED_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleSelectPrompt(prompt)}
+                    className="text-left text-xs p-3 rounded-lg border border-border bg-card hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+                  >
+                    💡 {prompt}
+                  </button>
+                ))}
+              </div>
             </Empty>
           ) : (
             <MessageScroller>

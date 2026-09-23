@@ -158,6 +158,29 @@ If this fails, start Docker Desktop or the Docker daemon.
 3. Check the migration file for syntax errors
 4. Review Docker logs: `docker compose logs postgres`
 
+## RBAC: seeding roles and the first Admin
+
+After the database is up and migrated, seed the 3 RBAC roles (`LEARNER`, `LECTURER`,
+`ADMIN`) and backfill any existing user to `LEARNER`:
+
+```bash
+pnpm --filter @codi-1/db db:seed-roles
+```
+
+Safe to re-run — idempotent.
+
+New registrations are auto-granted `LEARNER`. There is no UI path to create the first
+`ADMIN` (by design — the Admin role-management screen requires an Admin to exist
+already), so bootstrap one from a normal registered account:
+
+```bash
+SEED_ADMIN_EMAIL=you@example.com pnpm --filter @codi-1/db db:seed-admin
+```
+
+The user must already exist (register normally first). Once one Admin exists, further
+role changes (promoting to Lecturer/Admin, demoting) go through
+`/dashboard/admin/users` in the app.
+
 ## Next Steps
 
 Once local setup is complete, the development workflow is:
