@@ -9,9 +9,10 @@ interface Issue {
   matched: string;
 }
 
-// Allowed exceptions (e.g. brand colors like Google logo fill)
+// Allowed exceptions (e.g. brand colors and official brand logos like Google / GitHub)
 const ALLOWED_EXCEPTIONS = [
-  "google-button.tsx", // Google official brand colors #4285F4, etc.
+  "google-button.tsx", // Google official brand colors and SVG logo
+  "github-button.tsx", // GitHub official brand SVG logo
 ];
 
 // Patterns for hardcoded primitive Tailwind colors that violate design tokens

@@ -133,7 +133,6 @@ function DashboardInner({
         </div>
       </div>
 
-<<<<<<< HEAD
       {/* OVERVIEW / BLANK DASHBOARD WORKSPACE */}
       <div className="space-y-6">
         {/* Welcome User Banner */}
@@ -171,44 +170,6 @@ function DashboardInner({
             </Button>
           </div>
         </div>
-=======
-      {/* Profile Card (Xem & Edit Profile, Đổi ảnh đại diện R2) */}
-      <ProfileCard user={session.user} roles={roles} />
-
-      {navItems && navItems.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Chức năng</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {navItems.map((item) =>
-                item.href && !item.disabled ? (
-                  <li key={item.label}>
-                    <Link
-                      href={item.href as any}
-                      className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
-                    >
-                      <span>{item.label}</span>
-                    </Link>
-                  </li>
-                ) : (
-                  <li
-                    key={item.label}
-                    className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
-                  >
-                    <span className={item.disabled ? "text-muted-foreground" : ""}>{item.label}</span>
-                    {item.disabled && (
-                      <span className="text-xs text-muted-foreground">Sắp ra mắt</span>
-                    )}
-                  </li>
-                )
-              )}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
->>>>>>> origin/develop
 
         {/* Quick Metrics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
