@@ -1,0 +1,260 @@
+name: CI Lane & Gate Pipeline
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+      - master
+  push:
+    branches:
+      - develop
+      - main
+      - master
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  classify:
+    name: Classify Changes & Select Lane
+    runs-on: ubuntu-latest
+    outputs:
+      lane: ${{ steps.classifier.outputs.lane }}
+      workflow: ${{ steps.classifier.outputs.workflow }}
+    steps:
+      - name: Run Path Classifier with Self-Test
+        id: classifier
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Predicates definition
+            function isDocs(p) {
+              return /^README\.md$/.test(p) ||
+                     /^docs\//.test(p) ||
+                     /^\.github\/ISSUE_TEMPLATE\//.test(p) ||
+                     /^\.github\/PULL_REQUEST_TEMPLATE\.md$/.test(p);
+            }
+
+            function isWorkflow(p) {
+              return /^\.github\//.test(p) || /^\.gitignore$/.test(p);
+            }
+
+            function determineLane(files, targetBranch) {
+              if (targetBranch === 'main' || targetBranch === 'master') {
+                return 'full';
+              }
+              if (!files || files.length === 0) return 'fast';
+              if (files.every(isDocs)) return 'docs';
+              if (files.every(isWorkflow)) return 'workflow';
+              return 'fast';
+            }
+
+            // --- 1. Embedded Self-Test Suite ---
+            const testCases = [
+              { files: ['README.md'], branch: 'develop', expected: 'docs' },
+              { files: ['docs/contributing.md'], branch: 'develop', expected: 'docs' },
+              { files: ['.github/workflows/ci.yml'], branch: 'develop', expected: 'workflow' },
+              { files: ['apps/web/src/app/page.tsx'], branch: 'develop', expected: 'fast' },
+              { files: ['README.md', 'apps/web/src/app/page.tsx'], branch: 'develop', expected: 'fast' },
+              { files: ['unknown/path/config.json'], branch: 'develop', expected: 'fast' },
+              { files: ['apps/web/src/app/page.tsx'], branch: 'main', expected: 'full' },
+              { files: ['docs/contributing.md'], branch: 'main', expected: 'full' },
+            ];
+
+            for (const tc of testCases) {
+              const res = determineLane(tc.files, tc.branch);
+              if (res !== tc.expected) {
+                core.setFailed(`Classifier self-test failure for ${JSON.stringify(tc.files)} on ${tc.branch}: expected ${tc.expected}, got ${res}`);
+                return;
+              }
+            }
+
+            // --- 2. Determine target branch and changed files ---
+            const targetBranch = context.payload.pull_request?.base?.ref || context.ref.replace('refs/heads/', '');
+            const files = [];
+
+            if (context.eventName === 'pull_request') {
+              const listFiles = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                per_page: 100,
+              });
+              for (const f of listFiles) {
+                files.push(f.filename);
+                if (f.previous_filename) files.push(f.previous_filename);
+              }
+            } else if (context.eventName === 'push') {
+              if (context.payload.before && !context.payload.before.startsWith('00000000')) {
+                try {
+                  const comp = await github.rest.repos.compareCommitsWithBasehead({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    basehead: `${context.payload.before}...${context.payload.after}`,
+                  });
+                  for (const f of (comp.data.files || [])) {
+                    files.push(f.filename);
+                    if (f.previous_filename) files.push(f.previous_filename);
+                  }
+                } catch (e) {
+                  console.warn('Could not compare commits for push event:', e.message);
+                }
+              }
+            }
+
+            const lane = determineLane(files, targetBranch);
+            const hasWorkflow = files.some(f => /^\.github\//.test(f));
+
+            core.setOutput('lane', lane);
+            core.setOutput('workflow', hasWorkflow ? 'true' : 'false');
+
+            console.log(`Lane selected: ${lane} (target: ${targetBranch}, files changed: ${files.length}, workflow: ${hasWorkflow})`);
+
+            await core.summary
+              .addHeading('CI Lane Classification Report', 2)
+              .addTable([
+                [{ data: 'Setting', header: true }, { data: 'Resolved Value', header: true }],
+                ['Event', context.eventName],
+                ['Target Branch', targetBranch],
+                ['Assigned Lane', `**${lane.toUpperCase()}**`],
+                ['Has Workflow Changes', hasWorkflow ? 'Yes' : 'No'],
+                ['Files Changed Count', `${files.length}`],
+              ])
+              .write();
+
+  validate:
+    name: Code Standards & Type Check
+    needs: classify
+    if: needs.classify.outputs.lane == 'fast' || needs.classify.outputs.lane == 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Design Standards & Token Compliance
+        run: pnpm run check:standards
+
+      - name: Type Check
+        run: pnpm run check-types
+
+  workflow-check:
+    name: Workflow & ActionLint Check
+    needs: classify
+    if: needs.classify.outputs.workflow == 'true' || needs.classify.outputs.lane == 'workflow'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        run: |
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+  security:
+    name: Security & Lock-in Audit
+    needs: classify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for Vercel Lock-in
+        run: |
+          if grep -rn "@vercel/" apps/web/src/ --include="*.ts" --include="*.tsx" 2>/dev/null; then
+            echo "::error::Found unauthorized @vercel/ imports in apps/web/src. See docs/tech-stack.md section 4 for architecture rules."
+            exit 1
+          else
+            echo "✓ No Vercel proprietary vendor lock-in detected."
+          fi
+
+      - name: Scan for accidental hardcoded secrets
+        run: |
+          if grep -rnE '(AI_GATEWAY_API_KEY|BETTER_AUTH_SECRET|DATABASE_URL)=[a-zA-Z0-9_\-\.]{12,}' . \
+            --exclude-dir={node_modules,.git,.next,dist,build} \
+            --exclude="*.example" \
+            --exclude="*.md" 2>/dev/null; then
+            echo "::error::Potential hardcoded secrets detected in repository files!"
+            exit 1
+          else
+            echo "✓ No exposed secrets found in tracked configuration."
+          fi
+
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs:
+      - classify
+      - validate
+      - workflow-check
+      - security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate CI Gate Requirements
+        env:
+          CLASSIFY: ${{ needs.classify.result }}
+          LANE: ${{ needs.classify.outputs.lane }}
+          VALIDATE: ${{ needs.validate.result }}
+          WORKFLOW_CHECK: ${{ needs.workflow-check.result }}
+          WORKFLOW_REQUIRED: ${{ needs.classify.outputs.workflow }}
+          SECURITY: ${{ needs.security.result }}
+        run: |
+          set -Eeuo pipefail
+          echo "=================== CI GATE SUMMARY ==================="
+          echo "CLASSIFY STATUS   : $CLASSIFY"
+          echo "SELECTED LANE     : $LANE"
+          echo "SECURITY STATUS   : $SECURITY"
+          echo "VALIDATE STATUS   : $VALIDATE"
+          echo "WORKFLOW STATUS   : $WORKFLOW_CHECK (Required: $WORKFLOW_REQUIRED)"
+          echo "======================================================="
+
+          # 1. Classifier must succeed
+          test "$CLASSIFY" = "success"
+
+          # 2. Security scan must always succeed across all lanes
+          test "$SECURITY" = "success"
+
+          # 3. Lane assertions
+          case "$LANE" in
+            docs)
+              echo "✓ Docs lane: No additional checks needed."
+              ;;
+            workflow)
+              echo "Evaluating workflow lane requirements..."
+              test "$WORKFLOW_CHECK" = "success"
+              ;;
+            fast|full)
+              echo "Evaluating code validation requirements ($LANE lane)..."
+              test "$VALIDATE" = "success"
+              ;;
+            *)
+              echo "::error::Unknown or unrecognized lane: $LANE"
+              exit 1
+              ;;
+          esac
+
+          # 4. If workflow files changed in any lane, workflow check must pass
+          if [ "$WORKFLOW_REQUIRED" = "true" ]; then
+            echo "Verifying workflow check requirement..."
+            test "$WORKFLOW_CHECK" = "success"
+          fi
+
+          echo "🎉 All required checks for lane [$LANE] passed successfully!"
