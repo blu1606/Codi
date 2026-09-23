@@ -119,7 +119,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
   // Step 2: OTP Verification Screen
   if (signedUpEmail) {
     return (
-      <div className="mx-auto w-full mt-10 max-w-md p-4">
+      <div className="w-full">
         <Card>
           <CardHeader className="text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-2">
@@ -169,7 +169,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
 
   // Step 1: Sign Up Form
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-4">
+    <div className="w-full">
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">Tạo tài khoản</CardTitle>

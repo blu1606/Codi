@@ -25,7 +25,7 @@ export default function AvatarPicker({
 
   const defaultAvatar =
     currentAvatar ||
-    `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(userName || "Codi")}&backgroundColor=0ea5e9`;
+    `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(userName || "Codi")}`;
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -107,7 +107,7 @@ export default function AvatarPicker({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white cursor-pointer disabled:cursor-not-allowed"
+            className="absolute inset-0 bg-foreground/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-background cursor-pointer disabled:cursor-not-allowed"
             title="Đổi ảnh đại diện"
           >
             {uploading ? (

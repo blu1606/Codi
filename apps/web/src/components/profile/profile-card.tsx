@@ -55,7 +55,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
   const defaultAvatar =
     avatarUrl ||
-    `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(name || "Codi")}&backgroundColor=0ea5e9`;
+    `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(name || "Codi")}`;
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
