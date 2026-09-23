@@ -86,7 +86,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
   }
 
   return (
-    <div className="mx-auto w-full mt-10 max-w-md p-4">
+    <div className="w-full">
       <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">Chào mừng trở lại</CardTitle>

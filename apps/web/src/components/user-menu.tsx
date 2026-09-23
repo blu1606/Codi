@@ -37,9 +37,19 @@ export default function UserMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent className="bg-card">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel>Tài khoản</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
+          <DropdownMenuItem className="text-xs text-muted-foreground">
+            {session.user.email}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => router.push("/dashboard")}>
+            Bàn làm việc (Dashboard)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/profile")}>
+            Hồ sơ cá nhân (Profile)
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
             onClick={() => {
@@ -52,7 +62,7 @@ export default function UserMenu() {
               });
             }}
           >
-            Sign Out
+            Đăng xuất
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

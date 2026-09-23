@@ -20,6 +20,7 @@
     "cn": "^0.2.5",
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
+    "radix-ui": "^1.6.7",
     "react": "catalog:",
     "react-dom": "catalog:",
     "shadcn": "^4.21.0",
