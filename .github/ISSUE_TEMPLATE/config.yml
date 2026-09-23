@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Trao đổi & Thảo luận chung
+    url: https://github.com/blu1606/Codi/discussions
+    about: Hỏi đáp thắc mắc hoặc thảo luận ý tưởng trước khi mở Issue.

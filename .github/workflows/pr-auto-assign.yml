@@ -1,0 +1,43 @@
+name: PR Auto Assign
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-assign:
+    name: Auto Assign Author
+    runs-on: ubuntu-latest
+    steps:
+      # CRITICAL SECURITY RULE:
+      # Do not check out, download artifacts, or execute head-PR content here!
+      # pull_request_target runs in the context of the base repository with write privileges.
+      # Checking out or executing untrusted PR code under this token would compromise the repository.
+      - name: Assign PR author
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const author = context.payload.pull_request?.user?.login;
+            const senderType = context.payload.pull_request?.user?.type;
+
+            // Do not assign bots
+            if (!author || senderType === 'Bot' || author.endsWith('[bot]')) {
+              console.log('Skipping assignment for bot or missing author:', author);
+              return;
+            }
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                assignees: [author],
+              });
+              console.log(`Successfully assigned @${author} to PR #${context.issue.number}`);
+            } catch (error) {
+              console.warn(`Could not assign @${author}:`, error.message);
+            }
