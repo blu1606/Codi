@@ -172,6 +172,22 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               </form.Field>
             </div>
 
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="remember-email"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked === true)}
+                />
+                <Label htmlFor="remember-email" className="cursor-pointer text-sm text-muted-foreground">
+                  Ghi nhớ email
+                </Label>
+              </div>
+              <Link href="/forgot-password" className="font-medium text-primary hover:underline">
+                Quên mật khẩu?
+              </Link>
+            </div>
+
             <div className="pt-2">
               <form.Subscribe
                 selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
