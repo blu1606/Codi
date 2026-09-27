@@ -15,6 +15,14 @@ export async function GET(request: NextRequest) {
   const requestedYear = Number(request.nextUrl.searchParams.get("year"));
   const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100 ? requestedYear : new Date().getFullYear();
   try {
+  if (request.nextUrl.searchParams.get("scope") === "activities") {
+    const allActivities = await db.select().from(studentActivities).where(eq(studentActivities.userId, user.id)).orderBy(desc(studentActivities.occurredAt));
+    const activities = allActivities.filter((activity) => {
+      const occurredAt = new Date(activity.occurredAt);
+      return !Number.isNaN(occurredAt.getTime()) && occurredAt.getFullYear() === year;
+    });
+    return NextResponse.json({ activities });
+  }
   const [allActivities, enrollments, wishlist, cart, transactions] = await Promise.all([
     db.select().from(studentActivities).where(eq(studentActivities.userId, user.id)).orderBy(desc(studentActivities.occurredAt)),
     db.select({ enrollment: studentEnrollments, course: courses }).from(studentEnrollments).innerJoin(courses, eq(studentEnrollments.courseId, courses.id)).where(eq(studentEnrollments.userId, user.id)),
