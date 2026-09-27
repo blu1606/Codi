@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { PRESET_DEFAULT_AVATARS } from "@/lib/storage";
+import { PRESET_DEFAULT_AVATARS } from "@/lib/avatar-presets";
 
 interface AvatarPickerProps {
   currentAvatar: string | null;
