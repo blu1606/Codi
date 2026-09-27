@@ -87,27 +87,31 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
 
   return (
     <div className="w-full">
-      <Card>
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold tracking-tight">Chào mừng trở lại</CardTitle>
-          <CardDescription>Đăng nhập vào tài khoản Codi của bạn</CardDescription>
+      <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
+        <CardHeader className="text-center pb-6 pt-8 space-y-3">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-6 w-6 text-primary"
+            >
+              <path d="M21.42 10.922a2 2 0 0 1-.019 3.837l-8.5 4.35a2 2 0 0 1-1.802 0l-8.5-4.35a2 2 0 0 1-.019-3.837l8.5-4.2a2 2 0 0 1 1.84 0l8.5 4.2Z" />
+              <path d="M22 10v6" />
+              <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" />
+            </svg>
+          </div>
+          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">Welcome Back, Student!</CardTitle>
+          <CardDescription className="text-sm">Login to access your learning portal</CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <GoogleSignInButton text="Đăng nhập với Google" />
-            <GitHubSignInButton text="Đăng nhập với GitHub" />
-          </div>
-
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Hoặc đăng nhập với Email</span>
-            </div>
-          </div>
-
+        <CardContent className="space-y-6 pb-8">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -120,16 +124,17 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               <form.Field name="email">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor={field.name}>Email</Label>
+                    <Label htmlFor={field.name} className="text-xs text-muted-foreground font-medium">Email Address</Label>
                     <Input
                       id={field.name}
                       name={field.name}
                       type="email"
                       autoComplete="email"
-                      placeholder="name@example.com"
+                      placeholder="student@university.edu"
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
+                      className="bg-background/50 h-11"
                     />
                     {field.state.meta.errors.map((error) => (
                       <p key={error?.message} className="text-xs text-destructive">
@@ -145,7 +150,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               <form.Field name="password">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor={field.name}>Mật khẩu</Label>
+                    <Label htmlFor={field.name} className="text-xs text-muted-foreground font-medium">Password</Label>
                     <Input
                       id={field.name}
                       name={field.name}
@@ -155,6 +160,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
+                      className="bg-background/50 h-11"
                     />
                     {field.state.meta.errors.map((error) => (
                       <p key={error?.message} className="text-xs text-destructive">
@@ -166,48 +172,46 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               </form.Field>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="remember-me"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
-                />
-                <Label
-                  htmlFor="remember-me"
-                  className="text-xs font-normal text-muted-foreground cursor-pointer select-none"
-                >
-                  Ghi nhớ đăng nhập
-                </Label>
-              </div>
-              <Link
-                href={"/forgot-password" as any}
-                className="text-xs text-primary hover:underline font-medium"
+            <div className="pt-2">
+              <form.Subscribe
+                selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
               >
-                Quên mật khẩu?
-              </Link>
+                {({ canSubmit, isSubmitting }) => (
+                  <Button
+                    type="submit"
+                    className="w-full h-11 text-base font-semibold bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
+                    disabled={!canSubmit || isSubmitting}
+                  >
+                    {isSubmitting ? "Logging in..." : "Log In"}
+                  </Button>
+                )}
+              </form.Subscribe>
             </div>
-
-            <form.Subscribe
-              selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
-            >
-              {({ canSubmit, isSubmitting }) => (
-                <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-                  {isSubmitting ? "Đang xử lý..." : "Đăng nhập"}
-                </Button>
-              )}
-            </form.Subscribe>
           </form>
 
-          <div className="mt-4 text-center text-xs text-muted-foreground">
-            <span>Chưa có tài khoản? </span>
-            <Button
-              variant="link"
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-3 text-muted-foreground">OR</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <GoogleSignInButton text="Continue with Google" />
+            <GitHubSignInButton text="Continue with GitHub" />
+          </div>
+
+          <div className="pt-4 text-center text-sm text-muted-foreground">
+            <span>Don't have an account? </span>
+            <button
+              type="button"
               onClick={onSwitchToSignUp}
-              className="p-0 text-xs text-primary font-semibold hover:underline"
+              className="text-primary font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
             >
-              Đăng ký ngay
-            </Button>
+              Register here
+            </button>
           </div>
         </CardContent>
       </Card>
