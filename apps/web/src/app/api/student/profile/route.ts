@@ -9,17 +9,28 @@ async function currentUser() {
   return session?.user ?? null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const [activities, enrollments, wishlist, cart, transactions] = await Promise.all([
-    db.select().from(studentActivities).where(eq(studentActivities.userId, user.id)).orderBy(desc(studentActivities.occurredAt)).limit(365),
+  const requestedYear = Number(request.nextUrl.searchParams.get("year"));
+  const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100 ? requestedYear : new Date().getFullYear();
+  try {
+  const [allActivities, enrollments, wishlist, cart, transactions] = await Promise.all([
+    db.select().from(studentActivities).where(eq(studentActivities.userId, user.id)).orderBy(desc(studentActivities.occurredAt)),
     db.select({ enrollment: studentEnrollments, course: courses }).from(studentEnrollments).innerJoin(courses, eq(studentEnrollments.courseId, courses.id)).where(eq(studentEnrollments.userId, user.id)),
     db.select().from(studentWishlist).where(eq(studentWishlist.userId, user.id)),
     db.select().from(studentCart).where(eq(studentCart.userId, user.id)),
     db.select().from(studentTransactions).where(eq(studentTransactions.userId, user.id)).orderBy(desc(studentTransactions.createdAt)),
   ]);
+  const activities = allActivities.filter((activity) => {
+    const occurredAt = new Date(activity.occurredAt);
+    return !Number.isNaN(occurredAt.getTime()) && occurredAt.getFullYear() === year;
+  });
   return NextResponse.json({ activities, enrollments, wishlist, cart, transactions });
+  } catch (error) {
+    console.error("Failed to load student profile", error);
+    return NextResponse.json({ error: "Failed to load student profile" }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
