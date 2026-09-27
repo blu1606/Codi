@@ -1,5 +1,5 @@
 "use client";
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@codi-1/ui/components/button";
 import {
@@ -13,7 +13,6 @@ import { Checkbox } from "@codi-1/ui/components/checkbox";
 import { Input } from "@codi-1/ui/components/input";
 import { Label } from "@codi-1/ui/components/label";
 import { useForm } from "@tanstack/react-form";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import z from "zod";
@@ -25,7 +24,11 @@ import Loader from "./loader";
 
 const REMEMBER_EMAIL_KEY = "codi_remember_email";
 
-export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () => void }) {
+export default function SignInForm({
+  onSwitchToSignUp,
+}: {
+  onSwitchToSignUp: () => void;
+}) {
   const router = useRouter();
   const { isPending } = authClient.useSession();
   const [rememberMe, setRememberMe] = useState(false);
@@ -56,9 +59,13 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
             toast.success("Đăng nhập thành công!");
           },
           onError: (error) => {
-            toast.error(error.error.message || error.error.statusText || "Đăng nhập thất bại");
+            toast.error(
+              error.error.message ||
+                error.error.statusText ||
+                "Đăng nhập thất bại",
+            );
           },
-        }
+        },
       );
     },
     validators: {
@@ -107,8 +114,12 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" />
             </Eye>
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">Welcome Back, Student!</CardTitle>
-          <CardDescription className="text-sm">Login to access your learning portal</CardDescription>
+          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
+            Welcome Back, Student!
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Login to access your learning portal
+          </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6 pb-8">
@@ -124,7 +135,12 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               <form.Field name="email">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor={field.name} className="text-xs text-muted-foreground font-medium">Email Address</Label>
+                    <Label
+                      htmlFor={field.name}
+                      className="text-xs text-muted-foreground font-medium"
+                    >
+                      Email Address
+                    </Label>
                     <Input
                       id={field.name}
                       name={field.name}
@@ -137,7 +153,10 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                       className="bg-background/50 h-11"
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p key={error?.message} className="text-xs text-destructive">
+                      <p
+                        key={error?.message}
+                        className="text-xs text-destructive"
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -150,7 +169,12 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
               <form.Field name="password">
                 {(field) => (
                   <div className="space-y-2">
-                    <Label htmlFor={field.name} className="text-xs text-muted-foreground font-medium">Password</Label>
+                    <Label
+                      htmlFor={field.name}
+                      className="text-xs text-muted-foreground font-medium"
+                    >
+                      Password
+                    </Label>
                     <Input
                       id={field.name}
                       name={field.name}
@@ -163,7 +187,10 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                       className="bg-background/50 h-11"
                     />
                     {field.state.meta.errors.map((error) => (
-                      <p key={error?.message} className="text-xs text-destructive">
+                      <p
+                        key={error?.message}
+                        className="text-xs text-destructive"
+                      >
                         {error?.message}
                       </p>
                     ))}
@@ -179,18 +206,28 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                   checked={rememberMe}
                   onCheckedChange={(checked) => setRememberMe(checked === true)}
                 />
-                <Label htmlFor="remember-email" className="cursor-pointer text-sm text-muted-foreground">
+                <Label
+                  htmlFor="remember-email"
+                  className="cursor-pointer text-sm text-muted-foreground"
+                >
                   Ghi nhớ email
                 </Label>
               </div>
-              <Link href="/forgot-password" className="font-medium text-primary hover:underline">
+              <button
+                type="button"
+                onClick={() => router.push("/forgot-password")}
+                className="font-medium text-primary hover:underline"
+              >
                 Quên mật khẩu?
-              </Link>
+              </button>
             </div>
 
             <div className="pt-2">
               <form.Subscribe
-                selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}
+                selector={(state) => ({
+                  canSubmit: state.canSubmit,
+                  isSubmitting: state.isSubmitting,
+                })}
               >
                 {({ canSubmit, isSubmitting }) => (
                   <Button
