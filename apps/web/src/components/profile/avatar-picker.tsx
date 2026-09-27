@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@codi-1/ui/components/button";
-import { Camera, Check, CloudUpload, Loader2, Sparkles } from "lucide-react";
+import { Camera, Check, CloudUpload, Loader2, Minus, Plus, Sparkles, X, ZoomIn } from "lucide-react";
 import Image from "next/image";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -22,20 +22,18 @@ export default function AvatarPicker({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+  const [cropSource, setCropSource] = useState<{ file: File; url: string } | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
+  const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
+  const cropFrameRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({ active: false, x: 0, y: 0 });
 
   const defaultAvatar =
     currentAvatar ||
     `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(userName || "Codi")}`;
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Ảnh không được vượt quá 5MB");
-      return;
-    }
-
+  const uploadAvatar = async (file: File) => {
     try {
       setUploading(true);
       const formData = new FormData();
@@ -47,9 +45,7 @@ export default function AvatarPicker({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Tải ảnh thất bại");
-      }
+      if (!res.ok) throw new Error(data.error || "Tải ảnh thất bại");
 
       onAvatarUpdated(data.imageUrl);
       toast.success("Đã tải ảnh lên Cloudflare R2 thành công!");
@@ -57,8 +53,81 @@ export default function AvatarPicker({
       toast.error(err.message || "Không thể tải ảnh đại diện lên R2.");
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ảnh không được vượt quá 5MB");
+      return;
+    }
+
+    setCropSource({ file, url: URL.createObjectURL(file) });
+    setZoom(1);
+    setCropPosition({ x: 0, y: 0 });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const closeCropper = () => {
+    if (cropSource) URL.revokeObjectURL(cropSource.url);
+    setCropSource(null);
+  };
+
+  const confirmCrop = async () => {
+    if (!cropSource) return;
+    const image = new window.Image();
+    image.src = cropSource.url;
+    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("Không thể đọc ảnh")); });
+
+    const outputSize = 512;
+    const cropSize = cropFrameRef.current?.clientWidth || 320;
+    const scale = Math.max(cropSize / image.naturalWidth, cropSize / image.naturalHeight) * zoom;
+    const canvas = document.createElement("canvas");
+    canvas.width = outputSize;
+    canvas.height = outputSize;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.drawImage(image, ((cropSize - image.naturalWidth * scale) / 2 + cropPosition.x) * (outputSize / cropSize), ((cropSize - image.naturalHeight * scale) / 2 + cropPosition.y) * (outputSize / cropSize), image.naturalWidth * scale * (outputSize / cropSize), image.naturalHeight * scale * (outputSize / cropSize));
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      closeCropper();
+      await uploadAvatar(new File([blob], cropSource.file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }));
+    }, "image/jpeg", 0.92);
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLImageElement>) => {
+    dragRef.current = { active: true, x: event.clientX - cropPosition.x, y: event.clientY - cropPosition.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLImageElement>) => {
+    if (!dragRef.current.active) return;
+    setCropPosition(clampPosition(event.clientX - dragRef.current.x, event.clientY - dragRef.current.y));
+  };
+
+  const handlePointerUp = () => { dragRef.current.active = false; };
+
+  const clampPosition = (x: number, y: number, nextZoom = zoom) => {
+    const frameSize = cropFrameRef.current?.clientWidth || 320;
+    if (!imageNaturalSize.width || !imageNaturalSize.height) return { x, y };
+    const baseScale = Math.max(frameSize / imageNaturalSize.width, frameSize / imageNaturalSize.height);
+    const renderedWidth = imageNaturalSize.width * baseScale * nextZoom;
+    const renderedHeight = imageNaturalSize.height * baseScale * nextZoom;
+    const maxX = Math.max(0, (renderedWidth - frameSize) / 2);
+    const maxY = Math.max(0, (renderedHeight - frameSize) / 2);
+    return {
+      x: Math.min(maxX, Math.max(-maxX, x)),
+      y: Math.min(maxY, Math.max(-maxY, y)),
+    };
+  };
+
+  const handleZoomChange = (value: number) => {
+    setZoom(value);
+    setCropPosition(clampPosition(cropPosition.x, cropPosition.y, value));
   };
 
   const handleSelectPreset = async (presetUrl: string, id: string) => {
@@ -89,6 +158,48 @@ export default function AvatarPicker({
 
   return (
     <div className="space-y-4">
+      {cropSource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Chỉnh sửa hình ảnh</h2>
+              <button type="button" onClick={closeCropper} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Đóng">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div ref={cropFrameRef} className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted">
+              <img
+                src={cropSource.url}
+                alt="Xem trước ảnh đại diện"
+                draggable={false}
+                onLoad={(event) => setImageNaturalSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                className="absolute inset-0 h-full w-full cursor-grab select-none object-cover active:cursor-grabbing"
+                style={{ transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${zoom})` }}
+              />
+              <div className="pointer-events-none absolute inset-0 rounded-full border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.48)]" />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Minus className="h-4 w-4 text-muted-foreground" />
+              <input aria-label="Phóng to ảnh" type="range" min="1" max="3" step="0.01" value={zoom} onChange={(event) => handleZoomChange(Number(event.target.value))} className="flex-1 accent-primary" />
+              <Plus className="h-4 w-4 text-muted-foreground" />
+              <ZoomIn className="h-5 w-5 text-muted-foreground" />
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground">Kéo ảnh để chọn vùng hiển thị trong khung tròn</p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={closeCropper}>Huỷ bỏ</Button>
+              <Button type="button" onClick={confirmCrop} disabled={uploading}>Cắt và tải lên</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Current Avatar Display & Upload Trigger */}
       <div className="flex items-center gap-4">
         <div className="relative group">

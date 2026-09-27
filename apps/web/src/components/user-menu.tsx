@@ -11,12 +11,24 @@ import {
 import { Skeleton } from "@codi-1/ui/components/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 
 export default function UserMenu() {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleProfileNameUpdated = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name;
+      if (name) setDisplayName(name);
+    };
+
+    window.addEventListener("profile-name-updated", handleProfileNameUpdated);
+    return () => window.removeEventListener("profile-name-updated", handleProfileNameUpdated);
+  }, []);
 
   if (isPending) {
     return <Skeleton className="h-9 w-24" />;
@@ -33,7 +45,7 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
-        {session.user.name}
+        {displayName || session.user.name}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="bg-card">
         <DropdownMenuGroup>
