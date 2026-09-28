@@ -3,7 +3,7 @@
 import { Button } from "@codi-1/ui/components/button";
 import { Camera, Check, CloudUpload, Loader2, Minus, Plus, Sparkles, X, ZoomIn } from "lucide-react";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PRESET_DEFAULT_AVATARS } from "@/lib/avatar-presets";
@@ -156,45 +156,181 @@ export default function AvatarPicker({
     }
   };
 
+  useEffect(() => {
+    if (!cropSource) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeCropper();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [cropSource]);
+
+  const handleKeyDownCrop = (event: React.KeyboardEvent) => {
+    const step = event.shiftKey ? 25 : 10;
+    let dx = 0;
+    let dy = 0;
+    if (event.key === "ArrowUp") dy = step;
+    else if (event.key === "ArrowDown") dy = -step;
+    else if (event.key === "ArrowLeft") dx = step;
+    else if (event.key === "ArrowRight") dx = -step;
+    else return;
+
+    event.preventDefault();
+    setCropPosition((prev) => clampPosition(prev.x + dx, prev.y + dy));
+  };
+
   return (
     <div className="space-y-4">
       {cropSource && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cropper-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeCropper();
+          }}
+        >
           <div className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Chỉnh sửa hình ảnh</h2>
-              <button type="button" onClick={closeCropper} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Đóng">
+              <h2 id="cropper-dialog-title" className="text-lg font-semibold">
+                Chỉnh sửa hình ảnh
+              </h2>
+              <button
+                type="button"
+                onClick={closeCropper}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Đóng"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div ref={cropFrameRef} className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted">
+            <div
+              ref={cropFrameRef}
+              tabIndex={0}
+              role="region"
+              aria-label="Khung điều chỉnh vị trí ảnh. Dùng các phím mũi tên để dịch chuyển ảnh."
+              onKeyDown={handleKeyDownCrop}
+              className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted focus:outline-none focus:ring-2 focus:ring-primary"
+            >
               <img
                 src={cropSource.url}
                 alt="Xem trước ảnh đại diện"
                 draggable={false}
-                onLoad={(event) => setImageNaturalSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+                onLoad={(event) =>
+                  setImageNaturalSize({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  })
+                }
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
                 className="absolute inset-0 h-full w-full cursor-grab select-none object-cover active:cursor-grabbing"
-                style={{ transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${zoom})` }}
+                style={{
+                  transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${zoom})`,
+                }}
               />
               <div className="pointer-events-none absolute inset-0 rounded-full border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.48)]" />
             </div>
 
-            <div className="flex items-center gap-3">
-              <Minus className="h-4 w-4 text-muted-foreground" />
-              <input aria-label="Phóng to ảnh" type="range" min="1" max="3" step="0.01" value={zoom} onChange={(event) => handleZoomChange(Number(event.target.value))} className="flex-1 accent-primary" />
-              <Plus className="h-4 w-4 text-muted-foreground" />
-              <ZoomIn className="h-5 w-5 text-muted-foreground" />
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Minus className="h-4 w-4 text-muted-foreground" />
+                <input
+                  aria-label="Phóng to ảnh"
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.01"
+                  value={zoom}
+                  onChange={(event) =>
+                    handleZoomChange(Number(event.target.value))
+                  }
+                  className="flex-1 accent-primary"
+                />
+                <Plus className="h-4 w-4 text-muted-foreground" />
+                <ZoomIn className="h-5 w-5 text-muted-foreground" />
+              </div>
+
+              <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+                <span>Dịch chuyển:</span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x, p.y + 15))
+                    }
+                    aria-label="Dịch lên"
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x, p.y - 15))
+                    }
+                    aria-label="Dịch xuống"
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x + 15, p.y))
+                    }
+                    aria-label="Dịch sang trái"
+                  >
+                    ←
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x - 15, p.y))
+                    }
+                    aria-label="Dịch sang phải"
+                  >
+                    →
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setCropPosition({ x: 0, y: 0 })}
+                  >
+                    Căn giữa
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <p className="text-center text-xs text-muted-foreground">Kéo ảnh để chọn vùng hiển thị trong khung tròn</p>
+            <p className="text-center text-xs text-muted-foreground">
+              Kéo chuột hoặc chọn khung và dùng phím mũi tên (↑ ↓ ← →) để dịch ảnh
+            </p>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={closeCropper}>Huỷ bỏ</Button>
-              <Button type="button" onClick={confirmCrop} disabled={uploading}>Cắt và tải lên</Button>
+              <Button type="button" variant="outline" onClick={closeCropper}>
+                Huỷ bỏ
+              </Button>
+              <Button type="button" onClick={confirmCrop} disabled={uploading}>
+                Cắt và tải lên
+              </Button>
             </div>
           </div>
         </div>
