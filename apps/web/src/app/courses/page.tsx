@@ -26,6 +26,7 @@ import {
 } from "@codi-1/ui/components/card";
 import { Input } from "@codi-1/ui/components/input";
 import { SEED_COURSES, type Course } from "@/lib/data/courses";
+import { filterCourseCatalog } from "@/lib/filter-course-catalog";
 import { authClient } from "@/lib/auth-client";
 
 const CATEGORIES = [
@@ -49,21 +50,7 @@ export default function CoursesPage() {
 
   // Filter courses based on search term, category and level
   const filteredCourses = useMemo(() => {
-    return SEED_COURSES.filter((course) => {
-      const matchesSearch =
-        searchTerm.trim() === "" ||
-        course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.topics.some((t) => t.toLowerCase().includes(searchTerm.toLowerCase()));
-
-      const matchesCategory =
-        selectedCategory === "Tất cả" || course.category === selectedCategory;
-
-      const matchesLevel =
-        selectedLevel === "Tất cả cấp độ" || course.level === selectedLevel;
-
-      return matchesSearch && matchesCategory && matchesLevel;
-    });
+    return filterCourseCatalog(SEED_COURSES, searchTerm, selectedCategory, selectedLevel);
   }, [searchTerm, selectedCategory, selectedLevel]);
 
   const handleEnrollClick = (course: Course) => {
