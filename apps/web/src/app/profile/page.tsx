@@ -6,8 +6,8 @@ import { Button } from "@codi-1/ui/components/button";
 import { getActiveRoles } from "@codi-1/auth";
 import { auth, db } from "@/services";
 import ProfileCard from "@/components/profile/profile-card";
-import ChangePasswordCard from "@/components/profile/change-password-card";
 import EmailVerificationCard from "@/components/profile/email-verification-card";
+import StudentProfileOverview, { ProfileStats } from "@/components/profile/student-profile-overview";
 
 export default async function ProfilePage() {
   const session = await auth.api.getSession({
@@ -22,7 +22,7 @@ export default async function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-background py-8 px-4 sm:px-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="mx-auto w-full max-w-[1440px] space-y-6 px-2 sm:px-4 lg:px-8">
         {/* Navigation Breadcrumb / Back Action */}
         <div className="flex items-center justify-between">
           <Link href="/dashboard">
@@ -55,10 +55,14 @@ export default async function ProfilePage() {
         />
 
         {/* Profile Card (Edit Name, Cloudflare R2 Avatar Upload, Roles) */}
-        <ProfileCard user={session.user} roles={activeRoles} />
+        <div className="grid items-start gap-8 lg:grid-cols-[360px_minmax(0,1fr)] xl:gap-12">
+          <div className="space-y-4">
+            <ProfileCard user={session.user} roles={activeRoles} />
+            <ProfileStats />
+          </div>
+          <StudentProfileOverview />
+        </div>
 
-        {/* Change Password Card */}
-        <ChangePasswordCard />
       </div>
     </main>
   );
