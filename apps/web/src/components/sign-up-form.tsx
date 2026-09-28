@@ -120,7 +120,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
   if (signedUpEmail) {
     return (
       <div className="w-full">
-        <Card>
+        <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
           <CardHeader className="text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-2">
               <ShieldCheck className="w-6 h-6" />
@@ -170,7 +170,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
   // Step 1: Sign Up Form
   return (
     <div className="w-full">
-      <Card>
+      <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">Tạo tài khoản</CardTitle>
           <CardDescription>Đăng ký tài khoản Codi mới</CardDescription>

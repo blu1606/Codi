@@ -1,2 +1,43 @@
 @import "@codi-1/ui/globals.css";
 @source "../node_modules/streamdown/dist/*.js";
+
+/* Login-only AI Cyber Violet palette — does not change global app tokens */
+.login-cyber-violet {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2ff;
+  --secondary-foreground: #312e81;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #eef2ff;
+  --accent-foreground: #4338ca;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #6366f1;
+}
+
+.dark .login-cyber-violet {
+  --background: #0b0b10;
+  --foreground: #f1f5f9;
+  --card: #121218;
+  --card-foreground: #f1f5f9;
+  --popover: #121218;
+  --popover-foreground: #f1f5f9;
+  --primary: #818cf8;
+  --primary-foreground: #0f172a;
+  --secondary: #1a1a24;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1a1a24;
+  --muted-foreground: #94a3b8;
+  --accent: #1e1e2a;
+  --accent-foreground: #c7d2fe;
+  --border: rgb(129 140 248 / 18%);
+  --input: rgb(241 245 249 / 12%);
+  --ring: #818cf8;
+}
