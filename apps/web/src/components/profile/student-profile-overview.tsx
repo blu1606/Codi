@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, CheckCircle2, Clock3, TrendingUp, Wallet } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@codi-1/ui/components/card";
@@ -15,6 +15,7 @@ export default function StudentProfileOverview() {
   const [error, setError] = useState<string | null>(null);
   const [yearLoading, setYearLoading] = useState(false);
   const [yearError, setYearError] = useState<string | null>(null);
+  const activitiesCacheRef = useRef<Record<number, ProfileData["activities"]>>({});
 
   useEffect(() => {
     const c = new AbortController();
@@ -34,6 +35,7 @@ export default function StudentProfileOverview() {
         setData(body);
         setActivities(body.activities);
         setLoadedYear(currentYear);
+        activitiesCacheRef.current[currentYear] = body.activities;
       })
       .catch((e) => {
         if (e instanceof Error && e.name !== "AbortError") setError(e.message);
@@ -45,7 +47,20 @@ export default function StudentProfileOverview() {
   }, [currentYear]);
 
   useEffect(() => {
-    if (year === loadedYear) return;
+    if (year === loadedYear) {
+      setYearLoading(false);
+      setYearError(null);
+      return;
+    }
+
+    if (activitiesCacheRef.current[year]) {
+      setActivities(activitiesCacheRef.current[year]);
+      setLoadedYear(year);
+      setYearLoading(false);
+      setYearError(null);
+      return;
+    }
+
     const c = new AbortController();
     setYearLoading(true);
     setYearError(null);
@@ -63,16 +78,16 @@ export default function StudentProfileOverview() {
         return body as Pick<ProfileData, "activities">;
       })
       .then((body) => {
+        activitiesCacheRef.current[year] = body.activities;
         setActivities(body.activities);
         setLoadedYear(year);
+        setYearLoading(false);
       })
       .catch((e) => {
         if (e instanceof Error && e.name !== "AbortError") {
           setYearError(e.message || "Lỗi tải dữ liệu heatmap.");
+          setYearLoading(false);
         }
-      })
-      .finally(() => {
-        if (!c.signal.aborted) setYearLoading(false);
       });
     return () => c.abort();
   }, [year, loadedYear]);

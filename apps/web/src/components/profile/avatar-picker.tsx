@@ -28,6 +28,9 @@ export default function AvatarPicker({
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
   const cropFrameRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, x: 0, y: 0 });
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const triggerButtonRef = useRef<HTMLButtonElement>(null);
 
   const defaultAvatar =
     currentAvatar ||
@@ -65,6 +68,7 @@ export default function AvatarPicker({
       return;
     }
 
+    lastActiveElementRef.current = document.activeElement as HTMLElement | null;
     setCropSource({ file, url: URL.createObjectURL(file) });
     setZoom(1);
     setCropPosition({ x: 0, y: 0 });
@@ -74,6 +78,13 @@ export default function AvatarPicker({
   const closeCropper = () => {
     if (cropSource) URL.revokeObjectURL(cropSource.url);
     setCropSource(null);
+    setTimeout(() => {
+      if (lastActiveElementRef.current) {
+        lastActiveElementRef.current.focus();
+      } else {
+        triggerButtonRef.current?.focus();
+      }
+    }, 50);
   };
 
   const confirmCrop = async () => {
@@ -158,13 +169,48 @@ export default function AvatarPicker({
 
   useEffect(() => {
     if (!cropSource) return;
+
+    // Set initial focus to cropFrameRef for keyboard arrow panning
+    const timer = setTimeout(() => {
+      cropFrameRef.current?.focus();
+    }, 50);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         closeCropper();
+        return;
+      }
+
+      if (e.key === "Tab") {
+        if (!dialogRef.current) return;
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusable.length) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       }
     };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [cropSource]);
 
   const handleKeyDownCrop = (event: React.KeyboardEvent) => {
@@ -193,7 +239,10 @@ export default function AvatarPicker({
             if (e.target === e.currentTarget) closeCropper();
           }}
         >
-          <div className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl">
+          <div
+            ref={dialogRef}
+            className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl"
+          >
             <div className="flex items-center justify-between">
               <h2 id="cropper-dialog-title" className="text-lg font-semibold">
                 Chỉnh sửa hình ảnh
@@ -201,8 +250,8 @@ export default function AvatarPicker({
               <button
                 type="button"
                 onClick={closeCropper}
-                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="Đóng"
+                className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Đóng (Escape)"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -257,14 +306,13 @@ export default function AvatarPicker({
                 <ZoomIn className="h-5 w-5 text-muted-foreground" />
               </div>
 
-              <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+              <div className="flex flex-col gap-2 pt-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <span>Dịch chuyển:</span>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
                     onClick={() =>
                       setCropPosition((p) => clampPosition(p.x, p.y + 15))
                     }
@@ -275,8 +323,7 @@ export default function AvatarPicker({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
                     onClick={() =>
                       setCropPosition((p) => clampPosition(p.x, p.y - 15))
                     }
@@ -287,8 +334,7 @@ export default function AvatarPicker({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
                     onClick={() =>
                       setCropPosition((p) => clampPosition(p.x + 15, p.y))
                     }
@@ -299,8 +345,7 @@ export default function AvatarPicker({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
                     onClick={() =>
                       setCropPosition((p) => clampPosition(p.x - 15, p.y))
                     }
@@ -311,8 +356,7 @@ export default function AvatarPicker({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
+                    className="flex h-11 min-h-[44px] items-center justify-center px-3 text-xs font-medium"
                     onClick={() => setCropPosition({ x: 0, y: 0 })}
                   >
                     Căn giữa
@@ -375,6 +419,7 @@ export default function AvatarPicker({
               onChange={handleFileUpload}
             />
             <Button
+              ref={triggerButtonRef}
               type="button"
               variant="outline"
               size="sm"

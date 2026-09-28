@@ -18,17 +18,31 @@ import { authClient } from "@/lib/auth-client";
 export default function UserMenu() {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
-  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [profileOverride, setProfileOverride] = useState<{
+    userId: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleProfileNameUpdated = (event: Event) => {
-      const name = (event as CustomEvent<{ name?: string }>).detail?.name;
-      if (name) setDisplayName(name);
+      const detail = (
+        event as CustomEvent<{ name?: string; userId?: string }>
+      ).detail;
+      if (detail?.name) {
+        setProfileOverride({
+          userId: detail.userId || session?.user?.id || "",
+          name: detail.name,
+        });
+      }
     };
 
     window.addEventListener("profile-name-updated", handleProfileNameUpdated);
-    return () => window.removeEventListener("profile-name-updated", handleProfileNameUpdated);
-  }, []);
+    return () =>
+      window.removeEventListener(
+        "profile-name-updated",
+        handleProfileNameUpdated
+      );
+  }, [session?.user?.id]);
 
   if (isPending) {
     return <Skeleton className="h-9 w-24" />;
@@ -42,10 +56,15 @@ export default function UserMenu() {
     );
   }
 
+  const currentDisplayName =
+    profileOverride && profileOverride.userId === session.user.id
+      ? profileOverride.name
+      : session.user.name;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
-        {displayName || session.user.name}
+        {currentDisplayName}
       </DropdownMenuTrigger>
       <DropdownMenuContent className="bg-card">
         <DropdownMenuGroup>
@@ -65,6 +84,7 @@ export default function UserMenu() {
           <DropdownMenuItem
             variant="destructive"
             onClick={() => {
+              setProfileOverride(null);
               authClient.signOut({
                 fetchOptions: {
                   onSuccess: () => {

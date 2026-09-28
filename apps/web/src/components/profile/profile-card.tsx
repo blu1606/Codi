@@ -66,7 +66,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
       window.dispatchEvent(
         new CustomEvent("profile-name-updated", {
-          detail: { name: name.trim() },
+          detail: { name: name.trim(), userId: user.id },
         })
       );
       toast.success("Cập nhật thông tin hồ sơ thành công!");
