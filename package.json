@@ -33,6 +33,9 @@
     "deploy:prod": "vercel deploy --prod",
     "deploy:check": "vercel deploy --dry",
     "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
     "auth:generate": "cd apps/web && pnpm run auth:generate"
   },
@@ -42,11 +45,13 @@
   "devDependencies": {
     "@codi-1/config": "workspace:*",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "^5.0.2",
     "supabase": "^2.117.0",
     "tsx": "^4.23.13",
     "typescript": "catalog:",
     "varlock": "catalog:",
-    "vercel": "^59.11.7"
+    "vercel": "^59.11.7",
+    "vitest": "^5.0.2"
   },
   "packageManager": "pnpm@11.9.0"
 }
