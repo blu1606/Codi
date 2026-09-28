@@ -20,7 +20,7 @@ function LoginContent() {
   }, [tabParam]);
 
   return (
-    <div className="login-cyber-violet relative flex h-full w-full items-center justify-center overflow-hidden bg-background p-4 sm:p-8">
+    <div className="login-cyber-violet relative flex min-h-[calc(100vh-4rem)] w-full items-center justify-center overflow-y-auto bg-background p-4 py-8 sm:p-8">
       <div
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{

@@ -199,7 +199,7 @@ export default function SignInForm({
               </form.Field>
             </div>
 
-            <div className="flex items-center justify-between gap-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="remember-email"
