@@ -1,6 +1,5 @@
 "use client";
 
-import { Briefcase, Sparkles, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Hero from "@/components/hero";
 
@@ -8,41 +7,39 @@ export default function Home() {
   const router = useRouter();
 
   const heroData = {
+    eyebrow: "Thế hệ học lập trình mới với trợ lý AI",
     title: (
       <>
         A new way to learn <br />
-        <span className="text-primary">&amp; get knowledge</span>
+        &amp; get knowledge
       </>
     ),
     subtitle:
-      "Codi đồng hành cùng bạn với các khoá học lập trình thực chiến & trợ lý AI cá nhân hoá lộ trình đào tạo 24/7.",
+      "Học lập trình thông minh hơn với trợ lý AI, đa dạng các khóa học từ cơ bản đến nâng cao, thực hành code trực tiếp và lộ trình học cá nhân hóa hoàn hảo.",
     actions: [
       {
-        text: "Khám phá khoá học",
-        onClick: () => router.push("/courses"),
+        text: "Bắt đầu học ngay",
+        onClick: () => router.push("/dashboard"),
         variant: "default" as const,
       },
       {
-        text: "Tư vấn lộ trình với AI",
-        onClick: () => router.push("/ai"),
+        text: "Khám phá khóa học",
+        onClick: () => router.push("/courses"),
         variant: "outline" as const,
       },
     ],
     stats: [
       {
-        value: "15,2K",
-        label: "Học viên năng động",
-        icon: <Users className="h-5 w-5 text-muted-foreground" />,
+        value: "50K+",
+        label: "Học viên",
       },
       {
-        value: "4,5K",
-        label: "Bài học & Dự án",
-        icon: <Briefcase className="h-5 w-5 text-muted-foreground" />,
+        value: "120+",
+        label: "Khóa học AI",
       },
       {
-        value: "24/7",
-        label: "AI Mentor đồng hành",
-        icon: <Sparkles className="h-5 w-5 text-muted-foreground" />,
+        value: "94.6%",
+        label: "Hoàn thành mục tiêu",
       },
     ],
     images: [
@@ -55,6 +52,7 @@ export default function Home() {
   return (
     <main className="w-full bg-background flex flex-col justify-center">
       <Hero
+        eyebrow={heroData.eyebrow}
         title={heroData.title}
         subtitle={heroData.subtitle}
         actions={heroData.actions}

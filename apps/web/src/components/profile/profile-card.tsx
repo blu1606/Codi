@@ -5,14 +5,16 @@ import { Input } from "@codi-1/ui/components/input";
 import { Label } from "@codi-1/ui/components/label";
 import {
   AlertCircle,
+  CalendarDays,
   Check,
   Edit3,
   Loader2,
+  Mail,
   ShieldCheck,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import AvatarPicker from "./avatar-picker";
@@ -39,13 +41,8 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user.name);
-  const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState(user.image || null);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setBio(window.localStorage.getItem(`codi:profile-bio:${user.id}`) ?? "");
-  }, [user.id]);
 
   const defaultAvatar =
     avatarUrl ||
@@ -67,7 +64,6 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Không thể cập nhật hồ sơ");
 
-      window.localStorage.setItem(`codi:profile-bio:${user.id}`, bio.trim());
       window.dispatchEvent(new CustomEvent("profile-name-updated", { detail: { name: name.trim() } }));
       toast.success("Cập nhật thông tin hồ sơ thành công!");
       setIsEditing(false);
@@ -81,6 +77,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
   const handleAvatarUpdated = (newUrl: string) => {
     setAvatarUrl(newUrl);
+    window.dispatchEvent(new CustomEvent("profile-avatar-updated", { detail: { userId: user.id, imageUrl: newUrl } }));
     router.refresh();
   };
 
@@ -102,17 +99,6 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
               <Label htmlFor="displayName">Họ và tên</Label>
               <Input id="displayName" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập họ và tên của bạn" disabled={saving} />
             </div>
-            <div className="max-w-md space-y-2">
-              <Label htmlFor="bio">Bio</Label>
-              <textarea
-                id="bio"
-                value={bio}
-                onChange={(event) => setBio(event.target.value)}
-                placeholder="Viết vài điều về bạn..."
-                disabled={saving}
-                className="min-h-24 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-              />
-            </div>
             <div className="flex items-center gap-2 pt-2">
               <Button type="submit" disabled={saving} className="gap-1.5">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
@@ -133,7 +119,10 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
               {roles.map((roleId) => <span key={roleId} className="rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">{ROLE_LABEL[roleId] ?? roleId}</span>)}
               {user.emailVerified ? <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"><ShieldCheck className="h-3.5 w-3.5" /> Đã xác thực</span> : <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground"><AlertCircle className="h-3.5 w-3.5" /> Chưa xác thực</span>}
             </div>
-            {bio.trim() && <p className="whitespace-pre-wrap text-sm text-muted-foreground">{bio}</p>}
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2"><Mail className="h-4 w-4" /> {user.email}</p>
+              {user.createdAt && <p className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Joined {new Date(user.createdAt).toLocaleDateString("en-GB")}</p>}
+            </div>
             <Button variant="outline" onClick={() => setIsEditing(true)} className="w-full gap-1.5">
               <Edit3 className="h-4 w-4" /> Edit profile
             </Button>

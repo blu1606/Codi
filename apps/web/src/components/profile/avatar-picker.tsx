@@ -3,7 +3,7 @@
 import { Button } from "@codi-1/ui/components/button";
 import { Camera, Check, CloudUpload, Loader2, Minus, Plus, Sparkles, X, ZoomIn } from "lucide-react";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PRESET_DEFAULT_AVATARS } from "@/lib/avatar-presets";
@@ -27,7 +27,40 @@ export default function AvatarPicker({
   const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
   const cropFrameRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef({ active: false, x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!cropSource) return;
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusableSelector = "button:not([disabled]), input:not([disabled]), [tabindex=\"0\"]";
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCropper();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(document.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.closest("[role=\"dialog\"]"));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleDialogKeyDown);
+    requestAnimationFrame(() => closeButtonRef.current?.focus());
+    return () => document.removeEventListener("keydown", handleDialogKeyDown);
+  }, [cropSource]);
 
   const defaultAvatar =
     currentAvatar ||
@@ -74,6 +107,7 @@ export default function AvatarPicker({
   const closeCropper = () => {
     if (cropSource) URL.revokeObjectURL(cropSource.url);
     setCropSource(null);
+    requestAnimationFrame(() => previousFocusRef.current?.focus());
   };
 
   const confirmCrop = async () => {
@@ -110,6 +144,29 @@ export default function AvatarPicker({
   };
 
   const handlePointerUp = () => { dragRef.current.active = false; };
+
+  const handleCropKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 25 : 10;
+    const offsets: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+    const offset = offsets[event.key];
+    if (offset) {
+      event.preventDefault();
+      setCropPosition((position) => clampPosition(position.x + offset[0], position.y + offset[1]));
+      return;
+    }
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      handleZoomChange(Math.min(3, Number((zoom + 0.1).toFixed(2))));
+    } else if (event.key === "-") {
+      event.preventDefault();
+      handleZoomChange(Math.max(1, Number((zoom - 0.1).toFixed(2))));
+    }
+  };
 
   const clampPosition = (x: number, y: number, nextZoom = zoom) => {
     const frameSize = cropFrameRef.current?.clientWidth || 320;
@@ -160,15 +217,15 @@ export default function AvatarPicker({
     <div className="space-y-4">
       {cropSource && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-labelledby="crop-dialog-title" aria-describedby="crop-dialog-description" className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Chỉnh sửa hình ảnh</h2>
-              <button type="button" onClick={closeCropper} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Đóng">
+              <h2 id="crop-dialog-title" className="text-lg font-semibold">Chỉnh sửa hình ảnh</h2>
+              <button ref={closeButtonRef} type="button" onClick={closeCropper} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Đóng">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div ref={cropFrameRef} className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted">
+            <div ref={cropFrameRef} tabIndex={0} role="region" aria-label="Vùng cắt ảnh. Dùng phím mũi tên để di chuyển ảnh" onKeyDown={handleCropKeyDown} className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted focus:outline-none focus:ring-2 focus:ring-ring">
               <img
                 src={cropSource.url}
                 alt="Xem trước ảnh đại diện"
@@ -191,7 +248,7 @@ export default function AvatarPicker({
               <ZoomIn className="h-5 w-5 text-muted-foreground" />
             </div>
 
-            <p className="text-center text-xs text-muted-foreground">Kéo ảnh để chọn vùng hiển thị trong khung tròn</p>
+            <p id="crop-dialog-description" className="text-center text-xs text-muted-foreground">Kéo ảnh hoặc dùng phím mũi tên để chọn vùng hiển thị trong khung tròn. Dùng + và - để phóng to hoặc thu nhỏ.</p>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={closeCropper}>Huỷ bỏ</Button>
               <Button type="button" onClick={confirmCrop} disabled={uploading}>Cắt và tải lên</Button>
@@ -218,7 +275,8 @@ export default function AvatarPicker({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="absolute inset-0 bg-foreground/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-background cursor-pointer disabled:cursor-not-allowed"
+            aria-label="Đổi ảnh đại diện"
+            className="absolute inset-0 bg-foreground/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-background cursor-pointer disabled:cursor-not-allowed"
             title="Đổi ảnh đại diện"
           >
             {uploading ? (
