@@ -1,10 +1,12 @@
-"use server";
+﻿"use server";
 
 import { and, count, eq, isNull } from "drizzle-orm";
 import { headers } from "next/headers";
 
 import { requireRole, ROLE, type RoleId } from "@codi-1/auth";
 import { userRoles } from "@codi-1/db/schema/roles";
+import { user } from "@codi-1/db/schema/auth";
+import { session as session_table } from "@codi-1/db/schema/auth";
 import { auth, db } from "@/services";
 
 export async function updateUserRole(targetUserId: string, newRoleId: RoleId): Promise<void> {
@@ -47,4 +49,31 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
       grantedBy: session.user.id,
     });
   });
+}
+
+export async function toggleUserBan(
+  targetUserId: string,
+  ban: boolean,
+  reason?: string,
+): Promise<void> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  if (targetUserId === session.user.id) {
+    throw new Error("Không thể tự khóa tài khoản của chính mình.");
+  }
+
+  await db
+    .update(user)
+    .set({
+      banned: ban,
+      banReason: ban ? (reason ?? "Vi phạm nội quy nền tảng.") : null,
+    })
+    .where(eq(user.id, targetUserId));
+
+  // Revoke all active sessions immediately when banning
+  if (ban) {
+    await db.delete(session_table).where(eq(session_table.userId, targetUserId));
+  }
 }

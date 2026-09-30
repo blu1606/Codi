@@ -1,10 +1,10 @@
-import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+﻿import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@codi-1/db";
 import * as schema from "@codi-1/db/schema/auth";
 import { userRoles } from "@codi-1/db/schema/roles";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import { emailOTP } from "better-auth/plugins";
+import { emailOTP, admin } from "better-auth/plugins";
 import { Resend } from "resend";
 
 import { getResetPasswordOTPEmailHtml, getVerificationOTPEmailHtml } from "./email-templates";
@@ -54,6 +54,7 @@ export function createAuth(env: AuthConfig, database: Database) {
     },
     plugins: [
       nextCookies(),
+      admin(),
       emailOTP({
         otpLength: 6,
         expiresIn: 120, // 2 minutes expiry
@@ -113,3 +114,4 @@ export function createAuth(env: AuthConfig, database: Database) {
 }
 
 export type Session = ReturnType<typeof createAuth>["$Infer"]["Session"];
+
