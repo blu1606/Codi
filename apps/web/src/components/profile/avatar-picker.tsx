@@ -27,40 +27,10 @@ export default function AvatarPicker({
   const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
   const cropFrameRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef({ active: false, x: 0, y: 0 });
-
-  useEffect(() => {
-    if (!cropSource) return;
-
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusableSelector = "button:not([disabled]), input:not([disabled]), [tabindex=\"0\"]";
-    const handleDialogKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeCropper();
-        return;
-      }
-      if (event.key !== "Tab") return;
-
-      const focusable = Array.from(document.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.closest("[role=\"dialog\"]"));
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleDialogKeyDown);
-    requestAnimationFrame(() => closeButtonRef.current?.focus());
-    return () => document.removeEventListener("keydown", handleDialogKeyDown);
-  }, [cropSource]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const triggerButtonRef = useRef<HTMLButtonElement>(null);
 
   const defaultAvatar =
     currentAvatar ||
@@ -98,6 +68,7 @@ export default function AvatarPicker({
       return;
     }
 
+    lastActiveElementRef.current = document.activeElement as HTMLElement | null;
     setCropSource({ file, url: URL.createObjectURL(file) });
     setZoom(1);
     setCropPosition({ x: 0, y: 0 });
@@ -107,7 +78,13 @@ export default function AvatarPicker({
   const closeCropper = () => {
     if (cropSource) URL.revokeObjectURL(cropSource.url);
     setCropSource(null);
-    requestAnimationFrame(() => previousFocusRef.current?.focus());
+    setTimeout(() => {
+      if (lastActiveElementRef.current) {
+        lastActiveElementRef.current.focus();
+      } else {
+        triggerButtonRef.current?.focus();
+      }
+    }, 50);
   };
 
   const confirmCrop = async () => {
@@ -144,29 +121,6 @@ export default function AvatarPicker({
   };
 
   const handlePointerUp = () => { dragRef.current.active = false; };
-
-  const handleCropKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? 25 : 10;
-    const offsets: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-    const offset = offsets[event.key];
-    if (offset) {
-      event.preventDefault();
-      setCropPosition((position) => clampPosition(position.x + offset[0], position.y + offset[1]));
-      return;
-    }
-    if (event.key === "+" || event.key === "=") {
-      event.preventDefault();
-      handleZoomChange(Math.min(3, Number((zoom + 0.1).toFixed(2))));
-    } else if (event.key === "-") {
-      event.preventDefault();
-      handleZoomChange(Math.max(1, Number((zoom - 0.1).toFixed(2))));
-    }
-  };
 
   const clampPosition = (x: number, y: number, nextZoom = zoom) => {
     const frameSize = cropFrameRef.current?.clientWidth || 320;
@@ -213,45 +167,214 @@ export default function AvatarPicker({
     }
   };
 
+  useEffect(() => {
+    if (!cropSource) return;
+
+    // Set initial focus to cropFrameRef for keyboard arrow panning
+    const timer = setTimeout(() => {
+      cropFrameRef.current?.focus();
+    }, 50);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeCropper();
+        return;
+      }
+
+      if (e.key === "Tab") {
+        if (!dialogRef.current) return;
+        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusable.length) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [cropSource]);
+
+  const handleKeyDownCrop = (event: React.KeyboardEvent) => {
+    const step = event.shiftKey ? 25 : 10;
+    let dx = 0;
+    let dy = 0;
+    if (event.key === "ArrowUp") dy = step;
+    else if (event.key === "ArrowDown") dy = -step;
+    else if (event.key === "ArrowLeft") dx = step;
+    else if (event.key === "ArrowRight") dx = -step;
+    else return;
+
+    event.preventDefault();
+    setCropPosition((prev) => clampPosition(prev.x + dx, prev.y + dy));
+  };
+
   return (
     <div className="space-y-4">
       {cropSource && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="crop-dialog-title" aria-describedby="crop-dialog-description" className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cropper-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeCropper();
+          }}
+        >
+          <div
+            ref={dialogRef}
+            className="w-full max-w-md space-y-4 rounded-xl border border-border bg-background p-5 shadow-2xl"
+          >
             <div className="flex items-center justify-between">
-              <h2 id="crop-dialog-title" className="text-lg font-semibold">Chỉnh sửa hình ảnh</h2>
-              <button ref={closeButtonRef} type="button" onClick={closeCropper} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Đóng">
+              <h2 id="cropper-dialog-title" className="text-lg font-semibold">
+                Chỉnh sửa hình ảnh
+              </h2>
+              <button
+                type="button"
+                onClick={closeCropper}
+                className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Đóng (Escape)"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div ref={cropFrameRef} tabIndex={0} role="region" aria-label="Vùng cắt ảnh. Dùng phím mũi tên để di chuyển ảnh" onKeyDown={handleCropKeyDown} className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted focus:outline-none focus:ring-2 focus:ring-ring">
+            <div
+              ref={cropFrameRef}
+              tabIndex={0}
+              role="region"
+              aria-label="Khung điều chỉnh vị trí ảnh. Dùng các phím mũi tên để dịch chuyển ảnh."
+              onKeyDown={handleKeyDownCrop}
+              className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted focus:outline-none focus:ring-2 focus:ring-primary"
+            >
               <img
                 src={cropSource.url}
                 alt="Xem trước ảnh đại diện"
                 draggable={false}
-                onLoad={(event) => setImageNaturalSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+                onLoad={(event) =>
+                  setImageNaturalSize({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  })
+                }
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
                 className="absolute inset-0 h-full w-full cursor-grab select-none object-cover active:cursor-grabbing"
-                style={{ transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${zoom})` }}
+                style={{
+                  transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${zoom})`,
+                }}
               />
               <div className="pointer-events-none absolute inset-0 rounded-full border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.48)]" />
             </div>
 
-            <div className="flex items-center gap-3">
-              <Minus className="h-4 w-4 text-muted-foreground" />
-              <input aria-label="Phóng to ảnh" type="range" min="1" max="3" step="0.01" value={zoom} onChange={(event) => handleZoomChange(Number(event.target.value))} className="flex-1 accent-primary" />
-              <Plus className="h-4 w-4 text-muted-foreground" />
-              <ZoomIn className="h-5 w-5 text-muted-foreground" />
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Minus className="h-4 w-4 text-muted-foreground" />
+                <input
+                  aria-label="Phóng to ảnh"
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.01"
+                  value={zoom}
+                  onChange={(event) =>
+                    handleZoomChange(Number(event.target.value))
+                  }
+                  className="flex-1 accent-primary"
+                />
+                <Plus className="h-4 w-4 text-muted-foreground" />
+                <ZoomIn className="h-5 w-5 text-muted-foreground" />
+              </div>
+
+              <div className="flex flex-col gap-2 pt-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>Dịch chuyển:</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x, p.y + 15))
+                    }
+                    aria-label="Dịch lên"
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x, p.y - 15))
+                    }
+                    aria-label="Dịch xuống"
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x + 15, p.y))
+                    }
+                    aria-label="Dịch sang trái"
+                  >
+                    ←
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center p-0 text-base font-bold"
+                    onClick={() =>
+                      setCropPosition((p) => clampPosition(p.x - 15, p.y))
+                    }
+                    aria-label="Dịch sang phải"
+                  >
+                    →
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="flex h-11 min-h-[44px] items-center justify-center px-3 text-xs font-medium"
+                    onClick={() => setCropPosition({ x: 0, y: 0 })}
+                  >
+                    Căn giữa
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <p id="crop-dialog-description" className="text-center text-xs text-muted-foreground">Kéo ảnh hoặc dùng phím mũi tên để chọn vùng hiển thị trong khung tròn. Dùng + và - để phóng to hoặc thu nhỏ.</p>
+            <p className="text-center text-xs text-muted-foreground">
+              Kéo chuột hoặc chọn khung và dùng phím mũi tên (↑ ↓ ← →) để dịch ảnh
+            </p>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={closeCropper}>Huỷ bỏ</Button>
-              <Button type="button" onClick={confirmCrop} disabled={uploading}>Cắt và tải lên</Button>
+              <Button type="button" variant="outline" onClick={closeCropper}>
+                Huỷ bỏ
+              </Button>
+              <Button type="button" onClick={confirmCrop} disabled={uploading}>
+                Cắt và tải lên
+              </Button>
             </div>
           </div>
         </div>
@@ -275,8 +398,7 @@ export default function AvatarPicker({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            aria-label="Đổi ảnh đại diện"
-            className="absolute inset-0 bg-foreground/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-background cursor-pointer disabled:cursor-not-allowed"
+            className="absolute inset-0 bg-foreground/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-background cursor-pointer disabled:cursor-not-allowed"
             title="Đổi ảnh đại diện"
           >
             {uploading ? (
@@ -297,6 +419,7 @@ export default function AvatarPicker({
               onChange={handleFileUpload}
             />
             <Button
+              ref={triggerButtonRef}
               type="button"
               variant="outline"
               size="sm"
