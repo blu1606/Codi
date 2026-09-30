@@ -59,7 +59,7 @@ export default function BanToggle({
   if (isBanned) {
     return (
       <div className="flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-500">
+        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
           <Ban className="h-3 w-3" />
           Da khoa
         </span>
