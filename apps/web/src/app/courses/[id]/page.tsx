@@ -1,7 +1,6 @@
 ﻿import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Clock, Users, GraduationCap, CheckCircle2 } from "lucide-react";
-import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
@@ -10,6 +9,7 @@ import {
   CardTitle,
 } from "@codi-1/ui/components/card";
 import { SEED_COURSES } from "@/lib/data/courses";
+import EnrollButton from "./enroll-button";
 
 interface CourseDetailPageProps {
   params: Promise<{
@@ -19,7 +19,7 @@ interface CourseDetailPageProps {
 
 export default async function CourseDetailPage({ params }: CourseDetailPageProps) {
   const { id } = await params;
-  
+
   // Find by ID or Slug
   const course = SEED_COURSES.find(c => c.id === id || c.slug === id);
 
@@ -29,18 +29,18 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
 
   return (
     <div className="container mx-auto py-10 px-4 md:px-6">
-      <Link 
-        href="/courses" 
+      <Link
+        href="/courses"
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Quay lại danh sách khóa học
+        Quay lai danh sach khoa hoc
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           <div>
-            <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary text-primary-foreground hover:bg-primary/80 mb-4">
+            <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold border-transparent bg-primary text-primary-foreground mb-4">
               {course.category}
             </div>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl mb-4">
@@ -68,9 +68,9 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
 
           <Card>
             <CardHeader>
-              <CardTitle>Nội dung khóa học</CardTitle>
+              <CardTitle>Noi dung khoa hoc</CardTitle>
               <CardDescription>
-                Các chủ đề chính bạn sẽ học trong khóa học này
+                Cac chu de chinh ban se hoc trong khoa hoc nay
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -87,7 +87,7 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
 
           <Card>
             <CardHeader>
-              <CardTitle>Yêu cầu đầu vào</CardTitle>
+              <CardTitle>Yeu cau dau vao</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="flex items-center">
@@ -101,21 +101,19 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
         <div className="lg:col-span-1">
           <Card className="sticky top-20">
             <CardHeader>
-              <CardTitle>Đăng ký khóa học</CardTitle>
+              <CardTitle>Dang ky khoa hoc</CardTitle>
               <CardDescription>
-                Bắt đầu hành trình học tập của bạn ngay hôm nay
+                Bat dau hanh trinh hoc tap cua ban ngay hom nay
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-3xl font-bold">Miễn phí</div>
+              <div className="text-3xl font-bold">Mien phi</div>
               <p className="text-sm text-muted-foreground">
-                Tất cả các khóa học hiện tại đang trong giai đoạn thử nghiệm và được cung cấp miễn phí.
+                Tat ca cac khoa hoc hien tai dang trong giai doan thu nghiem va duoc cung cap mien phi.
               </p>
-              <Button className="w-full" size="lg">
-                Đăng ký học ngay
-              </Button>
+              <EnrollButton courseTitle={course.title} />
               <div className="text-center text-xs text-muted-foreground mt-4">
-                Bảo hành hoàn tiền trong 30 ngày nếu không hài lòng.
+                Bao hanh hoan tien trong 30 ngay neu khong hai long.
               </div>
             </CardContent>
           </Card>

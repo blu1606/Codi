@@ -288,7 +288,7 @@ export default function CoursesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => router.push('/courses/' + course.slug)}
+                    onClick={() => router.push(('/courses/' + course.slug) as any)}
                     className="text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2"
                   >
                     Xem chi tiết
@@ -442,3 +442,4 @@ export default function CoursesPage() {
     </div>
   );
 }
+
