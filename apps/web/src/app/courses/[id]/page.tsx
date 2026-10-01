@@ -112,9 +112,7 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
                 Tất cả các khóa học hiện đang trong giai đoạn thử nghiệm và được cung cấp miễn phí.
               </p>
               <EnrollButton courseTitle={course.title} />
-              <div className="text-center text-xs text-muted-foreground mt-4">
-                Bảo hành hoàn tiền trong 30 ngày nếu không hài lòng.
-              </div>
+              
             </CardContent>
           </Card>
         </div>
@@ -122,3 +120,4 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
     </div>
   );
 }
+
