@@ -30,16 +30,16 @@ export default function Home() {
     ],
     stats: [
       {
-        value: "50K+",
-        label: "Học viên",
+        value: "Lộ trình",
+        label: "Theo mục tiêu học tập",
       },
       {
-        value: "120+",
-        label: "Khóa học AI",
+        value: "Khóa học",
+        label: "Khám phá chủ đề lập trình",
       },
       {
-        value: "94.6%",
-        label: "Hoàn thành mục tiêu",
+        value: "Trợ lý AI",
+        label: "Hỗ trợ học tập",
       },
     ],
     images: [

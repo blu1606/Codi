@@ -30,18 +30,23 @@
   will-change: transform, opacity;
 }
 
-.overlay ~ :global(div) :global([data-codi-logo]) {
-  visibility: hidden;
-  animation: reveal 0s 8s forwards;
+@media (prefers-reduced-motion: no-preference) {
+  .overlay ~ :global(div) :global([data-codi-logo]),
+  .overlay ~ :global(div) :global([data-codi-intro-nav] [data-slot="navigation-menu-item"]),
+  .overlay ~ :global(div) :global([data-codi-intro-account]),
+  .overlay ~ :global(div) :global([data-codi-intro-hero]),
+  .overlay ~ :global(div) :global([data-codi-intro-image]) {
+    /* Reserve layout space until each stage of the intro reveals these elements. */
+    visibility: hidden;
+    animation: reveal 0s 8s forwards;
+  }
 }
 
-.overlay ~ :global(div) :global([data-codi-intro-nav] [data-slot="navigation-menu-item"]),
-.overlay ~ :global(div) :global([data-codi-intro-account]),
-.overlay ~ :global(div) :global([data-codi-intro-hero]),
-.overlay ~ :global(div) :global([data-codi-intro-image]) {
-  /* Reserve layout space until each stage of the intro reveals these elements. */
-  visibility: hidden;
-  animation: reveal 0s 8s forwards;
+@media (prefers-reduced-motion: reduce) {
+  .overlay {
+    display: none;
+    animation: none;
+  }
 }
 
 @keyframes dismiss {

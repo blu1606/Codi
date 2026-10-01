@@ -26,13 +26,18 @@ export default function HomeLogoIntro() {
   const markRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setActive(pathname === "/");
+    setActive(pathname === "/" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, [pathname]);
 
   useLayoutEffect(() => {
     if (!active) return;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    // Recheck before any WAAPI call in case the preference changed after activation.
+    if (reducedMotion.matches) {
+      setActive(false);
+      return;
+    }
     const target = document.querySelector<HTMLElement>("[data-codi-logo]");
     const overlay = overlayRef.current;
     const backdrop = backdropRef.current;
@@ -48,15 +53,14 @@ export default function HomeLogoIntro() {
     const animations: Animation[] = [];
     let finishFrame = 0;
     let disposed = false;
-    // Keep the requested journey in reduced-motion mode, with gentler size/opacity changes.
-    const startScale = reducedMotion.matches ? 0.9 : 0.65;
-    const peakScale = reducedMotion.matches ? 1.9 : 3.3;
-    const pulseOpacity = reducedMotion.matches ? 0.8 : 0.3;
+    const startScale = 0.65;
+    const peakScale = 3.3;
+    const pulseOpacity = 0.3;
 
     const revealHero = () => {
       if (disposed) return [];
       const items = Array.from(document.querySelectorAll<HTMLElement>("[data-codi-intro-hero]"));
-      const fromY = reducedMotion.matches ? -6 : -28;
+      const fromY = -28;
       const heroAnimations = items.map((item, index) => item.animate(
         [
           { transform: `translate3d(0, ${fromY}px, 0)`, opacity: 0, visibility: "visible" },
@@ -76,7 +80,7 @@ export default function HomeLogoIntro() {
     const revealImages = () => {
       if (disposed) return [];
       const items = Array.from(document.querySelectorAll<HTMLElement>("[data-codi-intro-image]"));
-      const fromX = reducedMotion.matches ? 12 : 80;
+      const fromX = 80;
       const imageAnimations = items.map((item, index) => item.animate(
         [
           { transform: `translate3d(${fromX}px, 0, 0)`, opacity: 0, visibility: "visible" },
@@ -121,7 +125,7 @@ export default function HomeLogoIntro() {
       const account = document.querySelector<HTMLElement>("[data-codi-intro-account]");
       if (account) {
         const availableSpace = Math.max(0, document.documentElement.clientWidth - account.getBoundingClientRect().right);
-        const fromX = Math.min(reducedMotion.matches ? 8 : 40, availableSpace);
+        const fromX = Math.min(40, availableSpace);
         headerAnimations.push(account.animate(
           [
             { transform: `translate3d(${fromX}px, 0, 0)`, opacity: 0, visibility: "visible" },
