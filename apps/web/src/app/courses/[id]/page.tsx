@@ -34,7 +34,7 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Quay lai danh sach khoa hoc
+        Quay lại danh sách khóa học
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -68,9 +68,9 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
 
           <Card>
             <CardHeader>
-              <CardTitle>Noi dung khoa hoc</CardTitle>
+              <CardTitle>Nội dung khóa học</CardTitle>
               <CardDescription>
-                Cac chu de chinh ban se hoc trong khoa hoc nay
+                Các chủ đề chính bạn sẽ học trong khóa học này
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -87,7 +87,7 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
 
           <Card>
             <CardHeader>
-              <CardTitle>Yeu cau dau vao</CardTitle>
+              <CardTitle>Yêu cầu đầu vào</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="flex items-center">
@@ -101,19 +101,19 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
         <div className="lg:col-span-1">
           <Card className="sticky top-20">
             <CardHeader>
-              <CardTitle>Dang ky khoa hoc</CardTitle>
+              <CardTitle>Đăng ký khóa học</CardTitle>
               <CardDescription>
-                Bat dau hanh trinh hoc tap cua ban ngay hom nay
+                Bắt đầu hành trình học tập của bạn ngay hôm nay
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-3xl font-bold">Mien phi</div>
+              <div className="text-3xl font-bold">Miễn phí</div>
               <p className="text-sm text-muted-foreground">
-                Tat ca cac khoa hoc hien tai dang trong giai doan thu nghiem va duoc cung cap mien phi.
+                Tất cả các khóa học hiện đang trong giai đoạn thử nghiệm và được cung cấp miễn phí.
               </p>
               <EnrollButton courseTitle={course.title} />
               <div className="text-center text-xs text-muted-foreground mt-4">
-                Bao hanh hoan tien trong 30 ngay neu khong hai long.
+                Bảo hành hoàn tiền trong 30 ngày nếu không hài lòng.
               </div>
             </CardContent>
           </Card>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
@@ -20,7 +20,7 @@ export default function EnrollButton({ courseTitle }: { courseTitle: string }) {
 
   return (
     <Button className="w-full" size="lg" onClick={handleEnroll}>
-      {session?.user ? "Vao hoc ngay" : "Dang ky hoc ngay"}
+      {session?.user ? "Vào học ngay" : "Đăng ký học ngay"}
       <ArrowRight className="ml-2 h-4 w-4" />
     </Button>
   );
