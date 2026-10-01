@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
@@ -288,7 +288,7 @@ export default function CoursesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSelectedCourse(course)}
+                    onClick={() => router.push(('/courses/' + course.slug) as any)}
                     className="text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2"
                   >
                     Xem chi tiết
@@ -442,3 +442,4 @@ export default function CoursesPage() {
     </div>
   );
 }
+
