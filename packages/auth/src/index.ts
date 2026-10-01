@@ -1,3 +1,5 @@
+﻿import { APIError } from "better-auth/api";
+import { eq } from "drizzle-orm";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@codi-1/db";
 import * as schema from "@codi-1/db/schema/auth";
@@ -51,6 +53,21 @@ export function createAuth(env: AuthConfig, database: Database) {
           },
         },
       },
+      session: {
+        create: {
+          before: async (session) => {
+            const [dbUser] = await database
+              .select({ banned: schema.user.banned })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId));
+              
+            if (dbUser?.banned) {
+              throw new APIError("UNAUTHORIZED", { message: "Tai khoan da bi khoa." });
+            }
+            return { data: session };
+          }
+        }
+      }
     },
     plugins: [
       nextCookies(),
@@ -63,8 +80,8 @@ export function createAuth(env: AuthConfig, database: Database) {
             try {
               const isReset = type === "forget-password";
               const subject = isReset
-                ? "Mã OTP đặt lại mật khẩu Codi"
-                : "Mã OTP xác thực tài khoản Codi";
+                ? "Ma OTP dat lai mat khau Codi"
+                : "Ma OTP xac thuc tai khoan Codi";
               const html = isReset
                 ? getResetPasswordOTPEmailHtml({ otp })
                 : getVerificationOTPEmailHtml({ otp });
@@ -78,15 +95,15 @@ export function createAuth(env: AuthConfig, database: Database) {
 
               if (result.error) {
                 console.warn(
-                  `\n⚠️ [Resend Error]: ${result.error.message}\n👉 [Fallback OTP for ${email}]: ${otp} (Hết hạn sau 2 phút)\n`
+                  `\n[Resend Error]: ${result.error.message}\n[Fallback OTP for ${email}]: ${otp} (Het han sau 2 phut)\n`
                 );
               }
             } catch (error) {
               console.error("[Resend] Failed to send OTP email:", error);
-              console.log(`👉 [Fallback OTP for ${email}]: ${otp}`);
+              console.log(`[Fallback OTP for ${email}]: ${otp}`);
             }
           } else {
-            console.log(`[Auth OTP for ${email}]: ${otp} (Type: ${type}, Hết hạn sau 2 phút)`);
+            console.log(`[Auth OTP for ${email}]: ${otp} (Type: ${type}, Het han sau 2 phut)`);
           }
         },
       }),
