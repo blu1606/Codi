@@ -81,6 +81,9 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
   const handleAvatarUpdated = (newUrl: string) => {
     setAvatarUrl(newUrl);
+    window.dispatchEvent(new CustomEvent("profile-avatar-updated", {
+      detail: { userId: user.id, imageUrl: newUrl },
+    }));
     router.refresh();
   };
 
