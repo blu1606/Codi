@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import "../index.css";
 import Header from "@/components/header";
+import HomeLogoIntro from "@/components/home-logo-intro";
 import Providers from "@/components/providers";
 
 const geistSans = Geist({
@@ -34,6 +35,7 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <Providers>
+          <HomeLogoIntro />
           <div className="grid grid-rows-[auto_1fr] h-svh">
             <Header />
             {children}
