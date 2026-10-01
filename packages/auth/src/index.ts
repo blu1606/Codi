@@ -1,4 +1,6 @@
-﻿import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+﻿import { APIError } from "better-auth/api";
+import { eq } from "drizzle-orm";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@codi-1/db";
 import * as schema from "@codi-1/db/schema/auth";
 import { userRoles } from "@codi-1/db/schema/roles";
@@ -51,6 +53,21 @@ export function createAuth(env: AuthConfig, database: Database) {
           },
         },
       },
+      session: {
+        create: {
+          before: async (session) => {
+            const [dbUser] = await database
+              .select({ banned: schema.user.banned })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId));
+              
+            if (dbUser?.banned) {
+              throw new APIError("UNAUTHORIZED", { message: "Tai khoan da bi khoa." });
+            }
+            return { data: session };
+          }
+        }
+      }
     },
     plugins: [
       nextCookies(),

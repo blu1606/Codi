@@ -1,6 +1,7 @@
-import { and, count, eq, isNull } from "drizzle-orm";
+﻿import { and, count, eq, isNull } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { userRoles } from "@codi-1/db/schema/roles";
+import { user } from "@codi-1/db/schema/auth";
 
 export const ROLE = { LEARNER: "LEARNER", LECTURER: "LECTURER", ADMIN: "ADMIN" } as const;
 export type RoleId = (typeof ROLE)[keyof typeof ROLE];
@@ -9,7 +10,14 @@ export async function getActiveRoles(db: Database, userId: string): Promise<Role
   const result = await db
     .select({ roleId: userRoles.roleId })
     .from(userRoles)
-    .where(and(eq(userRoles.userId, userId), isNull(userRoles.revokedAt)));
+    .innerJoin(user, eq(userRoles.userId, user.id))
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        isNull(userRoles.revokedAt),
+        eq(user.banned, false)
+      )
+    );
 
   return result.map((r) => r.roleId as RoleId);
 }
@@ -18,7 +26,14 @@ export async function countActiveHolders(db: Database, roleId: RoleId): Promise<
   const result = await db
     .select({ total: count() })
     .from(userRoles)
-    .where(and(eq(userRoles.roleId, roleId), isNull(userRoles.revokedAt)));
+    .innerJoin(user, eq(userRoles.userId, user.id))
+    .where(
+      and(
+        eq(userRoles.roleId, roleId),
+        isNull(userRoles.revokedAt),
+        eq(user.banned, false)
+      )
+    );
 
   return result[0]?.total ?? 0;
 }

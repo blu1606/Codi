@@ -15,8 +15,7 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
   await requireRole(db, session.user.id, ROLE.ADMIN);
 
   await db.transaction(async (tx) => {
-    // lock this user's active role row(s) first so a concurrent updateUserRole call on
-    // the same target, or the self-lockout count below, can't interleave with this one
+    // lock this user's active role row(s) first
     const currentActive = await tx
       .select()
       .from(userRoles)
@@ -24,8 +23,8 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
       .for("update");
 
     if (targetUserId === session.user.id && newRoleId !== ROLE.ADMIN) {
-      const [{ total }] = await tx
-        .select({ total: count() })
+      const activeAdmins = await tx
+        .select({ id: userRoles.id })
         .from(userRoles)
         .innerJoin(user, eq(userRoles.userId, user.id))
         .where(
@@ -34,8 +33,10 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
             isNull(userRoles.revokedAt),
             eq(user.banned, false)
           )
-        );
-      if (total <= 1) {
+        )
+        .for("update");
+        
+      if (activeAdmins.length <= 1) {
         throw new Error("Khong the xoa quyen Admin cuoi cung dang hoat dong.");
       }
     }
@@ -82,21 +83,23 @@ export async function toggleUserBan(
         );
 
       if (targetIsAdmin[0].total > 0) {
-        // Ensure there is at least one OTHER admin who is NOT banned
-        const [{ total: otherAdmins }] = await tx
-          .select({ total: count() })
+        // Lock all active admin roles to serialize against concurrent bans/demotions
+        const activeAdmins = await tx
+          .select({ id: userRoles.id, userId: userRoles.userId })
           .from(userRoles)
           .innerJoin(user, eq(userRoles.userId, user.id))
           .where(
             and(
               eq(userRoles.roleId, ROLE.ADMIN),
               isNull(userRoles.revokedAt),
-              eq(user.banned, false),
-              ne(user.id, targetUserId)
+              eq(user.banned, false)
             )
-          );
+          )
+          .for("update");
 
-        if (otherAdmins === 0) {
+        const otherAdmins = activeAdmins.filter((a) => a.userId !== targetUserId);
+
+        if (otherAdmins.length === 0) {
           throw new Error("Khong the khoa Admin dang hoat dong duy nhat.");
         }
       }
