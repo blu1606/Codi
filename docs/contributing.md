@@ -48,9 +48,15 @@ pnpm run check:standards
 # 3. Kiểm tra tính tương thích TypeScript toàn monorepo
 pnpm run check-types
 
-# 4. Chạy môi trường dev
+# 4. Chạy kiểm thử đơn vị & độ phủ (Unit Tests & Coverage)
+pnpm test
+pnpm test:coverage
+
+# 5. Chạy môi trường dev
 pnpm run dev:web
 ```
+
+> Chi tiết về kiến trúc test, AAA pattern, phạm vi mock và hướng dẫn demo xem tại: [`docs/unit-testing.md`](./unit-testing.md).
 
 ---
 
@@ -65,7 +71,7 @@ pnpm run dev:web
 2. Thực hiện thay đổi, tuân thủ nguyên tắc:
    - Sử dụng design token từ Tailwind config, không hardcode màu primitive (`text-red-500`, `bg-blue-600`...).
    - Sử dụng icon từ `lucide-react`, không viết thẻ `<svg>` inline trực tiếp trừ khi là brand logo được cấp phép.
-3. Chạy `pnpm run check:standards` và `pnpm run check-types` cục bộ.
+3. Chạy `pnpm run check:standards`, `pnpm run check-types`, và `pnpm test:coverage` cục bộ.
 4. Mở PR vào nhánh `develop` (hoặc `main` nếu là bản release vX.X.X):
    - PR sẽ tự động áp dụng template và gắn reviewer/assignee.
    - Luôn đính kèm `Closes #<issue_id>` để tự động link và đóng issue tương ứng khi merge.
