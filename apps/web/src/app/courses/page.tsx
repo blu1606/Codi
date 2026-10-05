@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -25,14 +25,23 @@ import {
   CardTitle,
 } from "@codi-1/ui/components/card";
 import { Input } from "@codi-1/ui/components/input";
-import { SEED_COURSES, type Course } from "@/lib/data/courses";
+import type { Course } from "@/lib/data/courses";
 import { filterCourseCatalog } from "@/lib/filter-course-catalog";
 import { authClient } from "@/lib/auth-client";
+
+type CatalogCourse = Omit<Course, "topics" | "targetAudience" | "prerequisites" | "category" | "level"> & {
+  category: string;
+  level: string;
+  topics?: string[];
+  targetAudience?: string;
+  prerequisites?: string;
+};
 
 const CATEGORIES = [
   "Tất cả",
   "Frontend",
   "Backend",
+  "Fullstack",
   "Data & AI",
   "Mobile",
   "Computer Science",
@@ -46,18 +55,62 @@ export default function CoursesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Tất cả");
   const [selectedLevel, setSelectedLevel] = useState<string>("Tất cả cấp độ");
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<CatalogCourse | null>(null);
+  const [catalog, setCatalog] = useState<CatalogCourse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [adding, setAdding] = useState(false);
+  const [cartMessage, setCartMessage] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError(false);
+    fetch("/api/courses", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Catalogue unavailable");
+        const data = await response.json();
+        if (!Array.isArray(data.courses)) throw new Error("Invalid catalogue");
+        if (!controller.signal.aborted) setCatalog(data.courses);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLoadError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [reload]);
 
   // Filter courses based on search term, category and level
   const filteredCourses = useMemo(() => {
-    return filterCourseCatalog(SEED_COURSES, searchTerm, selectedCategory, selectedLevel);
-  }, [searchTerm, selectedCategory, selectedLevel]);
+    return filterCourseCatalog(catalog, searchTerm, selectedCategory, selectedLevel);
+  }, [catalog, searchTerm, selectedCategory, selectedLevel]);
 
-  const handleEnrollClick = (course: Course) => {
-    if (session?.user) {
-      router.push("/dashboard");
-    } else {
+  const handleEnrollClick = async (course: CatalogCourse) => {
+    if (!session?.user) {
       router.push("/login");
+      return;
+    }
+    setAdding(true);
+    setCartMessage("");
+    try {
+      const response = await fetch("/api/student/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: course.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setCartMessage(result.error || "Không thể thêm khóa học vào giỏ.");
+      } else {
+        setCartMessage(result.added ? "Đã thêm khóa học vào giỏ." : "Khóa học đã có trong giỏ.");
+      }
+    } catch {
+      setCartMessage("Không thể kết nối. Vui lòng thử lại.");
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -155,6 +208,7 @@ export default function CoursesPage() {
 
       {/* Main Course Listing Section */}
       <section className="container mx-auto max-w-7xl px-4 sm:px-6 py-10">
+        <p role="status" className="mb-4 text-sm">{cartMessage}</p>
         {/* Results Counter */}
         <div className="flex items-center justify-between pb-6">
           <p className="text-sm text-muted-foreground">
@@ -178,7 +232,14 @@ export default function CoursesPage() {
         </div>
 
         {/* Empty State */}
-        {filteredCourses.length === 0 ? (
+        {loading ? (
+          <p role="status" className="min-h-64 py-16 text-center">Đang tải khóa học…</p>
+        ) : loadError ? (
+          <div role="alert" className="min-h-64 py-16 text-center">
+            <p>Không tải được danh mục khóa học.</p>
+            <Button onClick={() => setReload((value) => value + 1)}>Thử lại</Button>
+          </div>
+        ) : filteredCourses.length === 0 ? (
           <Card className="border border-dashed border-border py-16 text-center">
             <CardContent className="space-y-4 max-w-md mx-auto">
               <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
@@ -249,7 +310,7 @@ export default function CoursesPage() {
                     </p>
 
                     {/* Key Topics preview */}
-                    <div className="space-y-1.5">
+                    {course.topics && <div className="space-y-1.5">
                       <span className="text-xs font-semibold text-foreground/80">Chủ đề trọng tâm:</span>
                       <div className="flex flex-wrap gap-1.5">
                         {course.topics.slice(0, 3).map((topic, i) => (
@@ -266,7 +327,7 @@ export default function CoursesPage() {
                           </span>
                         )}
                       </div>
-                    </div>
+                    </div>}
                   </CardContent>
                 </div>
 
@@ -285,9 +346,10 @@ export default function CoursesPage() {
                     variant="default"
                     size="sm"
                     onClick={() => handleEnrollClick(course)}
+                    disabled={adding}
                     className="gap-1.5 text-xs cursor-pointer"
                   >
-                    <span>{session?.user ? "Vào học ngay" : "Đăng ký học"}</span>
+                    <span>{adding ? "Đang thêm…" : "Thêm vào giỏ"}</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -362,7 +424,7 @@ export default function CoursesPage() {
             </p>
 
             {/* Information Grid */}
-            <div className="grid sm:grid-cols-2 gap-4 rounded-xl bg-muted/40 p-4 border border-border/60 text-xs">
+            {(selectedCourse.targetAudience || selectedCourse.prerequisites) && <div className="grid sm:grid-cols-2 gap-4 rounded-xl bg-muted/40 p-4 border border-border/60 text-xs">
               <div className="space-y-1">
                 <span className="font-semibold text-foreground">Đối tượng phù hợp:</span>
                 <p className="text-muted-foreground">{selectedCourse.targetAudience}</p>
@@ -371,10 +433,10 @@ export default function CoursesPage() {
                 <span className="font-semibold text-foreground">Yêu cầu đầu vào:</span>
                 <p className="text-muted-foreground">{selectedCourse.prerequisites}</p>
               </div>
-            </div>
+            </div>}
 
             {/* Curriculum Topics */}
-            <div className="space-y-2">
+            {selectedCourse.topics && <div className="space-y-2">
               <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                 <Layers className="h-4 w-4 text-primary" />
                 Nội dung các học phần:
@@ -390,18 +452,19 @@ export default function CoursesPage() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </div>}
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3 pt-3 border-t border-border">
               <Button
+                disabled={adding}
                 onClick={() => {
                   setSelectedCourse(null);
                   handleEnrollClick(selectedCourse);
                 }}
                 className="flex-1 cursor-pointer gap-2"
               >
-                <span>{session?.user ? "Tham gia lớp học ngay" : "Đăng ký học khóa này"}</span>
+                <span>{adding ? "Đang thêm…" : "Thêm vào giỏ"}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
               <Button
