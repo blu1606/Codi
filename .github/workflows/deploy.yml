@@ -36,6 +36,18 @@ jobs:
       - name: Type Check
         run: pnpm run check-types
 
+      - name: Unit Tests and Coverage Gate
+        run: pnpm exec vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=coverage/junit.xml
+
+      - name: Upload Test and Coverage Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-validation-coverage
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: error
+
   deploy:
     name: Vercel Deploy
     needs: validate

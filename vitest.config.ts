@@ -21,12 +21,13 @@ export default defineConfig({
         "apps/web/src/app/dashboard/admin/actions.ts",
         "apps/web/src/app/api/user/profile/route.ts",
         "apps/web/src/lib/filter-course-catalog.ts",
+        "apps/web/src/app/api/student/cart/route.ts",
       ],
       thresholds: {
         statements: 80,
         lines: 80,
         functions: 80,
-        branches: 75,
+        branches: 80,
       },
     },
     alias: {
