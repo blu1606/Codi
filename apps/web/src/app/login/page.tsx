@@ -2,7 +2,6 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { LogIn, UserPlus } from "lucide-react";
 
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
@@ -21,37 +20,19 @@ function LoginContent() {
   }, [tabParam]);
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 pt-10 pb-16">
-      {/* Segmented Tab Navigation: Tab Login / Tab Đăng ký */}
-      <div className="mb-4 grid w-full grid-cols-2 rounded-xl bg-muted/80 p-1 text-muted-foreground border border-border/50 shadow-sm backdrop-blur-sm">
-        <button
-          type="button"
-          onClick={() => setActiveTab("signin")}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all duration-200 cursor-pointer ${
-            activeTab === "signin"
-              ? "bg-background text-foreground shadow-sm font-bold border border-border/40"
-              : "hover:text-foreground text-muted-foreground"
-          }`}
-        >
-          <LogIn className="h-4 w-4" />
-          <span>Đăng nhập</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("signup")}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-all duration-200 cursor-pointer ${
-            activeTab === "signup"
-              ? "bg-background text-foreground shadow-sm font-bold border border-border/40"
-              : "hover:text-foreground text-muted-foreground"
-          }`}
-        >
-          <UserPlus className="h-4 w-4" />
-          <span>Đăng ký</span>
-        </button>
+    <div className="login-cyber-violet relative flex min-h-[calc(100vh-4rem)] w-full items-center justify-center overflow-y-auto bg-background p-4 py-8 sm:p-8">
+      <div
+        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage:
+            "url('https://cdn.21st.dev/assets/mirror/80/807b564e6a3dfa435b6ffb617953d522554723e27b78eaa0ae311392cb957016.jpg')",
+        }}
+      >
+        <div className="absolute inset-0 bg-background/80 dark:bg-background/88 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgb(99_102_241_/_0.18),_transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgb(129_140_248_/_0.22),_transparent_55%)]" />
       </div>
 
-      {/* Tab Panels */}
-      <div className="w-full">
+      <div className="relative z-10 w-full max-w-md">
         {activeTab === "signin" ? (
           <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} />
         ) : (

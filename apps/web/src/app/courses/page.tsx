@@ -18,6 +18,7 @@ import {
 } from "@codi-1/ui/components/card";
 import { Input } from "@codi-1/ui/components/input";
 import { fetchCourses, type CatalogCourse } from "@/lib/course-catalog";
+import { filterCourseCatalog } from "@/lib/filter-course-catalog";
 import { authClient } from "@/lib/auth-client";
 
 const CATEGORIES = [
@@ -43,6 +44,8 @@ export default function CoursesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [adding, setAdding] = useState(false);
+  const [cartMessage, setCartMessage] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -64,28 +67,32 @@ export default function CoursesPage() {
 
   // Filter courses based on search term, category and level
   const filteredCourses = useMemo(() => {
-    return courses.filter((course) => {
-      const matchesSearch =
-        searchTerm.trim() === "" ||
-        course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.category.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesCategory =
-        selectedCategory === "Tất cả" || course.category === selectedCategory;
-
-      const matchesLevel =
-        selectedLevel === "Tất cả cấp độ" || course.level === selectedLevel;
-
-      return matchesSearch && matchesCategory && matchesLevel;
-    });
+    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel);
   }, [courses, searchTerm, selectedCategory, selectedLevel]);
 
-  const handleEnrollClick = () => {
-    if (session?.user) {
-      router.push("/dashboard");
-    } else {
+  const handleEnrollClick = async (course: CatalogCourse) => {
+    if (!session?.user) {
       router.push("/login");
+      return;
+    }
+    setAdding(true);
+    setCartMessage("");
+    try {
+      const response = await fetch("/api/student/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: course.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setCartMessage(result.error || "Không thể thêm khóa học vào giỏ.");
+      } else {
+        setCartMessage(result.added ? "Đã thêm khóa học vào giỏ." : "Khóa học đã có trong giỏ.");
+      }
+    } catch {
+      setCartMessage("Không thể kết nối. Vui lòng thử lại.");
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -183,6 +190,7 @@ export default function CoursesPage() {
 
       {/* Main Course Listing Section */}
       <section className="container mx-auto max-w-7xl px-4 sm:px-6 py-10">
+        <p role="status" className="mb-4 text-sm">{cartMessage}</p>
         {/* Results Counter */}
         <div className="flex items-center justify-between pb-6">
           <p className="text-sm text-muted-foreground">
@@ -303,10 +311,11 @@ export default function CoursesPage() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={handleEnrollClick}
+                    onClick={() => handleEnrollClick(course)}
+                    disabled={adding}
                     className="gap-1.5 text-xs cursor-pointer"
                   >
-                    <span>{session?.user ? "Vào học ngay" : "Đăng ký học"}</span>
+                    <span>{adding ? "Đang thêm…" : "Thêm vào giỏ"}</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -395,13 +404,14 @@ export default function CoursesPage() {
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3 pt-3 border-t border-border">
               <Button
+                disabled={adding}
                 onClick={() => {
                   setSelectedCourse(null);
-                  handleEnrollClick();
+                  handleEnrollClick(selectedCourse);
                 }}
                 className="flex-1 cursor-pointer gap-2"
               >
-                <span>{session?.user ? "Tham gia lớp học ngay" : "Đăng ký học khóa này"}</span>
+                <span>{adding ? "Đang thêm…" : "Thêm vào giỏ"}</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
               <Button
