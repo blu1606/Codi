@@ -20,7 +20,6 @@ interface CourseDetailPageProps {
 export default async function CourseDetailPage({ params }: CourseDetailPageProps) {
   const { id } = await params;
 
-  // Find by ID or Slug
   const course = SEED_COURSES.find(c => c.id === id || c.slug === id);
 
   if (!course) {
@@ -112,7 +111,6 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
                 Tất cả các khóa học hiện đang trong giai đoạn thử nghiệm và được cung cấp miễn phí.
               </p>
               <EnrollButton courseTitle={course.title} />
-              
             </CardContent>
           </Card>
         </div>
@@ -120,4 +118,3 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
     </div>
   );
 }
-
