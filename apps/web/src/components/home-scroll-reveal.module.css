@@ -1,0 +1,11 @@
+.reveal {
+  min-width: 0;
+}
+
+/* Override motion styles immediately when the viewport or preference changes. */
+@media (width < 1024px), (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

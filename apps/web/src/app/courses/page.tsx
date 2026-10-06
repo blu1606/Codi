@@ -1,37 +1,30 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  BookOpen,
-  CheckCircle2,
   Clock,
-  Compass,
-  GraduationCap,
-  Layers,
   Search,
   Sparkles,
   X,
   ArrowRight,
-  ExternalLink,
 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@codi-1/ui/components/card";
 import { Input } from "@codi-1/ui/components/input";
-import { SEED_COURSES, type Course } from "@/lib/data/courses";
+import { fetchCourses, type CatalogCourse } from "@/lib/course-catalog";
 import { authClient } from "@/lib/auth-client";
 
 const CATEGORIES = [
   "Tất cả",
   "Frontend",
   "Backend",
+  "Fullstack",
   "Data & AI",
   "Mobile",
   "Computer Science",
@@ -45,16 +38,38 @@ export default function CoursesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Tất cả");
   const [selectedLevel, setSelectedLevel] = useState<string>("Tất cả cấp độ");
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<CatalogCourse | null>(null);
+  const [courses, setCourses] = useState<CatalogCourse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetchCourses(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setCourses(data);
+        const courseId = new URLSearchParams(window.location.search).get("course");
+        if (courseId) setSelectedCourse(data.find((course) => course.id === courseId) ?? null);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setError("Không thể tải khóa học. Vui lòng thử lại.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [attempt]);
 
   // Filter courses based on search term, category and level
   const filteredCourses = useMemo(() => {
-    return SEED_COURSES.filter((course) => {
+    return courses.filter((course) => {
       const matchesSearch =
         searchTerm.trim() === "" ||
         course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         course.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        course.topics.some((t) => t.toLowerCase().includes(searchTerm.toLowerCase()));
+        course.category.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesCategory =
         selectedCategory === "Tất cả" || course.category === selectedCategory;
@@ -64,9 +79,9 @@ export default function CoursesPage() {
 
       return matchesSearch && matchesCategory && matchesLevel;
     });
-  }, [searchTerm, selectedCategory, selectedLevel]);
+  }, [courses, searchTerm, selectedCategory, selectedLevel]);
 
-  const handleEnrollClick = (course: Course) => {
+  const handleEnrollClick = () => {
     if (session?.user) {
       router.push("/dashboard");
     } else {
@@ -191,7 +206,14 @@ export default function CoursesPage() {
         </div>
 
         {/* Empty State */}
-        {filteredCourses.length === 0 ? (
+        {loading ? (
+          <p role="status" className="py-12 text-center text-sm text-muted-foreground">Đang tải khóa học…</p>
+        ) : error ? (
+          <Card className="items-center gap-4 border-dashed p-8 text-center">
+            <p role="alert" className="text-sm text-muted-foreground">{error}</p>
+            <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>Thử lại</Button>
+          </Card>
+        ) : filteredCourses.length === 0 ? (
           <Card className="border border-dashed border-border py-16 text-center">
             <CardContent className="space-y-4 max-w-md mx-auto">
               <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
@@ -261,25 +283,9 @@ export default function CoursesPage() {
                       {course.description}
                     </p>
 
-                    {/* Key Topics preview */}
-                    <div className="space-y-1.5">
-                      <span className="text-xs font-semibold text-foreground/80">Chủ đề trọng tâm:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {course.topics.slice(0, 3).map((topic, i) => (
-                          <span
-                            key={i}
-                            className="rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground font-medium"
-                          >
-                            {topic}
-                          </span>
-                        ))}
-                        {course.topics.length > 3 && (
-                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                            +{course.topics.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {course.enrollmentCount.toLocaleString("vi-VN")} học viên đã đăng ký
+                    </p>
                   </CardContent>
                 </div>
 
@@ -297,7 +303,7 @@ export default function CoursesPage() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() => handleEnrollClick(course)}
+                    onClick={handleEnrollClick}
                     className="gap-1.5 text-xs cursor-pointer"
                   >
                     <span>{session?.user ? "Vào học ngay" : "Đăng ký học"}</span>
@@ -377,32 +383,13 @@ export default function CoursesPage() {
             {/* Information Grid */}
             <div className="grid sm:grid-cols-2 gap-4 rounded-xl bg-muted/40 p-4 border border-border/60 text-xs">
               <div className="space-y-1">
-                <span className="font-semibold text-foreground">Đối tượng phù hợp:</span>
-                <p className="text-muted-foreground">{selectedCourse.targetAudience}</p>
+                <span className="font-semibold text-foreground">Học phí:</span>
+                <p className="text-muted-foreground">{selectedCourse.price === 0 ? "Miễn phí" : `${selectedCourse.price.toLocaleString("vi-VN")} ₫`}</p>
               </div>
               <div className="space-y-1">
-                <span className="font-semibold text-foreground">Yêu cầu đầu vào:</span>
-                <p className="text-muted-foreground">{selectedCourse.prerequisites}</p>
+                <span className="font-semibold text-foreground">Học viên đã đăng ký:</span>
+                <p className="text-muted-foreground">{selectedCourse.enrollmentCount.toLocaleString("vi-VN")}</p>
               </div>
-            </div>
-
-            {/* Curriculum Topics */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                <Layers className="h-4 w-4 text-primary" />
-                Nội dung các học phần:
-              </h4>
-              <ul className="grid sm:grid-cols-2 gap-2 text-xs">
-                {selectedCourse.topics.map((topic, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 p-2.5 bg-background"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <span className="text-foreground/90">{topic}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
 
             {/* Action Buttons */}
@@ -410,7 +397,7 @@ export default function CoursesPage() {
               <Button
                 onClick={() => {
                   setSelectedCourse(null);
-                  handleEnrollClick(selectedCourse);
+                  handleEnrollClick();
                 }}
                 className="flex-1 cursor-pointer gap-2"
               >

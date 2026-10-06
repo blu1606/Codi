@@ -2,6 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import Hero from "@/components/hero";
+import HomeFeatures from "@/components/home-features";
+import HomeCourses from "@/components/home-courses";
+import HomeMentor from "@/components/home-mentor";
+import HomeFooter from "@/components/home-footer";
 
 export default function Home() {
   const router = useRouter();
@@ -50,15 +54,21 @@ export default function Home() {
   };
 
   return (
-    <main className="w-full bg-background flex flex-col justify-center">
-      <Hero
-        eyebrow={heroData.eyebrow}
-        title={heroData.title}
-        subtitle={heroData.subtitle}
-        actions={heroData.actions}
-        stats={heroData.stats}
-        images={heroData.images}
-      />
-    </main>
+    <>
+      <main className="w-full bg-background flex flex-col justify-center">
+        <Hero
+          eyebrow={heroData.eyebrow}
+          title={heroData.title}
+          subtitle={heroData.subtitle}
+          actions={heroData.actions}
+          stats={heroData.stats}
+          images={heroData.images}
+        />
+        <HomeFeatures />
+        <HomeCourses />
+        <HomeMentor />
+      </main>
+      <HomeFooter />
+    </>
   );
 }

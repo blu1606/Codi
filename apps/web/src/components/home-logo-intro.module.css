@@ -7,6 +7,10 @@
   animation: dismiss 0s 8s forwards;
 }
 
+.overlay[data-mode="content"] {
+  animation-delay: 3s;
+}
+
 .backdrop {
   position: absolute;
   inset: 0;
@@ -31,7 +35,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .overlay ~ :global(div) :global([data-codi-logo]),
+  .overlay[data-mode="logo"] ~ :global(div) :global([data-codi-logo]),
   .overlay ~ :global(div) :global([data-codi-intro-nav] [data-slot="navigation-menu-item"]),
   .overlay ~ :global(div) :global([data-codi-intro-account]),
   .overlay ~ :global(div) :global([data-codi-intro-hero]),
@@ -39,6 +43,13 @@
     /* Reserve layout space until each stage of the intro reveals these elements. */
     visibility: hidden;
     animation: reveal 0s 8s forwards;
+  }
+
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-nav] [data-slot="navigation-menu-item"]),
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-account]),
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-hero]),
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-image]) {
+    animation-delay: 3s;
   }
 }
 
