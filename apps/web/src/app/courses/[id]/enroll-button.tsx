@@ -26,9 +26,9 @@ export default function EnrollButton({ course }: { course: Course }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           amount: course.price,
-          description: Codi - Thanh toán khóa học: ,
+          description: `Codi - Thanh toán khóa học: ${course.title}`,
           item: [{ id: course.id, title: course.title, price: course.price }],
-          embed_data: { courseId: course.id, redirecturl: ${window.location.origin}/dashboard },
+          embed_data: { courseId: course.id, redirecturl: `${window.location.origin}/dashboard` },
           app_user: session?.user?.name || "CodiUser"
         })
       });
