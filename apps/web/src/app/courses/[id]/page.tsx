@@ -1,4 +1,4 @@
-﻿import { notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Clock, Users, GraduationCap, CheckCircle2 } from "lucide-react";
 import {
@@ -106,11 +106,11 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-3xl font-bold">Miễn phí</div>
+              <div className="text-3xl font-bold">{course.price.toLocaleString("vi-VN")}đ</div>
               <p className="text-sm text-muted-foreground">
-                Tất cả các khóa học hiện đang trong giai đoạn thử nghiệm và được cung cấp miễn phí.
+                Đầu tư một lần, sở hữu trọn đời. Nâng cấp kỹ năng lập trình của bạn với giáo trình thực chiến chuẩn doanh nghiệp.
               </p>
-              <EnrollButton courseTitle={course.title} />
+              <EnrollButton course={course} />
             </CardContent>
           </Card>
         </div>

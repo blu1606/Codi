@@ -1,4 +1,4 @@
-﻿import crypto from "crypto";
+import crypto from "crypto";
 
 const config = {
   app_id: process.env.ZALOPAY_APP_ID || "2553",
@@ -31,7 +31,7 @@ export async function createZaloPayOrder({
     embed_data,
     amount,
     description,
-    bank_code: "zalopayapp",
+    bank_code: "",
     mac: "",
   };
 
