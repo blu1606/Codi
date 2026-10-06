@@ -1,4 +1,4 @@
-export interface Course {
+﻿export interface Course {
   id: string;
   title: string;
   slug: string;
@@ -9,6 +9,7 @@ export interface Course {
   targetAudience: string;
   prerequisites: string;
   topics: string[];
+  price: number;
 }
 
 export const SEED_COURSES: Course[] = [
@@ -31,6 +32,7 @@ export const SEED_COURSES: Course[] = [
       "Quản lý State & Gọi API",
       "Deploy & Tối ưu trên Vercel"
     ],
+    price: 499000
   },
   {
     id: "course-2",
@@ -50,6 +52,7 @@ export const SEED_COURSES: Course[] = [
       "Caching với Redis & Giới hạn Rate Limiting",
       "Docker hóa ứng dụng & Triển khai Cloud"
     ],
+    price: 599000
   },
   {
     id: "course-3",
@@ -70,6 +73,7 @@ export const SEED_COURSES: Course[] = [
       "Quy hoạch động (Dynamic Programming)",
       "Kỹ năng live-coding phỏng vấn kỹ thuật"
     ],
+    price: 399000
   },
   {
     id: "course-4",
@@ -90,6 +94,7 @@ export const SEED_COURSES: Course[] = [
       "AI SDK & Stream Text UI",
       "Multi-agent Orchestration & Tự động hóa tác vụ"
     ],
+    price: 699000
   },
   {
     id: "course-5",
@@ -104,11 +109,12 @@ export const SEED_COURSES: Course[] = [
     topics: [
       "Kiến trúc Expo Router & File-based Routing",
       "Component Native & Layout Flexbox trên Mobile",
-      "Xử lý cử chỉ Gesture & Hiệu ứng Animation",
+      "Xử lý cơ chế Gesture & Hiệu ứng Animation",
       "Lưu trữ dữ liệu Offline-first",
       "Tích hợp Camera, Định vị & Push Notifications",
       "Đóng gói APK/AAB & Xuất bản App Store/Google Play"
     ],
+    price: 499000
   },
 ];
 
@@ -117,6 +123,7 @@ export function getCourseCatalogPrompt(): string {
     (c, idx) =>
       `${idx + 1}. **${c.title}** (${c.level} | ${c.duration})\n` +
       `   - Phân loại: ${c.category}\n` +
+      `   - Giá: ${c.price.toLocaleString("vi-VN")} VND\n` +
       `   - Mô tả: ${c.description}\n` +
       `   - Đối tượng phù hợp: ${c.targetAudience}\n` +
       `   - Điều kiện tiên quyết: ${c.prerequisites}\n` +
