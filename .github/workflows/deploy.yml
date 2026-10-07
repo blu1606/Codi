@@ -7,6 +7,7 @@ on:
       - master
   pull_request:
     branches:
+      - develop
       - main
       - master
 
@@ -17,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -51,6 +54,7 @@ jobs:
   deploy:
     name: Vercel Deploy
     needs: validate
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -58,6 +62,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -85,7 +91,16 @@ jobs:
 
       - name: Deploy Project Artifacts to Vercel (Preview)
         if: github.event_name == 'pull_request'
-        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          REVIEW_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          preview_url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN" --meta githubCommitSha="$REVIEW_SHA")
+          {
+            echo '## PR preview'
+            echo "Source commit: \`$REVIEW_SHA\`"
+            echo "Preview URL: $preview_url"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Production Deployment (Khi push vào main/master)
       - name: Pull Vercel Environment Information (Production)

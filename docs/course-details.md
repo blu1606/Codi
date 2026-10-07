@@ -1,5 +1,22 @@
 # Course details and curriculum
 
+## Verify a PR preview
+
+PRs targeting `develop`, `main`, or `master` run the Vercel deployment workflow.
+Validation and deployment use the PR head commit. The deployment run summary
+records its source SHA and preview URL; verify that SHA matches the reviewed
+head before using the URL as UI acceptance evidence. Fork PRs do not deploy
+with repository credentials.
+
+Use the matching preview to check desktop/mobile layout, light/dark themes,
+course cover/video/captions, empty/error states, intro keyboard/pointer/skip/
+reduced-motion behavior and home re-entry, and authenticated cart behavior.
+Record the preview URL, source SHA, viewport, and observed result. A passing
+unit suite or an older production site does not establish UI acceptance.
+The preview database needs the course-content schema described below.
+
+## Behavior
+
 Each catalog card links to `/courses/{slug}`. The detail page fetches
 `GET /api/courses/{slug}` and uses the existing `POST /api/student/cart` with
 the database course ID for its enrollment action. Existing links with
