@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRight, BookOpen, BrainCircuit, Braces, Clock3,
   Code2, Database, GitBranch, Smartphone, Users,
@@ -99,15 +100,26 @@ export default function HomeCourses() {
                 <HomeScrollReveal key={course.id} delay={index * 0.08} className="h-full">
                   <Card className="group flex h-full flex-col gap-0 overflow-hidden rounded-xl border-border bg-card p-0 ring-0 transition-colors hover:border-primary/50">
                     <div aria-hidden="true" className={styles.cover} data-tone={tone}>
-                      <div className={styles.coverPanel}>
-                        <span className={styles.coverLabel}>{course.category}</span>
-                        <div className={styles.coverArt}>
-                          <span className={styles.codeLines}><i /><i /><i /></span>
-                          <Icon className={styles.coverIcon} strokeWidth={1.25} />
-                          <span className={styles.codeLines}><i /><i /><i /></span>
+                      {course.coverImageUrl ? (
+                        <Image
+                          src={course.coverImageUrl}
+                          alt=""
+                          fill
+                          sizes="(min-width: 1280px) 260px, (min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                          className="object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className={styles.coverPanel}>
+                          <span className={styles.coverLabel}>{course.category}</span>
+                          <div className={styles.coverArt}>
+                            <span className={styles.codeLines}><i /><i /><i /></span>
+                            <Icon className={styles.coverIcon} strokeWidth={1.25} />
+                            <span className={styles.codeLines}><i /><i /><i /></span>
+                          </div>
+                          <span className={styles.coverCaption}>CODI / LEARN BY BUILDING</span>
                         </div>
-                        <span className={styles.coverCaption}>CODI / LEARN BY BUILDING</span>
-                      </div>
+                      )}
                     </div>
                     <div className="flex flex-1 flex-col p-4">
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

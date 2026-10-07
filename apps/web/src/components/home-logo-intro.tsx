@@ -34,7 +34,7 @@ export default function HomeLogoIntro() {
     const isFirstLoad = previousPathRef.current === null;
     previousPathRef.current = pathname;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setIntro(!reducedMotion && (isFirstLoad || pathname === "/")
+    setIntro(!reducedMotion && pathname === "/"
       ? { pathname, mode: isFirstLoad ? "logo" : "content" }
       : null);
   }, [pathname]);
@@ -244,17 +244,20 @@ export default function HomeLogoIntro() {
   if (!intro || intro.pathname !== pathname) return null;
 
   return (
-    <div ref={overlayRef} className={styles.overlay} data-mode={intro.mode} aria-hidden="true">
+    <div ref={overlayRef} className={styles.overlay} data-mode={intro.mode}>
       {intro.mode === "logo" && (
         <>
-          <div ref={backdropRef} className={styles.backdrop} />
-          <div ref={logoRef} className={styles.logo}>
+          <div ref={backdropRef} className={styles.backdrop} aria-hidden="true" />
+          <div ref={logoRef} className={styles.logo} aria-hidden="true">
             <div ref={markRef} className={styles.mark}>
               <BrandLogo />
             </div>
           </div>
         </>
       )}
+      <button type="button" className={styles.skip} onClick={() => setIntro(null)}>
+        Bỏ qua giới thiệu
+      </button>
     </div>
   );
 }

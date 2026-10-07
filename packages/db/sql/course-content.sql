@@ -5,8 +5,12 @@ CREATE TABLE IF NOT EXISTS public.course_details (
   requirements text[] NOT NULL DEFAULT '{}'::text[],
   target_audience text,
   cover_image_url text,
-  intro_video_url text
+  intro_video_url text,
+  intro_video_captions_url text
 );
+
+-- Also update databases where course_details already exists.
+ALTER TABLE public.course_details ADD COLUMN IF NOT EXISTS intro_video_captions_url text;
 
 CREATE TABLE IF NOT EXISTS public.course_chapters (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

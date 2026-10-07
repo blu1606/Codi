@@ -37,12 +37,14 @@ pnpm db:seed-course-outcomes
 ```
 
 This command matches the existing courses by slug and updates only
-`course_details.learning_outcomes` in a verified transaction. It preserves
+`course_details.learning_outcomes` in a verified transaction. It requires
+exactly six non-empty outcomes for each of the five courses, rejecting an
+invalid seed before opening a database connection. It preserves
 other metadata and curriculum. Running it again replaces those outcomes with
 the authored text in the file. The detail page continues to read from the API;
 this file is not a UI fallback and does not create sample lessons.
 
-The catalog uses `coverImageUrl` returned by `GET /api/courses`; the detail
+The homepage and catalog use `coverImageUrl` returned by `GET /api/courses`; the detail
 page uses the same database cover. Five original SVG covers are stored in
 `apps/web/public/images/courses/`. Run `pnpm db:seed-course-covers` to set
 their URLs on the existing courses. This replaces only `cover_image_url`,
@@ -53,6 +55,12 @@ show a neutral category placeholder.
   `learning_outcomes` and `requirements` as PostgreSQL `text[]`, and
   `target_audience` as text. `cover_image_url` is an image URL;
   `intro_video_url` is a browser-playable video URL (for example MP4 or WebM).
+  Supply `intro_video_captions_url` with a Vietnamese WebVTT caption URL for
+  that video. The player includes a default captions track and appears only
+  when both URLs are present; otherwise the course cover remains visible.
+  Video and caption files must be browser-accessible, with appropriate CORS headers
+  if hosted on a different origin. Re-run `db:setup-course-content` before
+  deploying this change to an existing database to add the optional column.
 - `course_chapters`: link `course_id` to the course, supply `title`, set
   zero-based `position`, and set `is_published = true` when ready.
 - `course_lessons`: link `chapter_id` to its chapter, supply `title`, optional

@@ -145,8 +145,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
           <aside className={styles.sidebar} aria-label="Đăng ký khóa học">
             <Card className={styles.enrollmentCard}>
-              {detail.introVideoUrl ? (
-                <video className={styles.cover} controls preload="metadata" poster={detail.coverImageUrl ?? undefined} aria-label={`Giới thiệu: ${course.title}`} src={detail.introVideoUrl} />
+              {detail.introVideoUrl && detail.introVideoCaptionsUrl ? (
+                <video className={styles.cover} controls crossOrigin="anonymous" preload="metadata" poster={detail.coverImageUrl ?? undefined} aria-label={`Giới thiệu: ${course.title}`} src={detail.introVideoUrl}>
+                  <track kind="captions" src={detail.introVideoCaptionsUrl} srcLang="vi" label="Tiếng Việt" default />
+                </video>
               ) : (
                 <div className={styles.cover}>
                   {detail.coverImageUrl ? (

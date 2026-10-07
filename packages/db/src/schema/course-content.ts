@@ -9,6 +9,7 @@ export const courseDetails = pgTable.withRLS("course_details", {
   targetAudience: text("target_audience"),
   coverImageUrl: text("cover_image_url"),
   introVideoUrl: text("intro_video_url"),
+  introVideoCaptionsUrl: text("intro_video_captions_url"),
 });
 
 export const courseChapters = pgTable.withRLS("course_chapters", {

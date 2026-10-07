@@ -8,10 +8,10 @@ const outcomes: Record<string, string[]> = JSON.parse(
 );
 const entries = Object.entries(outcomes);
 if (entries.length !== 5 || entries.some(([slug, items]) =>
-  !slug || !Array.isArray(items) || items.length === 0 ||
+  !slug.trim() || !Array.isArray(items) || items.length !== 6 ||
   items.some((item) => typeof item !== "string" || !item.trim()),
 )) {
-  throw new Error("Expected learning outcomes for all five courses.");
+  throw new Error("Expected exactly six non-empty learning outcomes for each of the five courses.");
 }
 
 const client = new Client({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 10000 });

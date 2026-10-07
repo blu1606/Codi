@@ -5,6 +5,7 @@
 }
 
 .card {
+  --course-price: #d83a0c;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -15,6 +16,8 @@
   color: var(--card-foreground);
   transition: transform 180ms ease, box-shadow 180ms ease;
 }
+
+:global(.dark) .card { --course-price: #ff9166; }
 
 .card:hover {
   transform: translateY(-4px);
@@ -105,7 +108,7 @@
 
 .price {
   margin-top: 12px;
-  color: light-dark(#d83a0c, #ff9166);
+  color: var(--course-price);
   font-size: 17px;
   font-weight: 700;
 }

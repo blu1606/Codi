@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  pointer-events: none;
+  pointer-events: auto;
   /* Mounted after hydration; the timer cannot expire before the intro starts. */
   animation: dismiss 0s 8s forwards;
 }
@@ -10,6 +10,24 @@
 .overlay[data-mode="content"] {
   animation-delay: 3s;
 }
+
+.skip {
+  position: absolute;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.skip:hover { background: var(--muted); }
+.skip:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
 
 .backdrop {
   position: absolute;

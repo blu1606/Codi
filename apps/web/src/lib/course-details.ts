@@ -20,6 +20,7 @@ export interface CourseDetail {
   targetAudience: string | null;
   coverImageUrl: string | null;
   introVideoUrl: string | null;
+  introVideoCaptionsUrl: string | null;
   chapters: CourseChapter[];
   summary: { chapterCount: number; lessonCount: number; durationSeconds: number };
 }

@@ -50,6 +50,7 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     targetAudience: details?.targetAudience ?? null,
     coverImageUrl: details?.coverImageUrl ?? null,
     introVideoUrl: details?.introVideoUrl ?? null,
+    introVideoCaptionsUrl: details?.introVideoCaptionsUrl ?? null,
     chapters: [...chapters.values()],
     summary: { chapterCount: chapters.size, lessonCount, durationSeconds },
   };

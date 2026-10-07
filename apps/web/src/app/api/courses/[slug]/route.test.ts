@@ -49,7 +49,7 @@ describe("GET /api/courses/[slug]", () => {
     expect(body.course).toEqual({ ...course, createdAt: course.createdAt.toISOString() });
     expect(body).toMatchObject({
       learningOutcomes: [], requirements: [], targetAudience: null,
-      coverImageUrl: null, introVideoUrl: null, chapters: [],
+      coverImageUrl: null, introVideoUrl: null, introVideoCaptionsUrl: null, chapters: [],
       summary: { chapterCount: 0, lessonCount: 0, durationSeconds: 0 },
     });
     expect(body).not.toHaveProperty("rating");
@@ -92,6 +92,16 @@ describe("GET /api/courses/[slug]", () => {
     mocks.courseLimit.mockResolvedValue([]);
     expect((await request("unknown-course")).status).toBe(404);
     expect(mocks.select).toHaveBeenCalledOnce();
+  });
+
+  it("returns the authored intro video and caption URLs without inventing captions", async () => {
+    mocks.detailsLimit.mockResolvedValue([{
+      introVideoUrl: "/videos/frontend-intro.mp4",
+      introVideoCaptionsUrl: "/videos/frontend-intro.vi.vtt",
+    }]);
+    const body = await (await request()).json();
+    expect(body.introVideoUrl).toBe("/videos/frontend-intro.mp4");
+    expect(body.introVideoCaptionsUrl).toBe("/videos/frontend-intro.vi.vtt");
   });
 
   it("reports a database failure instead of disguising it as an empty curriculum", async () => {
