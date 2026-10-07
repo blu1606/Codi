@@ -1,5 +1,9 @@
 # Codi
 
+[![CI Pipeline](https://github.com/blu1606/Codi/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/blu1606/Codi/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen)](./docs/unit-testing.md)
+[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-61%20passed-success)](./docs/unit-testing.md)
+
 **Nền tảng học lập trình trực tuyến cá nhân hoá lộ trình bằng AI.**
 
 Thay vì bắt mọi học viên đi theo một thứ tự bài học cố định, Codi dựa trên mục tiêu học tập,
@@ -29,10 +33,38 @@ dữ liệu lịch sử nên chạy được ngay từ khoá học đầu tiên.
 ## Công nghệ
 
 Next.js (App Router) · TypeScript · PostgreSQL 16 (Supabase, dev) · Drizzle ORM · Better Auth ·
-Tailwind v4 + shadcn/ui · Vercel · Docker (production, kế hoạch sau)
+Tailwind v4 + shadcn/ui · Vitest (Unit Tests & Coverage) · Vercel · Docker (production, kế hoạch sau)
 
 Lý do chọn và các quyết định kỹ thuật: [`docs/tech-stack.md`](./docs/tech-stack.md)
 Hệ thống thiết kế (màu, font, accessibility): [`docs/design-guidelines.md`](./docs/design-guidelines.md)
+
+---
+
+## Kiểm thử & Độ phủ mã nguồn (Unit Tests & Coverage)
+
+Dự án áp dụng kiểm thử đơn vị với **Vitest (V8 coverage engine)** và tích hợp tự động qua GitHub Actions CI Gate:
+
+```bash
+# Chạy toàn bộ test suites
+pnpm test
+
+# Chạy kiểm thử kèm báo cáo độ phủ mã nguồn (Coverage Gate)
+pnpm test:coverage
+```
+
+### Báo cáo độ phủ mã nguồn (Coverage Report)
+
+| Module nghiệp vụ | Statements | Branches | Functions | Lines | Trạng thái |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `packages/auth/src/rbac.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/app/dashboard/admin/actions.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/app/api/user/profile/route.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/lib/filter-course-catalog.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/lib/add-course-to-cart.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/app/api/student/cart/route.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| **Tổng thể (Tất cả mục tiêu)** | **100%** | **100%** | **100%** | **100%** | **Gate: ≥ 80%** |
+
+Chi tiết kiến trúc kiểm thử, mock và kịch bản demo: [`docs/unit-testing.md`](./docs/unit-testing.md)
 
 ---
 
@@ -80,32 +112,6 @@ Dự án được tổ chức theo mô hình TypeScript Monorepo quản lý bở
    pnpm run dev
    ```
    Ứng dụng web sẽ chạy tại [http://localhost:3001](http://localhost:3001).
-
-### Kiểm thử & Đo độ phủ (Unit Tests & Coverage)
-
-Dự án áp dụng kiểm thử đơn vị với **Vitest (V8 coverage engine)** và tích hợp tự động qua GitHub Actions CI Gate:
-
-```bash
-# Chạy toàn bộ test suites
-pnpm test
-
-# Chạy kiểm thử kèm báo cáo độ phủ mã nguồn (Coverage Gate)
-pnpm test:coverage
-```
-
-#### Báo cáo độ phủ mã nguồn (Coverage Report)
-
-| Module nghiệp vụ | Statements | Branches | Functions | Lines | Trạng thái |
-|---|:---:|:---:|:---:|:---:|:---:|
-| `packages/auth/src/rbac.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
-| `apps/web/src/app/dashboard/admin/actions.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
-| `apps/web/src/app/api/user/profile/route.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
-| `apps/web/src/lib/filter-course-catalog.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
-| `apps/web/src/lib/add-course-to-cart.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
-| `apps/web/src/app/api/student/cart/route.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
-| **Tổng thể (Tất cả mục tiêu)** | **100%** | **100%** | **100%** | **100%** | **Gate: ≥ 80%** |
-
-Chi tiết kiến trúc kiểm thử, mock và kịch bản demo: [`docs/unit-testing.md`](./docs/unit-testing.md)
 
 ---
 
