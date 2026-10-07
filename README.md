@@ -81,6 +81,32 @@ Dự án được tổ chức theo mô hình TypeScript Monorepo quản lý bở
    ```
    Ứng dụng web sẽ chạy tại [http://localhost:3001](http://localhost:3001).
 
+### Kiểm thử & Đo độ phủ (Unit Tests & Coverage)
+
+Dự án áp dụng kiểm thử đơn vị với **Vitest (V8 coverage engine)** và tích hợp tự động qua GitHub Actions CI Gate:
+
+```bash
+# Chạy toàn bộ test suites
+pnpm test
+
+# Chạy kiểm thử kèm báo cáo độ phủ mã nguồn (Coverage Gate)
+pnpm test:coverage
+```
+
+#### Báo cáo độ phủ mã nguồn (Coverage Report)
+
+| Module nghiệp vụ | Statements | Branches | Functions | Lines | Trạng thái |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `packages/auth/src/rbac.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/app/dashboard/admin/actions.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/app/api/user/profile/route.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/lib/filter-course-catalog.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/lib/add-course-to-cart.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| `apps/web/src/app/api/student/cart/route.ts` | 100% | 100% | 100% | 100% | ✅ Passed |
+| **Tổng thể (Tất cả mục tiêu)** | **100%** | **100%** | **100%** | **100%** | **Gate: ≥ 80%** |
+
+Chi tiết kiến trúc kiểm thử, mock và kịch bản demo: [`docs/unit-testing.md`](./docs/unit-testing.md)
+
 ---
 
 ## Giấy phép
