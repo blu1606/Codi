@@ -1,0 +1,32 @@
+{
+  "user": {
+    "id": "learner-1"
+  },
+  "courses": {
+    "available": {
+      "id": "course-1"
+    },
+    "missing": {
+      "id": "course-missing"
+    }
+  },
+  "expectedResults": {
+    "added": {
+      "kind": "added",
+      "courseId": "course-1"
+    },
+    "notFound": {
+      "kind": "not-found"
+    },
+    "alreadyInCart": {
+      "kind": "already-in-cart",
+      "courseId": "course-1"
+    },
+    "alreadyOwned": {
+      "kind": "already-owned"
+    }
+  },
+  "errors": {
+    "dbUnavailable": "Database unavailable"
+  }
+}

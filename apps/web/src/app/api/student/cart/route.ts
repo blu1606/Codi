@@ -1,8 +1,7 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
-import { courses, studentCart, studentEnrollments } from "@codi-1/db";
+import { addCourseToCart } from "@/lib/add-course-to-cart";
 import { auth, db } from "@/services";
 
 export async function POST(request: Request) {
@@ -29,21 +28,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Mã khóa học không hợp lệ" }, { status: 400 });
     }
     const courseId = body.courseId.trim();
-    const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
-    if (!course) {
+    const result = await addCourseToCart(userId, courseId);
+    if (result.kind === "not-found") {
       return NextResponse.json({ error: "Không tìm thấy khóa học" }, { status: 404 });
     }
-    const [enrollment] = await db.select().from(studentEnrollments).where(and(
-      eq(studentEnrollments.userId, userId), eq(studentEnrollments.courseId, courseId)
-    )).limit(1);
-    if (enrollment) {
+    if (result.kind === "already-owned") {
       return NextResponse.json({ error: "Bạn đã sở hữu khóa học này" }, { status: 409 });
     }
-    // The database unique constraint also handles simultaneous duplicate requests.
-    const inserted = await db.insert(studentCart).values({ userId, courseId })
-      .onConflictDoNothing({ target: [studentCart.userId, studentCart.courseId] })
-      .returning({ courseId: studentCart.courseId });
-    const added = inserted.length > 0;
+    const added = result.kind === "added";
     return NextResponse.json({ courseId, added }, { status: added ? 201 : 200 });
   } catch (error) {
     if (error instanceof ForbiddenError) {
