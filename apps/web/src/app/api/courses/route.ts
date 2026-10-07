@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asc, count, desc, eq, getTableColumns } from "drizzle-orm";
 import { db } from "@/services";
-import { courses, studentEnrollments } from "@codi-1/db";
+import { courses, courseDetails, studentEnrollments } from "@codi-1/db";
 
 export async function GET(request: NextRequest) {
   const sort = request.nextUrl.searchParams.get("sort") ?? "title";
@@ -19,10 +19,11 @@ export async function GET(request: NextRequest) {
     // Count enrollment rows, not activity events, so each learner is counted once.
     const enrollmentCount = count(studentEnrollments.id);
     const query = db
-      .select({ ...getTableColumns(courses), enrollmentCount })
+      .select({ ...getTableColumns(courses), enrollmentCount, coverImageUrl: courseDetails.coverImageUrl })
       .from(courses)
       .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
-      .groupBy(courses.id)
+      .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))
+      .groupBy(courses.id, courseDetails.coverImageUrl)
       .orderBy(...(sort === "popular"
         ? [desc(enrollmentCount), asc(courses.title), asc(courses.id)]
         : [asc(courses.title), asc(courses.id)]));

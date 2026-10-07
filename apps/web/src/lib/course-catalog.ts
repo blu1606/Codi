@@ -3,6 +3,7 @@ import type { courses } from "@codi-1/db";
 export type CatalogCourse = Omit<typeof courses.$inferSelect, "createdAt"> & {
   createdAt: string;
   enrollmentCount: number;
+  coverImageUrl?: string | null;
 };
 
 export async function fetchCourses(signal: AbortSignal, query = ""): Promise<CatalogCourse[]> {

@@ -128,7 +128,7 @@ export default function HomeCourses() {
                         <Button
                           variant="outline"
                           nativeButton={false}
-                          render={<Link href={`/courses?course=${encodeURIComponent(course.id)}`} />}
+                          render={<Link href={`/courses/${encodeURIComponent(course.slug)}`} />}
                           className="w-full rounded-lg border-primary/70 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary dark:bg-primary/10 dark:hover:bg-primary/20"
                           aria-label={`Bắt đầu học: ${course.title}`}
                         >
