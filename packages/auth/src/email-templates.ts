@@ -9,8 +9,12 @@ interface OTPEmailProps {
   otp: string;
 }
 
-export function getVerificationOTPEmailHtml({ name, otp }: OTPEmailProps): string {
+export function getVerificationOTPEmailHtml({ name, otp }: OTPEmailProps, purpose: "account" | "change-email" = "account"): string {
   const greeting = name ? `Xin chào <strong>${name}</strong>,` : "Xin chào bạn,";
+  const title = purpose === "change-email" ? "Mã xác thực đổi email Codi" : "Mã xác thực tài khoản Codi";
+  const instructions = purpose === "change-email"
+    ? "Để xác nhận địa chỉ email mới cho tài khoản Codi, vui lòng nhập mã gồm 6 chữ số dưới đây. Email tài khoản chỉ được cập nhật sau khi xác thực thành công:"
+    : "Để kích hoạt tài khoản Codi của bạn, vui lòng nhập mã xác thực gồm 6 chữ số dưới đây:";
 
   return `
 <!DOCTYPE html>
@@ -18,7 +22,7 @@ export function getVerificationOTPEmailHtml({ name, otp }: OTPEmailProps): strin
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mã xác thực tài khoản Codi</title>
+  <title>${title}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f8fafc; padding: 40px 10px;">
@@ -36,7 +40,7 @@ export function getVerificationOTPEmailHtml({ name, otp }: OTPEmailProps): strin
             <td style="padding: 32px;">
               <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.5;">${greeting}</p>
               <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #475569;">
-                Để kích hoạt tài khoản Codi của bạn, vui lòng nhập mã xác thực gồm 6 chữ số dưới đây:
+                ${instructions}
               </p>
               
               <!-- OTP Box -->
@@ -78,6 +82,10 @@ export function getVerificationOTPEmailHtml({ name, otp }: OTPEmailProps): strin
 </body>
 </html>
   `.trim();
+}
+
+export function getChangeEmailOTPEmailHtml(props: OTPEmailProps): string {
+  return getVerificationOTPEmailHtml(props, "change-email");
 }
 
 export function getResetPasswordOTPEmailHtml({ name, otp }: OTPEmailProps): string {

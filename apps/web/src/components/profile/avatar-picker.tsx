@@ -8,20 +8,25 @@ import { toast } from "sonner";
 
 import { PRESET_DEFAULT_AVATARS } from "@/lib/avatar-presets";
 
+export type AvatarSelection =
+  | { kind: "file"; file: File }
+  | { kind: "preset"; url: string };
+
 interface AvatarPickerProps {
   currentAvatar: string | null;
   userName: string;
-  onAvatarUpdated: (newUrl: string) => void;
+  onAvatarSelected: (selection: AvatarSelection) => void;
+  disabled?: boolean;
 }
 
 export default function AvatarPicker({
   currentAvatar,
   userName,
-  onAvatarUpdated,
+  onAvatarSelected,
+  disabled = false,
 }: AvatarPickerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
   const [cropSource, setCropSource] = useState<{ file: File; url: string } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
@@ -31,35 +36,20 @@ export default function AvatarPicker({
   const dialogRef = useRef<HTMLDivElement>(null);
   const lastActiveElementRef = useRef<HTMLElement | null>(null);
   const triggerButtonRef = useRef<HTMLButtonElement>(null);
+  const cropUrlRef = useRef<string | null>(null);
+  const busy = disabled || processing;
+
+  useEffect(() => () => {
+    if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+    cropUrlRef.current = null;
+  }, []);
 
   const defaultAvatar =
     currentAvatar ||
     `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(userName || "Codi")}`;
 
-  const uploadAvatar = async (file: File) => {
-    try {
-      setUploading(true);
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("/api/user/avatar", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Tải ảnh thất bại");
-
-      onAvatarUpdated(data.imageUrl);
-      toast.success("Đã tải ảnh lên Cloudflare R2 thành công!");
-    } catch (err: any) {
-      toast.error(err.message || "Không thể tải ảnh đại diện lên R2.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (busy) return;
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -69,14 +59,17 @@ export default function AvatarPicker({
     }
 
     lastActiveElementRef.current = document.activeElement as HTMLElement | null;
-    setCropSource({ file, url: URL.createObjectURL(file) });
+    if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+    cropUrlRef.current = URL.createObjectURL(file);
+    setCropSource({ file, url: cropUrlRef.current });
     setZoom(1);
     setCropPosition({ x: 0, y: 0 });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const closeCropper = () => {
-    if (cropSource) URL.revokeObjectURL(cropSource.url);
+    if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+    cropUrlRef.current = null;
     setCropSource(null);
     setTimeout(() => {
       if (lastActiveElementRef.current) {
@@ -88,26 +81,40 @@ export default function AvatarPicker({
   };
 
   const confirmCrop = async () => {
-    if (!cropSource) return;
-    const image = new window.Image();
-    image.src = cropSource.url;
-    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("Không thể đọc ảnh")); });
+    if (!cropSource || busy) return;
+    setProcessing(true);
+    try {
+      const image = new window.Image();
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("Không thể đọc ảnh"));
+        image.src = cropSource.url;
+      });
+      if (cropUrlRef.current !== cropSource.url) return;
 
-    const outputSize = 512;
-    const cropSize = cropFrameRef.current?.clientWidth || 320;
-    const scale = Math.max(cropSize / image.naturalWidth, cropSize / image.naturalHeight) * zoom;
-    const canvas = document.createElement("canvas");
-    canvas.width = outputSize;
-    canvas.height = outputSize;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.drawImage(image, ((cropSize - image.naturalWidth * scale) / 2 + cropPosition.x) * (outputSize / cropSize), ((cropSize - image.naturalHeight * scale) / 2 + cropPosition.y) * (outputSize / cropSize), image.naturalWidth * scale * (outputSize / cropSize), image.naturalHeight * scale * (outputSize / cropSize));
+      const outputSize = 512;
+      const cropSize = cropFrameRef.current?.clientWidth || 320;
+      const scale = Math.max(cropSize / image.naturalWidth, cropSize / image.naturalHeight) * zoom;
+      const canvas = document.createElement("canvas");
+      canvas.width = outputSize;
+      canvas.height = outputSize;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Không thể xử lý ảnh");
+      context.drawImage(image, ((cropSize - image.naturalWidth * scale) / 2 + cropPosition.x) * (outputSize / cropSize), ((cropSize - image.naturalHeight * scale) / 2 + cropPosition.y) * (outputSize / cropSize), image.naturalWidth * scale * (outputSize / cropSize), image.naturalHeight * scale * (outputSize / cropSize));
 
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+      if (cropUrlRef.current !== cropSource.url) return;
+      if (!blob) throw new Error("Không thể xử lý ảnh");
+      onAvatarSelected({
+        kind: "file",
+        file: new File([blob], cropSource.file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }),
+      });
       closeCropper();
-      await uploadAvatar(new File([blob], cropSource.file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }));
-    }, "image/jpeg", 0.92);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Không thể xử lý ảnh");
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLImageElement>) => {
@@ -141,30 +148,8 @@ export default function AvatarPicker({
     setCropPosition(clampPosition(cropPosition.x, cropPosition.y, value));
   };
 
-  const handleSelectPreset = async (presetUrl: string, id: string) => {
-    try {
-      setSelectedPreset(id);
-      setUploading(true);
-
-      const res = await fetch("/api/user/avatar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ presetUrl }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Không thể lưu avatar mặc định lên R2");
-      }
-
-      onAvatarUpdated(data.imageUrl);
-      toast.success("Đã lưu ảnh đại diện mặc định lên Cloudflare R2!");
-    } catch (err: any) {
-      toast.error(err.message || "Lỗi cập nhật ảnh");
-    } finally {
-      setUploading(false);
-      setSelectedPreset(null);
-    }
+  const handleSelectPreset = (presetUrl: string) => {
+    if (!busy) onAvatarSelected({ kind: "preset", url: presetUrl });
   };
 
   useEffect(() => {
@@ -372,8 +357,8 @@ export default function AvatarPicker({
               <Button type="button" variant="outline" onClick={closeCropper}>
                 Huỷ bỏ
               </Button>
-              <Button type="button" onClick={confirmCrop} disabled={uploading}>
-                Cắt và tải lên
+              <Button type="button" onClick={confirmCrop} disabled={busy}>
+                {processing ? "Đang xử lý…" : "Dùng ảnh này"}
               </Button>
             </div>
           </div>
@@ -397,11 +382,11 @@ export default function AvatarPicker({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
+            disabled={busy}
             className="absolute inset-0 bg-foreground/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-background cursor-pointer disabled:cursor-not-allowed"
             title="Đổi ảnh đại diện"
           >
-            {uploading ? (
+            {busy ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Camera className="w-5 h-5" />
@@ -417,6 +402,7 @@ export default function AvatarPicker({
               accept="image/png,image/jpeg,image/webp,image/svg+xml"
               className="hidden"
               onChange={handleFileUpload}
+              disabled={busy}
             />
             <Button
               ref={triggerButtonRef}
@@ -424,19 +410,19 @@ export default function AvatarPicker({
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
+              disabled={busy}
               className="gap-1.5"
             >
-              {uploading ? (
+              {busy ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <CloudUpload className="w-4 h-4 text-primary" />
               )}
-              Tải ảnh lên R2
+              Chọn ảnh
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Hỗ trợ PNG, JPG, WebP tối đa 5MB. Lưu trữ an toàn trên Cloudflare R2.
+            Hỗ trợ PNG, JPG, WebP tối đa 5MB. Ảnh chỉ được lưu khi bấm Lưu thay đổi.
           </p>
         </div>
       </div>
@@ -450,13 +436,14 @@ export default function AvatarPicker({
 
         <div className="grid grid-cols-6 gap-2">
           {PRESET_DEFAULT_AVATARS.map((preset) => {
-            const isSelected = selectedPreset === preset.id;
+            const isSelected = currentAvatar === preset.url;
             return (
               <button
                 key={preset.id}
                 type="button"
-                onClick={() => handleSelectPreset(preset.url, preset.id)}
-                disabled={uploading}
+                onClick={() => handleSelectPreset(preset.url)}
+                disabled={busy}
+                aria-pressed={isSelected}
                 title={preset.name}
                 className="relative group p-1 rounded-xl border border-border hover:border-primary transition-all duration-150 aspect-square flex items-center justify-center overflow-hidden hover:scale-105 active:scale-95 disabled:opacity-50"
               >

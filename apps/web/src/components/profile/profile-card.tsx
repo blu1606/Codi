@@ -14,10 +14,10 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import AvatarPicker from "./avatar-picker";
+import AvatarPicker, { type AvatarSelection } from "./avatar-picker";
 
 const ROLE_LABEL: Record<string, string> = {
   LEARNER: "Learner",
@@ -41,8 +41,14 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user.name);
+  const [draftName, setDraftName] = useState(user.name);
   const [avatarUrl, setAvatarUrl] = useState(user.image || null);
+  const [pendingAvatar, setPendingAvatar] = useState<(AvatarSelection & { previewUrl: string }) | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => () => {
+    if (pendingAvatar?.kind === "file") URL.revokeObjectURL(pendingAvatar.previewUrl);
+  }, [pendingAvatar]);
 
   const defaultAvatar =
     avatarUrl ||
@@ -50,23 +56,47 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
+    if (saving) return;
+    const nextName = draftName.trim();
+    if (!nextName) {
       toast.error("Họ và tên không được để trống");
       return;
     }
     try {
       setSaving(true);
-      const res = await fetch("/api/user/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
+      let res: Response;
+      if (pendingAvatar?.kind === "file") {
+        const formData = new FormData();
+        formData.append("name", nextName);
+        formData.append("file", pendingAvatar.file);
+        res = await fetch("/api/user/avatar", { method: "POST", body: formData });
+      } else if (pendingAvatar?.kind === "preset") {
+        res = await fetch("/api/user/avatar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: nextName, presetUrl: pendingAvatar.url }),
+        });
+      } else {
+        res = await fetch("/api/user/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: nextName }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Không thể cập nhật hồ sơ");
 
+      setName(nextName);
+      if (pendingAvatar) {
+        setAvatarUrl(data.imageUrl);
+        window.dispatchEvent(new CustomEvent("profile-avatar-updated", {
+          detail: { userId: user.id, imageUrl: data.imageUrl },
+        }));
+      }
+      setPendingAvatar(null);
       window.dispatchEvent(
         new CustomEvent("profile-name-updated", {
-          detail: { name: name.trim(), userId: user.id },
+          detail: { name: nextName, userId: user.id },
         })
       );
       toast.success("Cập nhật thông tin hồ sơ thành công!");
@@ -79,12 +109,18 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
     }
   };
 
-  const handleAvatarUpdated = (newUrl: string) => {
-    setAvatarUrl(newUrl);
-    window.dispatchEvent(new CustomEvent("profile-avatar-updated", {
-      detail: { userId: user.id, imageUrl: newUrl },
-    }));
-    router.refresh();
+  const handleAvatarSelected = (selection: AvatarSelection) => {
+    setPendingAvatar({
+      ...selection,
+      previewUrl: selection.kind === "file" ? URL.createObjectURL(selection.file) : selection.url,
+    });
+  };
+
+  const handleCancel = () => {
+    if (saving) return;
+    setDraftName(name);
+    setPendingAvatar(null);
+    setIsEditing(false);
   };
 
   return (
@@ -100,9 +136,10 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
               Ảnh đại diện (Cloudflare R2)
             </Label>
             <AvatarPicker
-              currentAvatar={avatarUrl}
-              userName={name}
-              onAvatarUpdated={handleAvatarUpdated}
+              currentAvatar={pendingAvatar?.previewUrl ?? avatarUrl}
+              userName={draftName}
+              onAvatarSelected={handleAvatarSelected}
+              disabled={saving}
             />
           </div>
 
@@ -114,8 +151,8 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
               <Label htmlFor="displayName">Họ và tên</Label>
               <Input
                 id="displayName"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
                 placeholder="Nhập họ và tên của bạn"
                 disabled={saving}
               />
@@ -146,7 +183,8 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setIsEditing(false)}
+                onClick={handleCancel}
+                disabled={saving}
               >
                 Huỷ
               </Button>
@@ -205,7 +243,11 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
             <Button
               variant="outline"
-              onClick={() => setIsEditing(true)}
+              onClick={() => {
+                setDraftName(name);
+                setPendingAvatar(null);
+                setIsEditing(true);
+              }}
               className="w-full gap-1.5"
             >
               <Edit3 className="h-4 w-4" /> Chỉnh sửa hồ sơ

@@ -19,8 +19,9 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import Loader from "@/components/loader";
+import AccountResetPasswordForm from "@/components/settings/account-reset-password-form";
 
-function ResetPasswordContent() {
+function TokenResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
@@ -176,6 +177,11 @@ function ResetPasswordContent() {
       </CardContent>
     </Card>
   );
+}
+
+function ResetPasswordContent() {
+  const searchParams = useSearchParams();
+  return searchParams.get("source") === "account" ? <AccountResetPasswordForm /> : <TokenResetPasswordContent />;
 }
 
 export default function ResetPasswordPage() {
