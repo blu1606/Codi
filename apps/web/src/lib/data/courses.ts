@@ -32,7 +32,7 @@ export const SEED_COURSES: Course[] = [
       "Quản lý State & Gọi API",
       "Deploy & Tối ưu trên Vercel"
     ],
-    price: 399000
+    price: 5000
   },
   {
     id: "course-2",
@@ -52,7 +52,7 @@ export const SEED_COURSES: Course[] = [
       "Caching với Redis & Giới hạn Rate Limiting",
       "Docker hóa ứng dụng & Triển khai Cloud"
     ],
-    price: 449000
+    price: 5000
   },
   {
     id: "course-3",
@@ -73,7 +73,7 @@ export const SEED_COURSES: Course[] = [
       "Quy hoạch động (Dynamic Programming)",
       "Kỹ năng live-coding phỏng vấn kỹ thuật"
     ],
-    price: 299000
+    price: 5000
   },
   {
     id: "course-4",
@@ -94,7 +94,7 @@ export const SEED_COURSES: Course[] = [
       "AI SDK & Stream Text UI",
       "Multi-agent Orchestration & Tự động hóa tác vụ"
     ],
-    price: 499000
+    price: 5000
   },
   {
     id: "course-5",
@@ -114,7 +114,7 @@ export const SEED_COURSES: Course[] = [
       "Tích hợp Camera, Định vị & Push Notifications",
       "Đóng gói APK/AAB & Xuất bản App Store/Google Play"
     ],
-    price: 349000
+    price: 5000
   },
 ];
 
