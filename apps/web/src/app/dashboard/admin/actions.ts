@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, eq, isNull, ne } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, ne } from "drizzle-orm";
 import { headers } from "next/headers";
 
 import { requireRole, ROLE, type RoleId } from "@codi-1/auth";
@@ -16,19 +16,33 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
 
   await db.transaction(async (tx) => {
     // Lock all active admins to serialize admin-altering operations and revalidate caller
-    const activeAdmins = await tx
+    const activeAdminRoles = await tx
       .select({ id: userRoles.id, userId: userRoles.userId })
       .from(userRoles)
-      .innerJoin(user, eq(userRoles.userId, user.id))
       .where(
         and(
           eq(userRoles.roleId, ROLE.ADMIN),
-          isNull(userRoles.revokedAt),
-          eq(user.banned, false)
+          isNull(userRoles.revokedAt)
         )
       )
       .orderBy(userRoles.id)
       .for("update");
+
+    let activeAdmins: typeof activeAdminRoles = [];
+    if (activeAdminRoles.length > 0) {
+      const activeAdminUserIds = activeAdminRoles.map((r) => r.userId);
+      const unbannedUsers = await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(
+          and(
+            inArray(user.id, activeAdminUserIds),
+            eq(user.banned, false)
+          )
+        );
+      const unbannedUserIds = unbannedUsers.map((u) => u.id);
+      activeAdmins = activeAdminRoles.filter((r) => unbannedUserIds.includes(r.userId));
+    }
 
     if (!activeAdmins.some((a) => a.userId === session.user.id)) {
       throw new Error("Unauthorized or banned");
@@ -80,19 +94,33 @@ export async function toggleUserBan(
 
   await db.transaction(async (tx) => {
     // Lock all active admins to serialize admin-altering operations and revalidate caller
-    const activeAdmins = await tx
+    const activeAdminRoles = await tx
       .select({ id: userRoles.id, userId: userRoles.userId })
       .from(userRoles)
-      .innerJoin(user, eq(userRoles.userId, user.id))
       .where(
         and(
           eq(userRoles.roleId, ROLE.ADMIN),
-          isNull(userRoles.revokedAt),
-          eq(user.banned, false)
+          isNull(userRoles.revokedAt)
         )
       )
       .orderBy(userRoles.id)
       .for("update");
+
+    let activeAdmins: typeof activeAdminRoles = [];
+    if (activeAdminRoles.length > 0) {
+      const activeAdminUserIds = activeAdminRoles.map((r) => r.userId);
+      const unbannedUsers = await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(
+          and(
+            inArray(user.id, activeAdminUserIds),
+            eq(user.banned, false)
+          )
+        );
+      const unbannedUserIds = unbannedUsers.map((u) => u.id);
+      activeAdmins = activeAdminRoles.filter((r) => unbannedUserIds.includes(r.userId));
+    }
 
     if (!activeAdmins.some((a) => a.userId === session.user.id)) {
       throw new Error("Unauthorized or banned");
