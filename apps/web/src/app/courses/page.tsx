@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
@@ -45,7 +45,6 @@ export default function CoursesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Tất cả");
   const [selectedLevel, setSelectedLevel] = useState<string>("Tất cả cấp độ");
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
 
   // Filter courses based on search term, category and level
   const filteredCourses = useMemo(() => {
@@ -288,7 +287,7 @@ export default function CoursesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => router.push(('/courses/' + course.slug) as any)}
+                    onClick={() => router.push(`/courses/${course.slug}` as any)}
                     className="text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2"
                   >
                     Xem chi tiết
@@ -334,111 +333,6 @@ export default function CoursesPage() {
         </div>
       </section>
 
-      {/* Course Detail Modal Dialog */}
-      {selectedCourse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div
-            className="relative w-full max-w-2xl rounded-2xl bg-card border border-border p-6 shadow-xl max-h-[90vh] overflow-y-auto space-y-5"
-            role="dialog"
-            aria-modal="true"
-          >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedCourse(null)}
-              className="absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            {/* Header */}
-            <div className="space-y-2 pr-8">
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-md bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                  {selectedCourse.category}
-                </span>
-                <span className="rounded-md bg-secondary text-secondary-foreground px-2 py-0.5 text-xs font-medium">
-                  {selectedCourse.level}
-                </span>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  {selectedCourse.duration}
-                </span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                {selectedCourse.title}
-              </h2>
-            </div>
-
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {selectedCourse.description}
-            </p>
-
-            {/* Information Grid */}
-            <div className="grid sm:grid-cols-2 gap-4 rounded-xl bg-muted/40 p-4 border border-border/60 text-xs">
-              <div className="space-y-1">
-                <span className="font-semibold text-foreground">Đối tượng phù hợp:</span>
-                <p className="text-muted-foreground">{selectedCourse.targetAudience}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="font-semibold text-foreground">Yêu cầu đầu vào:</span>
-                <p className="text-muted-foreground">{selectedCourse.prerequisites}</p>
-              </div>
-            </div>
-
-            {/* Curriculum Topics */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                <Layers className="h-4 w-4 text-primary" />
-                Nội dung các học phần:
-              </h4>
-              <ul className="grid sm:grid-cols-2 gap-2 text-xs">
-                {selectedCourse.topics.map((topic, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 p-2.5 bg-background"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <span className="text-foreground/90">{topic}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 pt-3 border-t border-border">
-              <Button
-                onClick={() => {
-                  setSelectedCourse(null);
-                  handleEnrollClick(selectedCourse);
-                }}
-                className="flex-1 cursor-pointer gap-2"
-              >
-                <span>{session?.user ? "Tham gia lớp học ngay" : "Đăng ký học khóa này"}</span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedCourse(null);
-                  router.push(`/ai?topic=${encodeURIComponent(selectedCourse.title)}`);
-                }}
-                className="gap-2 cursor-pointer text-primary border-primary/30"
-              >
-                <Sparkles className="h-4 w-4" />
-                Hỏi AI về khóa học
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setSelectedCourse(null)}
-                className="cursor-pointer"
-              >
-                Đóng
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

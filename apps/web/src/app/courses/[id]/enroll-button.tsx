@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
@@ -6,7 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { authClient } from "@/lib/auth-client";
 
-export default function EnrollButton({ courseTitle }: { courseTitle: string }) {
+export default function EnrollButton() {
   const router = useRouter();
   const { data: session } = authClient.useSession();
 
