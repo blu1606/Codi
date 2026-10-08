@@ -1,4 +1,4 @@
-﻿import { APIError } from "better-auth/api";
+import { APIError } from "better-auth/api";
 import { eq } from "drizzle-orm";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import type { Database } from "@codi-1/db";
@@ -65,6 +65,18 @@ export function createAuth(env: AuthConfig, database: Database) {
               throw new APIError("UNAUTHORIZED", { message: "Tai khoan da bi khoa." });
             }
             return { data: session };
+          },
+          after: async (session) => {
+            // Re-check after insertion to close the race condition with concurrent bans
+            const [dbUser] = await database
+              .select({ banned: schema.user.banned })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId));
+              
+            if (dbUser?.banned) {
+              await database.delete(schema.session).where(eq(schema.session.id, session.id));
+              throw new APIError("UNAUTHORIZED", { message: "Tai khoan da bi khoa." });
+            }
           }
         }
       }

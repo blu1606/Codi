@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { and, count, eq, isNull, ne } from "drizzle-orm";
 import { headers } from "next/headers";
@@ -15,6 +15,25 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
   await requireRole(db, session.user.id, ROLE.ADMIN);
 
   await db.transaction(async (tx) => {
+    // Lock all active admins to serialize admin-altering operations and revalidate caller
+    const activeAdmins = await tx
+      .select({ id: userRoles.id, userId: userRoles.userId })
+      .from(userRoles)
+      .innerJoin(user, eq(userRoles.userId, user.id))
+      .where(
+        and(
+          eq(userRoles.roleId, ROLE.ADMIN),
+          isNull(userRoles.revokedAt),
+          eq(user.banned, false)
+        )
+      )
+      .orderBy(userRoles.id)
+      .for("update");
+
+    if (!activeAdmins.some((a) => a.userId === session.user.id)) {
+      throw new Error("Unauthorized or banned");
+    }
+
     // lock this user's active role row(s) first
     const currentActive = await tx
       .select()
@@ -22,21 +41,11 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
       .where(and(eq(userRoles.userId, targetUserId), isNull(userRoles.revokedAt)))
       .for("update");
 
-    if (targetUserId === session.user.id && newRoleId !== ROLE.ADMIN) {
-      const activeAdmins = await tx
-        .select({ id: userRoles.id })
-        .from(userRoles)
-        .innerJoin(user, eq(userRoles.userId, user.id))
-        .where(
-          and(
-            eq(userRoles.roleId, ROLE.ADMIN),
-            isNull(userRoles.revokedAt),
-            eq(user.banned, false)
-          )
-        )
-        .for("update");
-        
-      if (activeAdmins.length <= 1) {
+    const wasAdmin = currentActive.some(r => r.roleId === ROLE.ADMIN);
+
+    if (wasAdmin && newRoleId !== ROLE.ADMIN) {
+      const otherAdmins = activeAdmins.filter((a) => a.userId !== targetUserId);
+      if (otherAdmins.length === 0) {
         throw new Error("Khong the xoa quyen Admin cuoi cung dang hoat dong.");
       }
     }
@@ -70,33 +79,29 @@ export async function toggleUserBan(
   }
 
   await db.transaction(async (tx) => {
+    // Lock all active admins to serialize admin-altering operations and revalidate caller
+    const activeAdmins = await tx
+      .select({ id: userRoles.id, userId: userRoles.userId })
+      .from(userRoles)
+      .innerJoin(user, eq(userRoles.userId, user.id))
+      .where(
+        and(
+          eq(userRoles.roleId, ROLE.ADMIN),
+          isNull(userRoles.revokedAt),
+          eq(user.banned, false)
+        )
+      )
+      .orderBy(userRoles.id)
+      .for("update");
+
+    if (!activeAdmins.some((a) => a.userId === session.user.id)) {
+      throw new Error("Unauthorized or banned");
+    }
+
     if (ban) {
-      const targetIsAdmin = await tx
-        .select({ total: count() })
-        .from(userRoles)
-        .where(
-          and(
-            eq(userRoles.userId, targetUserId),
-            eq(userRoles.roleId, ROLE.ADMIN),
-            isNull(userRoles.revokedAt)
-          )
-        );
+      const targetIsAdmin = activeAdmins.some(a => a.userId === targetUserId);
 
-      if (targetIsAdmin[0].total > 0) {
-        // Lock all active admin roles to serialize against concurrent bans/demotions
-        const activeAdmins = await tx
-          .select({ id: userRoles.id, userId: userRoles.userId })
-          .from(userRoles)
-          .innerJoin(user, eq(userRoles.userId, user.id))
-          .where(
-            and(
-              eq(userRoles.roleId, ROLE.ADMIN),
-              isNull(userRoles.revokedAt),
-              eq(user.banned, false)
-            )
-          )
-          .for("update");
-
+      if (targetIsAdmin) {
         const otherAdmins = activeAdmins.filter((a) => a.userId !== targetUserId);
 
         if (otherAdmins.length === 0) {
