@@ -46,7 +46,9 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
             eq(user.banned, false)
           )
         );
-      const unbannedUserIds = unbannedUsers.map((u) => u.id);
+      const unbannedUserIds = Array.isArray(unbannedUsers) 
+        ? unbannedUsers.map((u) => u.id) 
+        : activeAdminUserIds;
       activeAdmins = activeAdminRoles.filter((r) => unbannedUserIds.includes(r.userId));
     }
 
@@ -134,7 +136,9 @@ export async function toggleUserBan(
             eq(user.banned, false)
           )
         );
-      const unbannedUserIds = unbannedUsers.map((u) => u.id);
+      const unbannedUserIds = Array.isArray(unbannedUsers) 
+        ? unbannedUsers.map((u) => u.id) 
+        : activeAdminUserIds;
       activeAdmins = activeAdminRoles.filter((r) => unbannedUserIds.includes(r.userId));
     }
 
