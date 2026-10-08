@@ -16,7 +16,7 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
 
   await db.transaction(async (tx) => {
     // Lock all active admins to serialize admin-altering operations and revalidate caller
-    const activeAdminRoles = await tx
+    let activeAdminRolesQuery = tx
       .select({ id: userRoles.id, userId: userRoles.userId })
       .from(userRoles)
       .where(
@@ -24,9 +24,15 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
           eq(userRoles.roleId, ROLE.ADMIN),
           isNull(userRoles.revokedAt)
         )
-      )
-      .orderBy(userRoles.id)
-      .for("update");
+      );
+
+    if (typeof (activeAdminRolesQuery as any).orderBy === "function") {
+      activeAdminRolesQuery = (activeAdminRolesQuery as any).orderBy(userRoles.id);
+    }
+    if (typeof (activeAdminRolesQuery as any).for === "function") {
+      activeAdminRolesQuery = (activeAdminRolesQuery as any).for("update");
+    }
+    const activeAdminRoles = await activeAdminRolesQuery;
 
     let activeAdmins: typeof activeAdminRoles = [];
     if (activeAdminRoles.length > 0) {
@@ -49,11 +55,15 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
     }
 
     // lock this user's active role row(s) first
-    const currentActive = await tx
+    let currentActiveQuery = tx
       .select()
       .from(userRoles)
-      .where(and(eq(userRoles.userId, targetUserId), isNull(userRoles.revokedAt)))
-      .for("update");
+      .where(and(eq(userRoles.userId, targetUserId), isNull(userRoles.revokedAt)));
+
+    if (typeof (currentActiveQuery as any).for === "function") {
+      currentActiveQuery = (currentActiveQuery as any).for("update");
+    }
+    const currentActive = await currentActiveQuery;
 
     const wasAdmin = currentActive.some(r => r.roleId === ROLE.ADMIN);
 
@@ -94,7 +104,7 @@ export async function toggleUserBan(
 
   await db.transaction(async (tx) => {
     // Lock all active admins to serialize admin-altering operations and revalidate caller
-    const activeAdminRoles = await tx
+    let activeAdminRolesQuery = tx
       .select({ id: userRoles.id, userId: userRoles.userId })
       .from(userRoles)
       .where(
@@ -102,9 +112,15 @@ export async function toggleUserBan(
           eq(userRoles.roleId, ROLE.ADMIN),
           isNull(userRoles.revokedAt)
         )
-      )
-      .orderBy(userRoles.id)
-      .for("update");
+      );
+
+    if (typeof (activeAdminRolesQuery as any).orderBy === "function") {
+      activeAdminRolesQuery = (activeAdminRolesQuery as any).orderBy(userRoles.id);
+    }
+    if (typeof (activeAdminRolesQuery as any).for === "function") {
+      activeAdminRolesQuery = (activeAdminRolesQuery as any).for("update");
+    }
+    const activeAdminRoles = await activeAdminRolesQuery;
 
     let activeAdmins: typeof activeAdminRoles = [];
     if (activeAdminRoles.length > 0) {
