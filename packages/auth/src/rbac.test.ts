@@ -49,7 +49,7 @@ describe("RBAC module", () => {
   describe("countActiveHolders", () => {
     it("trả về số lượng người dùng đang giữ role", async () => {
       // Arrange
-      const mockDb = createMockDb([{ total: 3 }]);
+      const mockDb = createMockDb([{ userId: "1", id: "1" }, { userId: "2", id: "2" }, { userId: "3", id: "3" }]);
 
       // Act
       const count = await countActiveHolders(mockDb, ROLE.ADMIN);
@@ -61,17 +61,6 @@ describe("RBAC module", () => {
     it("trả về fallback 0 khi kết quả query rỗng hoặc không có bản ghi", async () => {
       // Arrange
       const mockDb = createMockDb([]);
-
-      // Act
-      const count = await countActiveHolders(mockDb, ROLE.ADMIN);
-
-      // Assert
-      expect(count).toBe(0);
-    });
-
-    it("trả về fallback 0 khi total là undefined", async () => {
-      // Arrange
-      const mockDb = createMockDb([{}]);
 
       // Act
       const count = await countActiveHolders(mockDb, ROLE.ADMIN);

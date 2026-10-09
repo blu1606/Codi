@@ -23,6 +23,11 @@ vi.mock("@/services", () => ({
   },
   db: {
     transaction: (cb: any) => mockTransaction(cb),
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({}),
+      }),
+    }),
   },
 }));
 
@@ -67,19 +72,21 @@ describe("updateUserRole action", () => {
 
     const mockTx = {
       select: vi.fn().mockImplementation((arg) => {
-        if (arg?.total !== undefined) {
-          // Count query for remaining admins
+        // activeAdminRolesQuery
+        if (arg?.userId) {
           return {
             from: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue([{ total: 1 }]),
+              where: vi.fn().mockReturnValue({
+                for: vi.fn().mockResolvedValue([{ id: "role-row-1", userId: adminId }]),
+              }),
             }),
           };
         }
-        // Query current active roles
+        // currentActiveQuery
         return {
           from: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
-              for: vi.fn().mockResolvedValue([{ id: "role-row-1" }]),
+              for: vi.fn().mockResolvedValue([{ id: "role-row-1", roleId: ROLE.ADMIN, userId: adminId }]),
             }),
           }),
         };
@@ -92,7 +99,7 @@ describe("updateUserRole action", () => {
 
     // Act & Assert
     await expect(updateUserRole(adminId, ROLE.LEARNER)).rejects.toThrow(
-      "Không thể xoá quyền Admin cuối cùng đang hoạt động."
+      "Khong the xoa quyen Admin cuoi cung dang hoat dong."
     );
     expect(mockTx.update).not.toHaveBeenCalled();
     expect(mockTx.insert).not.toHaveBeenCalled();
@@ -111,17 +118,22 @@ describe("updateUserRole action", () => {
 
     const mockTx = {
       select: vi.fn().mockImplementation((arg) => {
-        if (arg?.total !== undefined) {
+        if (arg?.userId) {
           return {
             from: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue([{ total: 2 }]),
+              where: vi.fn().mockReturnValue({
+                for: vi.fn().mockResolvedValue([
+                  { id: "role-row-1", userId: adminId },
+                  { id: "role-row-2", userId: "other-admin-id" },
+                ]),
+              }),
             }),
           };
         }
         return {
           from: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
-              for: vi.fn().mockResolvedValue([{ id: "role-row-1" }]),
+              for: vi.fn().mockResolvedValue([{ id: "role-row-1", roleId: ROLE.ADMIN, userId: adminId }]),
             }),
           }),
         };
@@ -160,12 +172,23 @@ describe("updateUserRole action", () => {
     const mockValues = vi.fn().mockResolvedValue(undefined);
 
     const mockTx = {
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            for: vi.fn().mockResolvedValue([]),
+      select: vi.fn().mockImplementation((arg) => {
+        if (arg?.userId) {
+          return {
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue({
+                for: vi.fn().mockResolvedValue([{ id: "role-row-1", userId: adminId }]),
+              }),
+            }),
+          };
+        }
+        return {
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              for: vi.fn().mockResolvedValue([{ id: "role-row-1", roleId: ROLE.ADMIN, userId: adminId }]),
+            }),
           }),
-        }),
+        };
       }),
       update: vi.fn().mockReturnValue({ set: mockSet }),
       insert: vi.fn().mockReturnValue({ values: mockValues }),
@@ -176,8 +199,8 @@ describe("updateUserRole action", () => {
     // Act
     await updateUserRole(adminId, ROLE.ADMIN);
 
-    // Assert: select for count total should NOT be called (select called only once for current active)
-    expect(mockTx.select).toHaveBeenCalledTimes(1);
+    // Assert: select should be called twice (active admins and current roles)
+    expect(mockTx.select).toHaveBeenCalledTimes(2);
     expect(mockTx.insert).toHaveBeenCalledWith(expect.anything());
     expect(mockValues).toHaveBeenCalledWith({
       userId: adminId,
@@ -201,15 +224,26 @@ describe("updateUserRole action", () => {
     const mockValues = vi.fn().mockResolvedValue(undefined);
 
     const mockTx = {
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            for: vi.fn().mockResolvedValue([
-              { id: "active-role-1" },
-              { id: "active-role-2" },
-            ]),
+      select: vi.fn().mockImplementation((arg) => {
+        if (arg?.userId) {
+          return {
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue({
+                for: vi.fn().mockResolvedValue([{ id: "role-row-1", userId: actorAdminId }]),
+              }),
+            }),
+          };
+        }
+        return {
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              for: vi.fn().mockResolvedValue([
+                { id: "active-role-1", roleId: ROLE.LEARNER, userId: targetUserId },
+                { id: "active-role-2", roleId: ROLE.LECTURER, userId: targetUserId },
+              ]),
+            }),
           }),
-        }),
+        };
       }),
       update: vi.fn().mockReturnValue({ set: mockSet }),
       insert: vi.fn().mockReturnValue({ values: mockValues }),
