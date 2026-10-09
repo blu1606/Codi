@@ -60,22 +60,27 @@ export default function ChangePasswordCard({ onBusyChange }: { onBusyChange?: (b
         return;
       }
 
-      await authClient.changePassword(
-        {
-          currentPassword: value.currentPassword,
-          newPassword: value.newPassword,
-          revokeOtherSessions: true,
-        },
-        {
-          onSuccess: () => {
-            toast.success("Đổi mật khẩu thành công! Các phiên đăng nhập khác đã được đăng xuất.");
-            formApi.reset();
+      onBusyChange?.(true);
+      try {
+        await authClient.changePassword(
+          {
+            currentPassword: value.currentPassword,
+            newPassword: value.newPassword,
+            revokeOtherSessions: true,
           },
-          onError: (ctx) => {
-            toast.error(ctx.error.message || "Đổi mật khẩu thất bại. Vui lòng kiểm tra mật khẩu hiện tại.");
-          },
-        }
-      );
+          {
+            onSuccess: () => {
+              toast.success("Đổi mật khẩu thành công! Các phiên đăng nhập khác đã được đăng xuất.");
+              formApi.reset();
+            },
+            onError: (ctx) => {
+              toast.error(ctx.error.message || "Đổi mật khẩu thất bại. Vui lòng kiểm tra mật khẩu hiện tại.");
+            },
+          }
+        );
+      } finally {
+        onBusyChange?.(false);
+      }
     },
     validators: {
       onSubmit: z

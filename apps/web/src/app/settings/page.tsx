@@ -13,5 +13,5 @@ export default async function SettingsPage() {
     redirect("/login");
   }
 
-  return <AccountSettings user={session.user} currentSessionId={session.session.id} />;
+  return <AccountSettings user={session.user} />;
 }

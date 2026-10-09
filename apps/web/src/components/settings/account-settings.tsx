@@ -25,10 +25,9 @@ const editButtonClass = "h-10 rounded-lg px-4 text-sm font-semibold";
 
 interface AccountSettingsProps {
   user: { id: string; name: string; email: string; emailVerified: boolean; image?: string | null };
-  currentSessionId: string;
 }
 
-export default function AccountSettings({ user, currentSessionId }: AccountSettingsProps) {
+export default function AccountSettings({ user }: AccountSettingsProps) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const dialogTriggerRef = useRef<HTMLElement | null>(null);
@@ -185,7 +184,7 @@ export default function AccountSettings({ user, currentSessionId }: AccountSetti
                 <h3 className="text-sm font-semibold">Xác Thực Đa Nhân Tố</h3>
                 <span className="flex items-center gap-3 text-sm text-muted-foreground">Chưa hỗ trợ <ChevronRight aria-hidden="true" className="size-5" /></span>
               </div>
-              <SessionSettings currentSessionId={currentSessionId} revision={sessionRevision} />
+              <SessionSettings revision={sessionRevision} />
             </section>
           </div>
         </div>

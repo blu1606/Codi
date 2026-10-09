@@ -22,8 +22,9 @@ function describeDevice(userAgent?: string | null) {
   return `${browser} · ${system}`;
 }
 
-export default function SessionSettings({ currentSessionId, revision }: { currentSessionId: string; revision: number }) {
+export default function SessionSettings({ revision }: { revision: number }) {
   const [sessions, setSessions] = useState<Sessions | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -35,10 +36,24 @@ export default function SessionSettings({ currentSessionId, revision }: { curren
     async function loadSessions() {
       setLoading(true);
       setError(false);
+      setCurrentSessionId(null);
       try {
-        const result = await authClient.listSessions();
-        if (result.error || !result.data) throw new Error("Không thể tải phiên đăng nhập.");
-        if (active) setSessions(result.data);
+        // Password changes can replace this device's session. Refresh its
+        // authoritative identity together with the list before enabling logout.
+        const [result, currentSession] = await Promise.all([
+          authClient.listSessions({ fetchOptions: { cache: "no-store" } }),
+          authClient.getSession({
+            query: { disableCookieCache: true },
+            fetchOptions: { cache: "no-store" },
+          }),
+        ]);
+        if (result.error || !result.data || currentSession.error || !currentSession.data) {
+          throw new Error("Không thể tải phiên đăng nhập.");
+        }
+        if (active) {
+          setSessions(result.data);
+          setCurrentSessionId(currentSession.data.session.id);
+        }
       } catch {
         if (active) setError(true);
       } finally {
@@ -50,7 +65,7 @@ export default function SessionSettings({ currentSessionId, revision }: { curren
   }, [revision, refresh]);
 
   async function revokeSession(session: Sessions[number]) {
-    if (revoking || session.id === currentSessionId) return;
+    if (loading || error || revoking || !currentSessionId || session.id === currentSessionId) return;
     setRevoking(session.id);
     try {
       const result = await authClient.revokeSession({ token: session.token });
