@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" fill="none">
+  <defs><linearGradient id="bg" x2="640" y2="360" gradientUnits="userSpaceOnUse"><stop stop-color="#059669"/><stop offset="1" stop-color="#064e3b"/></linearGradient></defs>
+  <path fill="url(#bg)" d="M0 0h640v360H0z"/>
+  <path d="m508-60 210 120v240L508 420 298 300V60z" stroke="#6ee7b7" stroke-opacity=".1" stroke-width="35"/>
+  <g stroke="#a7f3d0" stroke-width="2.5">
+    <rect x="442" y="102" width="134" height="52" rx="12" fill="#022c22" fill-opacity=".4"/><rect x="442" y="165" width="134" height="52" rx="12" fill="#022c22" fill-opacity=".4"/>
+    <path d="M460 122h49m-49 12h30m-30 52h49m-49 12h30" stroke-opacity=".65"/>
+    <circle cx="553" cy="128" r="4" fill="#a7f3d0"/><circle cx="553" cy="191" r="4" fill="#a7f3d0"/>
+    <path d="M509 217v20"/><ellipse cx="509" cy="249" rx="53" ry="15" fill="#065f46"/><path d="M456 249v38c0 20 106 20 106 0v-38m-106 20c0 20 106 20 106 0"/>
+  </g>
+  <g fill="white" font-family="Arial, sans-serif">
+    <text x="40" y="49" font-size="19" font-weight="700" letter-spacing="3">CODI / BACKEND</text>
+    <text x="40" y="141" font-size="54" font-weight="800">Node.js</text>
+    <text x="40" y="202" font-size="44" font-weight="800">TypeScript</text>
+    <text x="42" y="247" font-size="22" opacity=".88">Xây dựng hệ thống vững chắc</text>
+    <text x="42" y="321" font-size="17" font-weight="700" letter-spacing="2" opacity=".8">API · POSTGRESQL · DOCKER</text>
+  </g>
+</svg>

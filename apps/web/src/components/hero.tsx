@@ -1,15 +1,17 @@
 "use client";
 
 import { motion, type Variants } from "framer-motion";
+import { Rocket } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { cn } from "@codi-1/ui/lib/utils";
 import React from "react";
+import styles from "./hero.module.css";
 
 // Define the props for reusability
 export interface StatProps {
   value: string;
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
 }
 
 export interface ActionProps {
@@ -20,6 +22,7 @@ export interface ActionProps {
 }
 
 export interface HeroProps {
+  eyebrow?: string;
   title: React.ReactNode;
   subtitle: string;
   actions: ActionProps[];
@@ -27,40 +30,6 @@ export interface HeroProps {
   images: string[];
   className?: string;
 }
-
-// Animation variants for Framer Motion
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.2,
-    },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.5,
-    },
-  },
-};
-
-const imageVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.8 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: {
-      duration: 0.5,
-      ease: "easeOut",
-    },
-  },
-};
 
 const floatingVariants: Variants = {
   animate: {
@@ -74,6 +43,7 @@ const floatingVariants: Variants = {
 };
 
 export default function Hero({
+  eyebrow,
   title,
   subtitle,
   actions,
@@ -85,53 +55,59 @@ export default function Hero({
     <section className={cn("w-full overflow-hidden bg-background py-12 sm:py-24", className)}>
       <div className="container mx-auto grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-8 px-4 sm:px-6">
         {/* Left Column: Text Content */}
-        <motion.div
-          className="flex flex-col items-center text-center lg:items-start lg:text-left"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
+        <div
+          className={cn(styles.content, "flex min-w-0 flex-col items-start text-left")}
         >
-          <motion.h1
-            className="text-4xl font-bold tracking-tight text-foreground sm:text-6xl"
-            variants={itemVariants}
+          {eyebrow && (
+            <div
+              data-codi-intro-hero
+              className="mb-5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 px-2.5 py-1 text-[10px] font-semibold leading-relaxed tracking-wide text-primary uppercase sm:text-[11px]"
+            >
+              <Rocket aria-hidden="true" className="size-3 shrink-0" />
+              <span>{eyebrow}</span>
+            </div>
+          )}
+          <h1
+            data-codi-intro-hero
+            className="text-4xl font-extrabold leading-[1.15] tracking-[-0.035em] text-foreground sm:text-[44px] xl:text-5xl"
           >
             {title}
-          </motion.h1>
-          <motion.p className="mt-6 max-w-md text-lg text-muted-foreground" variants={itemVariants}>
+          </h1>
+          <p data-codi-intro-hero className="mt-5 max-w-xl text-[15px] leading-7 text-muted-foreground sm:text-base">
             {subtitle}
-          </motion.p>
-          <motion.div className="mt-8 flex flex-wrap justify-center gap-4 lg:justify-start" variants={itemVariants}>
+          </p>
+          <div data-codi-intro-hero className="mt-7 flex flex-wrap items-center gap-3">
             {actions.map((action, index) => (
               <Button
                 key={index}
                 onClick={action.onClick}
                 variant={action.variant}
                 size="lg"
-                className={cn("cursor-pointer", action.className)}
+                className={cn("h-10 cursor-pointer rounded-lg px-5 text-sm font-semibold", action.className)}
               >
                 {action.text}
               </Button>
             ))}
-          </motion.div>
-          <motion.div className="mt-12 flex flex-wrap justify-center gap-8 lg:justify-start" variants={itemVariants}>
+          </div>
+          <div
+            data-codi-intro-hero
+            className={cn(styles.stats, "mt-10 flex flex-wrap gap-x-8 gap-y-5 sm:mt-12 sm:gap-x-10")}
+          >
             {stats.map((stat, index) => (
               <div key={index} className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">{stat.icon}</div>
+                {stat.icon && <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">{stat.icon}</div>}
                 <div>
-                  <p className="text-xl font-bold text-foreground">{stat.value}</p>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  <p className="text-xl font-semibold leading-7 tracking-tight text-foreground">{stat.value}</p>
+                  <p className="mt-1 text-[13px] font-normal leading-5 text-muted-foreground">{stat.label}</p>
                 </div>
               </div>
             ))}
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
         {/* Right Column: Image Collage */}
-        <motion.div
+        <div
           className="relative h-[400px] w-full sm:h-[500px]"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
         >
           {/* Decorative Shapes */}
           <motion.div
@@ -153,10 +129,10 @@ export default function Hero({
           />
 
           {/* Images */}
-          <motion.div
+          <div
+            data-codi-intro-image
             className="absolute left-1/2 top-0 h-48 w-48 -translate-x-1/2 rounded-2xl bg-muted p-2 shadow-lg sm:h-64 sm:w-64"
             style={{ transformOrigin: "bottom center" }}
-            variants={imageVariants}
           >
             <img
               src={images[0]}
@@ -166,11 +142,11 @@ export default function Hero({
               loading="eager"
               className="h-full w-full rounded-xl object-cover"
             />
-          </motion.div>
-          <motion.div
+          </div>
+          <div
+            data-codi-intro-image
             className="absolute right-0 top-1/3 h-40 w-40 rounded-2xl bg-muted p-2 shadow-lg sm:h-56 sm:w-56"
             style={{ transformOrigin: "left center" }}
-            variants={imageVariants}
           >
             <img
               src={images[1]}
@@ -180,11 +156,11 @@ export default function Hero({
               loading="eager"
               className="h-full w-full rounded-xl object-cover"
             />
-          </motion.div>
-          <motion.div
+          </div>
+          <div
+            data-codi-intro-image
             className="absolute bottom-0 left-0 h-32 w-32 rounded-2xl bg-muted p-2 shadow-lg sm:h-48 sm:w-48"
             style={{ transformOrigin: "top right" }}
-            variants={imageVariants}
           >
             <img
               src={images[2]}
@@ -194,8 +170,8 @@ export default function Hero({
               loading="eager"
               className="h-full w-full rounded-xl object-cover"
             />
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </div>
     </section>
   );

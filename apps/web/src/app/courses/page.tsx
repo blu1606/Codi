@@ -1,41 +1,23 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  BookOpen,
-  CheckCircle2,
-  Clock,
-  Compass,
-  GraduationCap,
-  Layers,
   Search,
   Sparkles,
   X,
-  ArrowRight,
-  ExternalLink,
 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@codi-1/ui/components/card";
 import { Input } from "@codi-1/ui/components/input";
-import type { Course } from "@/lib/data/courses";
+import { fetchCourses, type CatalogCourse } from "@/lib/course-catalog";
 import { filterCourseCatalog } from "@/lib/filter-course-catalog";
 import { authClient } from "@/lib/auth-client";
-
-type CatalogCourse = Omit<Course, "topics" | "targetAudience" | "prerequisites" | "category" | "level"> & {
-  category: string;
-  level: string;
-  topics?: string[];
-  targetAudience?: string;
-  prerequisites?: string;
-};
+import { CatalogCourseCard } from "@/components/courses/catalog-course-card";
+import cardStyles from "@/components/courses/catalog-course-card.module.css";
 
 const CATEGORIES = [
   "Tất cả",
@@ -55,38 +37,36 @@ export default function CoursesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Tất cả");
   const [selectedLevel, setSelectedLevel] = useState<string>("Tất cả cấp độ");
-  const [selectedCourse, setSelectedCourse] = useState<CatalogCourse | null>(null);
-  const [catalog, setCatalog] = useState<CatalogCourse[]>([]);
+  const [courses, setCourses] = useState<CatalogCourse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [reload, setReload] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [adding, setAdding] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    setLoadError(false);
-    fetch("/api/courses", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Catalogue unavailable");
-        const data = await response.json();
-        if (!Array.isArray(data.courses)) throw new Error("Invalid catalogue");
-        if (!controller.signal.aborted) setCatalog(data.courses);
+    setError(null);
+    fetchCourses(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setCourses(data);
+        const courseId = new URLSearchParams(window.location.search).get("course");
+        const linkedCourse = courseId ? data.find((course) => course.id === courseId) : null;
+        if (linkedCourse) router.replace(`/courses/${encodeURIComponent(linkedCourse.slug)}`);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setLoadError(true);
+        if (!controller.signal.aborted) setError("Không thể tải khóa học. Vui lòng thử lại.");
       })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [reload]);
+  }, [attempt, router]);
 
   // Filter courses based on search term, category and level
   const filteredCourses = useMemo(() => {
-    return filterCourseCatalog(catalog, searchTerm, selectedCategory, selectedLevel);
-  }, [catalog, searchTerm, selectedCategory, selectedLevel]);
+    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel);
+  }, [courses, searchTerm, selectedCategory, selectedLevel]);
 
   const handleEnrollClick = async (course: CatalogCourse) => {
     if (!session?.user) {
@@ -115,7 +95,7 @@ export default function CoursesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background font-[family-name:var(--font-geist-sans)]">
       {/* Hero Header Section */}
       <section className="border-b border-border/40 bg-gradient-to-b from-primary/5 via-background to-background py-12 sm:py-16">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6">
@@ -233,12 +213,12 @@ export default function CoursesPage() {
 
         {/* Empty State */}
         {loading ? (
-          <p role="status" className="min-h-64 py-16 text-center">Đang tải khóa học…</p>
-        ) : loadError ? (
-          <div role="alert" className="min-h-64 py-16 text-center">
-            <p>Không tải được danh mục khóa học.</p>
-            <Button onClick={() => setReload((value) => value + 1)}>Thử lại</Button>
-          </div>
+          <p role="status" className="py-12 text-center text-sm text-muted-foreground">Đang tải khóa học…</p>
+        ) : error ? (
+          <Card className="items-center gap-4 border-dashed p-8 text-center">
+            <p role="alert" className="text-sm text-muted-foreground">{error}</p>
+            <Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>Thử lại</Button>
+          </Card>
         ) : filteredCourses.length === 0 ? (
           <Card className="border border-dashed border-border py-16 text-center">
             <CardContent className="space-y-4 max-w-md mx-auto">
@@ -276,84 +256,14 @@ export default function CoursesPage() {
           </Card>
         ) : (
           /* Course Cards Grid */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className={cardStyles.grid}>
             {filteredCourses.map((course) => (
-              <Card
+              <CatalogCourseCard
                 key={course.id}
-                className="group flex flex-col justify-between border-border hover:border-primary/40 transition-all duration-200 hover:shadow-md bg-card overflow-hidden"
-              >
-                <div>
-                  <CardHeader className="pb-3 space-y-2.5">
-                    {/* Badges: Category & Level */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="rounded-md bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                        {course.category}
-                      </span>
-                      <span className="rounded-md bg-secondary text-secondary-foreground px-2 py-0.5 text-xs font-medium">
-                        {course.level}
-                      </span>
-                    </div>
-
-                    <CardTitle className="text-lg font-bold tracking-tight group-hover:text-primary transition-colors line-clamp-2">
-                      {course.title}
-                    </CardTitle>
-
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      <span>{course.duration}</span>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
-                      {course.description}
-                    </p>
-
-                    {/* Key Topics preview */}
-                    {course.topics && <div className="space-y-1.5">
-                      <span className="text-xs font-semibold text-foreground/80">Chủ đề trọng tâm:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {course.topics.slice(0, 3).map((topic, i) => (
-                          <span
-                            key={i}
-                            className="rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground font-medium"
-                          >
-                            {topic}
-                          </span>
-                        ))}
-                        {course.topics.length > 3 && (
-                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                            +{course.topics.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    </div>}
-                  </CardContent>
-                </div>
-
-                {/* Card Footer Actions */}
-                <div className="p-6 pt-0 border-t border-border/40 mt-4 flex items-center justify-between gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedCourse(course)}
-                    className="text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2"
-                  >
-                    Xem chi tiết
-                  </Button>
-
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => handleEnrollClick(course)}
-                    disabled={adding}
-                    className="gap-1.5 text-xs cursor-pointer"
-                  >
-                    <span>{adding ? "Đang thêm…" : "Thêm vào giỏ"}</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </Card>
+                course={course}
+                adding={adding}
+                onAdd={handleEnrollClick}
+              />
             ))}
           </div>
         )}
@@ -383,112 +293,6 @@ export default function CoursesPage() {
         </div>
       </section>
 
-      {/* Course Detail Modal Dialog */}
-      {selectedCourse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div
-            className="relative w-full max-w-2xl rounded-2xl bg-card border border-border p-6 shadow-xl max-h-[90vh] overflow-y-auto space-y-5"
-            role="dialog"
-            aria-modal="true"
-          >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedCourse(null)}
-              className="absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            {/* Header */}
-            <div className="space-y-2 pr-8">
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-md bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                  {selectedCourse.category}
-                </span>
-                <span className="rounded-md bg-secondary text-secondary-foreground px-2 py-0.5 text-xs font-medium">
-                  {selectedCourse.level}
-                </span>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  {selectedCourse.duration}
-                </span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                {selectedCourse.title}
-              </h2>
-            </div>
-
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {selectedCourse.description}
-            </p>
-
-            {/* Information Grid */}
-            {(selectedCourse.targetAudience || selectedCourse.prerequisites) && <div className="grid sm:grid-cols-2 gap-4 rounded-xl bg-muted/40 p-4 border border-border/60 text-xs">
-              <div className="space-y-1">
-                <span className="font-semibold text-foreground">Đối tượng phù hợp:</span>
-                <p className="text-muted-foreground">{selectedCourse.targetAudience}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="font-semibold text-foreground">Yêu cầu đầu vào:</span>
-                <p className="text-muted-foreground">{selectedCourse.prerequisites}</p>
-              </div>
-            </div>}
-
-            {/* Curriculum Topics */}
-            {selectedCourse.topics && <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                <Layers className="h-4 w-4 text-primary" />
-                Nội dung các học phần:
-              </h4>
-              <ul className="grid sm:grid-cols-2 gap-2 text-xs">
-                {selectedCourse.topics.map((topic, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 p-2.5 bg-background"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <span className="text-foreground/90">{topic}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>}
-
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 pt-3 border-t border-border">
-              <Button
-                disabled={adding}
-                onClick={() => {
-                  setSelectedCourse(null);
-                  handleEnrollClick(selectedCourse);
-                }}
-                className="flex-1 cursor-pointer gap-2"
-              >
-                <span>{adding ? "Đang thêm…" : "Thêm vào giỏ"}</span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedCourse(null);
-                  router.push(`/ai?topic=${encodeURIComponent(selectedCourse.title)}`);
-                }}
-                className="gap-2 cursor-pointer text-primary border-primary/30"
-              >
-                <Sparkles className="h-4 w-4" />
-                Hỏi AI về khóa học
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setSelectedCourse(null)}
-                className="cursor-pointer"
-              >
-                Đóng
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
