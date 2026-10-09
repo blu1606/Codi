@@ -44,7 +44,7 @@ function createMockTx(
   const mockDeleteWhere = vi.fn().mockResolvedValue(undefined);
   
   const mockTx = {
-    select: vi.fn().mockImplementation((arg) => {
+    select: vi.fn().mockImplementation((arg: any) => {
       if (arg?.userId) {
         // activeAdminRolesQuery
         const chain = {
