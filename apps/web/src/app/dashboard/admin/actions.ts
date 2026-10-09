@@ -22,7 +22,11 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
       .where(
         and(
           eq(userRoles.roleId, ROLE.ADMIN),
-          isNull(userRoles.revokedAt)
+          isNull(userRoles.revokedAt),
+          inArray(
+            userRoles.userId,
+            db.select({ id: user.id }).from(user).where(eq(user.banned, false))
+          )
         )
       );
 
@@ -32,25 +36,7 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
     if (typeof (activeAdminRolesQuery as any).for === "function") {
       activeAdminRolesQuery = (activeAdminRolesQuery as any).for("update");
     }
-    const activeAdminRoles = await activeAdminRolesQuery;
-
-    let activeAdmins: typeof activeAdminRoles = [];
-    if (activeAdminRoles.length > 0) {
-      const activeAdminUserIds = activeAdminRoles.map((r) => r.userId);
-      const unbannedUsers = await tx
-        .select({ id: user.id })
-        .from(user)
-        .where(
-          and(
-            inArray(user.id, activeAdminUserIds),
-            eq(user.banned, false)
-          )
-        );
-      const unbannedUserIds = Array.isArray(unbannedUsers) 
-        ? unbannedUsers.flatMap((u: any) => [u.id, u.userId].filter(Boolean)) 
-        : activeAdminUserIds;
-      activeAdmins = activeAdminRoles.filter((r) => unbannedUserIds.includes(r.userId));
-    }
+    const activeAdmins = await activeAdminRolesQuery;
 
     if (!activeAdmins.some((a) => a.userId === session.user.id)) {
       throw new Error("Unauthorized or banned");
@@ -112,7 +98,11 @@ export async function toggleUserBan(
       .where(
         and(
           eq(userRoles.roleId, ROLE.ADMIN),
-          isNull(userRoles.revokedAt)
+          isNull(userRoles.revokedAt),
+          inArray(
+            userRoles.userId,
+            db.select({ id: user.id }).from(user).where(eq(user.banned, false))
+          )
         )
       );
 
@@ -122,25 +112,7 @@ export async function toggleUserBan(
     if (typeof (activeAdminRolesQuery as any).for === "function") {
       activeAdminRolesQuery = (activeAdminRolesQuery as any).for("update");
     }
-    const activeAdminRoles = await activeAdminRolesQuery;
-
-    let activeAdmins: typeof activeAdminRoles = [];
-    if (activeAdminRoles.length > 0) {
-      const activeAdminUserIds = activeAdminRoles.map((r) => r.userId);
-      const unbannedUsers = await tx
-        .select({ id: user.id })
-        .from(user)
-        .where(
-          and(
-            inArray(user.id, activeAdminUserIds),
-            eq(user.banned, false)
-          )
-        );
-      const unbannedUserIds = Array.isArray(unbannedUsers) 
-        ? unbannedUsers.flatMap((u: any) => [u.id, u.userId].filter(Boolean)) 
-        : activeAdminUserIds;
-      activeAdmins = activeAdminRoles.filter((r) => unbannedUserIds.includes(r.userId));
-    }
+    const activeAdmins = await activeAdminRolesQuery;
 
     if (!activeAdmins.some((a) => a.userId === session.user.id)) {
       throw new Error("Unauthorized or banned");
