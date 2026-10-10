@@ -1,0 +1,87 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: auto;
+  /* Mounted after hydration; the timer cannot expire before the intro starts. */
+  animation: dismiss 0s 8s forwards;
+}
+
+.overlay[data-mode="content"] {
+  animation-delay: 3s;
+}
+
+.skip {
+  position: absolute;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.skip:hover { background: var(--muted); }
+.skip:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--background);
+}
+
+.logo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max-content;
+  transform: translate(-50%, -50%) translate3d(0px, 0px, 0px);
+  transform-origin: center;
+  will-change: transform;
+}
+
+.mark {
+  display: flex;
+  transform: scale(0.65);
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .overlay[data-mode="logo"] ~ :global(div) :global([data-codi-logo]),
+  .overlay ~ :global(div) :global([data-codi-intro-nav] [data-slot="navigation-menu-item"]),
+  .overlay ~ :global(div) :global([data-codi-intro-account]),
+  .overlay ~ :global(div) :global([data-codi-intro-hero]),
+  .overlay ~ :global(div) :global([data-codi-intro-image]) {
+    /* Reserve layout space until each stage of the intro reveals these elements. */
+    visibility: hidden;
+    animation: reveal 0s 8s forwards;
+  }
+
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-nav] [data-slot="navigation-menu-item"]),
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-account]),
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-hero]),
+  .overlay[data-mode="content"] ~ :global(div) :global([data-codi-intro-image]) {
+    animation-delay: 3s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay {
+    display: none;
+    animation: none;
+  }
+}
+
+@keyframes dismiss {
+  to { visibility: hidden; }
+}
+
+@keyframes reveal {
+  to { visibility: visible; }
+}

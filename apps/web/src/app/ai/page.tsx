@@ -32,7 +32,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@codi-1/ui/components/tooltip";
 import { DefaultChatTransport } from "ai";
 import { ArrowUpIcon, Loader2, MessageCircleDashedIcon, RotateCwIcon } from "lucide-react";
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Streamdown } from "streamdown";
 
 const SUGGESTED_PROMPTS = [
@@ -44,6 +44,11 @@ const SUGGESTED_PROMPTS = [
 
 export default function AIPage() {
   const [input, setInput] = useState("");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prompt = params.get("prompt") ?? params.get("topic");
+    if (prompt) setInput(prompt);
+  }, []);
   const { messages, sendMessage, status, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/ai",

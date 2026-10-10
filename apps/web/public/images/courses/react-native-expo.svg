@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" fill="none">
+  <defs><linearGradient id="bg" x2="640" y2="360" gradientUnits="userSpaceOnUse"><stop stop-color="#0ea5e9"/><stop offset="1" stop-color="#075985"/></linearGradient></defs>
+  <path fill="url(#bg)" d="M0 0h640v360H0z"/>
+  <path d="m500-30 190 190-190 190-190-190z" stroke="#7dd3fc" stroke-opacity=".1" stroke-width="45"/>
+  <g transform="rotate(10 507 187)">
+    <rect x="448" y="78" width="116" height="219" rx="22" fill="#082f49" fill-opacity=".65" stroke="#bae6fd" stroke-width="3"/>
+    <rect x="482" y="90" width="48" height="7" rx="3.5" fill="#7dd3fc"/>
+    <rect x="461" y="113" width="90" height="71" rx="10" fill="#38bdf8" fill-opacity=".35"/>
+    <path d="m484 149 14-16 26 30" stroke="#e0f2fe" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="461" y="196" width="64" height="6" rx="3" fill="#bae6fd"/><rect x="461" y="210" width="86" height="5" rx="2.5" fill="#bae6fd" fill-opacity=".4"/>
+    <rect x="461" y="231" width="90" height="31" rx="8" fill="#38bdf8"/><path d="M491 282h30" stroke="#bae6fd" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g fill="white" font-family="Arial, sans-serif">
+    <text x="40" y="49" font-size="19" font-weight="700" letter-spacing="3">CODI / MOBILE</text>
+    <text x="40" y="141" font-size="48" font-weight="800">React Native</text>
+    <text x="40" y="202" font-size="52" font-weight="800">&amp; Expo</text>
+    <text x="42" y="247" font-size="22" opacity=".88">Một ý tưởng. Hai nền tảng.</text>
+    <text x="42" y="321" font-size="17" font-weight="700" letter-spacing="2" opacity=".8">iOS · ANDROID · MOBILE APPS</text>
+  </g>
+</svg>

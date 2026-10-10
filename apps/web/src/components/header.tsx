@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Code2, Compass, LayoutDashboard, Sparkles, User } from "lucide-react";
+import { BookOpen, Compass, LayoutDashboard, Sparkles, User } from "lucide-react";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -14,7 +14,9 @@ import {
 } from "@codi-1/ui/components/navigation-menu";
 import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
+import NotificationMenu from "./notification-menu";
 import { cn } from "@codi-1/ui/lib/utils";
+import BrandLogo from "./brand-logo";
 
 export default function Header() {
   const pathname = usePathname();
@@ -24,34 +26,26 @@ export default function Header() {
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Brand Logo & Left Section */}
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground hover:opacity-90 transition-opacity">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <Code2 className="h-5 w-5" />
-            </div>
-            <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              Codi
-            </span>
+          <Link href="/" data-codi-logo className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground hover:opacity-90 transition-opacity">
+            <BrandLogo />
           </Link>
 
           {/* Navigation Menu Primitives */}
-          <NavigationMenu className="hidden md:flex">
+          <NavigationMenu data-codi-intro-nav className="hidden md:flex">
             <NavigationMenuList className="gap-1">
               {/* Home Link */}
               <NavigationMenuItem>
-                <Link href="/" passHref legacyBehavior>
-                  <NavigationMenuLink
-                    data-active={pathname === "/"}
-                    className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5")}
-                  >
+                <NavigationMenuLink asChild data-active={pathname === "/"} className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5")}>
+                  <Link href="/">
                     Trang chủ
-                  </NavigationMenuLink>
-                </Link>
+                  </Link>
+                </NavigationMenuLink>
               </NavigationMenuItem>
 
               {/* Courses & Training Dropdown */}
               <NavigationMenuItem>
                 <NavigationMenuTrigger
-                  data-active={pathname === "/courses"}
+                  data-active={pathname === "/courses" || pathname.startsWith("/courses/")}
                   className="h-9 px-3.5"
                 >
                   Khoá học
@@ -109,49 +103,41 @@ export default function Header() {
 
               {/* Dashboard Link */}
               <NavigationMenuItem>
-                <Link href="/dashboard" passHref legacyBehavior>
-                  <NavigationMenuLink
-                    data-active={pathname.startsWith("/dashboard")}
-                    className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5 flex items-center gap-1.5")}
-                  >
+                <NavigationMenuLink asChild data-active={pathname.startsWith("/dashboard")} className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5 flex items-center gap-1.5")}>
+                  <Link href="/dashboard">
                     <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                     <span>Bàn làm việc</span>
-                  </NavigationMenuLink>
-                </Link>
+                  </Link>
+                </NavigationMenuLink>
               </NavigationMenuItem>
 
               {/* AI Chat Link */}
               <NavigationMenuItem>
-                <Link href="/ai" passHref legacyBehavior>
-                  <NavigationMenuLink
-                    data-active={pathname === "/ai"}
-                    className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5 flex items-center gap-1.5 text-primary font-semibold")}
-                  >
+                <NavigationMenuLink asChild data-active={pathname === "/ai"} className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5 flex items-center gap-1.5 text-primary font-semibold")}>
+                  <Link href="/ai">
                     <Sparkles className="h-4 w-4 text-primary" />
                     <span>AI Chat</span>
-                  </NavigationMenuLink>
-                </Link>
+                  </Link>
+                </NavigationMenuLink>
               </NavigationMenuItem>
 
               {/* Profile Link */}
               <NavigationMenuItem>
-                <Link href="/profile" passHref legacyBehavior>
-                  <NavigationMenuLink
-                    data-active={pathname === "/profile"}
-                    className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5 flex items-center gap-1.5")}
-                  >
+                <NavigationMenuLink asChild data-active={pathname === "/profile"} className={cn(navigationMenuTriggerStyle(), "h-9 px-3.5 flex items-center gap-1.5")}>
+                  <Link href="/profile">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span>Hồ sơ (Profile)</span>
-                  </NavigationMenuLink>
-                </Link>
+                  </Link>
+                </NavigationMenuLink>
               </NavigationMenuItem>
             </NavigationMenuList>
           </NavigationMenu>
         </div>
 
-        {/* Right Section: ModeToggle & UserMenu */}
-        <div className="flex items-center gap-3">
+        {/* Right Section: Theme, notifications, and account avatar */}
+        <div data-codi-intro-account className="flex shrink-0 items-center gap-2.5">
           <ModeToggle />
+          <NotificationMenu />
           <UserMenu />
         </div>
       </div>

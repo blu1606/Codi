@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" fill="none">
+  <defs><linearGradient id="bg" x2="640" y2="360" gradientUnits="userSpaceOnUse"><stop stop-color="#06b6d4"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs>
+  <path fill="url(#bg)" d="M0 0h640v360H0z"/>
+  <circle cx="572" cy="35" r="188" stroke="white" stroke-opacity=".1" stroke-width="50"/>
+  <path d="M0 305 640 90M0 350 640 135" stroke="white" stroke-opacity=".08"/>
+  <g transform="translate(420 156)" stroke="#a5f3fc" stroke-width="3" opacity=".8">
+    <ellipse rx="77" ry="28"/><ellipse rx="77" ry="28" transform="rotate(60)"/><ellipse rx="77" ry="28" transform="rotate(120)"/><circle r="9" fill="#a5f3fc" stroke="none"/>
+  </g>
+  <rect x="454" y="234" width="114" height="67" rx="12" fill="#0f172a" fill-opacity=".28" stroke="white" stroke-opacity=".25"/>
+  <path d="m481 258-11 9 11 9m57-18 11 9-11 9m-21-22-10 27" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="white" font-family="Arial, sans-serif">
+    <text x="40" y="49" font-size="19" font-weight="700" letter-spacing="3">CODI / FRONTEND</text>
+    <text x="40" y="141" font-size="54" font-weight="800">React &amp;</text>
+    <text x="40" y="202" font-size="54" font-weight="800">Next.js</text>
+    <text x="42" y="247" font-size="22" opacity=".88">Từ giao diện đến ứng dụng</text>
+    <text x="42" y="321" font-size="17" font-weight="700" letter-spacing="2" opacity=".8">HTML · CSS · JAVASCRIPT</text>
+  </g>
+</svg>
