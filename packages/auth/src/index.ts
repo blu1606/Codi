@@ -11,10 +11,11 @@ import { Resend } from "resend";
 
 import { getResetPasswordOTPEmailHtml, getVerificationOTPEmailHtml } from "./email-templates";
 import { ROLE } from "./rbac";
+import { getAuthOriginConfig, type AuthOriginConfig } from "./auth-origin";
 
 export * from "./rbac";
 
-export type AuthConfig = {
+export type AuthConfig = AuthOriginConfig & {
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
   RESEND_API_KEY?: string;
@@ -34,12 +35,11 @@ export function createAuth(env: AuthConfig, database: Database) {
       provider: "pg",
       schema,
     }),
-    trustedOrigins: [env.BETTER_AUTH_URL],
+    ...getAuthOriginConfig(env),
     emailAndPassword: {
       enabled: true,
     },
     secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
     databaseHooks: {
       user: {
         create: {
