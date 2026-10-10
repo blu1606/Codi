@@ -202,6 +202,13 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
                 )}
               </div>
 
+              <div className="w-full rounded-md bg-muted p-3 border border-border text-center">
+                <p className="text-xs text-muted-foreground mb-1">Mã giao dịch (để đối soát):</p>
+                <div className="font-mono font-bold text-foreground select-all text-lg">
+                  {transferMessage}
+                </div>
+              </div>
+
             </CardContent>
           </Card>
 
