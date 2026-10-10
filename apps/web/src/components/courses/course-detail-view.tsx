@@ -134,7 +134,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             <p className={styles.description}>{course.description}</p>
             <div className={styles.metadata}>
               {detail.rating > 0 && (
-                <span className="flex items-center text-amber-500">
+                <span className="flex items-center text-primary">
                   <span className="font-bold mr-1">{detail.rating.toFixed(1)}</span>
                   <Star aria-hidden="true" className="size-4 fill-current" />
                   <span className="text-muted-foreground ml-1 font-normal">({detail.reviewCount} đánh giá)</span>
@@ -266,6 +266,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                       width={120}
                       height={120}
                       className="rounded-full object-cover border-2 border-primary/10"
+                      unoptimized
                     />
                   </div>
                   <div className="space-y-3">
