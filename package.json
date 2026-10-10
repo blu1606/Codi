@@ -18,6 +18,9 @@
     "db:studio": "pnpm --filter @codi-1/db db:studio",
     "db:generate": "pnpm --filter @codi-1/db db:generate",
     "db:migrate": "pnpm --filter @codi-1/db db:migrate",
+    "db:setup-course-content": "pnpm --filter @codi-1/db db:setup-course-content",
+    "db:seed-course-outcomes": "pnpm --filter @codi-1/db db:seed-course-outcomes",
+    "db:seed-course-covers": "pnpm --filter @codi-1/db db:seed-course-covers",
     "db:start": "pnpm --filter @codi-1/db db:start",
     "db:watch": "pnpm --filter @codi-1/db db:watch",
     "db:stop": "pnpm --filter @codi-1/db db:stop",
@@ -33,6 +36,9 @@
     "deploy:prod": "vercel deploy --prod",
     "deploy:check": "vercel deploy --dry",
     "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
     "auth:generate": "cd apps/web && pnpm run auth:generate"
   },
@@ -42,11 +48,13 @@
   "devDependencies": {
     "@codi-1/config": "workspace:*",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "^5.0.2",
     "supabase": "^2.117.0",
     "tsx": "^4.23.13",
     "typescript": "catalog:",
     "varlock": "catalog:",
-    "vercel": "^59.11.7"
+    "vercel": "^59.11.7",
+    "vitest": "^5.0.2"
   },
   "packageManager": "pnpm@11.9.0"
 }

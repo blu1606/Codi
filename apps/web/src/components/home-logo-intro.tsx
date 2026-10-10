@@ -15,27 +15,38 @@ const HERO_STAGGER = 120;
 const IMAGE_DURATION = 350;
 const IMAGE_STAGGER = 90;
 
+type Intro = { pathname: string; mode: "logo" | "content" };
+
 export default function HomeLogoIntro() {
   const pathname = usePathname();
-  // Mount the intro after hydration, including when navigating home from another page.
-  // Its fallback timer must not run while the browser is still loading JavaScript.
-  const [active, setActive] = useState(false);
+  // The root layout persists across navigation. A new document (reload/new tab)
+  // gets a fresh ref, while returning home only replays the content reveal.
+  const previousPathRef = useRef<string | null>(null);
+  const [intro, setIntro] = useState<Intro | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const markRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setActive(pathname === "/" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    // Keep Strict Mode's effect replay from consuming the initial logo animation.
+    if (previousPathRef.current === pathname) return;
+    const isFirstLoad = previousPathRef.current === null;
+    previousPathRef.current = pathname;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setIntro(!reducedMotion && pathname === "/"
+      ? { pathname, mode: isFirstLoad ? "logo" : "content" }
+      : null);
   }, [pathname]);
 
   useLayoutEffect(() => {
-    if (!active) return;
+    if (!intro || intro.pathname !== pathname) return;
+    const showLogo = intro.mode === "logo";
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     // Recheck before any WAAPI call in case the preference changed after activation.
     if (reducedMotion.matches) {
-      setActive(false);
+      setIntro(null);
       return;
     }
     const target = document.querySelector<HTMLElement>("[data-codi-logo]");
@@ -43,9 +54,9 @@ export default function HomeLogoIntro() {
     const backdrop = backdropRef.current;
     const logo = logoRef.current;
     const mark = markRef.current;
-    const finish = () => setActive(false);
+    const finish = () => setIntro(null);
 
-    if (pathname !== "/" || !target || !overlay || !backdrop || !logo || !mark || !logo.animate) {
+    if (!target || !overlay || !target.animate || (showLogo && (!backdrop || !logo || !mark || !logo.animate))) {
       finish();
       return;
     }
@@ -152,63 +163,68 @@ export default function HomeLogoIntro() {
       }, () => {});
     };
 
-    const grow = mark.animate(
-      [{ transform: `scale(${startScale})` }, { transform: `scale(${peakScale})` }],
-      { duration: GROW_DURATION, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" },
-    );
-    const pulse = mark.animate(
-      [
-        { opacity: 1, offset: 0 },
-        { opacity: 1, offset: 0.15 },
-        { opacity: pulseOpacity, offset: 0.3 },
-        { opacity: 1, offset: 0.45 },
-        { opacity: 1, offset: 0.55 },
-        { opacity: pulseOpacity, offset: 0.7 },
-        { opacity: 1, offset: 0.85 },
-        { opacity: 1, offset: 1 },
-      ],
-      { duration: GROW_DURATION, easing: "linear", fill: "forwards" },
-    );
-    animations.push(grow, pulse);
+    if (showLogo && backdrop && logo && mark) {
+      const grow = mark.animate(
+        [{ transform: `scale(${startScale})` }, { transform: `scale(${peakScale})` }],
+        { duration: GROW_DURATION, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both" },
+      );
+      const pulse = mark.animate(
+        [
+          { opacity: 1, offset: 0 },
+          { opacity: 1, offset: 0.15 },
+          { opacity: pulseOpacity, offset: 0.3 },
+          { opacity: 1, offset: 0.45 },
+          { opacity: 1, offset: 0.55 },
+          { opacity: pulseOpacity, offset: 0.7 },
+          { opacity: 1, offset: 0.85 },
+          { opacity: 1, offset: 1 },
+        ],
+        { duration: GROW_DURATION, easing: "linear", fill: "forwards" },
+      );
+      animations.push(grow, pulse);
 
-    // Sequence from the animation itself so a slow frame cannot skip the journey.
-    void grow.finished.then(
-      () => {
-        if (disposed) return;
-        // Measure after growth, once fonts/layout and scroll restoration have settled.
-        const destination = target.getBoundingClientRect();
-        const viewport = overlay.getBoundingClientRect();
-        const x = destination.left + destination.width / 2 - (viewport.left + viewport.width / 2);
-        const y = destination.top + destination.height / 2 - (viewport.top + viewport.height / 2);
-        const timing: KeyframeAnimationOptions = {
-          delay: HOLD_DURATION,
-          duration: TRAVEL_DURATION,
-          easing: "cubic-bezier(0.65, 0, 0.35, 1)",
-          fill: "both",
-        };
+      // Sequence from the animation itself so a slow frame cannot skip the journey.
+      void grow.finished.then(
+        () => {
+          if (disposed) return;
+          // Measure after growth, once fonts/layout and scroll restoration have settled.
+          const destination = target.getBoundingClientRect();
+          const viewport = overlay.getBoundingClientRect();
+          const x = destination.left + destination.width / 2 - (viewport.left + viewport.width / 2);
+          const y = destination.top + destination.height / 2 - (viewport.top + viewport.height / 2);
+          const timing: KeyframeAnimationOptions = {
+            delay: HOLD_DURATION,
+            duration: TRAVEL_DURATION,
+            easing: "cubic-bezier(0.65, 0, 0.35, 1)",
+            fill: "both",
+          };
 
-        // Move the same visible logo all the way to the header; never fade it out.
-        // A separate inner scale keeps growth and travel from replacing each other.
-        const travel = logo.animate(
-          [
-            { transform: "translate(-50%, -50%) translate3d(0px, 0px, 0px)" },
-            { transform: `translate(-50%, -50%) translate3d(${x}px, ${y}px, 0px)` },
-          ],
-          timing,
-        );
-        const shrink = mark.animate(
-          [{ transform: `scale(${peakScale})` }, { transform: "scale(1)" }],
-          timing,
-        );
-        const fade = backdrop.animate([{ opacity: 1 }, { opacity: 0 }], timing);
-        animations.push(travel, shrink, fade);
-        // Cancellation rejects finished during unmount/Strict Mode.
-        void travel.finished.then(revealHeaderAndHero, () => {});
-      },
-      () => {},
-    );
+          // Move the same visible logo all the way to the header; never fade it out.
+          // A separate inner scale keeps growth and travel from replacing each other.
+          const travel = logo.animate(
+            [
+              { transform: "translate(-50%, -50%) translate3d(0px, 0px, 0px)" },
+              { transform: `translate(-50%, -50%) translate3d(${x}px, ${y}px, 0px)` },
+            ],
+            timing,
+          );
+          const shrink = mark.animate(
+            [{ transform: `scale(${peakScale})` }, { transform: "scale(1)" }],
+            timing,
+          );
+          const fade = backdrop.animate([{ opacity: 1 }, { opacity: 0 }], timing);
+          animations.push(travel, shrink, fade);
+          // Cancellation rejects finished during unmount/Strict Mode.
+          void travel.finished.then(revealHeaderAndHero, () => {});
+        },
+        () => {},
+      );
+    } else {
+      // Keep the header logo in place and immediately reveal the home content.
+      revealHeaderAndHero();
+    }
 
-    const fallbackTimer = window.setTimeout(finish, 8000);
+    const fallbackTimer = window.setTimeout(finish, showLogo ? 8000 : 3000);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" || event.key === "Tab") finish();
     };
@@ -223,18 +239,25 @@ export default function HomeLogoIntro() {
       window.removeEventListener("keydown", onKeyDown);
       reducedMotion.removeEventListener("change", finish);
     };
-  }, [active, pathname]);
+  }, [intro, pathname]);
 
-  if (!active || pathname !== "/") return null;
+  if (!intro || intro.pathname !== pathname) return null;
 
   return (
-    <div ref={overlayRef} className={styles.overlay} aria-hidden="true">
-      <div ref={backdropRef} className={styles.backdrop} />
-      <div ref={logoRef} className={styles.logo}>
-        <div ref={markRef} className={styles.mark}>
-          <BrandLogo />
-        </div>
-      </div>
+    <div ref={overlayRef} className={styles.overlay} data-mode={intro.mode}>
+      {intro.mode === "logo" && (
+        <>
+          <div ref={backdropRef} className={styles.backdrop} aria-hidden="true" />
+          <div ref={logoRef} className={styles.logo} aria-hidden="true">
+            <div ref={markRef} className={styles.mark}>
+              <BrandLogo />
+            </div>
+          </div>
+        </>
+      )}
+      <button type="button" className={styles.skip} onClick={() => setIntro(null)}>
+        Bỏ qua giới thiệu
+      </button>
     </div>
   );
 }

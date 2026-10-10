@@ -45,7 +45,7 @@ export default function Header() {
               {/* Courses & Training Dropdown */}
               <NavigationMenuItem>
                 <NavigationMenuTrigger
-                  data-active={pathname === "/courses"}
+                  data-active={pathname === "/courses" || pathname.startsWith("/courses/")}
                   className="h-9 px-3.5"
                 >
                   Khoá học

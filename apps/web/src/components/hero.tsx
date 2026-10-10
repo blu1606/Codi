@@ -89,13 +89,16 @@ export default function Hero({
               </Button>
             ))}
           </div>
-          <div data-codi-intro-hero className="mt-10 flex flex-wrap gap-x-8 gap-y-5 sm:mt-12 sm:gap-x-10">
+          <div
+            data-codi-intro-hero
+            className={cn(styles.stats, "mt-10 flex flex-wrap gap-x-8 gap-y-5 sm:mt-12 sm:gap-x-10")}
+          >
             {stats.map((stat, index) => (
               <div key={index} className="flex items-center gap-3">
                 {stat.icon && <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">{stat.icon}</div>}
                 <div>
-                  <p className="text-2xl font-extrabold tracking-tight text-foreground">{stat.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{stat.label}</p>
+                  <p className="text-xl font-semibold leading-7 tracking-tight text-foreground">{stat.value}</p>
+                  <p className="mt-1 text-[13px] font-normal leading-5 text-muted-foreground">{stat.label}</p>
                 </div>
               </div>
             ))}
