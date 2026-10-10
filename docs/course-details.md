@@ -93,3 +93,29 @@ can be added when actual teaching content is available.
 Missing details or content rows are represented by empty arrays/null fields
 and honest “đang cập nhật” states. The catalog's planned `duration` is shown
 separately from the total runtime of published lessons.
+
+## Instructor and rating metadata
+
+The assigned instructor name and optional avatar come from the linked user.
+The current user schema has no title or biography, so the API returns `null`
+for those fields; the page shows an updating message instead of credentials.
+Missing avatars are omitted. An unassigned instructor remains `null`.
+Rating and review count are read from the stored course fields. Their defaults
+are zero, and a zero rating is not displayed. Only verified review aggregates
+should populate these fields; there is no review aggregation workflow yet.
+The former `packages/db/seed-course.ts` script was removed because it assigned
+an arbitrary user and invented reviews. Do not run a saved copy of that script.
+If it was previously run, audit the affected course against authoritative data;
+this code change does not overwrite existing database values.
+
+Before deploying this branch to **each** existing target database, an operator
+must review and apply the schema diff from `packages/db/src/schema/courses.ts`
+using the existing `pnpm db:push` workflow. It adds nullable `instructor_id`
+referencing `user.id`, `rating` (real, not null, default 0), and `review_count`
+(integer, not null, default 0). `db:setup-course-content` alone does not add
+these course columns. Verify the columns and foreign key in that target before
+releasing the API; a missing column causes course reads to fail with HTTP 500.
+No seed is needed. Review the complete proposed diff before applying it, and
+do not accept unrelated destructive changes. Rollback the application first;
+retain these additive columns to preserve any authored assignments or verified
+aggregates. Preview success does not establish production schema readiness.

@@ -14,12 +14,13 @@ const course = {
   id: "course-a", slug: "frontend-react-nextjs", title: "Frontend React",
   category: "Frontend", level: "Beginner", duration: "8 tuần",
   description: "Khóa học từ database", price: 125000,
+  instructorId: "instructor-1", rating: 4.5, reviewCount: 10,
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
 function row(enrollmentCount = "7", coverImageUrl: string | null = "/images/courses/frontend-react-nextjs.svg") {
   return [course.id, course.slug, course.title, course.category, course.level,
-    course.duration, course.description, course.price, course.createdAt,
+    course.duration, course.description, course.price, course.instructorId, course.rating, course.reviewCount, course.createdAt,
     enrollmentCount, coverImageUrl];
 }
 

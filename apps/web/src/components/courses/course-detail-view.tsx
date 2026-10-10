@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowRight, BookOpen, BrainCircuit, Braces, Check,
   ChevronDown, ChevronRight, Clock3, Code2, Database, FileText,
-  GitBranch, GraduationCap, Layers3, Loader2, ShoppingBag, Smartphone, Sparkles, Users,
+  GitBranch, GraduationCap, Layers3, Loader2, ShoppingBag, Smartphone, Sparkles, Users, Star
 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { Card } from "@codi-1/ui/components/card";
@@ -133,6 +133,13 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             <h1 className={styles.title}>{course.title}</h1>
             <p className={styles.description}>{course.description}</p>
             <div className={styles.metadata}>
+              {detail.rating > 0 && (
+                <span className="flex items-center text-primary">
+                  <span className="font-bold mr-1">{detail.rating.toFixed(1)}</span>
+                  <Star aria-hidden="true" className="size-4 fill-current" />
+                  <span className="text-muted-foreground ml-1 font-normal">({detail.reviewCount} đánh giá)</span>
+                </span>
+              )}
               <span><Users aria-hidden="true" className="size-4" /><strong>{course.enrollmentCount.toLocaleString("vi-VN")}</strong> học viên đã đăng ký</span>
               <span><Clock3 aria-hidden="true" className="size-4" />{course.duration}</span>
             </div>
@@ -140,6 +147,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               <a href="#outcomes">Bạn sẽ học được gì</a>
               <a href="#curriculum">Nội dung khóa học</a>
               <a href="#requirements">Yêu cầu</a>
+              {detail.instructor && <a href="#instructor">Giảng viên</a>}
             </nav>
           </header>
 
@@ -243,6 +251,35 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               <div className={styles.sectionHeading}><span className={styles.sectionNumber}>03</span><h2 id="requirements-title">Yêu cầu trước khi học</h2></div>
               {detail.requirements.length > 0 ? <ul className={styles.requirements}>{detail.requirements.map((requirement, index) => <li key={index}>{requirement}</li>)}</ul> : <p className={styles.emptyText}>Thông tin về kiến thức và công cụ cần chuẩn bị đang được cập nhật.</p>}
             </section>
+            
+            {detail.instructor && (
+              <section id="instructor" className={styles.section} aria-labelledby="instructor-title">
+                <div className={styles.sectionHeading}>
+                  <span className={styles.sectionNumber}>04</span>
+                  <h2 id="instructor-title">Giảng viên</h2>
+                </div>
+                <Card className="flex flex-col sm:flex-row gap-6 p-6 mt-4 border-border/50">
+                  {detail.instructor.avatar && <div className="shrink-0 flex justify-center">
+                    <Image
+                      src={detail.instructor.avatar}
+                      alt={detail.instructor.name}
+                      width={120}
+                      height={120}
+                      className="rounded-full object-cover border-2 border-primary/10"
+                      unoptimized
+                    />
+                  </div>}
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="text-xl font-bold">{detail.instructor.name}</h3>
+                      {detail.instructor.title && <p className="text-sm font-medium text-primary">{detail.instructor.title}</p>}
+                    </div>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{detail.instructor.bio ?? "Thông tin giới thiệu giảng viên đang được cập nhật."}</p>
+                  </div>
+                </Card>
+              </section>
+            )}
+
             <Link href="/courses" className={styles.backLink}><ArrowLeft aria-hidden="true" className="size-4" /> Khám phá các khóa học khác</Link>
           </div>
         </div>
