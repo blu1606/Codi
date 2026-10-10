@@ -19,14 +19,12 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
     let activeAdminRolesQuery = tx
       .select({ id: userRoles.id, userId: userRoles.userId })
       .from(userRoles)
+      .innerJoin(user, eq(userRoles.userId, user.id))
       .where(
         and(
           eq(userRoles.roleId, ROLE.ADMIN),
           isNull(userRoles.revokedAt),
-          inArray(
-            userRoles.userId,
-            db.select({ id: user.id }).from(user).where(eq(user.banned, false))
-          )
+          eq(user.banned, false)
         )
       );
 
@@ -95,14 +93,12 @@ export async function toggleUserBan(
     let activeAdminRolesQuery = tx
       .select({ id: userRoles.id, userId: userRoles.userId })
       .from(userRoles)
+      .innerJoin(user, eq(userRoles.userId, user.id))
       .where(
         and(
           eq(userRoles.roleId, ROLE.ADMIN),
           isNull(userRoles.revokedAt),
-          inArray(
-            userRoles.userId,
-            db.select({ id: user.id }).from(user).where(eq(user.banned, false))
-          )
+          eq(user.banned, false)
         )
       );
 

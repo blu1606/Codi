@@ -55,7 +55,9 @@ function createMockTx(
         };
         return {
           from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue(chain),
+            innerJoin: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue(chain),
+            }),
           }),
         };
       }
