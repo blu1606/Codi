@@ -9,9 +9,9 @@ async function main() {
   if (users.length === 0) {
     console.log("No users found. Creating a dummy instructor...");
     const [newUser] = await db.insert(user).values({
+      id: crypto.randomUUID(),
       name: "Nguyễn Văn A",
       email: "instructor@codi.vn",
-      role: "instructor",
     }).returning();
     users.push(newUser);
   }
