@@ -16,22 +16,3 @@ export const courses = pgTable("courses", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const courseChapters = pgTable("course_chapters", {
-  id: text("id").primaryKey(),
-  courseId: text("course_id")
-    .notNull()
-    .references(() => courses.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  order: integer("order").notNull(),
-});
-
-export const courseLessons = pgTable("course_lessons", {
-  id: text("id").primaryKey(),
-  chapterId: text("chapter_id")
-    .notNull()
-    .references(() => courseChapters.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  duration: text("duration"),
-  order: integer("order").notNull(),
-  isPreview: boolean("is_preview").default(false).notNull(),
-});

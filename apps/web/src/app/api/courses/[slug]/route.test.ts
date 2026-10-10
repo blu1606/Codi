@@ -27,7 +27,7 @@ beforeEach(() => {
     .mockReturnValueOnce({ from: mocks.detailsFrom })
     .mockReturnValueOnce({ from: mocks.chapterFrom });
   mocks.courseFrom.mockReturnValue({ leftJoin: mocks.courseJoin });
-  mocks.courseJoin.mockReturnValue({ where: mocks.courseWhere });
+  mocks.courseJoin.mockReturnValue({ leftJoin: mocks.courseJoin, where: mocks.courseWhere });
   mocks.courseWhere.mockReturnValue({ groupBy: mocks.groupBy });
   mocks.groupBy.mockReturnValue({ limit: mocks.courseLimit });
   mocks.courseLimit.mockResolvedValue([course]);
@@ -52,7 +52,6 @@ describe("GET /api/courses/[slug]", () => {
       coverImageUrl: null, introVideoUrl: null, introVideoCaptionsUrl: null, chapters: [],
       summary: { chapterCount: 0, lessonCount: 0, durationSeconds: 0 },
     });
-    expect(body).not.toHaveProperty("rating");
   });
 
   it("looks up the exact slug and scopes content to its course, excluding draft chapters and lessons", async () => {
