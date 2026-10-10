@@ -166,10 +166,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               <div className={styles.cardBody}>
                 <p className={styles.priceLabel}>Học phí khóa học</p>
                 <p className={styles.price}>{course.price === 0 ? "Miễn phí" : `${course.price.toLocaleString("vi-VN")} ₫`}</p>
-                <Button onClick={() => router.push(`/courses/${slug}/checkout`)} disabled={sessionLoading} className={styles.enrollButton}>
-                  <ShoppingBag aria-hidden="true" className="size-4" />
-                  Thanh toán
-                  <ArrowRight aria-hidden="true" className="ml-auto size-4" />
+                <Button onClick={handleAddToCart} disabled={adding || sessionLoading || inCart} className={styles.enrollButton}>
+                  {adding ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <ShoppingBag aria-hidden="true" className="size-4" />}
+                  {inCart ? "Đã trong giỏ hàng" : "Thêm vào giỏ"}
+                  {!adding && !inCart && <ArrowRight aria-hidden="true" className="ml-auto size-4" />}
                 </Button>
                 {cartMessage && <p role="status" className="mt-3 text-sm leading-6 text-muted-foreground">{cartMessage}</p>}
                 <dl className={styles.facts}>
