@@ -19,6 +19,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "Ignored outbound transfer" });
     }
 
+    // Verify it's for the correct account
+    const expectedAccount = process.env.SEPAY_ACCOUNT_NUMBER || "0352060805";
+    if (data.accountNumber !== expectedAccount) {
+      return NextResponse.json({ success: true, message: "Ignored transfer to different account" });
+    }
+
     // SePay sends the transfer content in data.content or data.description
     const content = data.content || data.description || "";
 
