@@ -18,9 +18,11 @@ import { authClient } from "@/lib/auth-client";
 export default function EmailVerificationCard({
   email,
   emailVerified,
+  displayEmail,
 }: {
   email: string;
   emailVerified: boolean;
+  displayEmail?: string;
 }) {
   const router = useRouter();
   const [resending, setResending] = useState(false);
@@ -91,7 +93,7 @@ export default function EmailVerificationCard({
           <CardTitle className="text-base font-semibold">Tài khoản chưa xác thực email</CardTitle>
         </div>
         <CardDescription>
-          Xác thực địa chỉ email <strong>{email}</strong> để bảo vệ tài khoản và mở khóa đầy đủ tính năng.
+          Xác thực địa chỉ email <strong>{displayEmail ?? email}</strong> để bảo vệ tài khoản và mở khóa đầy đủ tính năng.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
