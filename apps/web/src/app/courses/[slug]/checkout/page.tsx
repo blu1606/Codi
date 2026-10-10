@@ -4,7 +4,7 @@ import { useState, use, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, Code } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@codi-1/ui/components/card";
 
-import { SEED_COURSES } from "@/lib/data/courses";
+import { createCheckoutOrder, type CheckoutOrder } from "@/lib/checkout-order";
 import { authClient } from "@/lib/auth-client";
 
 interface CheckoutPageProps {
@@ -33,33 +33,24 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
   
   const { data: session, isPending } = authClient.useSession();
   const [selectedMethod, setSelectedMethod] = useState(PAYMENT_METHODS[0]);
-  const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [order, setOrder] = useState<CheckoutOrder | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const transactionId = order?.transactionId;
+  const course = order?.course;
   const [isPaid, setIsPaid] = useState(false);
 
-  const course = SEED_COURSES.find((c) => c.id === slug || c.slug === slug);
-
   useEffect(() => {
-    if (session?.user && course && !transactionId) {
-      // Create a pending transaction on the server
-      fetch("/api/payments/create-transaction", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          courseId: course.id,
-          amount: course.price,
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.transactionId) {
-            setTransactionId(data.transactionId);
-          }
-        })
-        .catch(console.error);
-    }
-  }, [session, course, transactionId]);
+    if (!session?.user.id) return;
+    let active = true;
+    setOrder(null);
+    setError(null);
+    setIsPaid(false);
+    createCheckoutOrder(slug)
+      .then((data) => { if (active) setOrder(data); })
+      .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Không thể tạo thanh toán."); });
+    return () => { active = false; };
+  }, [session?.user.id, slug, attempt]);
 
   useEffect(() => {
     if (!transactionId || isPaid) return;
@@ -93,15 +84,16 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
     return null;
   }
 
-  if (!course) {
-    return <div className="p-8 text-center text-destructive">Không tìm thấy khóa học!</div>;
+  if (error) {
+    return <div className="p-8 text-center space-y-4">
+      <p role="alert" className="text-destructive">{error}</p>
+      <Button onClick={() => { setError(null); setAttempt((value) => value + 1); }}>Thử lại</Button>
+      <Button variant="outline" render={<Link href={`/courses/${slug}`} />} nativeButton={false}>Quay lại khóa học</Button>
+    </div>;
   }
-
-  // Once we have a transactionId, generate the dynamic VietQR URL
-  const transferMessage = transactionId || "DANG TAO MA...";
-  const qrUrl = transactionId 
-    ? `https://img.vietqr.io/image/MB-0352060805-compact.png?amount=${course.price}&addInfo=${encodeURIComponent(transferMessage)}`
-    : "";
+  if (!order || !course) return <div role="status" className="p-8 text-center">Đang khởi tạo mã thanh toán...</div>;
+  const transferMessage = order.transactionId;
+  const qrUrl = `https://img.vietqr.io/image/${order.receiver.bankCode}-${order.receiver.accountNumber}-compact.png?amount=${order.amount}&addInfo=${encodeURIComponent(transferMessage)}`;
 
   if (isPaid) {
     return (
@@ -135,7 +127,7 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
                     <p className="font-bold text-lg leading-tight">{course.title}</p>
                     <p className="text-sm text-muted-foreground mt-1">{course.category}</p>
                     <p className="text-2xl font-bold text-primary mt-4">
-                      {course.price.toLocaleString("vi-VN")}đ
+                      {order.amount.toLocaleString("vi-VN")}đ
                     </p>
                   </div>
                 </div>
@@ -173,14 +165,6 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
         {/* CỘT PHẢI: QR Code ở giữa, nút hủy góc dưới phải */}
         <div className="flex flex-col h-full">
           <Card className="shadow-sm flex-grow flex flex-col relative overflow-hidden">
-            {/* Overlay loading state */}
-            {!transactionId && (
-              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
-                <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
-                <p className="text-foreground font-medium">Đang khởi tạo mã thanh toán...</p>
-              </div>
-            )}
-
             <CardHeader className="text-center pb-2">
               <CardTitle>Quét mã thanh toán</CardTitle>
               <CardDescription>

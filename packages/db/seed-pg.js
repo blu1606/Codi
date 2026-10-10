@@ -1,8 +1,11 @@
 import pg from 'pg';
 
 async function main() {
+  if (!process.env.DATABASE_URL?.trim()) {
+    throw new Error("DATABASE_URL must be explicitly configured");
+  }
   const client = new pg.Client({
-    connectionString: 'postgresql://postgres.nwelnegsoojejerqxiqc:DiAzK0jEZwMAFmkmgJ15DfSy@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres'
+    connectionString: process.env.DATABASE_URL
   });
 
   try {

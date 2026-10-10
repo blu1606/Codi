@@ -1,3 +1,4 @@
+import { getSepayConfig } from "@/lib/sepay-config";
 import { NextResponse } from "next/server";
 import { db } from "@/services";
 import { studentTransactions, studentEnrollments } from "@codi-1/db/schema/student-profile";
@@ -6,9 +7,13 @@ import { eq } from "drizzle-orm";
 export async function POST(req: Request) {
   try {
     // Authenticate the webhook request
-    const apiKey = process.env.SEPAY_WEBHOOK_SECRET;
+    const config = getSepayConfig();
+    if (!config) {
+      return NextResponse.json({ success: false, message: "Payments unavailable" }, { status: 503 });
+    }
+    const apiKey = config.webhookSecret;
     const authHeader = req.headers.get("authorization");
-    if (apiKey && authHeader !== `Apikey ${apiKey}`) {
+    if (authHeader !== `Apikey ${apiKey}`) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
@@ -20,7 +25,7 @@ export async function POST(req: Request) {
     }
 
     // Verify it's for the correct account
-    const expectedAccount = process.env.SEPAY_ACCOUNT_NUMBER || "0352060805";
+    const expectedAccount = config.receiver.accountNumber;
     if (data.accountNumber !== expectedAccount) {
       return NextResponse.json({ success: true, message: "Ignored transfer to different account" });
     }
