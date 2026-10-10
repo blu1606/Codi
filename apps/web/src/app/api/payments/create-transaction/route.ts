@@ -14,11 +14,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { courseId, amount } = await req.json();
+    const { courseId } = await req.json();
 
-    if (!courseId || typeof amount !== "number") {
+    if (!courseId) {
       return NextResponse.json({ error: "Invalid data" }, { status: 400 });
     }
+
+    const { courses } = await import("@codi-1/db/schema/courses");
+    const { eq } = await import("drizzle-orm");
+    const [course] = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+
+    if (!course) {
+      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    const amount = course.price;
 
     // Generate a simple ID like CODI12345
     const transactionId = `CODI${Math.floor(10000 + Math.random() * 90000)}`;

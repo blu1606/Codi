@@ -94,7 +94,7 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
   }
 
   if (!course) {
-    return <div className="p-8 text-center text-red-500">Không tìm thấy khóa học!</div>;
+    return <div className="p-8 text-center text-destructive">Không tìm thấy khóa học!</div>;
   }
 
   // Once we have a transactionId, generate the dynamic VietQR URL
@@ -106,9 +106,9 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
   if (isPaid) {
     return (
       <div className="container mx-auto py-20 px-4 flex flex-col items-center justify-center min-h-[60vh]">
-        <CheckCircle2 className="w-24 h-24 text-green-500 mb-6" />
+        <CheckCircle2 className="w-24 h-24 text-primary mb-6" />
         <h1 className="text-3xl font-bold mb-4">Thanh toán thành công!</h1>
-        <p className="text-gray-600 mb-8">Bạn đã đăng ký khóa học {course.title}. Hệ thống đang chuyển hướng vào bảng điều khiển...</p>
+        <p className="text-muted-foreground mb-8">Bạn đã đăng ký khóa học {course.title}. Hệ thống đang chuyển hướng vào bảng điều khiển...</p>
         <Button render={<Link href="/dashboard" />} nativeButton={false}>
           Vào học ngay
         </Button>
@@ -124,17 +124,17 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
         {/* CỘT TRÁI: Thông tin khóa học và Chọn phương thức */}
         <div className="space-y-6 flex flex-col justify-start">
           <div>
-            <h2 className="text-lg font-semibold mb-4 text-gray-700">Thông tin đơn hàng</h2>
+            <h2 className="text-lg font-semibold mb-4 text-foreground">Thông tin đơn hàng</h2>
             <Card className="shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-start space-x-4">
-                  <div className="h-16 w-16 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-2xl shrink-0">
+                  <div className="h-16 w-16 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl shrink-0">
                     {course.title.substring(0, 1).toUpperCase()}
                   </div>
                   <div>
                     <p className="font-bold text-lg leading-tight">{course.title}</p>
-                    <p className="text-sm text-gray-500 mt-1">{course.category}</p>
-                    <p className="text-2xl font-bold text-indigo-600 mt-4">
+                    <p className="text-sm text-muted-foreground mt-1">{course.category}</p>
+                    <p className="text-2xl font-bold text-primary mt-4">
                       {course.price.toLocaleString("vi-VN")}đ
                     </p>
                   </div>
@@ -144,7 +144,7 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
           </div>
 
           <div>
-            <h2 className="text-lg font-semibold mb-4 text-gray-700">Phương thức thanh toán</h2>
+            <h2 className="text-lg font-semibold mb-4 text-foreground">Phương thức thanh toán</h2>
             <div className="grid grid-cols-1 gap-3">
               {PAYMENT_METHODS.map((method) => (
                 <div
@@ -152,17 +152,17 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
                   onClick={() => setSelectedMethod(method)}
                   className={`flex items-center space-x-3 p-4 rounded-xl border cursor-pointer transition-all ${
                     selectedMethod.id === method.id
-                      ? "border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:border-indigo-400 ring-1 ring-indigo-600 dark:ring-indigo-400"
-                      : "border-gray-200 dark:border-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700 hover:bg-gray-50 dark:hover:bg-gray-900"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border hover:border-primary/50 hover:bg-accent"
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-full bg-white overflow-hidden flex items-center justify-center shrink-0 shadow-sm border border-gray-200 dark:border-gray-700">
+                  <div className="w-10 h-10 rounded-full bg-background overflow-hidden flex items-center justify-center shrink-0 shadow-sm border border-border">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={method.icon} alt={method.name} className="w-full h-full object-cover" />
                   </div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">{method.name}</div>
+                  <div className="font-medium text-foreground">{method.name}</div>
                   {selectedMethod.id === method.id && (
-                    <CheckCircle2 className="ml-auto h-5 w-5 text-indigo-600" />
+                    <CheckCircle2 className="ml-auto h-5 w-5 text-primary" />
                   )}
                 </div>
               ))}
@@ -175,9 +175,9 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
           <Card className="shadow-sm flex-grow flex flex-col relative overflow-hidden">
             {/* Overlay loading state */}
             {!transactionId && (
-              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
-                <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
-                <p className="text-gray-600 font-medium">Đang khởi tạo mã thanh toán...</p>
+              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+                <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+                <p className="text-foreground font-medium">Đang khởi tạo mã thanh toán...</p>
               </div>
             )}
 
@@ -202,14 +202,14 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
                 )}
               </div>
 
-              <div className="w-full rounded-md bg-amber-50 p-4 border border-amber-200">
-                <p className="text-sm font-medium text-amber-900 mb-2">
+              <div className="w-full rounded-md bg-muted p-4 border border-border">
+                <p className="text-sm font-medium text-foreground mb-2">
                   Nội dung chuyển khoản bắt buộc:
                 </p>
-                <div className="bg-white px-3 py-2 border border-amber-300 rounded font-mono text-center font-bold text-amber-900 select-all text-lg">
+                <div className="bg-background px-3 py-2 border border-border rounded font-mono text-center font-bold text-foreground select-all text-lg">
                   {transferMessage}
                 </div>
-                <p className="text-xs text-amber-700 mt-2 text-center">
+                <p className="text-xs text-muted-foreground mt-2 text-center">
                   Hệ thống sẽ tự động đối soát. Vui lòng ghi chính xác.
                 </p>
               </div>

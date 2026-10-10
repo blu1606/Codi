@@ -5,7 +5,19 @@ import { eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
   try {
+    // Authenticate the webhook request
+    const apiKey = process.env.SEPAY_WEBHOOK_SECRET;
+    const authHeader = req.headers.get("authorization");
+    if (apiKey && authHeader !== `Apikey ${apiKey}`) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
+
     const data = await req.json();
+
+    // Verify it's an incoming transfer
+    if (data.transferType !== "in") {
+      return NextResponse.json({ success: true, message: "Ignored outbound transfer" });
+    }
 
     // SePay sends the transfer content in data.content or data.description
     const content = data.content || data.description || "";
@@ -43,12 +55,13 @@ export async function POST(req: Request) {
           .set({ status: "paid" })
           .where(eq(studentTransactions.id, txId));
 
-        // Grant access to the course
+        // Grant access to the course, avoiding duplicates
         await txDB.insert(studentEnrollments)
           .values({
             userId: tx.userId,
             courseId: tx.courseId,
-          });
+          })
+          .onConflictDoNothing();
       });
       console.log(`Successfully processed transaction ${txId}`);
     } else {
