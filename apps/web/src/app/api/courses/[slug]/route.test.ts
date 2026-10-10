@@ -54,6 +54,21 @@ describe("GET /api/courses/[slug]", () => {
     });
   });
 
+  it.each([null, "https://example.com/authored-avatar.png"])("returns only supported instructor profile data with avatar %s", async (image) => {
+    mocks.courseLimit.mockResolvedValue([{ ...course, instructorName: "Authored name", instructorImage: image, rating: 0, reviewCount: 0 }]);
+    const body = await (await request()).json();
+    expect(body.instructor).toEqual({ name: "Authored name", avatar: image, title: null, bio: null });
+    expect(body.rating).toBe(0);
+    expect(body.reviewCount).toBe(0);
+    expect(body.course).not.toHaveProperty("instructorName");
+    expect(body.course).not.toHaveProperty("instructorImage");
+  });
+
+  it("does not invent an instructor when the join has no profile", async () => {
+    mocks.courseLimit.mockResolvedValue([{ ...course, instructorName: null, instructorImage: null }]);
+    expect((await (await request()).json()).instructor).toBeNull();
+  });
+
   it("looks up the exact slug and scopes content to its course, excluding draft chapters and lessons", async () => {
     await request();
     const dialect = new PgDialect();

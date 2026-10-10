@@ -259,7 +259,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   <h2 id="instructor-title">Giảng viên</h2>
                 </div>
                 <Card className="flex flex-col sm:flex-row gap-6 p-6 mt-4 border-border/50">
-                  <div className="shrink-0 flex justify-center">
+                  {detail.instructor.avatar && <div className="shrink-0 flex justify-center">
                     <Image
                       src={detail.instructor.avatar}
                       alt={detail.instructor.name}
@@ -268,13 +268,13 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                       className="rounded-full object-cover border-2 border-primary/10"
                       unoptimized
                     />
-                  </div>
+                  </div>}
                   <div className="space-y-3">
                     <div>
                       <h3 className="text-xl font-bold">{detail.instructor.name}</h3>
-                      <p className="text-sm font-medium text-primary">{detail.instructor.title}</p>
+                      {detail.instructor.title && <p className="text-sm font-medium text-primary">{detail.instructor.title}</p>}
                     </div>
-                    <p className="text-sm leading-relaxed text-muted-foreground">{detail.instructor.bio}</p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{detail.instructor.bio ?? "Thông tin giới thiệu giảng viên đang được cập nhật."}</p>
                   </div>
                 </Card>
               </section>

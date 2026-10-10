@@ -15,7 +15,7 @@ export interface CourseChapter {
 
 export interface CourseDetail {
   course: CatalogCourse;
-  instructor: { name: string; title: string; avatar: string; bio: string } | null;
+  instructor: { name: string; title: string | null; avatar: string | null; bio: string | null } | null;
   rating: number;
   reviewCount: number;
   learningOutcomes: string[];

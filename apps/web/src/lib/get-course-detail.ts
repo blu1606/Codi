@@ -54,9 +54,9 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     course: { ...courseData, createdAt: courseData.createdAt.toISOString() },
     instructor: instructorName ? {
       name: instructorName,
-      title: "Chuyên gia / Giảng viên",
-      avatar: instructorImage ?? "https://github.com/shadcn.png",
-      bio: "Giảng viên có nhiều năm kinh nghiệm thực chiến trong các dự án quy mô lớn. Luôn đề cao phương pháp Learn By Building - học qua thực hành và sản phẩm thực tế.",
+      title: null,
+      avatar: instructorImage ?? null,
+      bio: null,
     } : null,
     rating: course.rating,
     reviewCount: course.reviewCount,
