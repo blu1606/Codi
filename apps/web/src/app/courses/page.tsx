@@ -5,16 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
-  CheckCircle2,
   Clock,
-  Compass,
   GraduationCap,
   Layers,
   Search,
-  Sparkles,
-  X,
-  ArrowRight,
-  ExternalLink,
 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import {
@@ -287,10 +281,12 @@ export default function CoursesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => router.push(`/courses/${course.slug}` as any)}
+                    asChild
                     className="text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2"
                   >
-                    Xem chi tiết
+                    <Link href={`/courses/${course.slug}`}>
+                      Xem chi tiết
+                    </Link>
                   </Button>
 
                   <Button

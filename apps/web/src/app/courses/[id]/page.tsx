@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, Clock, Users, GraduationCap, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, Users, GraduationCap, CheckCircle2, Star, PlayCircle } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -45,9 +45,18 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl mb-4">
               {course.title}
             </h1>
-            <p className="text-xl text-muted-foreground">
+            <p className="text-xl text-muted-foreground mb-4">
               {course.description}
             </p>
+            {course.rating && course.reviewCount && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center text-amber-500">
+                  <Star className="h-4 w-4 fill-current" />
+                  <span className="ml-1 font-semibold">{course.rating.toFixed(1)}</span>
+                </div>
+                <span>({course.reviewCount} đánh giá)</span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -84,6 +93,44 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
             </CardContent>
           </Card>
 
+          {course.chapters && course.chapters.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Chương trình học</CardTitle>
+                <CardDescription>
+                  Chi tiết các bài học và thời lượng
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {course.chapters.map((chapter, index) => (
+                  <div key={index} className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted/50 px-4 py-3 font-semibold border-b">
+                      {chapter.title}
+                    </div>
+                    <div className="divide-y">
+                      {chapter.lessons.map((lesson, idx) => (
+                        <div key={idx} className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <PlayCircle className="h-4 w-4 text-primary" />
+                            <span className="text-sm">{lesson.title}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            {lesson.isPreview && (
+                              <span className="text-xs text-primary font-medium border border-primary/20 bg-primary/10 px-2 py-0.5 rounded-full">
+                                Học thử
+                              </span>
+                            )}
+                            <span>{lesson.duration}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Yêu cầu đầu vào</CardTitle>
@@ -95,6 +142,33 @@ export default async function CourseDetailPage({ params }: CourseDetailPageProps
               </p>
             </CardContent>
           </Card>
+
+          {course.instructor && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Giảng viên</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row gap-6">
+                  <div className="shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src={course.instructor.avatarUrl} 
+                      alt={course.instructor.name}
+                      className="w-24 h-24 rounded-full object-cover border-2 border-border"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold">{course.instructor.name}</h3>
+                    <p className="text-primary font-medium">{course.instructor.title}</p>
+                    <p className="text-muted-foreground mt-2 leading-relaxed">
+                      {course.instructor.bio}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="lg:col-span-1">

@@ -1,4 +1,5 @@
-import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import { user } from "./auth";
 
 export const courses = pgTable("courses", {
   id: text("id").primaryKey(),
@@ -9,5 +10,28 @@ export const courses = pgTable("courses", {
   duration: text("duration").notNull(),
   description: text("description").notNull(),
   price: integer("price").default(0).notNull(),
+  instructorId: text("instructor_id").references(() => user.id),
+  rating: real("rating").default(0).notNull(),
+  reviewCount: integer("review_count").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const courseChapters = pgTable("course_chapters", {
+  id: text("id").primaryKey(),
+  courseId: text("course_id")
+    .notNull()
+    .references(() => courses.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  order: integer("order").notNull(),
+});
+
+export const courseLessons = pgTable("course_lessons", {
+  id: text("id").primaryKey(),
+  chapterId: text("chapter_id")
+    .notNull()
+    .references(() => courseChapters.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  duration: text("duration"),
+  order: integer("order").notNull(),
+  isPreview: boolean("is_preview").default(false).notNull(),
 });
