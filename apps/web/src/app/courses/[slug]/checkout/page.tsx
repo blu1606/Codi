@@ -19,7 +19,7 @@ import { authClient } from "@/lib/auth-client";
 
 interface CheckoutPageProps {
   params: Promise<{
-    id: string;
+    slug: string;
   }>;
 }
 
@@ -29,14 +29,14 @@ const PAYMENT_METHODS = [
 
 export default function CheckoutPage({ params }: CheckoutPageProps) {
   const router = useRouter();
-  const { id } = use(params);
+  const { slug } = use(params);
   
   const { data: session, isPending } = authClient.useSession();
   const [selectedMethod, setSelectedMethod] = useState(PAYMENT_METHODS[0]);
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [isPaid, setIsPaid] = useState(false);
 
-  const course = SEED_COURSES.find((c) => c.id === id || c.slug === id);
+  const course = SEED_COURSES.find((c) => c.id === slug || c.slug === slug);
 
   useEffect(() => {
     if (session?.user && course && !transactionId) {
@@ -202,23 +202,11 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
                 )}
               </div>
 
-              <div className="w-full rounded-md bg-muted p-4 border border-border">
-                <p className="text-sm font-medium text-foreground mb-2">
-                  Nội dung chuyển khoản bắt buộc:
-                </p>
-                <div className="bg-background px-3 py-2 border border-border rounded font-mono text-center font-bold text-foreground select-all text-lg">
-                  {transferMessage}
-                </div>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Hệ thống sẽ tự động đối soát. Vui lòng ghi chính xác.
-                </p>
-              </div>
-
             </CardContent>
           </Card>
 
           <div className="mt-6 flex justify-end items-center gap-4">
-            <Button variant="outline" render={<Link href={`/courses/${id}`} />} nativeButton={false}>
+            <Button variant="outline" render={<Link href={`/courses/${slug}`} />} nativeButton={false}>
               Hủy giao dịch
             </Button>
           </div>
