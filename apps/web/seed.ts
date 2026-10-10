@@ -1,5 +1,5 @@
 import { db } from "./src/services";
-import { courses, user } from "@codi-1/db/src/schema";
+import { courses, user } from "@codi-1/db";
 import { eq } from "drizzle-orm";
 
 async function main() {
