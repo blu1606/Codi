@@ -9,6 +9,22 @@ export interface Course {
   targetAudience: string;
   prerequisites: string;
   topics: string[];
+  instructor?: {
+    name: string;
+    title: string;
+    bio: string;
+    avatarUrl: string;
+  };
+  rating?: number;
+  reviewCount?: number;
+  chapters?: {
+    title: string;
+    lessons: {
+      title: string;
+      duration: string;
+      isPreview: boolean;
+    }[];
+  }[];
 }
 
 export const SEED_COURSES: Course[] = [
@@ -31,6 +47,38 @@ export const SEED_COURSES: Course[] = [
       "Quản lý State & Gọi API",
       "Deploy & Tối ưu trên Vercel"
     ],
+    instructor: {
+      name: "Nguyễn Văn A",
+      title: "Senior Frontend Engineer",
+      bio: "Hơn 8 năm kinh nghiệm làm việc với React và các hệ sinh thái JS. Từng làm việc tại nhiều công ty công nghệ lớn.",
+      avatarUrl: "https://i.pravatar.cc/150?u=a",
+    },
+    rating: 4.8,
+    reviewCount: 124,
+    chapters: [
+      {
+        title: "Chương 1: Nền tảng Web",
+        lessons: [
+          { title: "HTML5 Semantic", duration: "15:00", isPreview: true },
+          { title: "CSS Flexbox & Grid", duration: "25:00", isPreview: true },
+          { title: "Tailwind CSS v4 căn bản", duration: "30:00", isPreview: false },
+        ]
+      },
+      {
+        title: "Chương 2: JavaScript Hiện Đại",
+        lessons: [
+          { title: "ES6+ Syntax", duration: "20:00", isPreview: false },
+          { title: "Promises & Async/Await", duration: "45:00", isPreview: false },
+        ]
+      },
+      {
+        title: "Chương 3: Xây dựng ứng dụng với React 19",
+        lessons: [
+          { title: "React Components & JSX", duration: "40:00", isPreview: false },
+          { title: "Hooks cơ bản", duration: "50:00", isPreview: false },
+        ]
+      }
+    ]
   },
   {
     id: "course-2",
@@ -50,6 +98,30 @@ export const SEED_COURSES: Course[] = [
       "Caching với Redis & Giới hạn Rate Limiting",
       "Docker hóa ứng dụng & Triển khai Cloud"
     ],
+    instructor: {
+      name: "Trần Thị B",
+      title: "Backend Tech Lead",
+      bio: "Chuyên gia về kiến trúc hệ thống và tối ưu hóa hiệu suất cơ sở dữ liệu với 10 năm kinh nghiệm.",
+      avatarUrl: "https://i.pravatar.cc/150?u=b",
+    },
+    rating: 4.9,
+    reviewCount: 89,
+    chapters: [
+      {
+        title: "Chương 1: Khởi tạo dự án & TypeScript",
+        lessons: [
+          { title: "Cấu hình Node.js với TS", duration: "20:00", isPreview: true },
+          { title: "Các patterns phổ biến", duration: "35:00", isPreview: false },
+        ]
+      },
+      {
+        title: "Chương 2: Express/Hono & REST API",
+        lessons: [
+          { title: "Routing & Middlewares", duration: "40:00", isPreview: false },
+          { title: "Xử lý lỗi (Error Handling)", duration: "25:00", isPreview: false },
+        ]
+      }
+    ]
   },
   {
     id: "course-3",
@@ -70,6 +142,23 @@ export const SEED_COURSES: Course[] = [
       "Quy hoạch động (Dynamic Programming)",
       "Kỹ năng live-coding phỏng vấn kỹ thuật"
     ],
+    instructor: {
+      name: "Lê Văn C",
+      title: "Competitive Programmer / SWE",
+      bio: "Nhiều lần đạt giải cao trong các kỳ thi lập trình thi đấu và hiện là SWE tại Big Tech.",
+      avatarUrl: "https://i.pravatar.cc/150?u=c",
+    },
+    rating: 4.7,
+    reviewCount: 201,
+    chapters: [
+      {
+        title: "Chương 1: Phân tích độ phức tạp",
+        lessons: [
+          { title: "Big-O Notation", duration: "25:00", isPreview: true },
+          { title: "Phân tích thuật toán đệ quy", duration: "30:00", isPreview: false },
+        ]
+      }
+    ]
   },
   {
     id: "course-4",
@@ -90,6 +179,23 @@ export const SEED_COURSES: Course[] = [
       "AI SDK & Stream Text UI",
       "Multi-agent Orchestration & Tự động hóa tác vụ"
     ],
+    instructor: {
+      name: "Phạm D",
+      title: "AI Engineer",
+      bio: "Nghiên cứu sinh về AI và ứng dụng, kinh nghiệm xây dựng các hệ thống AI Agents thực tế.",
+      avatarUrl: "https://i.pravatar.cc/150?u=d",
+    },
+    rating: 4.9,
+    reviewCount: 56,
+    chapters: [
+      {
+        title: "Chương 1: Tổng quan về LLM",
+        lessons: [
+          { title: "Hiểu về Transformers & LLM", duration: "30:00", isPreview: true },
+          { title: "Kỹ thuật Prompting", duration: "45:00", isPreview: false },
+        ]
+      }
+    ]
   },
   {
     id: "course-5",
@@ -109,6 +215,23 @@ export const SEED_COURSES: Course[] = [
       "Tích hợp Camera, Định vị & Push Notifications",
       "Đóng gói APK/AAB & Xuất bản App Store/Google Play"
     ],
+    instructor: {
+      name: "Hoàng E",
+      title: "Mobile App Developer",
+      bio: "Chuyên phát triển ứng dụng di động đa nền tảng, có nhiều ứng dụng đạt hàng triệu lượt tải.",
+      avatarUrl: "https://i.pravatar.cc/150?u=e",
+    },
+    rating: 4.6,
+    reviewCount: 77,
+    chapters: [
+      {
+        title: "Chương 1: Giới thiệu React Native & Expo",
+        lessons: [
+          { title: "Cài đặt môi trường", duration: "15:00", isPreview: true },
+          { title: "Core Components", duration: "35:00", isPreview: false },
+        ]
+      }
+    ]
   },
 ];
 

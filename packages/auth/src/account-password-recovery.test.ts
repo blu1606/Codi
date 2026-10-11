@@ -1,3 +1,5 @@
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +23,14 @@ const newPassword = "new-password-456";
 
 function createTestAuth(withDelivery = true) {
   const database = {
+    select: () => ({ from: () => ({ where: async (condition: SQL) => {
+      const [userId] = new PgDialect().sqlToQuery(condition).params;
+      return (state.storage.user ?? []).filter((user) => user.id === userId).map((user) => ({ banned: user.banned ?? false }));
+    } }) }),
+    delete: () => ({ where: async (condition: SQL) => {
+      const [sessionId] = new PgDialect().sqlToQuery(condition).params;
+      state.storage.session = (state.storage.session ?? []).filter((session) => session.id !== sessionId);
+    } }),
     insert: () => ({ values: () => ({ onConflictDoNothing: async () => undefined }) }),
   } as unknown as Database;
   return createAuth({
@@ -65,6 +75,48 @@ describe("account password recovery", () => {
     state.sendEmail.mockReset().mockResolvedValue({ data: { id: "fixture-message" }, error: null });
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it("preserves banned-account session protection alongside recovery", async () => {
+    const auth = createTestAuth();
+    await signUp(auth);
+    const user = state.storage.user?.[0];
+    if (!user) throw new Error("Expected the signed-up test account");
+    user.banned = true;
+    const previousSessions = state.storage.session?.length ?? 0;
+    const response = await auth.api.signInEmail({ body: { email, password: originalPassword }, asResponse: true });
+    expect(response.status).toBe(401);
+    expect(state.storage.session).toHaveLength(previousSessions);
+  });
+
+  it("does not create a replacement session for an account banned before password change", async () => {
+    const auth = createTestAuth();
+    const cookie = await signUp(auth);
+    const user = state.storage.user?.[0];
+    if (!user) throw new Error("Expected the signed-up test account");
+    user.banned = true;
+    const response = await auth.api.changePassword({
+      headers: new Headers({ Cookie: cookie }),
+      body: { currentPassword: originalPassword, newPassword, revokeOtherSessions: true },
+      asResponse: true,
+    });
+    expect(response.status).toBe(401);
+    expect(state.storage.session).toHaveLength(0);
+  });
+
+  it("keeps a banned account signed out after an OTP recovery reset", async () => {
+    const auth = createTestAuth();
+    const cookie = await signUp(auth);
+    const grant = cookies(await verify(auth, cookie));
+    const user = state.storage.user?.[0];
+    if (!user) throw new Error("Expected the signed-up test account");
+    user.banned = true;
+    const reset = await request(auth, "reset", `${cookie}; ${grant}`, { newPassword });
+    expect(reset.status).toBe(200);
+    expect(state.storage.session).toHaveLength(0);
+    const signIn = await auth.api.signInEmail({ body: { email, password: newPassword }, asResponse: true });
+    expect(signIn.status).toBe(401);
+    expect(state.storage.session).toHaveLength(0);
+  });
 
   it("requires authentication for every recovery step", async () => {
     const auth = createTestAuth();

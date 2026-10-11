@@ -1,3 +1,5 @@
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +27,14 @@ const newEmail = "replacement@example.com";
 
 function createTestAuth(withEmailDelivery = true) {
   const database = {
+    select: () => ({ from: () => ({ where: async (condition: SQL) => {
+      const [userId] = new PgDialect().sqlToQuery(condition).params;
+      return (state.storage.user ?? []).filter((user) => user.id === userId).map((user) => ({ banned: user.banned ?? false }));
+    } }) }),
+    delete: () => ({ where: async (condition: SQL) => {
+      const [sessionId] = new PgDialect().sqlToQuery(condition).params;
+      state.storage.session = (state.storage.session ?? []).filter((session) => session.id !== sessionId);
+    } }),
     insert: () => ({ values: () => ({ onConflictDoNothing: async () => undefined }) }),
   } as unknown as Database;
   return createAuth({

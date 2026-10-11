@@ -183,6 +183,18 @@ role changes (promoting to Lecturer/Admin, demoting) go through
 
 ## Next Steps
 
+### Preview authentication
+
+The server uses the exact runtime `VERCEL_URL` as its auth base URL when
+`VERCEL_ENV=preview`, while retaining `BETTER_AUTH_URL` as a trusted origin.
+This supports prebuilt previews whose unique URL is unavailable during build.
+Production and local development continue to use `BETTER_AUTH_URL`.
+Only a concrete Vercel deployment hostname is accepted; incoming request
+headers and wildcard origins are never used to grant trust. If the platform
+does not supply runtime deployment identity, the configured origin remains
+in effect. Verify login on the new preview after publishing; an older preview
+will still have its original configuration.
+
 Once local setup is complete, the development workflow is:
 
 1. Create a feature branch from `develop`
