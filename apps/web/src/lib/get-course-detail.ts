@@ -1,15 +1,21 @@
 import { and, asc, count, eq, getTableColumns } from "drizzle-orm";
-import { courseChapters, courseDetails, courseLessons, courses, studentEnrollments } from "@codi-1/db";
+import { courseChapters, courseDetails, courseLessons, courses, studentEnrollments, user } from "@codi-1/db";
 import { db } from "@/services";
 import type { CourseChapter, CourseDetail } from "./course-details";
 
 export async function getCourseDetail(slug: string): Promise<CourseDetail | null> {
   const [course] = await db
-    .select({ ...getTableColumns(courses), enrollmentCount: count(studentEnrollments.id) })
+    .select({
+      ...getTableColumns(courses),
+      enrollmentCount: count(studentEnrollments.id),
+      instructorName: user.name,
+      instructorImage: user.image,
+    })
     .from(courses)
     .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
+    .leftJoin(user, eq(courses.instructorId, user.id))
     .where(eq(courses.slug, slug))
-    .groupBy(courses.id)
+    .groupBy(courses.id, user.id)
     .limit(1);
   if (!course) return null;
 
@@ -43,8 +49,17 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
       durationSeconds += row.durationSeconds ?? 0;
     }
   }
+  const { instructorName, instructorImage, ...courseData } = course;
   return {
-    course: { ...course, createdAt: course.createdAt.toISOString() },
+    course: { ...courseData, createdAt: courseData.createdAt.toISOString() },
+    instructor: instructorName ? {
+      name: instructorName,
+      title: null,
+      avatar: instructorImage ?? null,
+      bio: null,
+    } : null,
+    rating: course.rating,
+    reviewCount: course.reviewCount,
     learningOutcomes: details?.learningOutcomes ?? [],
     requirements: details?.requirements ?? [],
     targetAudience: details?.targetAudience ?? null,

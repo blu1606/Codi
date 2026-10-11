@@ -1,4 +1,4 @@
-import { defineRelationsPart } from "drizzle-orm";
+﻿import { defineRelationsPart } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
@@ -12,7 +12,7 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-  banned: boolean("banned"),
+  banned: boolean("banned").default(false).notNull(),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
 });
@@ -100,3 +100,4 @@ export const authRelations = defineRelationsPart({ user, session, account, verif
     }),
   },
 }));
+

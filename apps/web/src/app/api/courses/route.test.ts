@@ -14,7 +14,7 @@ const course = {
   id: "course-a", slug: "frontend-react-nextjs", title: "Frontend React",
   category: "Frontend", level: "Beginner", duration: "8 tuần",
   description: "Khóa học từ database", price: 125000,
-  instructorId: "instructor-1", rating: 4.8, reviewCount: 120,
+  instructorId: "instructor-1", rating: 4.5, reviewCount: 10,
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 

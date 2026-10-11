@@ -1,4 +1,4 @@
-import { integer, pgTable, text, timestamp, real } from "drizzle-orm/pg-core";
+import { integer, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 export const courses = pgTable("courses", {
@@ -11,7 +11,8 @@ export const courses = pgTable("courses", {
   description: text("description").notNull(),
   price: integer("price").default(0).notNull(),
   instructorId: text("instructor_id").references(() => user.id),
-  rating: real("rating").default(0),
-  reviewCount: integer("review_count").default(0),
+  rating: real("rating").default(0).notNull(),
+  reviewCount: integer("review_count").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
