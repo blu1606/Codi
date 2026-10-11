@@ -119,6 +119,9 @@ export default function UserMenu() {
           <DropdownMenuItem onClick={() => router.push("/profile")}>
             Hồ sơ cá nhân (Profile)
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/settings")}>
+            Cài đặt (Setting)
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"

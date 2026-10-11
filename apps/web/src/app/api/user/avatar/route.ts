@@ -16,12 +16,19 @@ export async function POST(request: NextRequest) {
 
     const userId = session.user.id;
     const contentType = request.headers.get("content-type") || "";
+    const formData = contentType.includes("multipart/form-data") ? await request.formData() : null;
+    const body = formData ? null : await request.json();
+    const name = formData ? (formData.get("name") ?? undefined) : body.name;
+
+    if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+      return NextResponse.json({ error: "Họ và tên không được để trống" }, { status: 400 });
+    }
+    const trimmedName = typeof name === "string" ? name.trim() : undefined;
 
     let finalImageUrl = "";
 
-    if (contentType.includes("multipart/form-data")) {
+    if (formData) {
       // Direct file upload from user
-      const formData = await request.formData();
       const file = formData.get("file") as File | null;
 
       if (!file) {
@@ -61,7 +68,6 @@ export async function POST(request: NextRequest) {
       finalImageUrl = result.url;
     } else {
       // JSON payload for preset or sync URL
-      const body = await request.json();
       const { presetUrl, syncUrl } = body;
       const targetUrl = presetUrl || syncUrl;
 
@@ -95,10 +101,11 @@ export async function POST(request: NextRequest) {
       finalImageUrl = result.url;
     }
 
-    // Update user image in Database & Auth Session
+    // Commit the name and image together only after the image is ready.
     await auth.api.updateUser({
       body: {
         image: finalImageUrl,
+        ...(trimmedName !== undefined ? { name: trimmedName } : {}),
       },
       headers: reqHeaders,
     });
