@@ -184,7 +184,7 @@ stateDiagram-v2
 | order created | `createOrderFromCart` | — | order stores `voucherCode`, `discount`, `total`; voucher cleared from cart |
 | order paid | `markPaid` | — | `vouchers[code].used += 1` (only on payment, not on order creation) |
 
-- ⚠ conflict: PRODUCT Q16 (voucher scope, per-user limit, stacking) is open. Code has `scope` in the data but no scope check; only one voucher per cart.
+- ✅ Decided 2026-10-14 (D14): **one voucher per order, applies to the whole cart, no stacking, no per-course scope, no per-user limit** (only `usageLimit` overall). The `scope` field is ignored in MVP. "Mua ngay" orders take no voucher.
 - Admin: `ad-voucher-form` create/edit (code 4–20 chars `A-Z0-9`, unique, immutable after create; type, value, minOrder, usageLimit, expiresAt). `ad-voucher-toggle` = active switch with immediate effect (label "Đang bật"/"Đã tắt"); PRODUCT §7.12 wants a confirm for deactivation — ⚠ code toggles immediately.
 
 ---
@@ -206,6 +206,7 @@ stateDiagram-v2
     pending --> failed: 30 min elapsed without full payment (failReason expired)
     pending --> cancelled: learner cm-cancel OR cm-replace-order
     failed --> pending: cm-new-code (new order row, new code; failed row kept)
+    failed --> paid: late full transfer matched by webhook, courses not yet owned (D2)
     paid --> refunded: admin (no UI in prototype)
     refunded --> [*]
     paid --> [*]
@@ -222,12 +223,17 @@ stateDiagram-v2
 | pending → cancelled | learner `cm-cancel` (confirm) | status pending | `cancelOrder`; course ids re-added to cart; stop poll; navigate `/cart` |
 | pending → cancelled | learner `cm-replace-order` (modal) | status pending | old order cancelled ("Huỷ để tạo đơn mới"); new order from cart |
 | failed → pending (new order) | learner `cm-new-code` | previous order status failed | **new** order row (`Object.assign` copy of old, new code, `received: 0`, `failReason: null`, timeline "Đã tạo đơn (thay cho …)") — old failed row is kept |
-| paid → refunded | admin | **no transition implemented** in prototype | — (filter exists in `admin.js` `ad-order-filter`) |
+| failed → paid | bank webhook, late transfer (D2) | `received ≥ total` and learner does not already own every item | same side effects as pending → paid; timeline "Thanh toán muộn được chấp nhận" |
+| paid → refunded | — | **not implemented in MVP** (D18): refunds are handled outside the system; status value reserved for later | — |
 
 **Underpaid is not a status.** `received` is set (prototype: 50% of total) while `status` stays `pending`. Checkout shows alert "Đã nhận X / cần Y" with "Hãy chuyển thêm … với cùng nội dung". Expiry still applies (→ failed after 30 min). Full payment later → paid.
 
 - ✅ Decided 2026-10-14 (D1): keep 30-minute expiry → `failed` + `failReason='expired'`. Former note: PRODUCT §2.5 says "No expiry, cancel, or failed state exists yet"; PRODUCT §5 L3 specifies expiry (30 min in prototype, Q4 open) and failed. Code implements expiry → `failed` (via `status='failed'`, not a separate `expired` status). PRODUCT §5 L3 also lists `Expired` as a checkout state — map it to `failed` + `failReason='expired'`.
-- ⚠ conflict: PRODUCT Q5 (underpayment/overpayment/wrong content) is open; code has only the underpaid partial case and no overpaid handling.
+- ✅ Decided 2026-10-14 (D3) money edge cases, all matched by transfer content = `order.code`:
+  - **Underpaid:** order stays `pending` with `received` shown ("Đã nhận X / cần Y"); the learner tops up with the same content before expiry. Expiring while underpaid → `failed` (`failReason='expired'`) and the order appears in admin "Đơn cần đối soát" for a manual refund outside the system.
+  - **Overpaid:** order → `paid` normally; the excess is flagged on the order (`received > total`) and listed in "Đơn cần đối soát".
+  - **Wrong / missing content:** no auto-match; the payment shows in the bank log only. Learner contacts support with `CODI#####`; reconciliation is manual (no admin "match payment" UI in MVP).
+- ✅ Decided 2026-10-14 (D2) **late payment after expiry:** if a full transfer with the content of a `failed` (expired) order arrives, the webhook auto-honours it — order `failed → paid`, enrol, notify, timeline "Thanh toán muộn được chấp nhận" — **unless** the learner already owns every course in it (paid via a newer order); then the order stays `failed` and goes to "Đơn cần đối soát" for refund.
 
 ### 5.3 Checkout UI states (`/checkout?order=…`)
 
@@ -337,7 +343,7 @@ stateDiagram-v2
 | fork → skipped | `ln-fork-default` | — | `diag.status='skipped'`; `pathStatus='ready'`; `pathSource='default'`; `order = defaultOrder`; `skippable=[]`; `/learn/:id` |
 | fork → intro | `ln-fork-diagnostic` | — | `diag = {status:'intro', index 0, answers {}}` |
 | intro → in-progress | `ln-diag-start` | course has `entryTest` | `status='in-progress'` (resume label if index > 0) |
-| intro → skipped | `ln-diag-skip` ("Để sau" or "Xem lộ trình" when no entry test) | — | `pathStatus='ready'`, `pathSource='default'`, `order=defaultOrder`, `skippable=[]` (see ⚠ below) |
+| intro → skipped | `ln-diag-skip` ("Để sau" or "Xem lộ trình" when no entry test) | — | if an AI path exists it is **kept**; otherwise `pathStatus='ready'`, `pathSource='default'`, `order=defaultOrder`, `skippable=[]` (D11) |
 | answer question | `ln-diag-answer` | option or "Tôi chưa biết" (`unknown`) | records `answers[qId]`; Next enabled |
 | next/prev | `ln-diag-next/prev` | Next disabled until answered | index ± 1 |
 | in-progress → done | `ln-diag-next` on last question | — | mastery per concept: correct → 3, wrong → 1, unknown/unanswered → 0 (max per concept); `status='done'`; `/onboarding?view=result` |
@@ -351,7 +357,7 @@ stateDiagram-v2
 
 **⚠ conflicts**
 - PRODUCT Flow L4 says the diagnostic is "làm bất cứ lúc nào"; code allows retake from `ln-take-diag`. OK.
-- ⚠ `ln-diag-skip` (used for "Để sau") **overwrites** an existing AI `order`/`pathSource` with `defaultOrder`/`default`. A learner who retakes the diagnostic and then clicks "Để sau" loses their personalised order. PRODUCT G7 says completed lessons stay completed (true in code: `completed` is untouched), but the personalised path is lost. Implementers should keep the last AI path on "Để sau" (decision for product).
+- ✅ Decided 2026-10-14 (D11): "Để sau" (postponing a diagnostic retake) **keeps the last AI path**; the default order is used only when no AI path exists yet. Completed lessons are never reset.
 - PRODUCT Q6 (exact goal options) is open; code uses: goals `project` "Làm được dự án", `finish` "Hoàn thành khóa học", `interview` "Chuẩn bị phỏng vấn"; levels `new` "Mới bắt đầu", `basic` "Đã biết cơ bản", `solid` "Khá vững"; hours tiers `2`, `5`, `10` per week.
 
 ---
@@ -402,7 +408,7 @@ stateDiagram-v2
 **Learner goal edit (`ln-edit-goal`)**: confirm (reversible: yes); consequence "Codi xếp lại thứ tự các bài chưa học. Bài đã hoàn thành và điểm số giữ nguyên." → goal wizard → `generatePath`.
 
 - ⚠ conflict: PRODUCT Q22 (can goal change regenerate path) — code: yes, regenerates. Consistent with PRODUCT §5 L5/Q22 default; mark as resolved in code.
-- ⚠ conflict: PRODUCT §2.5 says "Mastery is computed by BKT (reproducible), not by the LLM". Code uses a heuristic (§9 `masteryFromScore`, §7 diagnostic mapping) — not BKT. Treat BKT as the target; the prototype is a placeholder.
+- ✅ Decided 2026-10-14 (D16): the real app computes mastery with **BKT** (probability per concept, reproducible, never by the LLM). UI keeps the 5-stop scale: 0 = no evidence · 1 = p < 0.40 · 2 = p < 0.60 · 3 = p < 0.85 · 4 = p ≥ 0.85 ("Thành thạo"). The prototype's heuristic (`masteryFromScore`) is a placeholder only; same inputs (diagnostic answers, quiz answers, coding results) feed BKT.
 
 ---
 
@@ -512,7 +518,7 @@ stateDiagram-v2
 | pending → pending (resubmit) | learner `ln-resubmit` → edit → submit | status pending | same row updated; `submittedAt` refreshed |
 | pending → graded | lecturer `tc-grade` | score within `0..maxScore` (or rubric per-criterion within points, total = sum) | `score`, `feedback`, `gradedAt`; notify learner "Bài tập đã được chấm" |
 | graded → graded (edit) | lecturer `tc-grade` with changed score | `requireReason`; confirm "Học viên sẽ nhận thông báo điểm đã thay đổi" | previous score+feedback pushed to `history`; notify "Điểm bài tập đã được cập nhật" |
-| graded → resubmit | — | **not allowed** (resubmit button only in `pending`) | — |
+| graded → resubmit | — | **not allowed** (resubmit only while `pending`, i.e. before grading) — ✅ Decided 2026-10-14 (D8) | — |
 
 - Grade banner: "Đã chấm: x/max", pass if `score ≥ passScore`, lecturer feedback text, grading date, and "Bài đã chấm không nộp lại được trong bản thử nghiệm (giả định Q10)".
 - Lesson completion counts any submission (§9).
@@ -555,7 +561,7 @@ stateDiagram-v2
 | idle → running | learner `cp-run` mode `run` ("Chạy", Ctrl/⌘+Enter) | not already running | runs **non-hidden** tests only; `runs += 1`; `lastRun` saved; `passed` not changed |
 | idle → running | learner `cp-run` mode `submit` ("Nộp bài") | — | runs **all** tests; `submits += 1`; `lastScore = pct` and `passed = allPass` (**latest submission counts**, D7); failing tests counted in `failedTests`; `failSubmits += 1` if not all pass |
 | → passed | submit with all tests passing and `!passed` | — | `passed = true`; toast "Bạn đã đạt tất cả test! Giờ có thể hoàn thành bài học." → checklist `code` done |
-| passed → passed | any later run | `passed` is sticky | — |
+| passed → passed | any later **run** ("Chạy") | runs never change `passed`; only a new submit does (D7) | — |
 | any → solution_viewed | `cp-solution` (confirm: "Giảng viên sẽ thấy bạn đã xem lời giải trước khi đạt") | — | `solutionViewed = true`; mastery score capped at 70 |
 | running → syntax/runtime/timeout | execution result | — | console shows error with explanation; chip "Lỗi cú pháp" / "Lỗi khi chạy" / "Quá thời gian"; "Hỏi AI về lỗi này" enabled |
 | cp-reset | `cp-reset` (confirm "Code bạn đang viết sẽ được thay bằng code khởi đầu") | — | draft cleared, lastRun cleared (`passed` not reset) |
@@ -723,9 +729,9 @@ stateDiagram-v2
 | pending → rejected (rejected) | admin `rv-reject` | **reason required**; use for policy/quality | `status='rejected'`, `reviewOutcome='rejected'`; round `rejected`; notify lecturer |
 | published → hidden | admin `ad-hide` (confirm, **reason required**) | — | `status='hidden'`, `hideReason`; new buyers blocked; existing learners keep access; notify lecturer |
 | hidden → published | admin `ad-unhide` (confirm) | — | `status='published'`, `hideReason=null`; notify lecturer |
-| published → published (price) | admin `ad-price` | price valid and ≠ current | `price` updated; pending orders keep their item price; notify lecturer "Giá khoá học đã thay đổi" |
+| published → published (price) | admin `ad-price` | price valid and ≠ current; **confirm dialog** stating old → new price and that only new orders are affected (no reason required) — ✅ Decided 2026-10-14 (D13) | `price` updated; pending orders and carts' existing orders keep their item price; notify lecturer "Giá khoá học đã thay đổi" |
 
-- Lecturer edits: `locked` (read-only) while `pending` (`lecturer.js` `locked(c)`). Edits allowed in `draft`, `rejected`, `published` (⚠ PRODUCT Q12 open: re-review on published edit? prototype: no re-review; contentChanged may mark KMap stale).
+- Lecturer edits: `locked` (read-only) while `pending` (`lecturer.js` `locked(c)`). Edits allowed in `draft`, `rejected`, `published` (✅ Decided 2026-10-14 (D17): editing a published course does **not** go back to review; changes are live immediately, the knowledge map turns `stale` and must be re-confirmed by the lecturer; admin can still hide the course).
 - Lecturer status filter labels: Bản nháp / Chờ duyệt / Bị từ chối / Đã xuất bản / Đã ẩn (PRODUCT decision 24 matches).
 - PRODUCT Q11 (delete course with learners): not implemented; `tc-delete-course` exists in lecturer module — treat deletion as out of state machine unless specified.
 
@@ -993,7 +999,7 @@ Events that create notifications in the prototype (recipient → title):
 
 - Not notified in prototype: order cancelled/expired (`failed`), path generation failure, role change, deactivation, review reply, public question post (learner → lecturer), lecturer's course-review reply.
 - ⚠ conflict: PRODUCT Q17 (which events; email too?) is open. Code: in-app only. PRODUCT §6 S40 lists "payment confirmed, assignment graded, question answered, publication approved/rejected, path updated" — all present except "rejected" is split into request-changes + reject (both notify).
-- PRODUCT §5 L3 expired/underpaid: no notification in code. Real app: decide.
+- ✅ Decided 2026-10-14 (D15): **in-app notifications only** for the events above (plus: order expired → buyer, late payment accepted → buyer). Email stays limited to auth (OTP, password reset). No push/SMS.
 
 ---
 
@@ -1039,28 +1045,28 @@ These are artifacts of the prototype. Their real-world equivalents are noted so 
 
 ---
 
-## 24. Open decisions (must be resolved before implementing the affected state)
+## 24. Product decisions (all resolved 2026-10-14)
 
 | ID | Topic | Current code behavior | PRODUCT position | Blocks |
 |---|---|---|---|---|
 | D1 | Order expiry duration (Q4) | **✅ Decided: 30 min from `createdAt`, then `failed`** | — | — |
-| D2 | Late payment after expiry | Support email; no auto-honour | Q4 open | §5 |
-| D3 | Underpaid/overpaid/wrong content (Q5) | Partial case only | open | §5 |
+| D2 | Late payment after expiry | **✅ Decided: late full transfer auto-honoured (failed → paid) unless already owned → reconciliation** | — | — |
+| D3 | Underpaid/overpaid/wrong content (Q5) | **✅ Decided: underpaid stays pending then reconciliation; overpaid → paid + flagged; wrong content → manual support** | — | — |
 | D4 | Mua ngay destination (decision 42) | **✅ Decided: single-course order → checkout, cart unchanged** | — | — |
 | D5 | "Tôi đã chuyển khoản" feedback | **✅ Decided: inline on the page + 30 s cooldown** | — | — |
 | D6 | Quiz pass required for completion? (Q9) | **✅ Decided: must pass (latest attempt), unlimited retakes** | — | — |
 | D7 | Best vs latest coding submission | **✅ Decided: latest submission counts** | — | — |
-| D8 | Resubmit after grade (Q10) | Blocked | open | §11 |
+| D8 | Resubmit after grade (Q10) | **✅ Decided: no resubmit after grading** | — | — |
 | D9 | Conversation resolve rules (decision 56, Q34) | **✅ Decided: lecturer or admin resolve/reopen (after a reply); learner cannot** | — | — |
 | D10 | Accept-all in KMap | **✅ Decided: summary dialog, loop-closing edges skipped** | — | — |
-| D11 | "Để sau" after an AI path | Resets to default order | keep personalised path (implied) | §7, §8 |
+| D11 | "Để sau" after an AI path | **✅ Decided: "Để sau" keeps the last AI path** | — | — |
 | D12 | Deactivation enforcement | **✅ Decided: cannot sign in + all sessions revoked** | — | — |
-| D13 | Price change confirmation | Modal, no reason | confirm + reason (§7.12) | §16 |
-| D14 | Voucher scope/stacking (Q16) | single voucher, no scope | open | §4 |
-| D15 | Notification channels (Q17) | in-app only, list in §22 | open | §22 |
-| D16 | Mastery model | heuristic 1–4 scale | BKT | §8, §9 |
-| D17 | Published-course edit → re-review (Q12) | no re-review; KMap marked stale | open | §16 |
-| D18 | Refund flow | none | non-goal (learner UI) | §5 |
+| D13 | Price change confirmation | **✅ Decided: confirm dialog old → new price, no reason; only new orders affected** | — | — |
+| D14 | Voucher scope/stacking (Q16) | **✅ Decided: one voucher per order, whole cart, no stacking/scope/per-user limit** | — | — |
+| D15 | Notification channels (Q17) | **✅ Decided: in-app only (+ auth emails)** | — | — |
+| D16 | Mastery model | **✅ Decided: BKT in real app with fixed thresholds; heuristic is placeholder** | — | — |
+| D17 | Published-course edit → re-review (Q12) | **✅ Decided: no re-review; live edit, knowledge map → stale** | — | — |
+| D18 | Refund flow | **✅ Decided: no refund flow in MVP; `refunded` reserved** | — | — |
 
 ---
 

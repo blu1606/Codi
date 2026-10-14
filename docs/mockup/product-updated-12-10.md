@@ -124,3 +124,13 @@ Resolved from `STATE-MACHINES.md` §24; mockup JS updated to match.
 | D7 | Coding exercise: the latest submission counts (score + pass), not the best | `coding-practice.js` (`lastScore`) |
 | D9 | Private conversation: only the lecturer or an admin can resolve/reopen; resolve needs a lecturer reply; learner cannot | `lecturer.js` `tc-conversation-resolve` |
 | D10 | Knowledge map "Chấp nhận tất cả": summary dialog with counts; edges that would create a loop are skipped and stay "suggested" | `lecturer.js` `tc-kmap-accept-all` |
+| D2 | Full transfer arriving after expiry is auto-accepted (`failed → paid`) unless the learner already owns the courses → "Đơn cần đối soát" | contract only |
+| D3 | Underpaid: stays pending, top up before expiry, else reconciliation · Overpaid: paid + flagged · Wrong content: manual support | contract only |
+| D8 | No assignment resubmission after grading | none (already so) |
+| D11 | "Để sau" on a diagnostic retake keeps the last AI path | `learner-learning.js` `ln-diag-skip` |
+| D13 | Price change: confirm dialog old → new, no reason, only new orders affected | contract only |
+| D14 | One voucher per order, whole cart, no stacking / scope / per-user limit | none |
+| D15 | Notifications in-app only; email only for auth | none |
+| D16 | Real app uses BKT with fixed thresholds for the 5-stop mastery scale | contract only |
+| D17 | Editing a published course: no re-review, live immediately, knowledge map becomes stale | none (already so) |
+| D18 | No refund flow in MVP; `refunded` status reserved | none |

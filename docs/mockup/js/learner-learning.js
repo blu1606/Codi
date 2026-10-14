@@ -876,7 +876,9 @@
   Codi.action('ln-diag-start', (el) => { const r = R(el); r.diag.status = 'in-progress'; save(false); Codi.go('/learn/' + el.dataset.course + '/onboarding'); });
   Codi.action('ln-diag-skip', (el) => {
     const c = Codi.course(el.dataset.course); const r = R(el);
-    r.diag.status = 'skipped'; r.pathStatus = 'ready'; r.pathSource = 'default'; r.order = c.defaultOrder.slice(); r.skippable = [];
+    r.diag.status = 'skipped';
+    // Postponing a retake never throws away a personalised path (D11); default order only when there is no AI path yet.
+    if (!(r.pathSource === 'ai' && r.order && r.order.length)) { r.pathStatus = 'ready'; r.pathSource = 'default'; r.order = c.defaultOrder.slice(); r.skippable = []; }
     save(false); Codi.go('/learn/' + c.id);
   });
   Codi.action('ln-take-diag', (el) => { const r = R(el); r.diag = { status: 'intro', index: 0, answers: {}, diagCardDismissed: r.diag.diagCardDismissed }; save(false); Codi.go('/learn/' + el.dataset.course + '/onboarding?view=intro'); });
