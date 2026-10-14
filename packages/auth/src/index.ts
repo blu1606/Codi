@@ -15,6 +15,7 @@ import { getAuthOriginConfig, type AuthOriginConfig } from "./auth-origin";
 import { accountPasswordRecovery } from "./account-password-recovery";
 
 export * from "./rbac";
+export { hashPassword, verifyPassword } from "better-auth/crypto";
 
 export type AuthConfig = AuthOriginConfig & {
   BETTER_AUTH_URL: string;
