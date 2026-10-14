@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, count, desc, eq, getTableColumns } from "drizzle-orm";
+import { asc, count, desc, eq } from "drizzle-orm";
 import { db } from "@/services";
 import { courses, courseDetails, studentEnrollments } from "@codi-1/db";
 
@@ -18,8 +18,15 @@ export async function GET(request: NextRequest) {
   try {
     // Count enrollment rows, not activity events, so each learner is counted once.
     const enrollmentCount = count(studentEnrollments.id);
+    // Public catalogue fields only: lifecycle, pricing audit and knowledge-map columns stay internal.
     const query = db
-      .select({ ...getTableColumns(courses), enrollmentCount, coverImageUrl: courseDetails.coverImageUrl })
+      .select({
+        id: courses.id, slug: courses.slug, title: courses.title, category: courses.category,
+        level: courses.level, duration: courses.duration, description: courses.description,
+        price: courses.price, instructorId: courses.instructorId, rating: courses.rating,
+        reviewCount: courses.reviewCount, createdAt: courses.createdAt,
+        enrollmentCount, coverImageUrl: courseDetails.coverImageUrl,
+      })
       .from(courses)
       .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
       .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))

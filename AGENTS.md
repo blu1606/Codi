@@ -73,12 +73,12 @@ pnpm run check:standards  # vi phạm design token
 pnpm run check-types
 pnpm test                 # Vitest
 pnpm test:coverage
-pnpm db:generate && pnpm db:migrate   # đổi schema
+pnpm db:generate && pnpm db:migrate   # đổi schema — chỉ thêm, không db:push lên DB dùng chung
 ```
 
 Chạy mockup: mở `docs/mockup/index.html` bằng trình duyệt (Alt+K để đổi vai trò / ép state).
 
 ## 5. Tài liệu khác
 
-`docs/contributing.md` (PR flow) · `docs/tech-stack.md` · `docs/design-guidelines.md` (nền tảng; token lấy theo
+`docs/database-schema.md` (schema v7, bảng thuộc module nào, cách migrate) · `docs/contributing.md` (PR flow) · `docs/tech-stack.md` · `docs/design-guidelines.md` (nền tảng; token lấy theo
 `docs/mockup/DESIGN-TOKENS.md` nếu khác) · `docs/unit-testing.md` · `docs/local-setup.md`.

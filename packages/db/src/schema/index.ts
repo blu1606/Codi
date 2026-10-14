@@ -1,6 +1,14 @@
 export * from "./auth";
 export * from "./roles";
-export * from "./student-profile";
 export * from "./courses";
 export * from "./course-content";
+export * from "./knowledge-map";
+export * from "./publication";
+export * from "./commerce";
+export * from "./student-profile";
+export * from "./assessments";
+export * from "./coding-exercises";
+export * from "./learning";
+export * from "./interaction";
+export * from "./ai-interaction-logs";
 export {};
