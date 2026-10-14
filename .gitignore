@@ -4,8 +4,11 @@ database/exports/
 *.drawio
 *.drawio.bkp
 
-# agent scratch, not a deliverable
-.claude/
+# agent scratch, not a deliverable — except the shared project skill
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/codi-mockup-parity/
 
 # ---- secrets ----
 .env
