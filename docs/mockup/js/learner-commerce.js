@@ -598,7 +598,12 @@
           <div class="card"><div class="card-body stack-3">
             <p class="row" role="status">${icon('loader')} <span>Đang kiểm tra thanh toán… (lần gần nhất <span data-checked>${new Date().toLocaleTimeString('vi-VN')}</span>)</span></p>
             <p class="small muted">Thường mất vài giây đến vài phút sau khi bạn chuyển. Bạn có thể rời trang — đơn hàng vẫn được lưu trong Giỏ hàng và Hồ sơ › Giao dịch.</p>
-            <button class="btn btn-secondary btn-block" data-action="cm-i-paid">Tôi đã chuyển khoản</button>
+            <button class="btn btn-secondary btn-block" data-action="cm-i-paid" ?disabled=${sim && sim.orderId === order.id && sim.manualCheckCooldown > 0}>Tôi đã chuyển khoản</button>
+            ${sim && sim.orderId === order.id && sim.manualCheckedAt ? ui.alert({ type: 'info', title: `Đã kiểm tra lúc ${new Date(sim.manualCheckedAt).toLocaleTimeString('vi-VN')}: Codi chưa nhận được tiền`, body: html`<ol class="stack-1 small">
+              <li>Một số ngân hàng xử lý chậm — Codi vẫn tự kiểm tra tới khi mã hết hạn.</li>
+              <li>Sau đó kế toán đối soát thủ công theo nội dung <span class="mono">${order.code}</span>, thường trong 2 giờ làm việc.</li>
+              <li>Khi xác nhận xong, khoá học mở ngay và bạn nhận được thông báo. Cần hỗ trợ: hotro@codi.vn.</li>
+            </ol>` }) : ''}
             ${slow || qrFailed ? html`<p class="xsmall muted">Cần hỗ trợ? Email hotro@codi.vn kèm mã giao dịch <span class="mono">${order.code}</span>.</p>` : ''}
             <button class="btn btn-ghost btn-block" data-action="cm-cancel" data-id="${order.id}">Hủy giao dịch</button>
           </div></div>
@@ -737,23 +742,13 @@
     ui.toast(`Đã tạo mã thanh toán mới ${code}.`, { type: 'success' });
     Codi.go('/checkout?order=' + o.id);
   });
-  // Manual check button with 30s cooldown (Flow L3, S06, decision 33)
+  // Manual check button with 30s cooldown, inline result (Flow L3, S06, decision 33)
   Codi.action('cm-i-paid', () => {
-    if (sim && sim.manualCheckCooldown > 0) return; // Ignore if still in cooldown
-    if (sim) sim.manualCheckCooldown = 30; // Start 30-second cooldown
-    ui.modal({
-      title: 'Bạn đã chuyển khoản?',
-      body: html`<div class="stack-3">
-        <p>Cảm ơn bạn. Một số ngân hàng xử lý chậm, nên Codi chưa nhận được tín hiệu tự động.</p>
-        <ol class="stack-2 small">
-          <li>Codi tiếp tục tự kiểm tra trong 30 phút tới.</li>
-          <li>Sau đó, bộ phận kế toán đối soát thủ công theo nội dung chuyển khoản — thường trong 2 giờ làm việc.</li>
-          <li>Khi xác nhận xong, khoá học mở ngay và bạn nhận được thông báo.</li>
-        </ol>
-        <p class="small muted">Đơn hàng vẫn được lưu. Cần hỗ trợ: hotro@codi.vn (kèm mã giao dịch).</p>
-      </div>`,
-      footer: html`<a class="btn btn-secondary" href="#/dashboard" data-close>Về bàn làm việc</a><button class="btn btn-primary" data-close>Tiếp tục chờ</button>`,
-    });
+    if (!sim || sim.manualCheckCooldown > 0) return; // cooldown: no spamming; auto polling keeps running
+    sim.manualCheckCooldown = 30;
+    sim.checkedAt = Date.now();
+    sim.manualCheckedAt = Date.now(); // result is rendered inline under the button (D5)
+    Codi.rerender();
   });
 
   // Reload QR button (when QR failed to load)

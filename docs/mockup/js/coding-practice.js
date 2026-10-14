@@ -240,7 +240,7 @@
     if (!db.codeAttempts) db.codeAttempts = [];
     let e = db.codeAttempts.find((x) => x.userId === uid() && x.lessonId === lessonId);
     if (!e && create) {
-      e = { userId: uid(), courseId, lessonId, draft: null, submits: 0, failSubmits: 0, runs: 0, passed: false, bestScore: 0, solutionViewed: false, failedTests: {}, lastRun: null, tutorialStep: 0, tutorialVisited: [0], stepDrafts: {}, stepRuns: {}, updatedAt: new Date().toISOString() };
+      e = { userId: uid(), courseId, lessonId, draft: null, submits: 0, failSubmits: 0, runs: 0, passed: false, lastScore: 0, solutionViewed: false, failedTests: {}, lastRun: null, tutorialStep: 0, tutorialVisited: [0], stepDrafts: {}, stepRuns: {}, updatedAt: new Date().toISOString() };
       db.codeAttempts.push(e);
     }
     return e;
@@ -265,7 +265,7 @@
     }
     const total = cd.tests.length;
     const outs = e && e.lastRun && e.lastRun.mode === 'submit' ? e.lastRun.outcomes : [];
-    return { kind: 'challenge', done: !!(e && e.passed), passedCount: outs.filter((o) => o.pass).length, total, submits: e ? e.submits : 0, solutionViewed: !!(e && e.solutionViewed), score: e ? e.bestScore : 0 };
+    return { kind: 'challenge', done: !!(e && e.passed), passedCount: outs.filter((o) => o.pass).length, total, submits: e ? e.submits : 0, solutionViewed: !!(e && e.solutionViewed), score: e ? e.lastScore : 0 };
   }
   // 0..100 for mastery; viewing the solution before passing caps the signal.
   function score(lesson) {
@@ -484,10 +484,12 @@
         e.submits += 1;
         const allPass = outcomes.length > 0 && outcomes.every((o) => o.pass);
         const pct = outcomes.length ? Math.round((outcomes.filter((o) => o.pass).length / outcomes.length) * 100) : 0;
-        e.bestScore = Math.max(e.bestScore || 0, pct);
+        // The latest submission counts (D7): score and pass status are overwritten, never max'ed.
+        const wasPassed = e.passed;
+        e.lastScore = pct; e.passed = allPass;
         outcomes.filter((o) => !o.pass).forEach((o) => { e.failedTests[o.id] = (e.failedTests[o.id] || 0) + 1; });
-        if (allPass && !e.passed) { e.passed = true; ui.toast('Bạn đã đạt tất cả test! Giờ có thể hoàn thành bài học.', { type: 'success' }); }
-        else if (!allPass) { e.failSubmits = (e.failSubmits || 0) + 1; }
+        if (allPass && !wasPassed) ui.toast('Bạn đã đạt tất cả test! Giờ có thể hoàn thành bài học.', { type: 'success' });
+        else if (!allPass) { e.failSubmits = (e.failSubmits || 0) + 1; if (wasPassed) ui.toast(`Lần nộp này đạt ${pct}%. Điểm tính theo lần nộp gần nhất.`, { type: 'warn' }); }
       }
     }
     delete running[key];

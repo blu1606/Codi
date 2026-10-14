@@ -239,6 +239,7 @@ These are the render branches of the single screen. They are derived from order 
 | awaiting | `pending`, `!qrFailed`, not underpaid | VietQR image + countdown "Hết hạn sau mm:ss" + consequence line + copy rows + 3-step tracker (step 2 active) + live status line | "Tôi đã chuyển khoản", "Hủy giao dịch" |
 | qr-failed | `pending` and `qrFailed` (set by poll when scenario `qrfail`) | alert "Không tải được mã QR" + "Tải lại mã QR" (clears flag) | copy rows as text fallback; support line |
 | manual-check cooldown | `sim.manualCheckCooldown > 0` (30 s) | button "Tôi đã chuyển khoản (Ns)" disabled | — |
+| manual-check result | `sim.manualCheckedAt` set | **inline** info alert under the button: "Đã kiểm tra lúc hh:mm:ss: Codi chưa nhận được tiền" + next steps (no modal, D5) | — |
 | underpaid | `pending` with `received > 0` | warn "Đã nhận X / cần Y" + "Hãy chuyển thêm …" | support line |
 | slow (no payment after 15 s, scenario `slow`) | `sim.slowShown` | support line appended | — |
 | expired | `failed`, `failReason==='expired'` | danger alert "Mã thanh toán đã hết hạn" + "Tạo mã mới" (primary) + "Về giỏ hàng" | support email with `CODI#####` |
@@ -263,9 +264,9 @@ Tracker steps: `Đã tạo đơn` → `Đang chờ thanh toán` → `Đã nhận
 
 - Action `cm-i-paid`:
   - Guard: ignored while `manualCheckCooldown > 0`.
-  - Effect: sets 30 s cooldown (button disabled, label countdown) and opens an info modal.
-  - Modal content (prototype): auto-check continues for 30 min; accountant manual reconciliation "thường trong 2 giờ làm việc"; on confirmation course opens and learner gets a notification; order is kept; support `hotro@codi.vn`.
-  - It does **not** change order status and does **not** trigger an immediate check in the prototype.
+  - Effect: sets 30 s cooldown (button disabled, label countdown), triggers one extra check (real app: query the bank/webhook log now) and shows the result **inline on the checkout page** under the button — ✅ decided 2026-10-14 (D5), no modal.
+  - Inline content: "Đã kiểm tra lúc hh:mm:ss: Codi chưa nhận được tiền"; auto-check continues until the code expires; accountant manual reconciliation by `CODI#####` "thường trong 2 giờ làm việc"; on confirmation the course opens and the learner is notified; support `hotro@codi.vn`.
+  - It never changes order status by itself; if the extra check finds the payment, the normal `pending → paid` transition runs.
 - ⚠ conflict: PRODUCT §5 L3 step 4 specifies: button → "Đang kiểm tra…" → either success, or inline "Chưa nhận được tiền — ngân hàng có thể mất 1–5 phút. Codi sẽ tự cập nhật." (tracker stays step 2; button re-enabled after a short cooldown). Code uses a modal and a 30 s cooldown. Implement PRODUCT's inline result with the code's cooldown length unless product decides otherwise.
 - Poll continues regardless (G11).
 
@@ -552,7 +553,7 @@ stateDiagram-v2
 | Transition | Trigger | Guard | Side effects |
 |---|---|---|---|
 | idle → running | learner `cp-run` mode `run` ("Chạy", Ctrl/⌘+Enter) | not already running | runs **non-hidden** tests only; `runs += 1`; `lastRun` saved; `passed` not changed |
-| idle → running | learner `cp-run` mode `submit` ("Nộp bài") | — | runs **all** tests; `submits += 1`; `bestScore = max(bestScore, pct)`; failing tests counted in `failedTests`; `failSubmits += 1` if not all pass |
+| idle → running | learner `cp-run` mode `submit` ("Nộp bài") | — | runs **all** tests; `submits += 1`; `lastScore = pct` and `passed = allPass` (**latest submission counts**, D7); failing tests counted in `failedTests`; `failSubmits += 1` if not all pass |
 | → passed | submit with all tests passing and `!passed` | — | `passed = true`; toast "Bạn đã đạt tất cả test! Giờ có thể hoàn thành bài học." → checklist `code` done |
 | passed → passed | any later run | `passed` is sticky | — |
 | any → solution_viewed | `cp-solution` (confirm: "Giảng viên sẽ thấy bạn đã xem lời giải trước khi đạt") | — | `solutionViewed = true`; mastery score capped at 70 |
@@ -562,10 +563,10 @@ stateDiagram-v2
 - Execution: sandboxed worker with timeout (main-thread fallback when workers are blocked). Python is **simulated** (passes only if code matches the reference solution).
 - Test rows: pass/fail icon; failed row expands to Input · Expected · Received with the difference marked by colour + text.
 - Tutorial lessons (`code.kind==='tutorial'`): per-step drafts/runs; step `isSolution` gated until `solutionViewed`; "done" when last step visited (`tutorialVisited` includes last index). Score for tutorial = 80 when done, else 0.
-- Mastery score = `bestScore` (challenge), capped at 70 if solution viewed.
+- Mastery score = `lastScore` (challenge), capped at 70 if solution viewed.
 
 **⚠ conflicts**
-- PRODUCT L6b: "resubmission rules … default: latest submission counts". Code: `bestScore` = **max** across submits; `passed` is sticky. Decide: best vs latest. The code is best-of.
+- ✅ Decided 2026-10-14 (D7): the **latest submission** counts — `lastScore` and `passed` are overwritten on every submit. A lesson already completed stays completed if a later submission fails.
 - PRODUCT says "Nộp bài records the submission"; code's `submit` is the only path to `passed`, `run` is free. Consistent.
 
 ---
@@ -651,8 +652,8 @@ Fields: `fromAI`, `aiContext{summary, code, failingTest}`, `messages[{from: lear
 ```mermaid
 stateDiagram-v2
     [*] --> open: tutor-lecturer-send (learner, >= 10 chars)
-    open --> resolved: tc-conversation-resolve (lecturer)
-    resolved --> open: tc-conversation-reopen (lecturer)
+    open --> resolved: tc-conversation-resolve (lecturer/admin, after >= 1 lecturer reply)
+    resolved --> open: tc-conversation-reopen (lecturer/admin)
     open --> open: messages exchanged (tc-conversation-reply)
     resolved --> resolved: no further messages in prototype
 ```
@@ -661,10 +662,10 @@ stateDiagram-v2
 |---|---|---|---|
 | → open | learner (from AI tutor) | text ≥ 10 chars | `conversations.push` with `aiContext` per attachment checkboxes; notify lecturer "Câu hỏi riêng từ học viên" |
 | open → open (message) | lecturer `tc-conversation-reply` | text ≥ 5 chars | message appended; notify learner "Có trả lời từ giảng viên" |
-| open → resolved | lecturer `tc-conversation-resolve` | — (shown as "Đánh dấu đã giải quyết") | status `resolved` |
-| resolved → open | lecturer `tc-conversation-reopen` | — | status `open` |
+| open → resolved | lecturer or admin `tc-conversation-resolve` ("Đánh dấu đã giải quyết") | at least one lecturer reply exists | status `resolved` |
+| resolved → open | lecturer or admin `tc-conversation-reopen` | — | status `open` |
 
-- PRODUCT (decision 56, Q34, L6d): either side can mark resolved; **lecturer must reply before marking resolved**; learner can reopen; learner can resolve only with a lecturer reply. ⚠ conflict: code lets the lecturer resolve with no reply check and gives the learner no resolve/reopen action. Implement PRODUCT's rule or record the decision.
+- ✅ Decided 2026-10-14 (D9): **only the lecturer of the course or an admin** can resolve and reopen; the learner cannot (learner only sends messages). Resolve requires at least one lecturer reply. The mockup has no admin conversation screen — the real app enforces the admin permission server-side.
 - Visibility: private (never public Hỏi đáp). Lecturer inbox tag "Từ AI trợ lý".
 - Learner-side waiting copy "Giảng viên thường trả lời trong 24 giờ" appears in the tutor panel; PRODUCT (Q34) says no expected reply time is promised. ⚠ conflict.
 
@@ -851,7 +852,7 @@ stateDiagram-v2
 | confirmed → ready | lecturer changes any item review | — | status `ready` (must re-confirm) |
 | ready/confirmed → stale | system `contentChanged` (any lesson/content edit) | status confirmed | toast "Nội dung đã đổi: bản đồ kiến thức cần phân tích lại." |
 | empty → ready | system `contentChanged` | lessons exist | — |
-| item: suggested → accepted | lecturer `tc-kmap-review` / `tc-kmap-accept-all` | accept-all: all `suggested` → `accepted` | — |
+| item: suggested → accepted | lecturer `tc-kmap-review` / `tc-kmap-accept-all` | accept-all: summary confirm dialog with counts; every `suggested` concept + every `suggested` edge **except edges that would close a loop** (target already reaches source via accepted/edited edges) — those stay `suggested` | toast with accepted / skipped counts |
 | item: → declined | lecturer | — | declined concepts/edges excluded from `activeEdges` and from confirm |
 
 **Cycle detection (`findCycle`):**
@@ -859,7 +860,7 @@ stateDiagram-v2
 - Guard: confirm disabled, banner names the loop with "Xem trên sơ đồ"; graph marks loop nodes and closing edge (colour + icon); list flags offending links.
 - AI-suggested cycle edges (scenario `cycle`) are added as `suggested`. They must **not** be auto-accepted.
 
-- ⚠ conflict: PRODUCT T2: "Chấp nhận tất cả" must open a summary confirmation ("Thêm 12 khái niệm và 9 liên kết tiên quyết · Bỏ qua 2 liên kết (tạo vòng lặp)") then Xác nhận. Code: `tc-kmap-accept-all` accepts **all** suggested items immediately (including the cycle-closing edge) with a toast; no summary dialog. Since confirm is blocked by cycles, the outcome is still safe, but the "never auto-accepted" rule is violated by accept-all. Implement the summary and exclude cycle-creating edges from accept-all.
+- ✅ Decided 2026-10-14 (D10): "Chấp nhận tất cả" shows a summary dialog (concepts, edges, edges skipped because they would create a loop) and never accepts a loop-closing edge; skipped edges stay `suggested` for one-by-one review.
 - ⚠ conflict: PRODUCT Flow T2 "Xác nhận bản đồ" required for publication (A4) — implemented as readiness item.
 - Graph vs list: graph default (decision 43); list is the accessible equivalent.
 
@@ -1046,12 +1047,12 @@ These are artifacts of the prototype. Their real-world equivalents are noted so 
 | D2 | Late payment after expiry | Support email; no auto-honour | Q4 open | §5 |
 | D3 | Underpaid/overpaid/wrong content (Q5) | Partial case only | open | §5 |
 | D4 | Mua ngay destination (decision 42) | **✅ Decided: single-course order → checkout, cart unchanged** | — | — |
-| D5 | "Tôi đã chuyển khoản" feedback | Modal + 30 s cooldown | inline "Chưa nhận được tiền" | §5.5 |
+| D5 | "Tôi đã chuyển khoản" feedback | **✅ Decided: inline on the page + 30 s cooldown** | — | — |
 | D6 | Quiz pass required for completion? (Q9) | **✅ Decided: must pass (latest attempt), unlimited retakes** | — | — |
-| D7 | Best vs latest coding submission | Best-of (max) | latest counts (L6b default) | §12 |
+| D7 | Best vs latest coding submission | **✅ Decided: latest submission counts** | — | — |
 | D8 | Resubmit after grade (Q10) | Blocked | open | §11 |
-| D9 | Conversation resolve rules (decision 56, Q34) | Lecturer may resolve without reply; no learner actions | reply required; learner can resolve/reopen | §14 |
-| D10 | Accept-all in KMap | Accepts cycle-closing edges; no summary | summary dialog, cycles excluded | §18 |
+| D9 | Conversation resolve rules (decision 56, Q34) | **✅ Decided: lecturer or admin resolve/reopen (after a reply); learner cannot** | — | — |
+| D10 | Accept-all in KMap | **✅ Decided: summary dialog, loop-closing edges skipped** | — | — |
 | D11 | "Để sau" after an AI path | Resets to default order | keep personalised path (implied) | §7, §8 |
 | D12 | Deactivation enforcement | **✅ Decided: cannot sign in + all sessions revoked** | — | — |
 | D13 | Price change confirmation | Modal, no reason | confirm + reason (§7.12) | §16 |

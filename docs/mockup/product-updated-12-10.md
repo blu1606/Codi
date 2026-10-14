@@ -120,3 +120,7 @@ Resolved from `STATE-MACHINES.md` §24; mockup JS updated to match.
 | D4 | "Mua ngay" = single-course order straight to checkout; cart and cart voucher untouched (decision 42) | `learner-commerce.js` `createBuyNowOrder`, `cm-buy-now` |
 | D6 | Lesson completion requires **passing** the quiz (latest attempt, unlimited retakes) | `learner-learning.js` checklist "Đạt quiz (≥ x%)" |
 | D12 | Deactivated account cannot sign in; all sessions revoked immediately | `core.js` `currentUser()` ignores non-active users |
+| D5 | "Tôi đã chuyển khoản" shows its result inline on the checkout page (no modal), 30 s cooldown, auto-check continues | `learner-commerce.js` `cm-i-paid` |
+| D7 | Coding exercise: the latest submission counts (score + pass), not the best | `coding-practice.js` (`lastScore`) |
+| D9 | Private conversation: only the lecturer or an admin can resolve/reopen; resolve needs a lecturer reply; learner cannot | `lecturer.js` `tc-conversation-resolve` |
+| D10 | Knowledge map "Chấp nhận tất cả": summary dialog with counts; edges that would create a loop are skipped and stay "suggested" | `lecturer.js` `tc-kmap-accept-all` |

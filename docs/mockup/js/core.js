@@ -82,8 +82,8 @@
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'codi-proto-v8';
-  const STATE_VERSION = 8; // v4: coding practice lessons + db.codeAttempts · v5: React coding challenge · v6: dark mode + charts + seed data · v7: seeded 180-day analytics + learner study days · v8: course reviews, assignment rubrics, review demo content
+  const STORAGE_KEY = 'codi-proto-v9';
+  const STATE_VERSION = 9; // v9: product decisions 14/10 (buy-now order, quiz pass, latest code score, deactivation) · v4: coding practice lessons + db.codeAttempts · v5: React coding challenge · v6: dark mode + charts + seed data · v7: seeded 180-day analytics + learner study days · v8: course reviews, assignment rubrics, review demo content
 
   // ───────────────────────── templating ─────────────────────────
   class SafeHTML {

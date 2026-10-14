@@ -24,7 +24,7 @@ Bottom-right **"Kịch bản thử nghiệm"** (Alt+K) switches role (Khách / H
 scenario states (payment expired/underpaid/slow/QR fail, AI path fail, materials error, AI rate limit, knowledge-map
 cycle…). "Đặt lại dữ liệu" resets the seed. Use it to screenshot the reference state you are implementing.
 
-The drawer, `localStorage` persistence (`codi-proto-v8`), seed data and fake latency are **prototype-only** — do not port them.
+The drawer, `localStorage` persistence (`codi-proto-v9`), seed data and fake latency are **prototype-only** — do not port them.
 
 ## Files
 
