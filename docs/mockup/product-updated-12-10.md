@@ -109,3 +109,14 @@ Header · §4.1 journey · §5 Flows L1, L2, L3, L4, **L6b (new)**, L10, T2, T4,
 ## 6. Research method (round 2)
 
 Six bounded Mobbin streams run in parallel by sub-agents, each inspecting returned screen images and returning compact evidence packets: guest conversion; payment confirm & recovery; skip diagnostic & motivation; coding exercise; knowledge graph & grading; admin preview & impact. ~33 Mobbin calls total, web platform (iOS bank-transfer results were discarded as off-target). All links are canonical `mobbin_url`s; no images embedded (Mobbin image URLs expire).
+
+## 7. Decisions 14/10/2026 (product owner)
+
+Resolved from `STATE-MACHINES.md` §24; mockup JS updated to match.
+
+| ID | Decision | Mockup change |
+|---|---|---|
+| D1 | Unpaid order expires after 30 minutes → `failed` (`failReason='expired'`), "Tạo mã mới" creates a new order | none (already so) |
+| D4 | "Mua ngay" = single-course order straight to checkout; cart and cart voucher untouched (decision 42) | `learner-commerce.js` `createBuyNowOrder`, `cm-buy-now` |
+| D6 | Lesson completion requires **passing** the quiz (latest attempt, unlimited retakes) | `learner-learning.js` checklist "Đạt quiz (≥ x%)" |
+| D12 | Deactivated account cannot sign in; all sessions revoked immediately | `core.js` `currentUser()` ignores non-active users |

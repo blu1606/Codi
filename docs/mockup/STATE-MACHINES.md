@@ -108,7 +108,7 @@ stateDiagram-v2
 | lecturer/admin role | "Xem chi tiết" | "Bạn đang xem với vai trò …" | — |
 
 - Detail route: if course `status !== 'published'` and not enrolled → "Khoá học tạm ngừng bán" (no purchase). If `hidden` and enrolled → info notice, learning continues.
-- ⚠ conflict: PRODUCT decision 42 says "Mua ngay" creates a single-course order and goes straight to checkout, leaving the cart unchanged. The code's `cm-buy-now` calls `addToCart(id)` and then navigates to `/cart` (the course is put in the cart). Decide before implementing; this file follows the code only for the cart side effect and the PRODUCT for destination is not met.
+- ✅ Decided 2026-10-14 (D4): "Mua ngay" (`cm-buy-now`) creates a **single-course pending order** (`createBuyNowOrder`, no voucher) and goes straight to `/checkout?order=…`. Cart and cart voucher are untouched. Guards = same as add-to-cart (learner, not owned); if the course is already `pending-payment`, it opens that order's checkout instead of creating a new one.
 
 ---
 
@@ -121,7 +121,7 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> empty
-    empty --> has_items: cm-add / cm-buy-now (addToCart)
+    empty --> has_items: cm-add (addToCart)
     has_items --> has_items: cm-add (another course)
     has_items --> empty: cm-remove (last item)
     has_items --> has_items: cm-remove (undo window, cm-undo restores)
@@ -134,7 +134,7 @@ stateDiagram-v2
 
 | From → To | Trigger (actor) | Guard / precondition | Side effects |
 |---|---|---|---|
-| empty → has_items | learner: `cm-add`, `cm-buy-now` | signed-in (`requireAuth`), role `learner`, not owned, not pending-payment | `setCart(cart + id)`; toast "Đã thêm … vào giỏ hàng" with "Xem giỏ hàng" |
+| empty → has_items | learner: `cm-add` (`cm-buy-now` does NOT touch the cart, see §5) | signed-in (`requireAuth`), role `learner`, not owned, not pending-payment | `setCart(cart + id)`; toast "Đã thêm … vào giỏ hàng" with "Xem giỏ hàng" |
 | has_items → empty/has_items | learner: `cm-remove` | — | removes item immediately, `lastRemoved` = id (undo) |
 | has_items → has_items | learner: `cm-undo` | `lastRemoved` not already in cart | re-adds item |
 | any → has_items (auto) | `/cart` route on render | item `isEnrolled` | silently removed with `ownedNotice` explanation |
@@ -201,7 +201,7 @@ Additional fields used by the prototype (not enum): `failReason: 'expired'|null`
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pending: createOrderFromCart / cm-new-code
+    [*] --> pending: createOrderFromCart / createBuyNowOrder / cm-new-code
     pending --> paid: webhook confirms full amount (markPaid)
     pending --> failed: 30 min elapsed without full payment (failReason expired)
     pending --> cancelled: learner cm-cancel OR cm-replace-order
@@ -216,6 +216,7 @@ stateDiagram-v2
 | From → To | Trigger (actor) | Guard / precondition | Side effects |
 |---|---|---|---|
 | [*] → pending | learner: `cm-checkout`; `/checkout` without order param | cart non-empty; `items` = cart courses not already enrolled; no pending duplicate unless user chose replace | order `code = CODI` + 5 digits, unique; `timeline: "Đã tạo đơn"`; cart emptied; voucher cleared |
+| [*] → pending | learner: `cm-buy-now` ("Mua ngay") | role learner; course not owned; no pending order already containing it (else open that order) | single-item order, `voucherCode: null`, `discount: 0`, `total = price`; **cart unchanged** |
 | pending → paid | bank webhook (prototype: `startSim` after 6 s when scenario = `success`) | `received ≥ total` (prototype: outcome flag) | `paidAt`; `timeline "Đã nhận tiền"`; **enrol each item** (`Codi.enroll`); voucher `used += 1`; notify buyer (§11) |
 | pending → failed | timer (`startSim`) when `now > createdAt + 30 min` | status still pending | `failReason='expired'`; timeline "Mã thanh toán hết hạn"; QR and transfer content invalid |
 | pending → cancelled | learner `cm-cancel` (confirm) | status pending | `cancelOrder`; course ids re-added to cart; stop poll; navigate `/cart` |
@@ -225,7 +226,7 @@ stateDiagram-v2
 
 **Underpaid is not a status.** `received` is set (prototype: 50% of total) while `status` stays `pending`. Checkout shows alert "Đã nhận X / cần Y" with "Hãy chuyển thêm … với cùng nội dung". Expiry still applies (→ failed after 30 min). Full payment later → paid.
 
-- ⚠ conflict: PRODUCT §2.5 says "No expiry, cancel, or failed state exists yet"; PRODUCT §5 L3 specifies expiry (30 min in prototype, Q4 open) and failed. Code implements expiry → `failed` (via `status='failed'`, not a separate `expired` status). PRODUCT §5 L3 also lists `Expired` as a checkout state — map it to `failed` + `failReason='expired'`.
+- ✅ Decided 2026-10-14 (D1): keep 30-minute expiry → `failed` + `failReason='expired'`. Former note: PRODUCT §2.5 says "No expiry, cancel, or failed state exists yet"; PRODUCT §5 L3 specifies expiry (30 min in prototype, Q4 open) and failed. Code implements expiry → `failed` (via `status='failed'`, not a separate `expired` status). PRODUCT §5 L3 also lists `Expired` as a checkout state — map it to `failed` + `failReason='expired'`.
 - ⚠ conflict: PRODUCT Q5 (underpayment/overpayment/wrong content) is open; code has only the underpaid partial case and no overpaid handling.
 
 ### 5.3 Checkout UI states (`/checkout?order=…`)
@@ -412,7 +413,7 @@ stateDiagram-v2
 1. `study` ("Học nội dung") — for non-code lessons. Done when `studied` contains the lesson (set by: video played to 100%; PDF all pages viewed; reading "Đã đánh dấu học xong nội dung" button).
    - For `tutorial` code lessons: `study` = "Đi hết các bước hướng dẫn" (done when last step visited).
    - For `challenge` code lessons: `code` = "Hoàn thành bài code" (done when `passed`), replaces `study`.
-2. `quiz` ("Làm quiz") — only if `lesson.quiz`. Done when `quiz.submitted` (**pass is not required**; ⚠ see below).
+2. `quiz` ("Đạt quiz (≥ {passingScore}%)") — only if `lesson.quiz`. Done when the **latest attempt is submitted AND passed** (`submitted && score ≥ passingScore`). Retakes unlimited; a retake clears `submitted` until resubmitted.
 3. `assignment` ("Nộp bài tập") — only if `lesson.assignment`. Done when **any** submission exists for the lesson (pending or graded).
 
 **Lesson completion (`ln-complete`) precondition:** every checklist item done. UI: button "Hoàn thành bài học" disabled with "Còn thiếu: …" until satisfied.
@@ -439,7 +440,7 @@ stateDiagram-v2
 
 **Study triggers (`markStudied`):** `ln-mark-studied` (reading) or video simulated to 100% or PDF last page. Shows toast "Đã đánh dấu học xong nội dung."
 
-- ⚠ conflict: PRODUCT §5 L6 says completion needs "Làm quiz" — code requires submission, not passing. PRODUCT L7 "Làm lại" implies retakes; code allows unlimited. PRODUCT Q9 (retake rules, which attempt counts) is open. Treat "submitted" as the precondition until product decides; flag if passing is required.
+- ✅ Decided 2026-10-14 (D6): passing the quiz is required to complete the lesson; latest attempt counts; retakes unlimited.
 - Assignment *submission* (not grade) satisfies completion (decision 14, A7) — consistent with code.
 - Course completion ≠ lesson completion: `isCourseComplete` requires all required lessons.
 
@@ -471,7 +472,7 @@ stateDiagram-v2
 | submitted → answering | `ln-quiz-retake` ("Làm lại") | — | `submitted=false`, answers cleared; **old `score` shown until resubmission** |
 
 - Passing score default `70` (seed). Result shows score ring, "Đạt"/"Chưa đạt", per-question review (your answer vs correct + explanation). Detailed answers are only available for the current attempt (text says "Kết quả từ lần làm trước (không lưu chi tiết từng câu)" otherwise).
-- Quiz `passed` does not gate completion (§9 ⚠).
+- Quiz `passed` (latest attempt) gates lesson completion (§9, D6).
 - AI-generated quiz questions (`aiGenerated`, `aiReviewed`): see §19.
 
 ---
@@ -948,7 +949,7 @@ stateDiagram-v2
 
 | Transition | Actor | Guard | Side effects |
 |---|---|---|---|
-| active → inactive | admin `ad-deactivate` | not self (self row shows "Tài khoản của bạn"); reason required; checkbox "Tôi hiểu tác động" required | `status='inactive'`, `deactivation={reason, at, by}`; **prototype does not sign the user out and does not block sign-in** (see ⚠) |
+| active → inactive | admin `ad-deactivate` | not self (self row shows "Tài khoản của bạn"); reason required; checkbox "Tôi hiểu tác động" required | `status='inactive'`, `deactivation={reason, at, by}`; user is **signed out everywhere immediately** (`currentUser()` returns null for non-active users) and **cannot sign in** (password + Google flows show "Tài khoản đã bị vô hiệu hoá") |
 | inactive → active | admin `ad-reactivate` | — | `status='active'`, `deactivation=null` |
 | role change | admin `ad-role` (select) | confirm "Đổi vai trò … Thay đổi có hiệu lực ở lần tải trang tiếp theo" | `role` updated; UI select reverted on cancel |
 
@@ -958,7 +959,7 @@ stateDiagram-v2
 - "Đang giảng dạy N khoá học" = published courses with this lecturer.
 - Consequence text (PRODUCT): logout from all devices, cannot sign in, data and orders kept, reactivation possible.
 
-- ⚠ conflict: deactivation is described to the admin as "đăng xuất khỏi mọi thiết bị", but `core.js` sign-in / `currentUser()` have **no check on `users[].status`** (grep: no `inactive` in core/learner/lecturer). Implement the block in the real app (sign-in + session revocation). This is a prototype gap, not product intent.
+- ✅ Decided 2026-10-14 (D12): inactive accounts cannot sign in and all sessions are revoked on deactivation. Real app: check `status` in Better Auth sign-in (password + OAuth) and delete the user's sessions in the same server action.
 - ⚠ Q15 (is reason mandatory and shown to the user?): code requires reason, shown to admin only.
 - Role change is not validated against content ownership (a lecturer demoted keeps `lecturerId` on courses). Real app must define behavior (open question, not in PRODUCT).
 - Admin "Tài khoản bị vô hiệu hoá" dashboard tile counts inactive users (link to filtered list).
@@ -1041,18 +1042,18 @@ These are artifacts of the prototype. Their real-world equivalents are noted so 
 
 | ID | Topic | Current code behavior | PRODUCT position | Blocks |
 |---|---|---|---|---|
-| D1 | Order expiry duration (Q4) | 30 min from `createdAt`, then `failed` | Q4 open | §5 |
+| D1 | Order expiry duration (Q4) | **✅ Decided: 30 min from `createdAt`, then `failed`** | — | — |
 | D2 | Late payment after expiry | Support email; no auto-honour | Q4 open | §5 |
 | D3 | Underpaid/overpaid/wrong content (Q5) | Partial case only | open | §5 |
-| D4 | Mua ngay destination (decision 42) | Adds to cart, goes to `/cart` | checkout, cart unchanged | §2, §3 |
+| D4 | Mua ngay destination (decision 42) | **✅ Decided: single-course order → checkout, cart unchanged** | — | — |
 | D5 | "Tôi đã chuyển khoản" feedback | Modal + 30 s cooldown | inline "Chưa nhận được tiền" | §5.5 |
-| D6 | Quiz pass required for completion? (Q9) | Submit only | pass not stated; retakes open | §9, §10 |
+| D6 | Quiz pass required for completion? (Q9) | **✅ Decided: must pass (latest attempt), unlimited retakes** | — | — |
 | D7 | Best vs latest coding submission | Best-of (max) | latest counts (L6b default) | §12 |
 | D8 | Resubmit after grade (Q10) | Blocked | open | §11 |
 | D9 | Conversation resolve rules (decision 56, Q34) | Lecturer may resolve without reply; no learner actions | reply required; learner can resolve/reopen | §14 |
 | D10 | Accept-all in KMap | Accepts cycle-closing edges; no summary | summary dialog, cycles excluded | §18 |
 | D11 | "Để sau" after an AI path | Resets to default order | keep personalised path (implied) | §7, §8 |
-| D12 | Deactivation enforcement | Flag only, no sign-in block | logout everywhere | §21 |
+| D12 | Deactivation enforcement | **✅ Decided: cannot sign in + all sessions revoked** | — | — |
 | D13 | Price change confirmation | Modal, no reason | confirm + reason (§7.12) | §16 |
 | D14 | Voucher scope/stacking (Q16) | single voucher, no scope | open | §4 |
 | D15 | Notification channels (Q17) | in-app only, list in §22 | open | §22 |

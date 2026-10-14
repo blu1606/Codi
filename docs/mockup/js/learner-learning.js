@@ -119,7 +119,7 @@
     } else {
       items = [{ key: 'study', label: 'Học nội dung', done: r.studied.includes(lesson.id) }];
     }
-    if (lesson.quiz) { const q = r.quiz[lesson.id]; items.push({ key: 'quiz', label: 'Làm quiz', done: !!(q && q.submitted), note: q && q.submitted ? `${q.score}%` : '' }); }
+    if (lesson.quiz) { const q = r.quiz[lesson.id]; items.push({ key: 'quiz', label: `Đạt quiz (≥ ${lesson.quiz.passingScore}%)`, done: !!(q && q.submitted && q.passed), note: q && q.submitted ? (q.passed ? `${q.score}%` : `${q.score}% · chưa đạt, làm lại`) : '' }); }
     if (lesson.assignment) { const s = mySubmission(lesson.id); items.push({ key: 'assignment', label: 'Nộp bài tập', done: !!s, note: s ? (s.status === 'graded' ? `Đã chấm ${String(s.score).replace('.', ',')}/${s.maxScore}` : 'Chờ chấm') : '' }); }
     return items;
   }

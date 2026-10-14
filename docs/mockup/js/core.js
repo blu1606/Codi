@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Codi prototype runtime (window.Codi) — shared by every feature module.
  * Classic script, works from file://. Feature modules (learner-commerce.js,
  * learner-learning.js, lecturer.js, admin.js) load after this file and register
@@ -705,7 +705,11 @@
 
   // ───────────────────────── selectors ─────────────────────────
   const db = () => Codi.state.db;
-  const currentUser = () => (Codi.state.currentUserId ? db().users.find((u) => u.id === Codi.state.currentUserId) || null : null);
+  // An inactive (deactivated) account has no valid session: it is treated as signed out everywhere.
+  const currentUser = () => {
+    const u = Codi.state.currentUserId ? db().users.find((x) => x.id === Codi.state.currentUserId) || null : null;
+    return u && u.status === 'active' ? u : null;
+  };
   const ROLE_LABEL = { learner: 'Học viên', lecturer: 'Giảng viên', admin: 'Quản trị viên' };
 
   // ───────────────────────── auth UI ─────────────────────────

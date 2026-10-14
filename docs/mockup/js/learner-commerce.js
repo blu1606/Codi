@@ -70,24 +70,35 @@
     return code;
   }
 
+  function buildOrder(items, voucherCode, discount, total) {
+    const code = makeOrderCode();
+    const now = new Date().toISOString();
+    return {
+      id: 'order-' + Date.now().toString(36), code, userId: uid(), items,
+      voucherCode, discount, total, method: 'Chuyển khoản ngân hàng', status: 'pending',
+      createdAt: now, paidAt: null, content: code, timeline: [{ at: now, label: 'Đã tạo đơn' }],
+    };
+  }
+
   // Creates a pending order from the cart (owned items already filtered out by the cart page).
   function createOrderFromCart() {
     const s = cartSummary();
     const items = s.courses.filter((c) => !Codi.isEnrolled(c.id)).map((c) => ({ courseId: c.id, price: c.price }));
     if (!items.length) return null;
-    const code = makeOrderCode();
-    const now = new Date().toISOString();
-    const order = {
-      id: 'order-' + Date.now().toString(36), code, userId: uid(), items,
-      voucherCode: s.voucher ? s.voucher.code : null, discount: s.voucher ? s.discount : 0,
-      total: s.voucher ? s.total : s.subtotal, method: 'Chuyển khoản ngân hàng', status: 'pending',
-      createdAt: now, paidAt: null, content: code, timeline: [{ at: now, label: 'Đã tạo đơn' }],
-    };
+    const order = buildOrder(items, s.voucher ? s.voucher.code : null, s.voucher ? s.discount : 0, s.voucher ? s.total : s.subtotal);
     Codi.set((st) => {
       st.db.orders.push(order);
       st.carts[uid()] = [];
       cm().voucher[uid()] = null;
     }, { render: false });
+    return order;
+  }
+
+  // "Mua ngay": single-course order straight to checkout. Cart and cart voucher stay untouched.
+  function createBuyNowOrder(courseId) {
+    const c = Codi.course(courseId);
+    const order = buildOrder([{ courseId: c.id, price: c.price }], null, 0, c.price);
+    Codi.set((st) => { st.db.orders.push(order); }, { render: false });
     return order;
   }
 
@@ -631,8 +642,12 @@
     const id = el.dataset.id;
     const course = Codi.course(id);
     Codi.requireAuth(() => {
-      addToCart(id);
-      if (Codi.cart().includes(id)) Codi.go('/cart');
+      if (Codi.role() !== 'learner') { ui.toast('Chỉ tài khoản học viên mới mua được khoá học.', { type: 'warn' }); return; }
+      const own = Codi.ownership(id);
+      if (own === 'owned') { ui.toast('Bạn đã sở hữu khóa học này.', { type: 'info' }); Codi.rerender(); return; }
+      if (own === 'pending-payment') { Codi.go('/checkout?order=' + Codi.pendingOrderFor(id).id); return; }
+      const o = createBuyNowOrder(id);
+      Codi.go('/checkout?order=' + o.id);
     }, { reason: 'Đăng nhập để mua khoá học.', courseTitle: course.title });
   });
   Codi.action('cm-enroll-free', (el) => {
