@@ -1,8 +1,29 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
+import { studentCart } from "@codi-1/db/schema/student-profile";
 import { addCourseToCart } from "@/lib/add-course-to-cart";
 import { auth, db } from "@/services";
+
+export async function GET() {
+  try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session?.user) {
+      return NextResponse.json({ count: 0, items: [] });
+    }
+    const cartRows = await db
+      .select({ courseId: studentCart.courseId })
+      .from(studentCart)
+      .where(eq(studentCart.userId, session.user.id));
+    return NextResponse.json({
+      count: cartRows.length,
+      items: cartRows.map((r) => r.courseId),
+    });
+  } catch {
+    return NextResponse.json({ count: 0, items: [] });
+  }
+}
 
 export async function POST(request: Request) {
   try {

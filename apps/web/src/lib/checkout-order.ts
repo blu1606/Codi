@@ -5,11 +5,11 @@ export interface CheckoutOrder {
   course: { id: string; title: string; category: string };
 }
 
-export async function createCheckoutOrder(courseSlug: string): Promise<CheckoutOrder> {
+export async function createCheckoutOrder(courseSlug: string, orderCode?: string): Promise<CheckoutOrder> {
   const response = await fetch("/api/payments/create-transaction", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ courseSlug }),
+    body: JSON.stringify({ courseSlug, orderCode }),
     signal: AbortSignal.timeout(15000),
   });
   const data = await response.json();

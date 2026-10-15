@@ -17,6 +17,7 @@ import UserMenu from "./user-menu";
 import NotificationMenu from "./notification-menu";
 import { cn } from "@codi-1/ui/lib/utils";
 import BrandLogo from "./brand-logo";
+import CartNavButton from "./cart-nav-button";
 
 export default function Header() {
   const pathname = usePathname();
@@ -138,6 +139,7 @@ export default function Header() {
 
         {/* Right Section: Theme, notifications, and account avatar */}
         <div data-codi-intro-account className="flex shrink-0 items-center gap-2.5">
+          <CartNavButton />
           <ModeToggle />
           <NotificationMenu />
           <UserMenu />

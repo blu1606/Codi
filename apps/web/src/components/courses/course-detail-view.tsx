@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertCircle,
   BarChart3,
   BookOpen,
   Check,
   ChevronDown,
+  ClipboardCheck,
   Clock,
-  Clock3,
-  FileText,
+  EyeOff,
   MessageCircle,
   Presentation,
   RotateCw,
@@ -18,10 +19,12 @@ import {
   Sparkles,
   Star,
   Terminal,
+  Upload,
   User,
   Users,
   Video,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@codi-1/ui/components/button";
 import { Card } from "@codi-1/ui/components/card";
 import { authClient } from "@/lib/auth-client";
@@ -29,9 +32,12 @@ import {
   CourseDetailError,
   fetchCourseDetail,
   formatLessonDuration,
+  getLessonTypeMeta,
   type CourseDetail,
+  type LessonContentType,
 } from "@/lib/course-details";
 import type { CourseOwnershipDetail } from "@/lib/course-ownership";
+import AuthModal from "@/components/auth/auth-modal";
 import styles from "./course-detail.module.css";
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -50,33 +56,23 @@ function getInitials(name?: string | null): string {
   return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function getLessonIcon(title: string) {
-  const lower = title.toLowerCase();
-  if (
-    lower.includes("video") ||
-    lower.includes("giới thiệu") ||
-    lower.includes("cài đặt") ||
-    lower.includes("state") ||
-    lower.includes("props") ||
-    lower.includes("useeffect") ||
-    lower.includes("router cơ bản") ||
-    lower.includes("component") ||
-    lower.includes("gọi api")
-  ) {
-    return Video;
+function getLessonIcon(type: LessonContentType) {
+  switch (type) {
+    case "quiz":
+      return ClipboardCheck;
+    case "assignment":
+      return Upload;
+    case "code":
+    case "tutorial":
+      return Terminal;
+    case "pdf":
+      return Presentation;
+    case "reading":
+      return BookOpen;
+    case "video":
+    default:
+      return Video;
   }
-  if (
-    lower.includes("thử thách") ||
-    lower.includes("luyện tập") ||
-    lower.includes("code") ||
-    lower.includes("reducer")
-  ) {
-    return Terminal;
-  }
-  if (lower.includes("pdf") || lower.includes("slide") || lower.includes("sự kiện") || lower.includes("context api")) {
-    return Presentation;
-  }
-  return BookOpen;
 }
 
 export default function CourseDetailView({ slug }: { slug: string }) {
@@ -95,6 +91,11 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const [adding, setAdding] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
+
+  // Gated Auth Modal state (Flow L2, S03)
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<"add-to-cart" | "buy-now" | "enroll-free" | null>(null);
+  const [intentReason, setIntentReason] = useState("");
 
   const userRole = (session?.user as { role?: string } | undefined)?.role ?? null;
   const isPrivilegedRole = userRole === "lecturer" || userRole === "admin";
@@ -148,12 +149,19 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     return () => controller.abort();
   }, [detail, session]);
 
-  const handleAddToCart = async () => {
-    if (!detail || adding || sessionLoading) return;
-    if (!session?.user) {
-      router.push("/login");
+  const handleAddToCart = async (isGatedReturn = false) => {
+    if (!detail || adding) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("add-to-cart");
+      setIntentReason("Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.");
+      setAuthModalOpen(true);
       return;
     }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới thêm được khoá học vào giỏ.");
+      return;
+    }
+
     setAdding(true);
     setCartMessage("");
     try {
@@ -163,22 +171,49 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         body: JSON.stringify({ courseId: detail.course.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("add-to-cart");
+          setIntentReason("Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.");
+          setAuthModalOpen(true);
+          return;
+        }
+        throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
+      }
       setOwnership({ ownership: "in-cart" });
-      setCartMessage(result.added ? `Đã thêm “${detail.course.title}” vào giỏ hàng.` : "Khóa học đã có trong giỏ hàng.");
+      const successText = result.added ? `Đã thêm “${detail.course.title}” vào giỏ hàng.` : "Khóa học đã có trong giỏ hàng.";
+      setCartMessage(successText);
+      toast.success(successText, {
+        action: {
+          label: "Xem giỏ hàng",
+          onClick: () => router.push("/cart" as any),
+        },
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("codi:cart-updated"));
+      }
     } catch (err: unknown) {
-      setCartMessage(err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.");
+      const msg = err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.";
+      setCartMessage(msg);
+      toast.error(msg);
     } finally {
       setAdding(false);
     }
   };
 
-  const handleEnrollFree = async () => {
-    if (!detail || enrolling || sessionLoading) return;
-    if (!session?.user) {
-      router.push("/login");
+  const handleEnrollFree = async (isGatedReturn = false) => {
+    if (!detail || enrolling) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("enroll-free");
+      setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
+      setAuthModalOpen(true);
       return;
     }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới đăng ký được khoá học.");
+      return;
+    }
+
     setEnrolling(true);
     setCartMessage("");
     try {
@@ -188,25 +223,82 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         body: JSON.stringify({ courseId: detail.course.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Không thể đăng ký khóa học miễn phí.");
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("enroll-free");
+          setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
+          setAuthModalOpen(true);
+          return;
+        }
+        throw new Error(result.error || "Không thể đăng ký khóa học miễn phí.");
+      }
       setOwnership({ ownership: "owned" });
-      setCartMessage(`Đăng ký thành công “${detail.course.title}”! Bạn có thể bắt đầu học ngay.`);
+      const successText = `Đã đăng ký “${detail.course.title}”.`;
+      setCartMessage(successText);
+      toast.success(successText);
+      router.push(`/learn/${detail.course.id}` as any);
     } catch (err: unknown) {
-      setCartMessage(err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.");
+      const msg = err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.";
+      setCartMessage(msg);
+      toast.error(msg);
     } finally {
       setEnrolling(false);
     }
   };
 
-  const handleBuyNow = async () => {
-    if (!detail || sessionLoading) return;
-    if (!session?.user) {
-      router.push("/login" as any);
+  const handleBuyNow = async (isGatedReturn = false) => {
+    if (!detail || adding) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("buy-now");
+      setIntentReason("Đăng nhập để mua khoá học.");
+      setAuthModalOpen(true);
       return;
     }
-    // Add to cart and redirect straight to cart/checkout
-    await handleAddToCart();
-    router.push("/cart" as any);
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới mua được khoá học.");
+      return;
+    }
+
+    setAdding(true);
+    setCartMessage("");
+    try {
+      const response = await fetch("/api/orders/buy-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: detail.course.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("buy-now");
+          setIntentReason("Đăng nhập để mua khoá học.");
+          setAuthModalOpen(true);
+          return;
+        }
+        throw new Error(result.error || "Không thể xử lý mua ngay.");
+      }
+      // D4: Straight to /checkout?order=... with this single order!
+      router.push(`/checkout?order=${result.orderCode}` as any);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Không thể xử lý mua ngay.";
+      setCartMessage(msg);
+      toast.error(msg);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleAuthSuccess = async () => {
+    setAuthModalOpen(false);
+    const intent = pendingIntent;
+    setPendingIntent(null);
+    if (intent === "add-to-cart") {
+      await handleAddToCart(true);
+    } else if (intent === "buy-now") {
+      await handleBuyNow(true);
+    } else if (intent === "enroll-free") {
+      await handleEnrollFree(true);
+    }
   };
 
   const toggleChapter = (id: string) => {
@@ -273,12 +365,36 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
   const { course, chapters, summary, instructor, learningOutcomes, requirements } = detail;
   const ownState = ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
-  const allExpanded = chapters.length > 0 && chapters.every((ch) => openChapters.has(ch.id));
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
   const ratingBreakdown = detail.ratingBreakdown ?? [92, 24, 8, 3, 1];
   const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0) || 1;
   const reviews = detail.reviews ?? [];
+
+  // Hidden/unavailable course check (Flow L1, S02)
+  if (course.status !== "published" && ownState !== "owned") {
+    return (
+      <main className={styles.page}>
+        <div className={styles.container}>
+          <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
+            <EyeOff className="size-10 text-muted-foreground mx-auto" />
+            <h1 className="text-2xl font-bold">Khoá học tạm ngừng bán</h1>
+            <p role="alert" className="text-sm text-muted-foreground">
+              Khoá học này hiện không mở bán cho học viên mới.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/courses"
+                className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Khám phá khoá học khác
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className={styles.page}>
@@ -294,6 +410,14 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           </span>
         </nav>
 
+        {/* Hidden notice for already-enrolled learners */}
+        {course.status === "hidden" && ownState === "owned" && (
+          <div role="status" className="rounded-xl border border-info/30 bg-info/10 p-4 text-xs text-info mb-4">
+            <strong className="block font-semibold mb-1">Khoá học đang tạm ẩn với người mua mới</strong>
+            Bạn đã sở hữu khoá học nên vẫn học bình thường.
+          </div>
+        )}
+
         <div className={styles.layout}>
           {/* Main Column */}
           <div className={styles.mainCol}>
@@ -302,7 +426,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               <h1 className={styles.title}>{course.title}</h1>
               <p className={styles.description}>{course.description}</p>
 
-              {/* Meta stats row matching Screenshot 1 */}
+              {/* Meta stats row */}
               <div className={styles.metaRow}>
                 <span className={styles.metaItem}>
                   <BarChart3 className="h-4 w-4" />
@@ -330,7 +454,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </div>
             </header>
 
-            {/* 01 · Bạn sẽ học được gì? (Screenshot 1) */}
+            {/* 01 · Bạn sẽ học được gì? */}
             <section className={styles.section} aria-labelledby="outcomes-heading">
               <h2 id="outcomes-heading" className={styles.sectionTitle}>
                 01 · Bạn sẽ học được gì?
@@ -351,7 +475,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               )}
             </section>
 
-            {/* 02 · Nội dung khóa học (Screenshot 1) */}
+            {/* 02 · Nội dung khóa học (S02 Syllabus) */}
             <section className={styles.section} aria-labelledby="curriculum-heading">
               <div className={styles.curriculumHeader}>
                 <h2 id="curriculum-heading" className={styles.sectionTitle}>
@@ -382,12 +506,13 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </p>
 
               {chapters.length === 0 ? (
-                <div className="p-6 rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground">
-                  Nội dung học đang được chuẩn bị. Giảng viên sẽ sớm cập nhật đề cương.
+                <div className="p-6 rounded-xl border border-dashed border-border bg-muted/20 text-center text-sm text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">Nội dung học đang được chuẩn bị</p>
+                  <p>Giảng viên sẽ sớm cập nhật đề cương.</p>
                 </div>
               ) : (
                 <div className={styles.chaptersList}>
-                  {chapters.map((chapter, i) => {
+                  {chapters.map((chapter) => {
                     const isOpen = openChapters.has(chapter.id);
                     const chapterDuration = chapter.lessons.reduce(
                       (acc, les) => acc + (les.durationSeconds || 0),
@@ -412,18 +537,32 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                         {isOpen && (
                           <ul className={styles.lessonsList}>
                             {chapter.lessons.map((lesson) => {
-                              const LessonIcon = getLessonIcon(lesson.title);
+                              const meta = getLessonTypeMeta(lesson.title);
+                              const LessonIcon = getLessonIcon(meta.type);
+
                               return (
                                 <li key={lesson.id} className={styles.lessonItem}>
                                   <div className={styles.lessonMain}>
                                     <LessonIcon className={`h-4 w-4 ${styles.lessonIcon}`} />
-                                    <span>{lesson.title}</span>
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
+                                      <span className="font-medium text-foreground">{lesson.title}</span>
+                                      <span className="text-[11px] text-muted-foreground font-normal">
+                                        {meta.label}
+                                      </span>
+                                    </div>
                                   </div>
-                                  {lesson.durationSeconds > 0 && (
-                                    <span className={styles.lessonDuration}>
-                                      {formatLessonDuration(lesson.durationSeconds)}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {lesson.isFreePreview && (
+                                      <span className="inline-flex items-center rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground border border-accent/30">
+                                        Học thử
+                                      </span>
+                                    )}
+                                    {lesson.durationSeconds > 0 && (
+                                      <span className={styles.lessonDuration}>
+                                        {formatLessonDuration(lesson.durationSeconds)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </li>
                               );
                             })}
@@ -436,7 +575,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               )}
             </section>
 
-            {/* 03 · Yêu cầu trước khi học (Screenshot 2) */}
+            {/* 03 · Yêu cầu trước khi học */}
             <section className={styles.section} aria-labelledby="requirements-heading">
               <h2 id="requirements-heading" className={styles.sectionTitle}>
                 03 · Yêu cầu trước khi học
@@ -452,7 +591,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               )}
             </section>
 
-            {/* 04 · Giảng viên (Screenshot 2) */}
+            {/* 04 · Giảng viên */}
             <section className={styles.section} aria-labelledby="instructor-heading">
               <h2 id="instructor-heading" className={styles.sectionTitle}>
                 04 · Giảng viên
@@ -468,7 +607,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </div>
             </section>
 
-            {/* Đánh giá của học viên (Screenshot 2) */}
+            {/* Đánh giá của học viên */}
             <section className={styles.section} aria-labelledby="reviews-heading">
               <h2 id="reviews-heading" className={styles.sectionTitle}>
                 Đánh giá của học viên
@@ -545,7 +684,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             </section>
           </div>
 
-          {/* Sticky Sidebar matching Screenshots 1 & 2 */}
+          {/* Sticky Sidebar (S02 Purchase Card) */}
           <aside className={styles.sidebar} aria-label="Đăng ký khóa học">
             <div className={styles.sidebarCard}>
               <h2 className={styles.sidebarTitle}>Đăng ký khóa học</h2>
@@ -557,7 +696,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                 </span>
               </div>
 
-              {/* Ownership-aware CTA section */}
+              {/* Ownership-aware CTA section (Flow L1, §7.2, decision 42) */}
               {isPrivilegedRole ? (
                 <p className="text-xs text-muted-foreground">
                   Bạn đang xem với vai trò {userRole}. Chỉ tài khoản học viên mới mua được khoá học.
@@ -586,27 +725,35 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                     Đơn hàng đang chờ thanh toán.
                   </div>
                   <Link
-                    href={(ownership?.pendingOrderId ? `/checkout?order=${ownership.pendingOrderId}` : "/checkout") as any}
+                    href={(ownership?.pendingOrderId ? `/checkout?order=${ownership.pendingOrderId}` : `/checkout`) as any}
                     className={styles.ctaPrimaryBtn}
                   >
                     Tiếp tục thanh toán
                   </Link>
                 </>
               ) : ownState === "in-cart" ? (
-                <>
-                  <button type="button" disabled className={styles.ctaSecondaryBtn}>
+                <div className="flex flex-col gap-2.5">
+                  <div className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-primary bg-primary/10 rounded-lg py-2">
                     <Check className="h-4 w-4" />
                     Đã trong giỏ hàng
-                  </button>
+                  </div>
                   <Link href={"/cart" as any} className={styles.ctaPrimaryBtn}>
-                    Xem giỏ hàng / Thanh toán
+                    Thanh toán
                   </Link>
-                </>
+                  <button
+                    type="button"
+                    onClick={() => handleBuyNow()}
+                    disabled={adding}
+                    className={styles.ctaSecondaryBtn}
+                  >
+                    Mua ngay
+                  </button>
+                </div>
               ) : ownState === "free" ? (
                 <>
                   <button
                     type="button"
-                    onClick={handleEnrollFree}
+                    onClick={() => handleEnrollFree()}
                     disabled={enrolling}
                     className={styles.ctaPrimaryBtn}
                   >
@@ -621,7 +768,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                 <div className="flex flex-col gap-2.5">
                   <button
                     type="button"
-                    onClick={handleBuyNow}
+                    onClick={() => handleBuyNow()}
                     disabled={adding}
                     className={styles.ctaPrimaryBtn}
                   >
@@ -629,7 +776,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   </button>
                   <button
                     type="button"
-                    onClick={handleAddToCart}
+                    onClick={() => handleAddToCart()}
                     disabled={adding}
                     className={styles.ctaSecondaryBtn}
                   >
@@ -677,6 +824,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           </aside>
         </div>
       </div>
+
+      {/* S03 Gated Sign-in / OTP Modal */}
+      <AuthModal
+        open={authModalOpen}
+        onOpenChange={setAuthModalOpen}
+        intentReason={intentReason}
+        courseTitle={detail?.course.title}
+        onSuccess={handleAuthSuccess}
+      />
     </main>
   );
 }

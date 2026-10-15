@@ -15,7 +15,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { courseId, courseSlug } = await req.json();
+    const { courseId, courseSlug, orderCode } = await req.json();
 
     if ((!courseId && !courseSlug) || (courseId != null && typeof courseId !== "string") || (courseSlug != null && typeof courseSlug !== "string")) {
       return NextResponse.json({ error: "Invalid data" }, { status: 400 });
@@ -38,16 +38,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Thanh toán tạm thời chưa khả dụng." }, { status: 503 });
     }
 
-    // Generate a simple ID like CODI12345
-    const transactionId = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
+    let transactionId = typeof orderCode === "string" && orderCode.trim() ? orderCode.trim() : null;
+    if (transactionId) {
+      const [existingTx] = await db
+        .select()
+        .from(studentTransactions)
+        .where(eq(studentTransactions.id, transactionId))
+        .limit(1);
 
-    await db.insert(studentTransactions).values({
-      id: transactionId,
-      userId: session.user.id,
-      courseId: course.id,
-      amount,
-      status: "pending",
-    });
+      if (!existingTx) {
+        await db.insert(studentTransactions).values({
+          id: transactionId,
+          userId: session.user.id,
+          courseId: course.id,
+          amount,
+          status: "pending",
+        }).catch(() => {});
+      }
+    } else {
+      transactionId = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
+      await db.insert(studentTransactions).values({
+        id: transactionId,
+        userId: session.user.id,
+        courseId: course.id,
+        amount,
+        status: "pending",
+      });
+    }
 
     return NextResponse.json({ transactionId, amount, receiver: config.receiver, course: { id: course.id, title: course.title, category: course.category } });
   } catch (error) {

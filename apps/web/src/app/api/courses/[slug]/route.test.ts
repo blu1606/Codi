@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(), courseFrom: vi.fn(), courseJoin: vi.fn(), courseWhere: vi.fn(),
   groupBy: vi.fn(), courseLimit: vi.fn(), detailsFrom: vi.fn(), detailsWhere: vi.fn(),
   detailsLimit: vi.fn(), chapterFrom: vi.fn(), lessonJoin: vi.fn(), chapterWhere: vi.fn(), orderBy: vi.fn(),
+  reviewsFrom: vi.fn(), reviewsJoin: vi.fn(), reviewsWhere: vi.fn(), reviewsOrderBy: vi.fn(), reviewsLimit: vi.fn(),
 }));
 
 vi.mock("@/services", () => ({ db: { select: mocks.select } }));
@@ -25,7 +26,8 @@ beforeEach(() => {
   mocks.select
     .mockReturnValueOnce({ from: mocks.courseFrom })
     .mockReturnValueOnce({ from: mocks.detailsFrom })
-    .mockReturnValueOnce({ from: mocks.chapterFrom });
+    .mockReturnValueOnce({ from: mocks.chapterFrom })
+    .mockReturnValueOnce({ from: mocks.reviewsFrom });
   mocks.courseFrom.mockReturnValue({ leftJoin: mocks.courseJoin });
   mocks.courseJoin.mockReturnValue({ leftJoin: mocks.courseJoin, where: mocks.courseWhere });
   mocks.courseWhere.mockReturnValue({ groupBy: mocks.groupBy });
@@ -38,6 +40,11 @@ beforeEach(() => {
   mocks.lessonJoin.mockReturnValue({ where: mocks.chapterWhere });
   mocks.chapterWhere.mockReturnValue({ orderBy: mocks.orderBy });
   mocks.orderBy.mockResolvedValue([]);
+  mocks.reviewsFrom.mockReturnValue({ leftJoin: mocks.reviewsJoin });
+  mocks.reviewsJoin.mockReturnValue({ leftJoin: mocks.reviewsJoin, where: mocks.reviewsWhere });
+  mocks.reviewsWhere.mockReturnValue({ orderBy: mocks.reviewsOrderBy });
+  mocks.reviewsOrderBy.mockReturnValue({ limit: mocks.reviewsLimit });
+  mocks.reviewsLimit.mockResolvedValue([]);
 });
 
 describe("GET /api/courses/[slug]", () => {
@@ -99,7 +106,7 @@ describe("GET /api/courses/[slug]", () => {
     expect(body.targetAudience).toBe("Đối tượng đã nhập");
     expect(body.summary).toEqual({ chapterCount: 2, lessonCount: 2, durationSeconds: 300 });
     expect(body.chapters.map((chapter: { lessons: unknown[] }) => chapter.lessons.length)).toEqual([2, 0]);
-    expect(body.chapters[0].lessons[0]).toEqual({ id: "lesson-1", title: "Bài 1", description: "Mô tả bài", durationSeconds: 120 });
+    expect(body.chapters[0].lessons[0]).toEqual({ id: "lesson-1", title: "Bài 1", description: "Mô tả bài", durationSeconds: 120, isFreePreview: false });
   });
 
   it("returns 404 without querying curriculum for an unknown slug", async () => {
