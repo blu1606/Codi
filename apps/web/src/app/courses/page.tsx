@@ -608,7 +608,7 @@ export default function CoursesPage() {
         {/* Results Counter & Sort (Screenshot 3 & S01 Mockup) */}
         <div className="my-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground font-medium" role="status">
-            {filteredCourses.length} khoá học
+            {loading ? "Đang tải danh sách khoá học…" : `${filteredCourses.length} khoá học`}
           </p>
           <div className="flex items-center gap-2">
             <label htmlFor="f-sort" className="text-xs text-muted-foreground font-medium shrink-0">
