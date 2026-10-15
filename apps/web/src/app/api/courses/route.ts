@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
       .from(courses)
       .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
       .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))
+      .where(eq(courses.status, "published"))
       .groupBy(courses.id, courseDetails.coverImageUrl)
       .orderBy(...(sort === "popular"
         ? [desc(enrollmentCount), asc(courses.title), asc(courses.id)]

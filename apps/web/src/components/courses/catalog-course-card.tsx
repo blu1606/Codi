@@ -173,7 +173,7 @@ export function CatalogCourseCard({
             ) : ownState === "in-cart" ? (
               <Link href={"/cart" as any} className={`${styles.ctaBtn} ${styles.ctaSecondary}`}>
                 <Check className="h-3.5 w-3.5" />
-                Đã trong giỏ
+                Đã trong giỏ hàng · Xem giỏ
               </Link>
             ) : ownState === "free" ? (
               <button

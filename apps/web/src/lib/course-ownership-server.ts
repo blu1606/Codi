@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { orderItems, orders, studentCart, studentEnrollments, studentTransactions } from "@codi-1/db";
+import { courses, orderItems, orders, studentCart, studentEnrollments, studentTransactions } from "@codi-1/db";
 import { db } from "@/services";
 import { resolveCourseOwnership, type CourseOwnershipDetail } from "./course-ownership";
 
@@ -104,4 +104,26 @@ export async function getCourseOwnershipMap(
   }
 
   return result;
+}
+
+/**
+ * Shared server helper to resolve single course ownership:
+ * owned | pending-payment | in-cart | free | not-owned
+ */
+export async function getOwnership(
+  userId: string | null | undefined,
+  courseId: string,
+  price?: number
+): Promise<CourseOwnershipDetail> {
+  let coursePrice = price;
+  if (coursePrice === undefined) {
+    const [c] = await db
+      .select({ price: courses.price })
+      .from(courses)
+      .where(eq(courses.id, courseId))
+      .limit(1);
+    coursePrice = c?.price ?? 0;
+  }
+  const map = await getCourseOwnershipMap(userId, [{ id: courseId, price: coursePrice }]);
+  return map[courseId] ?? { ownership: "not-owned" };
 }

@@ -82,7 +82,7 @@ export default function CoursesPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("Tất cả");
   const [selectedLevel, setSelectedLevel] = useState<string>("all");
   const [selectedPrice, setSelectedPrice] = useState<CatalogPriceFilter>("all");
-  const [selectedSort] = useState<CatalogSortOption>("popular");
+  const [selectedSort, setSelectedSort] = useState<CatalogSortOption>("popular");
 
   // Courses and ownership data
   const [courses, setCourses] = useState<CatalogCourse[]>([]);
@@ -126,6 +126,32 @@ export default function CoursesPage() {
       });
     return () => controller.abort();
   }, [attempt, router]);
+
+  // Hydrate filters from URL query parameters on initial load
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const qParam = params.get("q");
+    if (qParam) setSearchTerm(qParam);
+    const catParam = params.get("cat");
+    if (catParam) setSelectedCategory(catParam);
+    const levelParam = params.get("level");
+    if (levelParam) setSelectedLevel(levelParam);
+    const priceParam = params.get("price");
+    if (priceParam === "free" || priceParam === "paid" || priceParam === "all") {
+      setSelectedPrice(priceParam);
+    }
+    const sortParam = params.get("sort");
+    if (
+      sortParam === "popular" ||
+      sortParam === "newest" ||
+      sortParam === "price-asc" ||
+      sortParam === "price-desc" ||
+      sortParam === "rating"
+    ) {
+      setSelectedSort(sortParam);
+    }
+  }, []);
 
   // 2. Fetch ownership mapping when session and courses exist
   useEffect(() => {
@@ -188,9 +214,9 @@ export default function CoursesPage() {
       if (showTypeahead && activeSuggestionIndex >= 0 && activeSuggestionIndex < flatSuggestions.length) {
         e.preventDefault();
         const selected = flatSuggestions[activeSuggestionIndex];
-        setSearchTerm(selected.title);
         setShowTypeahead(false);
         setActiveSuggestionIndex(-1);
+        router.push(`/courses/${encodeURIComponent(selected.slug)}`);
       }
     }
   };
@@ -235,14 +261,29 @@ export default function CoursesPage() {
         onRemove: () => setSelectedPrice("all"),
       });
     }
+    if (selectedSort !== "popular") {
+      const sortLabels: Record<CatalogSortOption, string> = {
+        popular: "Phổ biến nhất",
+        newest: "Mới nhất",
+        "price-asc": "Giá: thấp → cao",
+        "price-desc": "Giá: cao → thấp",
+        rating: "Đánh giá cao nhất",
+      };
+      chips.push({
+        key: "sort",
+        label: `Sắp xếp: ${sortLabels[selectedSort]}`,
+        onRemove: () => setSelectedSort("popular"),
+      });
+    }
     return chips;
-  }, [searchTerm, selectedCategory, selectedLevel, selectedPrice]);
+  }, [searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
 
   const handleResetFilters = () => {
     setSearchTerm("");
     setSelectedCategory("Tất cả");
     setSelectedLevel("all");
     setSelectedPrice("all");
+    setSelectedSort("popular");
     setShowTypeahead(false);
     setActiveSuggestionIndex(-1);
   };
@@ -422,9 +463,9 @@ export default function CoursesPage() {
                             aria-selected={isSelected}
                             onMouseEnter={() => setActiveSuggestionIndex(itemIndex)}
                             onClick={() => {
-                              setSearchTerm(item.title);
                               setShowTypeahead(false);
                               setActiveSuggestionIndex(-1);
+                              router.push(`/courses/${encodeURIComponent(item.slug)}`);
                             }}
                             className={`w-full flex items-center justify-between text-left px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
                               isSelected
@@ -564,11 +605,29 @@ export default function CoursesPage() {
           </div>
         )}
 
-        {/* Results Counter (Screenshot 3: "5 khoá học") */}
-        <div className="my-4">
+        {/* Results Counter & Sort (Screenshot 3 & S01 Mockup) */}
+        <div className="my-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground font-medium" role="status">
             {filteredCourses.length} khoá học
           </p>
+          <div className="flex items-center gap-2">
+            <label htmlFor="f-sort" className="text-xs text-muted-foreground font-medium shrink-0">
+              Sắp xếp:
+            </label>
+            <select
+              id="f-sort"
+              aria-label="Sắp xếp danh sách khóa học"
+              value={selectedSort}
+              onChange={(e) => setSelectedSort(e.target.value as CatalogSortOption)}
+              className="h-9 px-2.5 rounded-lg bg-card border border-border text-xs text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              <option value="popular">Phổ biến nhất</option>
+              <option value="newest">Mới nhất</option>
+              <option value="price-asc">Giá: thấp → cao</option>
+              <option value="price-desc">Giá: cao → thấp</option>
+              <option value="rating">Đánh giá cao nhất</option>
+            </select>
+          </div>
         </div>
 
         {/* Course Cards Grid or States */}

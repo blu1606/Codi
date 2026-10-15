@@ -39,18 +39,20 @@ describe("GET /api/courses", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ courses: [{ ...course, enrollmentCount: 7, coverImageUrl: "/images/courses/frontend-react-nextjs.svg" }] });
     const [sql, params] = mocks.execute.mock.calls[0];
+    expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('order by "courses"."title" asc, "courses"."id" asc');
     expect(sql).not.toContain(" limit ");
-    expect(params).toEqual([]);
+    expect(params).toEqual(["published"]);
   });
 
   it("sorts popular courses by actual enrollment rows, then title and ID", async () => {
     const response = await request("?sort=popular&limit=4");
     expect(response.status).toBe(200);
     const [sql, params] = mocks.execute.mock.calls[0];
+    expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('order by count("student_enrollments"."id") desc, "courses"."title" asc, "courses"."id" asc');
-    expect(sql).toContain(" limit $1");
-    expect(params).toEqual([4]);
+    expect(sql).toContain(" limit $2");
+    expect(params).toEqual(["published", 4]);
   });
 
   it("left-joins enrollment counts and covers without dropping courses with no matching rows", async () => {
@@ -62,13 +64,14 @@ describe("GET /api/courses", () => {
     expect(sql).not.toContain("count(*)");
     expect(sql).toContain('left join "student_enrollments" on "student_enrollments"."course_id" = "courses"."id"');
     expect(sql).toContain('left join "course_details" on "course_details"."course_id" = "courses"."id"');
+    expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('"course_details"."cover_image_url"');
     expect(sql).toContain('group by "courses"."id", "course_details"."cover_image_url"');
   });
 
   it.each([1, 100])("accepts the limit boundary %i", async (limit) => {
     expect((await request(`?limit=${limit}`)).status).toBe(200);
-    expect(mocks.execute.mock.calls[0][1]).toEqual([limit]);
+    expect(mocks.execute.mock.calls[0][1]).toEqual(["published", limit]);
   });
 
   it.each(["0", "-1", "101", "1.5", "nope", "", " ", "Infinity"])("rejects invalid limit %j before querying", async (limit) => {
