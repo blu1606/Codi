@@ -42,6 +42,7 @@
   overflow: hidden;
   aspect-ratio: 16 / 9;
   width: 100%;
+  background: var(--muted);
 }
 
 .coverImage {

@@ -8,22 +8,21 @@ import type { CourseOwnershipDetail } from "@/lib/course-ownership";
 import styles from "./catalog-course-card.module.css";
 
 const BRAND_MAP: Record<string, { logo: string; bg: string; name: string }> = {
+  "course-1": { logo: "/logos/react.svg", bg: "#20232a", name: "React" },
+  "frontend-react-nextjs": { logo: "/logos/react.svg", bg: "#20232a", name: "React" },
+  "course-2": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
+  "backend-nodejs-typescript": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
+  "course-3": { logo: "/logos/typescript.svg", bg: "#3178c6", name: "TypeScript" },
+  "dsa-interview-prep": { logo: "/logos/typescript.svg", bg: "#3178c6", name: "TypeScript" },
+  "course-4": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
+  "ai-engineering": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
+  "course-5": { logo: "/logos/react.svg", bg: "#20232a", name: "React Native" },
+  "react-native-expo": { logo: "/logos/react.svg", bg: "#20232a", name: "React Native" },
   "course-react-001": { logo: "/logos/react.svg", bg: "#20232a", name: "React" },
-  "react-tu-co-ban-den-du-an-thuc-te": { logo: "/logos/react.svg", bg: "#20232a", name: "React" },
   "course-js-001": { logo: "/logos/javascript.svg", bg: "#f7df1e", name: "JavaScript" },
-  "javascript-nen-tang": { logo: "/logos/javascript.svg", bg: "#f7df1e", name: "JavaScript" },
   "course-node-001": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
-  "nodejs-express-rest-api": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
   "course-python-001": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
-  "python-phan-tich-du-lieu": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
   "course-git-001": { logo: "/logos/git.svg", bg: "#f05032", name: "Git" },
-  "git-github-cho-nguoi-moi": { logo: "/logos/git.svg", bg: "#f05032", name: "Git" },
-  "course-ts-001": { logo: "/logos/typescript.svg", bg: "#3178c6", name: "TypeScript" },
-  "typescript-chuyen-sau": { logo: "/logos/typescript.svg", bg: "#3178c6", name: "TypeScript" },
-  "course-next-001": { logo: "/logos/nextdotjs.svg", bg: "#000000", name: "Next.js" },
-  "nextjs-app-router-thuc-chien": { logo: "/logos/nextdotjs.svg", bg: "#000000", name: "Next.js" },
-  "course-jest-001": { logo: "/logos/jest.svg", bg: "#99425b", name: "Jest" },
-  "kiem-thu-voi-jest": { logo: "/logos/jest.svg", bg: "#99425b", name: "Jest" },
 };
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -81,15 +80,13 @@ export function CatalogCourseCard({
 
   return (
     <article className={styles.card} data-testid={`course-card-${course.id}`}>
-      <Link href={href} className={styles.coverLink} aria-label={`Xem chi tiết: ${course.title}`} style={{ backgroundColor: brand?.bg ?? "#1e293b" }}>
-        {brand?.logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={brand.logo}
-            alt={brand.name}
-            className={styles.thumbLogo}
-          />
-        ) : course.coverImageUrl ? (
+      <Link
+        href={href}
+        className={styles.coverLink}
+        aria-label={`Xem chi tiết: ${course.title}`}
+        style={!course.coverImageUrl && brand?.bg ? { backgroundColor: brand.bg } : undefined}
+      >
+        {course.coverImageUrl ? (
           <Image
             src={course.coverImageUrl}
             alt=""
@@ -97,6 +94,13 @@ export function CatalogCourseCard({
             sizes="(min-width: 1280px) 290px, (min-width: 1024px) 30vw, (min-width: 640px) 45vw, 100vw"
             className={styles.coverImage}
             unoptimized
+          />
+        ) : brand?.logo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={brand.logo}
+            alt={brand.name}
+            className={styles.thumbLogo}
           />
         ) : (
           <BookOpen className="h-10 w-10 text-muted-foreground" />

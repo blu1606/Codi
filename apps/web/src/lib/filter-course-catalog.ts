@@ -43,7 +43,11 @@ export function filterCourseCatalog<T extends CourseCatalogEntry>(
     const matchesCategory =
       selectedCategory === "Tất cả" ||
       selectedCategory === "all" ||
-      course.category === selectedCategory;
+      course.category === selectedCategory ||
+      ((selectedCategory === "Dữ liệu" || selectedCategory === "Data & AI") &&
+        (course.category === "Dữ liệu" || course.category === "Data & AI")) ||
+      ((selectedCategory === "Công cụ" || selectedCategory === "Computer Science" || selectedCategory === "Tools") &&
+        (course.category === "Công cụ" || course.category === "Computer Science" || course.category === "Tools"));
 
     const matchesLevel =
       selectedLevel === "Tất cả" ||

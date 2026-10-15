@@ -155,3 +155,9 @@ export const MOCK_COURSE_REVIEWS: Record<string, MockCourseContent> = {
     ],
   },
 };
+
+MOCK_COURSE_REVIEWS["frontend-react-nextjs"] = MOCK_COURSE_REVIEWS["react-tu-co-ban-den-du-an-thuc-te"];
+MOCK_COURSE_REVIEWS["backend-nodejs-typescript"] = MOCK_COURSE_REVIEWS["nodejs-express-rest-api"];
+MOCK_COURSE_REVIEWS["ai-engineering"] = MOCK_COURSE_REVIEWS["python-phan-tich-du-lieu"];
+MOCK_COURSE_REVIEWS["dsa-interview-prep"] = MOCK_COURSE_REVIEWS["javascript-nen-tang"];
+MOCK_COURSE_REVIEWS["react-native-expo"] = MOCK_COURSE_REVIEWS["git-github-cho-nguoi-moi"];
