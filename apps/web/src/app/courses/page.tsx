@@ -108,6 +108,14 @@ export default function CoursesPage() {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
+
+    // Preview / Test state: /courses?error=1
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("error") === "1") {
+      setLoading(false);
+      setError("Không thể tải khóa học. Vui lòng thử lại.");
+      return () => controller.abort();
+    }
+
     fetchCourses(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
@@ -647,7 +655,12 @@ export default function CoursesPage() {
               </div>
               <Button
                 variant="outline"
-                onClick={() => setAttempt((value) => value + 1)}
+                onClick={() => {
+                  if (typeof window !== "undefined" && window.location.search.includes("error=1")) {
+                    router.replace("/courses");
+                  }
+                  setAttempt((value) => value + 1);
+                }}
                 className="gap-2 cursor-pointer"
               >
                 <RotateCw className="h-4 w-4" />
