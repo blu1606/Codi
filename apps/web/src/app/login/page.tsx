@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
+import { onboardingReturnPath } from "@/lib/onboarding-return";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -34,7 +35,7 @@ function LoginContent() {
 
       <div className="relative z-10 w-full max-w-md">
         {activeTab === "signin" ? (
-          <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} />
+          <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} returnTo={onboardingReturnPath(searchParams.get("callbackURL"))} />
         ) : (
           <SignUpForm onSwitchToSignIn={() => setActiveTab("signin")} />
         )}
