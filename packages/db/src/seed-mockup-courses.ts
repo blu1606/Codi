@@ -1,6 +1,6 @@
 import "varlock/auto-load";
 import { createDb } from "./index";
-import { courses, courseDetails, courseChapters, courseLessons, user, courseReviews } from "./schema";
+import { courses, courseDetails, courseChapters, courseLessons, user } from "./schema";
 import { eq } from "drizzle-orm";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
@@ -296,6 +296,7 @@ for (const c of publishedCourses) {
 
   for (let ci = 0; ci < chapters.length; ci++) {
     const ch = chapters[ci];
+    if (!ch) continue;
     const [insertedChapter] = await db.insert(courseChapters).values({
       courseId: c.id,
       title: ch.title,
@@ -306,6 +307,7 @@ for (const c of publishedCourses) {
     if (insertedChapter) {
       for (let li = 0; li < ch.lessons.length; li++) {
         const les = ch.lessons[li];
+        if (!les) continue;
         await db.insert(courseLessons).values({
           chapterId: insertedChapter.id,
           title: les.title,
