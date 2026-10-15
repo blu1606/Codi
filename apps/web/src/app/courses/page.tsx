@@ -7,7 +7,6 @@ import {
   Sparkles,
   X,
   RotateCw,
-  SlidersHorizontal,
   Check,
   AlertCircle,
 } from "lucide-react";
@@ -33,26 +32,21 @@ const CATEGORIES = [
   "Tất cả",
   "Frontend",
   "Backend",
-  "Fullstack",
-  "Data & AI",
-  "Mobile",
-  "Computer Science",
+  "Dữ liệu",
+  "Công cụ",
 ] as const;
 
-const LEVELS = ["Tất cả cấp độ", "Beginner", "Intermediate", "Advanced"] as const;
-
-const SORT_OPTIONS: { value: CatalogSortOption; label: string }[] = [
-  { value: "popular", label: "Phổ biến nhất" },
-  { value: "newest", label: "Mới nhất" },
-  { value: "price-asc", label: "Giá: Thấp → Cao" },
-  { value: "price-desc", label: "Giá: Cao → Thấp" },
-  { value: "rating", label: "Đánh giá cao nhất" },
+const LEVELS: { value: string; label: string }[] = [
+  { value: "all", label: "Tất cả" },
+  { value: "Beginner", label: "Cơ bản" },
+  { value: "Intermediate", label: "Trung cấp" },
+  { value: "Advanced", label: "Nâng cao" },
 ];
 
 const PRICE_OPTIONS: { value: CatalogPriceFilter; label: string }[] = [
-  { value: "all", label: "Tất cả học phí" },
+  { value: "all", label: "Tất cả" },
   { value: "free", label: "Miễn phí" },
-  { value: "paid", label: "Có phí" },
+  { value: "paid", label: "Trả phí" },
 ];
 
 function CatalogSkeleton() {
@@ -61,17 +55,16 @@ function CatalogSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className={cardStyles.card}>
           <div className="aspect-video w-full bg-muted animate-pulse" />
-          <div className="p-5 flex flex-col flex-1 gap-3">
+          <div className="p-4 flex flex-col flex-1 gap-2.5">
             <div className="flex gap-2">
-              <div className="h-4 w-16 bg-muted rounded animate-pulse" />
-              <div className="h-4 w-12 bg-muted rounded animate-pulse" />
+              <div className="h-5 w-16 bg-muted rounded-full animate-pulse" />
             </div>
             <div className="h-5 w-3/4 bg-muted rounded animate-pulse mt-1" />
             <div className="h-4 w-1/3 bg-muted rounded animate-pulse" />
-            <div className="h-10 w-full bg-muted rounded animate-pulse mt-1" />
-            <div className="mt-auto pt-4 border-t border-border flex justify-between items-center">
-              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
-              <div className="h-8 w-24 bg-muted rounded-full animate-pulse" />
+            <div className="h-4 w-1/2 bg-muted rounded animate-pulse" />
+            <div className="mt-auto pt-3 border-t border-border flex justify-between items-center">
+              <div className="h-5 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-8 w-24 bg-muted rounded-lg animate-pulse" />
             </div>
           </div>
         </div>
@@ -84,12 +77,12 @@ export default function CoursesPage() {
   const router = useRouter();
   const { data: session } = authClient.useSession();
 
-  // Filters state
+  // Filters state (matches Mockup S01 & user requirements)
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Tất cả");
-  const [selectedLevel, setSelectedLevel] = useState<string>("Tất cả cấp độ");
+  const [selectedLevel, setSelectedLevel] = useState<string>("all");
   const [selectedPrice, setSelectedPrice] = useState<CatalogPriceFilter>("all");
-  const [selectedSort, setSelectedSort] = useState<CatalogSortOption>("popular");
+  const [selectedSort] = useState<CatalogSortOption>("popular");
 
   // Courses and ownership data
   const [courses, setCourses] = useState<CatalogCourse[]>([]);
@@ -223,21 +216,22 @@ export default function CoursesPage() {
     if (selectedCategory !== "Tất cả") {
       chips.push({
         key: "cat",
-        label: `Chủ đề: ${selectedCategory}`,
+        label: `Danh mục: ${selectedCategory}`,
         onRemove: () => setSelectedCategory("Tất cả"),
       });
     }
-    if (selectedLevel !== "Tất cả cấp độ") {
+    if (selectedLevel !== "all") {
+      const levelObj = LEVELS.find((l) => l.value === selectedLevel);
       chips.push({
         key: "level",
-        label: `Cấp độ: ${selectedLevel}`,
-        onRemove: () => setSelectedLevel("Tất cả cấp độ"),
+        label: `Trình độ: ${levelObj?.label ?? selectedLevel}`,
+        onRemove: () => setSelectedLevel("all"),
       });
     }
     if (selectedPrice !== "all") {
       chips.push({
         key: "price",
-        label: `Học phí: ${selectedPrice === "free" ? "Miễn phí" : "Có phí"}`,
+        label: `Giá: ${selectedPrice === "free" ? "Miễn phí" : "Trả phí"}`,
         onRemove: () => setSelectedPrice("all"),
       });
     }
@@ -247,9 +241,8 @@ export default function CoursesPage() {
   const handleResetFilters = () => {
     setSearchTerm("");
     setSelectedCategory("Tất cả");
-    setSelectedLevel("Tất cả cấp độ");
+    setSelectedLevel("all");
     setSelectedPrice("all");
-    setSelectedSort("popular");
     setShowTypeahead(false);
     setActiveSuggestionIndex(-1);
   };
@@ -330,198 +323,193 @@ export default function CoursesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background font-[family-name:var(--font-geist-sans)]">
-      {/* Hero Header Section */}
-      <section className="border-b border-border/40 bg-gradient-to-b from-primary/5 via-background to-background py-10 sm:py-14">
-        <div className="container mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="max-w-3xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Chương trình đào tạo thực chiến Codi</span>
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl text-foreground">
-              Khám phá các khóa học <br className="hidden sm:inline" />
-              <span className="text-primary">lập trình &amp; công nghệ</span>
-            </h1>
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
-              Trải nghiệm học tập gắn liền với dự án thực tế, hệ sinh thái bài tập tương tác
-              và trợ lý AI hỗ trợ giải đáp thắc mắc 24/7.
-            </p>
-          </div>
+    <div className="min-h-screen bg-background font-[family-name:var(--font-geist-sans)] py-8 sm:py-10">
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6">
+        {/* Header (Screenshot 3 & S01 Mockup) */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+            Khoá học
+          </h1>
+          <p className="mt-1.5 text-sm sm:text-base text-muted-foreground">
+            Tìm khoá học phù hợp với mục tiêu của bạn.
+          </p>
+        </div>
 
-          {/* Search Bar & Instant Filters Grid */}
-          <div className="mt-8 grid gap-3 sm:gap-4 md:grid-cols-12 items-center">
-            {/* Search Input with Grouped Typeahead */}
-            <div ref={searchContainerRef} className="relative md:col-span-5">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                type="text"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded={showTypeahead && flatSuggestions.length > 0}
-                aria-controls="typeahead-suggestions"
-                aria-activedescendant={
-                  activeSuggestionIndex >= 0 ? `suggestion-${activeSuggestionIndex}` : undefined
-                }
-                placeholder="Tìm khóa học theo tên, công nghệ (React, Node, AI...)"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setShowTypeahead(e.target.value.trim().length > 0);
-                  setActiveSuggestionIndex(-1);
-                }}
-                onFocus={() => {
-                  if (searchTerm.trim().length > 0) setShowTypeahead(true);
-                }}
-                onKeyDown={handleSearchKeyDown}
-                className="pl-10 pr-9 h-11 rounded-xl bg-card border-border shadow-sm text-sm"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchTerm("");
-                    setShowTypeahead(false);
+        {/* 4-Control Filter Bar matching Screenshot 3 */}
+        <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-end">
+          {/* 1. Tìm kiếm */}
+          <div ref={searchContainerRef} className="lg:col-span-6 relative">
+            <label htmlFor="f-search" className="block text-xs font-bold text-foreground mb-1.5">
+              Tìm kiếm
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="f-search"
+                  type="text"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={showTypeahead && flatSuggestions.length > 0}
+                  aria-controls="typeahead-suggestions"
+                  aria-activedescendant={
+                    activeSuggestionIndex >= 0 ? `suggestion-${activeSuggestionIndex}` : undefined
+                  }
+                  placeholder="Tìm khóa học theo tên, công nghệ (React, Node, AI...)"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setShowTypeahead(e.target.value.trim().length > 0);
                     setActiveSuggestionIndex(-1);
                   }}
-                  aria-label="Xóa từ khóa tìm kiếm"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+                  onFocus={() => {
+                    if (searchTerm.trim().length > 0) setShowTypeahead(true);
+                  }}
+                  onKeyDown={handleSearchKeyDown}
+                  className="pr-8 h-10 rounded-lg bg-card border-border text-sm"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setShowTypeahead(false);
+                      setActiveSuggestionIndex(-1);
+                    }}
+                    aria-label="Xóa từ khóa tìm kiếm"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
 
-              {/* Typeahead Suggestions Dropdown */}
-              {showTypeahead && searchTerm.trim().length > 0 && (
-                <div
-                  id="typeahead-suggestions"
-                  role="listbox"
-                  className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto rounded-xl border border-border bg-card shadow-lg p-2 text-sm"
-                >
-                  {flatSuggestions.length === 0 ? (
-                    <div className="py-4 text-center text-xs text-muted-foreground">
-                      Không tìm thấy gợi ý nào cho &ldquo;{searchTerm}&rdquo;
-                    </div>
-                  ) : (
-                    Object.entries(typeaheadResult.grouped).map(([category, items]) => (
-                      <div key={category} role="group" aria-label={category} className="mb-2 last:mb-0">
-                        <div className="px-2.5 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                          {category}
-                        </div>
-                        {items.map((item) => {
-                          const itemIndex = flatSuggestions.findIndex((s) => s.id === item.id);
-                          const isSelected = itemIndex === activeSuggestionIndex;
-                          return (
-                            <button
-                              key={item.id}
-                              id={`suggestion-${itemIndex}`}
-                              type="button"
-                              role="option"
-                              aria-selected={isSelected}
-                              onMouseEnter={() => setActiveSuggestionIndex(itemIndex)}
-                              onClick={() => {
-                                setSearchTerm(item.title);
-                                setShowTypeahead(false);
-                                setActiveSuggestionIndex(-1);
-                              }}
-                              className={`w-full flex items-center justify-between text-left px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
-                                isSelected
-                                  ? "bg-accent text-accent-foreground font-medium"
-                                  : "text-foreground hover:bg-muted"
-                              }`}
-                            >
-                              <span className="truncate pr-2">{item.title}</span>
-                              <span className="text-xs text-muted-foreground shrink-0">{item.level}</span>
-                            </button>
-                          );
-                        })}
+              <Button
+                type="button"
+                onClick={() => setShowTypeahead(false)}
+                className="h-10 px-4 rounded-lg gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Search className="h-4 w-4" />
+                <span>Tìm</span>
+              </Button>
+            </div>
+
+            {/* Typeahead Suggestions Dropdown */}
+            {showTypeahead && searchTerm.trim().length > 0 && (
+              <div
+                id="typeahead-suggestions"
+                role="listbox"
+                className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto rounded-xl border border-border bg-card shadow-lg p-2 text-sm"
+              >
+                {flatSuggestions.length === 0 ? (
+                  <div className="py-4 text-center text-xs text-muted-foreground">
+                    Không tìm thấy gợi ý nào cho &ldquo;{searchTerm}&rdquo;
+                  </div>
+                ) : (
+                  Object.entries(typeaheadResult.grouped).map(([category, items]) => (
+                    <div key={category} role="group" aria-label={category} className="mb-2 last:mb-0">
+                      <div className="px-2.5 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {category}
                       </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Level Selector */}
-            <div className="md:col-span-2">
-              <select
-                aria-label="Lọc theo cấp độ"
-                value={selectedLevel}
-                onChange={(e) => setSelectedLevel(e.target.value)}
-                className="w-full h-11 px-3 rounded-xl bg-card border border-border text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-              >
-                {LEVELS.map((lvl) => (
-                  <option key={lvl} value={lvl}>
-                    {lvl === "Tất cả cấp độ" ? "Cấp độ: Tất cả" : lvl}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Price Filter */}
-            <div className="md:col-span-2">
-              <select
-                aria-label="Lọc theo học phí"
-                value={selectedPrice}
-                onChange={(e) => setSelectedPrice(e.target.value as CatalogPriceFilter)}
-                className="w-full h-11 px-3 rounded-xl bg-card border border-border text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-              >
-                {PRICE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sort Selector */}
-            <div className="md:col-span-3">
-              <select
-                aria-label="Sắp xếp danh mục khóa học"
-                value={selectedSort}
-                onChange={(e) => setSelectedSort(e.target.value as CatalogSortOption)}
-                className="w-full h-11 px-3 rounded-xl bg-card border border-border text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    Sắp xếp: {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+                      {items.map((item) => {
+                        const itemIndex = flatSuggestions.findIndex((s) => s.id === item.id);
+                        const isSelected = itemIndex === activeSuggestionIndex;
+                        return (
+                          <button
+                            key={item.id}
+                            id={`suggestion-${itemIndex}`}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            onMouseEnter={() => setActiveSuggestionIndex(itemIndex)}
+                            onClick={() => {
+                              setSearchTerm(item.title);
+                              setShowTypeahead(false);
+                              setActiveSuggestionIndex(-1);
+                            }}
+                            className={`w-full flex items-center justify-between text-left px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-accent text-accent-foreground font-medium"
+                                : "text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            <span className="truncate pr-2">{item.title}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">{item.level}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Category Filter Pills */}
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground mr-1 flex items-center gap-1">
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Chủ đề:
-            </span>
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-all duration-150 cursor-pointer ${
-                  selectedCategory === cat
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+          {/* 2. Danh mục: Tất cả (default), Frontend, Backend, Dữ liệu, Công cụ */}
+          <div className="lg:col-span-2">
+            <label htmlFor="f-category" className="block text-xs font-bold text-foreground mb-1.5">
+              Danh mục
+            </label>
+            <select
+              id="f-category"
+              aria-label="Lọc theo danh mục"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Trình độ: Tất cả, Cơ bản, Trung cấp, Nâng cao */}
+          <div className="lg:col-span-2">
+            <label htmlFor="f-level" className="block text-xs font-bold text-foreground mb-1.5">
+              Trình độ
+            </label>
+            <select
+              id="f-level"
+              aria-label="Lọc theo trình độ"
+              value={selectedLevel}
+              onChange={(e) => setSelectedLevel(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              {LEVELS.map((lvl) => (
+                <option key={lvl.value} value={lvl.value}>
+                  {lvl.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. Giá: Tất cả, Miễn phí, Trả phí */}
+          <div className="lg:col-span-2">
+            <label htmlFor="f-price" className="block text-xs font-bold text-foreground mb-1.5">
+              Giá
+            </label>
+            <select
+              id="f-price"
+              aria-label="Lọc theo học phí"
+              value={selectedPrice}
+              onChange={(e) => setSelectedPrice(e.target.value as CatalogPriceFilter)}
+              className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              {PRICE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      </section>
 
-      {/* Main Course Listing Section */}
-      <section className="container mx-auto max-w-7xl px-4 sm:px-6 py-8 sm:py-10">
         {/* Feedback Alert if any */}
         {feedback && (
           <div
             role="status"
-            className={`mb-6 flex items-center justify-between rounded-xl border p-4 text-sm ${
+            className={`my-4 flex items-center justify-between rounded-xl border p-4 text-sm ${
               feedback.type === "success"
                 ? "bg-success-soft border-border text-success"
                 : "bg-destructive-soft border-border text-destructive"
@@ -546,9 +534,9 @@ export default function CoursesPage() {
           </div>
         )}
 
-        {/* Active Filter Chips Row */}
+        {/* Active Filter Chips */}
         {activeChips.length > 0 && (
-          <div className="mb-6 flex flex-wrap items-center gap-2">
+          <div className="my-3 flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground font-medium">Bộ lọc đang chọn:</span>
             {activeChips.map((chip) => (
               <span
@@ -576,25 +564,14 @@ export default function CoursesPage() {
           </div>
         )}
 
-        {/* Results Counter & Reset Controls */}
-        <div className="flex items-center justify-between pb-6">
-          <p className="text-sm text-muted-foreground" role="status">
-            Hiển thị <strong className="text-foreground">{filteredCourses.length}</strong> khóa học phù hợp
+        {/* Results Counter (Screenshot 3: "5 khoá học") */}
+        <div className="my-4">
+          <p className="text-sm text-muted-foreground font-medium" role="status">
+            {filteredCourses.length} khoá học
           </p>
-          {activeChips.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleResetFilters}
-              className="text-xs text-primary hover:text-primary cursor-pointer gap-1"
-            >
-              <X className="h-3.5 w-3.5" />
-              Đặt lại bộ lọc
-            </Button>
-          )}
         </div>
 
-        {/* Catalog Body States: Loading | Error | Empty | Results */}
+        {/* Course Cards Grid or States */}
         {loading ? (
           <CatalogSkeleton />
         ) : error ? (
@@ -655,7 +632,6 @@ export default function CoursesPage() {
             </CardContent>
           </Card>
         ) : (
-          /* Course Cards Grid */
           <div className={cardStyles.grid}>
             {filteredCourses.map((course) => (
               <CatalogCourseCard
@@ -671,31 +647,7 @@ export default function CoursesPage() {
             ))}
           </div>
         )}
-
-        {/* AI Learning Advisor Banner */}
-        <div className="mt-16 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary uppercase tracking-wider">
-              <Sparkles className="h-3.5 w-3.5" />
-              Lộ trình cá nhân hóa
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold tracking-tight">
-              Bạn chưa rõ nên bắt đầu từ khóa học nào?
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-xl">
-              Cung cấp cho Trợ lý AI Codi mục tiêu nghề nghiệp, thời gian học mỗi ngày và nền tảng hiện tại của bạn để nhận lộ trình chi tiết từng tuần.
-            </p>
-          </div>
-          <Button
-            size="lg"
-            onClick={() => router.push("/ai")}
-            className="gap-2 shrink-0 cursor-pointer shadow-sm"
-          >
-            <Sparkles className="h-4 w-4" />
-            Tư vấn lộ trình với AI
-          </Button>
-        </div>
-      </section>
+      </div>
     </div>
   );
 }

@@ -41,10 +41,21 @@ export function filterCourseCatalog<T extends CourseCatalogEntry>(
       course.topics?.some((t) => t.toLowerCase().includes(query));
 
     const matchesCategory =
-      selectedCategory === "Tất cả" || course.category === selectedCategory;
+      selectedCategory === "Tất cả" ||
+      selectedCategory === "all" ||
+      course.category === selectedCategory;
 
     const matchesLevel =
-      selectedLevel === "Tất cả cấp độ" || course.level === selectedLevel;
+      selectedLevel === "Tất cả" ||
+      selectedLevel === "Tất cả cấp độ" ||
+      selectedLevel === "all" ||
+      course.level === selectedLevel ||
+      ((selectedLevel === "Beginner" || selectedLevel === "Cơ bản") &&
+        (course.level === "Beginner" || course.level === "Cơ bản")) ||
+      ((selectedLevel === "Intermediate" || selectedLevel === "Trung cấp") &&
+        (course.level === "Intermediate" || course.level === "Trung cấp")) ||
+      ((selectedLevel === "Advanced" || selectedLevel === "Nâng cao") &&
+        (course.level === "Advanced" || course.level === "Nâng cao"));
 
     const price = course.price ?? 0;
     const matchesPrice =

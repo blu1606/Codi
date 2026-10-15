@@ -13,11 +13,26 @@ export interface CourseChapter {
   lessons: CourseLesson[];
 }
 
+export interface CourseReview {
+  id: string;
+  userName: string;
+  userAvatar?: string | null;
+  stars: number;
+  createdAt: string;
+  text?: string | null;
+  reply?: {
+    text: string;
+    createdAt?: string;
+  } | null;
+}
+
 export interface CourseDetail {
   course: CatalogCourse;
   instructor: { name: string; title: string | null; avatar: string | null; bio: string | null } | null;
   rating: number;
   reviewCount: number;
+  ratingBreakdown?: number[];
+  reviews?: CourseReview[];
   learningOutcomes: string[];
   requirements: string[];
   targetAudience: string | null;
