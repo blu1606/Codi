@@ -23,6 +23,10 @@ The login-specific palette remains scoped in `apps/web/src/index.css`.
 
 `/dev/foundation` renders the primitives for manual review in development; it returns 404 in production.
 It changes no application records and is not a substitute for testing the authenticated header and inbox.
+The development preview includes explicit simulated confirmation operations: an 8-second pending action,
+and an action that fails once then succeeds on retry. These call no API and provide reproducible manual
+screenshots of the shared component's pending/error behavior; they are not evidence of a real server response.
+See `docs/ui-foundation-manual-qa.md` for the screenshot handoff.
 
 ## Roles and protected routes
 

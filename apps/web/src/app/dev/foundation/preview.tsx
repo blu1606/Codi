@@ -17,7 +17,8 @@ import { MASTERY_LEVELS } from "@codi-1/ui/lib/mastery";
 
 // Development-only component review surface; never used as application data.
 export default function FoundationPreview() {
-  const [dialog, setDialog] = useState<"simple" | "reason" | "typed" | null>(null);
+  const [dialog, setDialog] = useState<"simple" | "reason" | "typed" | "pending" | "error" | null>(null);
+  const [failedOnce, setFailedOnce] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [docked, setDocked] = useState(false);
   const [removed, setRemoved] = useState(false);
@@ -33,7 +34,14 @@ export default function FoundationPreview() {
       <Card><CardHeader><CardTitle>Bảng nội dung</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-3"><Button onClick={() => setSheet(true)}>Mở bảng bên</Button><Button variant="outline" onClick={() => setDocked((value) => !value)}>Bật/tắt bảng docked</Button></CardContent></Card>
       <Card className="lg:col-span-2"><CardContent><Empty><EmptyHeader><EmptyMedia variant="icon"><Inbox aria-hidden="true" /></EmptyMedia><EmptyTitle>Chưa có thông báo.</EmptyTitle><EmptyDescription>Thông báo về học tập sẽ xuất hiện tại đây.</EmptyDescription></EmptyHeader></Empty></CardContent></Card>
     </div>
-    <ConfirmDialog open={dialog !== null} onOpenChange={(open) => { if (!open) setDialog(null); }} title={dialog === "typed" ? "Xoá nội dung xem thử" : "Xác nhận hành động xem thử"} consequence="Đây là bản xem thử, không thay đổi dữ liệu người dùng." reversible="Bạn có thể đóng hộp thoại để quay lại." requireReason={dialog === "reason"} typeToConfirm={dialog === "typed" ? "XOÁ" : undefined} danger={dialog === "typed"} onConfirm={() => {}} />
+    <Card><CardHeader><CardTitle>Kiểm tra xử lý và lỗi xác nhận</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-sm text-muted-foreground">Tình huống mô phỏng chỉ trên trang dev, không gọi API: giữ trạng thái xử lý 8 giây hoặc báo lỗi lần đầu để kiểm tra thử lại.</p><div className="flex flex-wrap gap-3"><Button variant="outline" onClick={() => setDialog("pending")}>Xem xác nhận đang xử lý</Button><Button variant="outline" onClick={() => { setFailedOnce(false); setDialog("error"); }}>Xem lỗi và thử lại xác nhận</Button></div></CardContent></Card>
+    <ConfirmDialog open={dialog !== null} onOpenChange={(open) => { if (!open) setDialog(null); }} title={dialog === "typed" ? "Xoá nội dung xem thử" : "Xác nhận hành động xem thử"} consequence="Đây là bản xem thử, không thay đổi dữ liệu người dùng." reversible="Bạn có thể đóng hộp thoại sau khi xử lý xong để quay lại." requireReason={dialog === "reason"} typeToConfirm={dialog === "typed" ? "XOÁ" : undefined} danger={dialog === "typed"} onConfirm={async () => {
+      if (dialog === "pending") await new Promise<void>((resolve) => window.setTimeout(resolve, 8000));
+      if (dialog === "error" && !failedOnce) {
+        setFailedOnce(true);
+        throw new Error("Lỗi mô phỏng trên trang dev. Bấm Xác nhận lần nữa để thử lại thành công.");
+      }
+    }} />
     <Sheet open={sheet} onOpenChange={setSheet} title="Nội dung bổ sung" description="Bảng bên chuyển thành toàn màn hình trên điện thoại."><Alert>Vùng nội dung độc lập, có thể cuộn và đóng bằng bàn phím.</Alert></Sheet>
     {docked && <div className="flex justify-end"><Sheet docked open={docked} onOpenChange={setDocked} title="Bảng docked"><p className="text-sm text-muted-foreground">Nội dung nằm cạnh trang, không khoá tương tác với trang chính.</p></Sheet></div>}
   </main>;
