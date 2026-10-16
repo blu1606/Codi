@@ -85,3 +85,12 @@ DB verification tạo fixture riêng trong transaction rồi rollback. Manual br
 - Quiz xét phần trăm chính xác: 69,5% không đạt 70%.
 - Review công khai dùng CourseReview và listPublicCourseReviews chung. Helper lưu/ẩn/hiện cập nhật rating/reviewCount trong transaction. Helper visibility là persistence nội bộ; caller phải kiểm quyền kiểm duyệt và xác nhận trước khi gọi.
 - Media mẫu chuyển khỏi public sang dev-fixtures; route /dev/lesson-player chỉ chạy development và bị loại khỏi production tracing. PDF.js vẫn là dependency runtime.
+
+### Xác minh sau sửa (17/10/2026)
+
+- #126: 523 unit/DOM/API tests qua; typecheck web/db/ui, token audit và production build qua. Coverage hiện chỉ cấu hình cho module admin, không phải coverage toàn bộ lesson player.
+- DB verification rollback qua, gồm video không có material duration dù lesson 600 giây, clamp theo material, quiz 69,5% không đạt 70%, PDF từng trang, guard, completion idempotent và ẩn/hiện review cập nhật aggregate.
+- Một lần lưu media trong transaction kiểm thử DB dev: 745 ms. Đây không phải phép đo end-to-end trên browser.
+- #124: chỉ đồng bộ review; 297 tests, typecheck web và token audit qua. File review mock không dùng đã bỏ.
+- Phần review dùng chung có cùng ancestry (`fix/shared-course-reviews`). `merge-tree` giữa hai nhánh không còn conflict ở type, getter, component hoặc test review. Còn conflict độc lập ở `sign-in-form.tsx` và `sign-up-form.tsx` giữa onboarding #123 và commerce #124; chưa nhập auth của #124 vào #126 theo phạm vi đã chốt.
+- Không tự merge PR hoặc bỏ draft; manual browser walkthrough và bảng screenshot vẫn cần hoàn tất như phần trên.
