@@ -21,6 +21,8 @@ export const studentActivities = pgTable("student_activities", {
 }, (table) => [uniqueIndex("student_activities_user_date_idx").on(table.userId, table.occurredAt)]);
 
 // UC-12 Set Course Learning Goal — an input to path generation, so it is structured, not prose.
+// ONBOARDING_GOALS (project/finish/interview) is canonical for new course goal writes (§7).
+// The four schema-v7 values remain readable for existing enrollments; goal edit maps them to finish.
 export const learningGoal = pgEnum("learning_goal", ["complete_course", "pass_assessments", "master_specific_skill", "refresh_basics", ...ONBOARDING_GOALS]);
 export const selfAssessedLevel = pgEnum("self_assessed_level", ONBOARDING_LEVELS);
 export const enrollmentStatus = pgEnum("enrollment_status", ["active", "completed", "suspended"]);
