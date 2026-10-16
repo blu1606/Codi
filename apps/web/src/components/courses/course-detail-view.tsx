@@ -25,7 +25,7 @@ import {
   Star,
   Smartphone,
   Sparkles,
-  Users ,
+  Users,
 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { Card } from "@codi-1/ui/components/card";
