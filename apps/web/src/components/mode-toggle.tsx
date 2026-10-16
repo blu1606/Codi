@@ -25,7 +25,7 @@ export function ModeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="outline" size="icon" className="size-10 rounded-xl text-muted-foreground hover:text-foreground" />}
+        render={<Button variant="outline" size="icon" className="size-11 rounded-md text-muted-foreground hover:text-foreground" />}
         aria-label="Chọn giao diện sáng hoặc tối"
         title="Giao diện"
       >
