@@ -50,6 +50,7 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     }
   }
   const { instructorName, instructorImage, ...courseData } = course;
+
   return {
     course: { ...courseData, createdAt: courseData.createdAt.toISOString() },
     instructor: instructorName ? {
@@ -60,6 +61,8 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     } : null,
     rating: course.rating,
     reviewCount: course.reviewCount,
+    ratingBreakdown: [0, 0, 0, 0, 0],
+    reviews: [],
     learningOutcomes: details?.learningOutcomes ?? [],
     requirements: details?.requirements ?? [],
     targetAudience: details?.targetAudience ?? null,
