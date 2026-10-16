@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/safe-redirect";
 
 export default function GitHubSignInButton({
   text = "Tiếp tục với GitHub",
@@ -18,14 +19,14 @@ export default function GitHubSignInButton({
   const handleGitHubSignIn = async () => {
     try {
       setLoading(true);
-      const currentPath =
+      const rawCurrentPath =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("next") ||
             (window.location.pathname === "/login"
               ? "/dashboard"
               : window.location.pathname + window.location.search)
           : "/dashboard";
-      const targetUrl = callbackURL || currentPath;
+      const targetUrl = safeNext(callbackURL || rawCurrentPath, "/dashboard");
 
       const res = await authClient.signIn.social(
         {

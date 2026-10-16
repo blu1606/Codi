@@ -398,7 +398,6 @@ export default function CoursesPage() {
           type: "success",
           text: `Đăng ký thành công “${course.title}”! Bạn có thể bắt đầu học ngay.`,
         });
-        router.push(`/learn/${course.id}` as any);
       }
     } catch {
       setFeedback({ type: "error", text: "Không thể kết nối. Vui lòng thử lại." });

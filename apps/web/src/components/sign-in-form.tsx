@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/safe-redirect";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
@@ -70,10 +71,11 @@ export default function SignInForm({
             if (onSuccess) {
               onSuccess();
             } else {
-              const next =
+              const rawNext =
                 typeof window !== "undefined"
-                  ? new URLSearchParams(window.location.search).get("next") || "/dashboard"
-                  : "/dashboard";
+                  ? new URLSearchParams(window.location.search).get("next")
+                  : null;
+              const next = safeNext(rawNext, "/dashboard");
               router.push(next as any);
             }
           },

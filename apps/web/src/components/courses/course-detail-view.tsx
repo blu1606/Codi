@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -96,6 +96,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<"add-to-cart" | "buy-now" | "enroll-free" | null>(null);
   const [intentReason, setIntentReason] = useState("");
+  const isResumingRef = useRef(false);
 
   const userRole = (session?.user as { role?: string } | undefined)?.role ?? null;
   const isPrivilegedRole = userRole === "lecturer" || userRole === "admin";
@@ -152,12 +153,27 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   // Check and resume pending intent stored in sessionStorage (e.g. from page reload or redirect)
   useEffect(() => {
     if (!detail || !session?.user) return;
+    if (isResumingRef.current) return;
     try {
       const stored = sessionStorage.getItem("codi_pending_course_intent");
       if (!stored) return;
-      const parsed = JSON.parse(stored) as { courseId?: string; slug?: string; action?: "add-to-cart" | "buy-now" | "enroll-free" };
+      const parsed = JSON.parse(stored) as {
+        courseId?: string;
+        slug?: string;
+        action?: "add-to-cart" | "buy-now" | "enroll-free";
+        createdAt?: number;
+      };
+
+      // 15-minute TTL check
+      const INTENT_TTL_MS = 15 * 60 * 1000;
+      if (parsed.createdAt && Date.now() - parsed.createdAt > INTENT_TTL_MS) {
+        sessionStorage.removeItem("codi_pending_course_intent");
+        return;
+      }
+
       if (parsed.courseId === detail.course.id || parsed.slug === slug) {
         sessionStorage.removeItem("codi_pending_course_intent");
+        isResumingRef.current = true;
         if (parsed.action === "buy-now") {
           handleBuyNow(true);
         } else if (parsed.action === "add-to-cart") {
@@ -180,6 +196,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           action: "add-to-cart",
           courseId: detail.course.id,
           slug,
+          createdAt: Date.now(),
         }));
       } catch {}
       setIntentReason("Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.");
@@ -242,6 +259,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           action: "enroll-free",
           courseId: detail.course.id,
           slug,
+          createdAt: Date.now(),
         }));
       } catch {}
       setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
@@ -278,7 +296,6 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       const successText = `Đã đăng ký “${detail.course.title}”.`;
       setCartMessage(successText);
       toast.success(successText);
-      router.push(`/learn/${detail.course.id}` as any);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.";
       setCartMessage(msg);
@@ -297,6 +314,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           action: "buy-now",
           courseId: detail.course.id,
           slug,
+          createdAt: Date.now(),
         }));
       } catch {}
       setIntentReason("Đăng nhập để mua khoá học.");
@@ -331,7 +349,6 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           } catch {}
           setOwnership({ ownership: "owned" });
           toast.success("Bạn đã sở hữu khóa học này.");
-          router.push(`/learn/${detail.course.id}` as any);
           return;
         }
         throw new Error(result.error || "Không thể xử lý mua ngay.");
@@ -354,6 +371,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
   const handleAuthSuccess = async () => {
     setAuthModalOpen(false);
+    if (isResumingRef.current) return;
     let intent = pendingIntent;
     if (!intent) {
       try {
@@ -365,7 +383,12 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       } catch {}
     }
     setPendingIntent(null);
+    try {
+      sessionStorage.removeItem("codi_pending_course_intent");
+    } catch {}
+
     if (!intent) return;
+    isResumingRef.current = true;
 
     // Refresh authClient session store to guarantee current credentials
     try {
@@ -927,7 +950,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       {/* S03 Gated Sign-in / OTP Modal */}
       <AuthModal
         open={authModalOpen}
-        onOpenChange={setAuthModalOpen}
+        onOpenChange={(open) => {
+          setAuthModalOpen(open);
+          if (!open) {
+            setPendingIntent(null);
+            try {
+              sessionStorage.removeItem("codi_pending_course_intent");
+            } catch {}
+          }
+        }}
         intentReason={intentReason}
         courseTitle={detail?.course.title}
         onSuccess={handleAuthSuccess}

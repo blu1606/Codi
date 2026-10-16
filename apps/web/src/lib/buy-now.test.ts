@@ -37,6 +37,7 @@ vi.mock("@codi-1/auth", () => ({
 const mockDb = {
   select: mocks.select,
   insert: mocks.insert,
+  transaction: async (fn: any) => fn(mockDb),
 } as any;
 
 const sampleCourse = {

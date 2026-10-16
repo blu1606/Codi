@@ -136,61 +136,85 @@ export async function createBuyNowOrder(
   }
 
   // 5. Create new Buy Now single-course order (D4: is_buy_now=true, voucherId=null, cart untouched)
-  const orderCode = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
   const paymentDeadline = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
 
-  const [newOrder] = await db
-    .insert(orders)
-    .values({
-      code: orderCode,
+  // Atomically generate code and create order + items + events + transaction
+  return await db.transaction(async (tx) => {
+    let newOrder: { id: number; code: string } | null = null;
+    let attempts = 0;
+
+    while (attempts < 5) {
+      attempts++;
+      const orderCode = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
+
+      // Check if order code already exists
+      const [existing] = await tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.code, orderCode))
+        .limit(1);
+
+      if (existing) continue;
+
+      const [created] = await tx
+        .insert(orders)
+        .values({
+          code: orderCode,
+          userId,
+          voucherId: null, // D4: no voucher
+          subtotal: targetCourse.price,
+          discountAmount: 0,
+          totalAmount: targetCourse.price,
+          receivedAmount: 0,
+          currency: "VND",
+          status: "pending",
+          isBuyNow: true, // D4: is_buy_now = true
+          paymentDeadline,
+        })
+        .returning({ id: orders.id, code: orders.code });
+
+      if (created) {
+        newOrder = created;
+        break;
+      }
+    }
+
+    if (!newOrder) {
+      throw new BuyNowError(500, "Không thể tạo mã đơn hàng duy nhất. Vui lòng thử lại.");
+    }
+
+    // Insert order item
+    await tx.insert(orderItems).values({
+      orderId: newOrder.id,
+      courseId: targetCourse.id,
+      courseTitle: targetCourse.title,
+      unitPrice: targetCourse.price,
+    });
+
+    // Insert timeline event
+    await tx.insert(orderEvents).values({
+      orderId: newOrder.id,
+      label: "Đã tạo đơn",
+      actorId: userId,
+    });
+
+    // Also record in studentTransactions for payment polling compatibility
+    await tx.insert(studentTransactions).values({
+      id: newOrder.code,
       userId,
-      voucherId: null, // D4: no voucher
-      subtotal: targetCourse.price,
-      discountAmount: 0,
-      totalAmount: targetCourse.price,
-      receivedAmount: 0,
-      currency: "VND",
+      courseId: targetCourse.id,
+      amount: targetCourse.price,
       status: "pending",
-      isBuyNow: true, // D4: is_buy_now = true
-      paymentDeadline,
-    })
-    .returning({ id: orders.id, code: orders.code });
+    });
 
-  if (!newOrder) {
-    throw new BuyNowError(500, "Không thể tạo đơn hàng mua ngay.");
-  }
-
-  // Insert order item
-  await db.insert(orderItems).values({
-    orderId: newOrder.id,
-    courseId: targetCourse.id,
-    courseTitle: targetCourse.title,
-    unitPrice: targetCourse.price,
+    return {
+      orderId: newOrder.id,
+      orderCode: newOrder.code,
+      courseId: targetCourse.id,
+      courseTitle: targetCourse.title,
+      courseSlug: targetCourse.slug,
+      price: targetCourse.price,
+      isExisting: false,
+    };
   });
-
-  // Insert timeline event
-  await db.insert(orderEvents).values({
-    orderId: newOrder.id,
-    label: "Đã tạo đơn",
-    actorId: userId,
-  });
-
-  // Also record in studentTransactions for payment polling compatibility
-  await db.insert(studentTransactions).values({
-    id: orderCode,
-    userId,
-    courseId: targetCourse.id,
-    amount: targetCourse.price,
-    status: "pending",
-  }).catch(() => {});
-
-  return {
-    orderId: newOrder.id,
-    orderCode: newOrder.code,
-    courseId: targetCourse.id,
-    courseTitle: targetCourse.title,
-    courseSlug: targetCourse.slug,
-    price: targetCourse.price,
-    isExisting: false,
-  };
 }
