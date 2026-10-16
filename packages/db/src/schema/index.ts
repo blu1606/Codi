@@ -9,6 +9,7 @@ export * from "./student-profile";
 export * from "./assessments";
 export * from "./coding-exercises";
 export * from "./learning";
+export * from "./learning-path-runtime";
 export * from "./interaction";
 export * from "./ai-interaction-logs";
 export {};

@@ -4,7 +4,7 @@ import { assertOnboardingAccess, goalTransition, onboardingCommand, requireDiagn
 function enrollment(overrides: Partial<Enrollment> = {}): Enrollment {
   return { id: 1, userId: "learner", courseId: "course", progress: 40, enrolledAt: new Date(), orderItemId: null, status: "active", completedAt: null,
     learningGoal: null, targetSkillId: null, weeklyGoalMinutes: null, goalSetAt: null, selfAssessedLevel: null, goalDraft: {}, goalStep: 0, goalEditing: false,
-    diagnosticQuestionIndex: 0, diagnosticStatus: "none", pathStatus: "none", pathSource: null, lastLessonId: null, lastActiveAt: null, ...overrides };
+    diagnosticQuestionIndex: 0, diagnosticCardDismissedAt: null, diagnosticStatus: "none", pathStatus: "none", pathSource: null, lastLessonId: null, lastActiveAt: null, ...overrides };
 }
 const setup = (e: Enrollment, command: OnboardingCommand) => ({ ...e, ...goalTransition(e, command) });
 

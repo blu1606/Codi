@@ -4,6 +4,9 @@ import { ZodError } from "zod";
 import { auth, db } from "@/services";
 import { onboardingCommand, OnboardingError } from "@/lib/onboarding-contract";
 import { createOnboardingService } from "@/lib/onboarding-service";
+import { scheduleLearningPath } from "@/lib/learning-path-runtime";
+
+export const maxDuration = 60;
 
 const service = createOnboardingService(db);
 type Context = { params: Promise<{ courseId: string }> };
@@ -32,6 +35,8 @@ export async function POST(request: NextRequest, context: Context) {
     const userId = await viewer(request);
     const { courseId } = await context.params;
     const command = onboardingCommand.parse(await request.json().catch(() => null));
-    return NextResponse.json(await service.execute(userId, courseId, command), { headers: { "Cache-Control": "private, no-store" } });
+    const data = await service.execute(userId, courseId, command);
+    if (data.enrollment.pathStatus === "generating") scheduleLearningPath(userId, courseId);
+    return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return failure(error); }
 }
