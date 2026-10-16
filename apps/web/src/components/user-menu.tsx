@@ -17,8 +17,9 @@ import { useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
+import { getRoleHome, ROLE_LABEL, type RoleId } from "@codi-1/auth/roles";
 
-export default function UserMenu() {
+export default function UserMenu({ role = null }: { role?: RoleId | null }) {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
   const [profileOverride, setProfileOverride] = useState<{
@@ -63,7 +64,7 @@ export default function UserMenu() {
   }, [session?.user?.id]);
 
   if (isPending) {
-    return <Skeleton className="size-10 rounded-full" aria-label="Đang tải tài khoản" />;
+    return <Skeleton className="size-11 rounded-full" aria-label="Đang tải tài khoản" />;
   }
 
   if (!session) {
@@ -72,7 +73,7 @@ export default function UserMenu() {
         href="/login"
         aria-label="Đăng nhập"
         title="Đăng nhập"
-        className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <UserRound aria-hidden="true" className="size-5" />
       </Link>
@@ -91,7 +92,7 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" className="size-10 overflow-hidden rounded-full border border-border bg-muted p-0" />}
+        render={<Button variant="ghost" size="icon" className="size-11 overflow-hidden rounded-full border border-border bg-muted p-0" />}
         aria-label={`Mở menu tài khoản của ${currentDisplayName}`}
         title={currentDisplayName}
       >
@@ -111,10 +112,11 @@ export default function UserMenu() {
           <DropdownMenuLabel>
             <span className="block truncate text-sm font-semibold text-foreground">{currentDisplayName}</span>
             <span className="mt-1 block truncate font-normal">{session.user.email}</span>
+            {role && <span className="mt-2 inline-flex rounded-pill bg-accent px-2 py-1 text-xs text-accent-foreground">{ROLE_LABEL[role]}</span>}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-            Bàn làm việc (Dashboard)
+          <DropdownMenuItem onClick={() => router.push(getRoleHome(role))}>
+            {role === "ADMIN" ? "Bảng quản trị" : role === "LECTURER" ? "Khu vực giảng dạy" : "Bàn làm việc"}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => router.push("/profile")}>
             Hồ sơ cá nhân (Profile)
