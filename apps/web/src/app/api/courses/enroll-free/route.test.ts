@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   values: vi.fn(),
   onConflictDoNothing: vi.fn(),
   delete: vi.fn(),
+  transaction: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
@@ -27,16 +28,17 @@ vi.mock("@/services", () => ({
     select: mocks.select,
     insert: mocks.insert,
     delete: mocks.delete,
+    transaction: mocks.transaction,
   },
 }));
 
 import { ForbiddenError } from "@codi-1/auth";
 import { POST } from "./route";
 
-function request(body: unknown) {
+function request(body: unknown, headersInit?: Record<string, string>) {
   return new NextRequest("http://localhost/api/courses/enroll-free", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headersInit },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -61,9 +63,27 @@ beforeEach(() => {
   mocks.onConflictDoNothing.mockResolvedValue(undefined);
 
   mocks.delete.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+
+  mocks.transaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
+    return callback({
+      insert: mocks.insert,
+      delete: mocks.delete,
+    });
+  });
 });
 
 describe("POST /api/courses/enroll-free", () => {
+  it("returns 415 when Content-Type is not application/json", async () => {
+    const req = new NextRequest("http://localhost/api/courses/enroll-free", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ courseId: "course-free" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(415);
+    expect(await res.json()).toEqual({ error: "Yêu cầu Content-Type application/json" });
+  });
+
   it("returns 401 when unauthenticated", async () => {
     mocks.getSession.mockResolvedValue(null);
     const res = await POST(request({ courseId: "course-free" }));

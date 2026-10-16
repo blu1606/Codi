@@ -2,7 +2,6 @@ import { and, asc, count, eq, getTableColumns } from "drizzle-orm";
 import { courseChapters, courseDetails, courseLessons, courses, studentEnrollments, user } from "@codi-1/db";
 import { db } from "@/services";
 import type { CourseChapter, CourseDetail } from "./course-details";
-import { MOCK_COURSE_REVIEWS } from "./course-mock-reviews";
 
 export async function getCourseDetail(slug: string): Promise<CourseDetail | null> {
   const [course] = await db
@@ -51,20 +50,19 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     }
   }
   const { instructorName, instructorImage, ...courseData } = course;
-  const mockExtra = MOCK_COURSE_REVIEWS[slug];
 
   return {
     course: { ...courseData, createdAt: courseData.createdAt.toISOString() },
     instructor: instructorName ? {
       name: instructorName,
-      title: mockExtra?.instructorTitle ?? null,
+      title: null,
       avatar: instructorImage ?? null,
       bio: null,
     } : null,
     rating: course.rating,
     reviewCount: course.reviewCount,
-    ratingBreakdown: mockExtra?.ratingBreakdown ?? [0, 0, 0, 0, 0],
-    reviews: mockExtra?.reviews ?? [],
+    ratingBreakdown: [0, 0, 0, 0, 0],
+    reviews: [],
     learningOutcomes: details?.learningOutcomes ?? [],
     requirements: details?.requirements ?? [],
     targetAudience: details?.targetAudience ?? null,

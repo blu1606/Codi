@@ -109,13 +109,6 @@ export default function CoursesPage() {
     setLoading(true);
     setError(null);
 
-    // Preview / Test state: /courses?error=1
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("error") === "1") {
-      setLoading(false);
-      setError("Không thể tải khóa học. Vui lòng thử lại.");
-      return () => controller.abort();
-    }
-
     fetchCourses(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
@@ -135,20 +128,39 @@ export default function CoursesPage() {
     return () => controller.abort();
   }, [attempt, router]);
 
+  const isHydratedRef = useRef(false);
+
   // Hydrate filters from URL query parameters on initial load
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const qParam = params.get("q");
     if (qParam) setSearchTerm(qParam);
+
     const catParam = params.get("cat");
     if (catParam) setSelectedCategory(catParam);
+
     const levelParam = params.get("level");
-    if (levelParam) setSelectedLevel(levelParam);
+    if (levelParam) {
+      const normalized = levelParam.trim().toLowerCase();
+      if (normalized === "beginner" || normalized === "cơ bản" || normalized === "co ban") {
+        setSelectedLevel("Beginner");
+      } else if (normalized === "intermediate" || normalized === "trung cấp" || normalized === "trung cap") {
+        setSelectedLevel("Intermediate");
+      } else if (normalized === "advanced" || normalized === "nâng cao" || normalized === "nang cao") {
+        setSelectedLevel("Advanced");
+      } else if (normalized === "all" || normalized === "tất cả") {
+        setSelectedLevel("all");
+      } else {
+        setSelectedLevel(levelParam);
+      }
+    }
+
     const priceParam = params.get("price");
     if (priceParam === "free" || priceParam === "paid" || priceParam === "all") {
       setSelectedPrice(priceParam);
     }
+
     const sortParam = params.get("sort");
     if (
       sortParam === "popular" ||
@@ -159,11 +171,30 @@ export default function CoursesPage() {
     ) {
       setSelectedSort(sortParam);
     }
+    isHydratedRef.current = true;
   }, []);
+
+  // Sync active filters and sort to URL query params
+  useEffect(() => {
+    if (!isHydratedRef.current || typeof window === "undefined") return;
+    const params = new URLSearchParams();
+    if (searchTerm.trim()) params.set("q", searchTerm.trim());
+    if (selectedCategory !== "Tất cả") params.set("cat", selectedCategory);
+    if (selectedLevel !== "all") params.set("level", selectedLevel);
+    if (selectedPrice !== "all") params.set("price", selectedPrice);
+    if (selectedSort !== "popular") params.set("sort", selectedSort);
+
+    const queryString = params.toString();
+    const newUrl = queryString ? `/courses?${queryString}` : "/courses";
+    const currentUrl = window.location.pathname + window.location.search;
+    if (currentUrl !== newUrl) {
+      window.history.replaceState(null, "", newUrl);
+    }
+  }, [searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
 
   // 2. Fetch ownership mapping when session and courses exist
   useEffect(() => {
-    if (!session?.user || courses.length === 0) {
+    if (!session?.user?.id || courses.length === 0) {
       setOwnershipMap({});
       return;
     }
@@ -172,7 +203,7 @@ export default function CoursesPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        courses: courses.map((c) => ({ id: c.id, price: c.price })),
+        courses: courses.map((c) => ({ id: c.id })),
       }),
       signal: controller.signal,
     })
@@ -184,14 +215,17 @@ export default function CoursesPage() {
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [courses, session]);
+  }, [courses, session?.user?.id]);
 
   // 3. Typeahead suggestions
   const typeaheadResult = useMemo(() => {
     return getTypeaheadSuggestions(courses, searchTerm);
   }, [courses, searchTerm]);
 
-  const flatSuggestions = typeaheadResult.matches;
+  // Build flat list matching the exact rendering group order
+  const flatSuggestions = useMemo(() => {
+    return Object.values(typeaheadResult.grouped).flat();
+  }, [typeaheadResult.grouped]);
 
   // Close typeahead on click outside
   useEffect(() => {
@@ -299,7 +333,8 @@ export default function CoursesPage() {
   // 6. Ownership CTAs Handlers
   const handleAddToCart = async (course: CatalogCourse) => {
     if (!session?.user) {
-      router.push("/login");
+      const nextUrl = `/courses/${encodeURIComponent(course.slug)}`;
+      router.push(`/login?next=${encodeURIComponent(nextUrl)}`);
       return;
     }
     setAddingCourseId(course.id);
@@ -337,7 +372,8 @@ export default function CoursesPage() {
 
   const handleEnrollFree = async (course: CatalogCourse) => {
     if (!session?.user) {
-      router.push("/login");
+      const nextUrl = `/courses/${encodeURIComponent(course.slug)}`;
+      router.push(`/login?next=${encodeURIComponent(nextUrl)}`);
       return;
     }
     setEnrollingCourseId(course.id);
@@ -482,7 +518,9 @@ export default function CoursesPage() {
                             }`}
                           >
                             <span className="truncate pr-2">{item.title}</span>
-                            <span className="text-xs text-muted-foreground shrink-0">{item.level}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              {LEVELS.find((l) => l.value === item.level)?.label ?? item.level}
+                            </span>
                           </button>
                         );
                       })}
@@ -655,12 +693,7 @@ export default function CoursesPage() {
               </div>
               <Button
                 variant="outline"
-                onClick={() => {
-                  if (typeof window !== "undefined" && window.location.search.includes("error=1")) {
-                    router.replace("/courses");
-                  }
-                  setAttempt((value) => value + 1);
-                }}
+                onClick={() => setAttempt((value) => value + 1)}
                 className="gap-2 cursor-pointer"
               >
                 <RotateCw className="h-4 w-4" />

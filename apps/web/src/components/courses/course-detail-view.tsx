@@ -125,7 +125,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
   // Check ownership
   useEffect(() => {
-    if (!detail || !session?.user) {
+    if (!detail || !session?.user?.id) {
       setOwnership(null);
       return;
     }
@@ -134,7 +134,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        courses: [{ id: detail.course.id, price: detail.course.price }],
+        courses: [{ id: detail.course.id }],
       }),
       signal: controller.signal,
     })
@@ -146,7 +146,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [detail, session]);
+  }, [detail, session?.user?.id]);
 
   const handleAddToCart = async () => {
     if (!detail || adding || sessionLoading) return;
@@ -474,71 +474,76 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                 Đánh giá của học viên
               </h2>
 
-              {/* Score breakdown card */}
-              <div className={styles.ratingBox}>
-                <div className={styles.ratingScore}>
-                  <span className={styles.scoreNum}>{detail.rating.toFixed(1)}</span>
-                  <div className={styles.starsRow}>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} className={`h-4 w-4 ${styles.starFilled}`} />
-                    ))}
-                  </div>
-                  <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
-                </div>
-
-                <div className={styles.breakdownList}>
-                  {[5, 4, 3, 2, 1].map((stars, idx) => {
-                    const countVal = ratingBreakdown[idx] ?? 0;
-                    const pct = Math.round((countVal / totalBreakdown) * 100);
-                    return (
-                      <div key={stars} className={styles.breakdownRow}>
-                        <span className={styles.breakdownLabel}>{stars} sao</span>
-                        <div className={styles.breakdownTrack} aria-hidden="true">
-                          <div
-                            className={styles.breakdownFill}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className={styles.breakdownCount}>{countVal}</span>
+              {/* Reviews section */}
+              {detail.reviewCount > 0 ? (
+                <>
+                  {/* Score breakdown card */}
+                  <div className={styles.ratingBox}>
+                    <div className={styles.ratingScore}>
+                      <span className={styles.scoreNum}>{detail.rating.toFixed(1)}</span>
+                      <div className={styles.starsRow}>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star key={i} className={`h-4 w-4 ${styles.starFilled}`} />
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Reviews list */}
-              {reviews.length > 0 ? (
-                <div className={styles.reviewsList}>
-                  {reviews.map((r) => (
-                    <div key={r.id} className={styles.reviewCard}>
-                      <div className={styles.reviewHeader}>
-                        <div className={styles.userAvatar}>
-                          {getInitials(r.userName)}
-                        </div>
-                        <span className={styles.userName}>{r.userName}</span>
-                        <div className={styles.starsRow}>
-                          {Array.from({ length: r.stars }).map((_, i) => (
-                            <Star key={i} className={`h-3.5 w-3.5 ${styles.starFilled}`} />
-                          ))}
-                        </div>
-                        <span className={styles.reviewDate}>{r.createdAt}</span>
-                      </div>
-
-                      {r.text && <p className={styles.reviewText}>{r.text}</p>}
-
-                      {r.reply && (
-                        <div className={styles.replyBox}>
-                          <div className={styles.replyHeader}>
-                            <MessageCircle className="h-3.5 w-3.5" />
-                            <span>Phản hồi của giảng viên</span>
-                            <span className={styles.replyBadge}>Giảng viên</span>
-                          </div>
-                          <p className={styles.replyText}>{r.reply.text}</p>
-                        </div>
-                      )}
+                      <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
                     </div>
-                  ))}
-                </div>
+
+                    <div className={styles.breakdownList}>
+                      {[5, 4, 3, 2, 1].map((stars, idx) => {
+                        const countVal = ratingBreakdown[idx] ?? 0;
+                        const pct = totalBreakdown > 0 ? Math.round((countVal / totalBreakdown) * 100) : 0;
+                        return (
+                          <div key={stars} className={styles.breakdownRow}>
+                            <span className={styles.breakdownLabel}>{stars} sao</span>
+                            <div className={styles.breakdownTrack} aria-hidden="true">
+                              <div
+                                className={styles.breakdownFill}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className={styles.breakdownCount}>{countVal}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Reviews list */}
+                  {reviews.length > 0 ? (
+                    <div className={styles.reviewsList}>
+                      {reviews.map((r) => (
+                        <div key={r.id} className={styles.reviewCard}>
+                          <div className={styles.reviewHeader}>
+                            <div className={styles.userAvatar}>
+                              {getInitials(r.userName)}
+                            </div>
+                            <span className={styles.userName}>{r.userName}</span>
+                            <div className={styles.starsRow}>
+                              {Array.from({ length: r.stars }).map((_, i) => (
+                                <Star key={i} className={`h-3.5 w-3.5 ${styles.starFilled}`} />
+                              ))}
+                            </div>
+                            <span className={styles.reviewDate}>{r.createdAt}</span>
+                          </div>
+
+                          {r.text && <p className={styles.reviewText}>{r.text}</p>}
+
+                          {r.reply && (
+                            <div className={styles.replyBox}>
+                              <div className={styles.replyHeader}>
+                                <MessageCircle className="h-3.5 w-3.5" />
+                                <span>Phản hồi của giảng viên</span>
+                                <span className={styles.replyBadge}>Giảng viên</span>
+                              </div>
+                              <p className={styles.replyText}>{r.reply.text}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>
               )}
@@ -560,26 +565,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               {/* Ownership-aware CTA section */}
               {isPrivilegedRole ? (
                 <p className="text-xs text-muted-foreground">
-                  Bạn đang xem với vai trò {userRole}. Chỉ tài khoản học viên mới mua được khoá học.
+                  Bạn đang xem với vai trò {userRole === "lecturer" ? "giảng viên" : "quản trị viên"}. Chỉ tài khoản học viên mới mua được khoá học.
                 </p>
               ) : ownState === "owned" ? (
-                <>
-                  <div className={styles.progressSection}>
-                    <div className={styles.progressLabelRow}>
-                      <span className="text-muted-foreground">Tiến độ của bạn</span>
-                      <strong>0/{summary.lessonCount} bài</strong>
-                    </div>
-                    <div className={styles.progressBarTrack} aria-hidden="true">
-                      <div className={styles.progressBarFill} style={{ width: "0%" }} />
-                    </div>
-                  </div>
-                  <Link
-                    href={`/learn/${course.id}` as any}
-                    className={styles.ctaPrimaryBtn}
-                  >
-                    Tiếp tục học
-                  </Link>
-                </>
+                <Link
+                  href={`/learn/${course.id}` as any}
+                  className={styles.ctaPrimaryBtn}
+                >
+                  Tiếp tục học
+                </Link>
               ) : ownState === "pending-payment" ? (
                 <>
                   <div className="rounded-lg bg-warning/10 p-3 text-xs text-warning border border-warning/20">

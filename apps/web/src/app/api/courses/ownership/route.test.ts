@@ -71,8 +71,8 @@ describe("POST /api/courses/ownership", () => {
     });
     expect(data.ownership).toEqual(data.ownerships);
     expect(mocks.getCourseOwnershipMap).toHaveBeenCalledWith(null, [
-      { id: "course-1", price: 100000 },
-      { id: "course-free", price: 0 },
+      "course-1",
+      "course-free",
     ]);
   });
 
@@ -94,7 +94,16 @@ describe("POST /api/courses/ownership", () => {
       "course-1": { ownership: "owned" },
     });
     expect(mocks.getCourseOwnershipMap).toHaveBeenCalledWith("learner-1", [
-      { id: "course-1", price: 100000 },
+      "course-1",
     ]);
+  });
+
+  it("rejects request when courses array exceeds 200 items", async () => {
+    const tooMany = Array.from({ length: 201 }, (_, i) => ({ id: `course-${i}` }));
+    const res = await POST(request({ courses: tooMany }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "Danh sách khoá học vượt quá giới hạn tối đa (200).",
+    });
   });
 });

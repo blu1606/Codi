@@ -8,24 +8,49 @@ import { resolveCourseOwnership, type CourseOwnershipDetail } from "./course-own
  */
 export async function getCourseOwnershipMap(
   userId: string | null | undefined,
-  courseList: { id: string; price: number }[]
+  courseInput: (string | { id: string; price?: number })[]
 ): Promise<Record<string, CourseOwnershipDetail>> {
   const result: Record<string, CourseOwnershipDetail> = {};
-  if (!courseList.length) return result;
+  if (!courseInput.length) return result;
+
+  // Extract unique course IDs
+  const rawIds = courseInput.map((c) => (typeof c === "string" ? c : c.id)).filter(Boolean);
+  const uniqueCourseIds = Array.from(new Set(rawIds));
+  if (!uniqueCourseIds.length) return result;
+
+  // Query database for published courses to obtain verified prices and omit non-existent/unpublished courses
+  const dbCourses = await db
+    .select({
+      id: courses.id,
+      price: courses.price,
+    })
+    .from(courses)
+    .where(
+      and(
+        inArray(courses.id, uniqueCourseIds),
+        eq(courses.status, "published")
+      )
+    );
+
+  if (!dbCourses.length) return result;
+
+  const validCourseMap = new Map<string, number>();
+  for (const c of dbCourses) {
+    validCourseMap.set(c.id, c.price);
+  }
+  const validCourseIds = Array.from(validCourseMap.keys());
 
   if (!userId) {
-    for (const c of courseList) {
-      result[c.id] = resolveCourseOwnership({
+    for (const [id, price] of validCourseMap.entries()) {
+      result[id] = resolveCourseOwnership({
         isEnrolled: false,
         isInCart: false,
-        price: c.price,
+        price,
         signedIn: false,
       });
     }
     return result;
   }
-
-  const courseIds = courseList.map((c) => c.id);
 
   // 1. Fetch user enrollments
   const enrollments = await db
@@ -34,7 +59,7 @@ export async function getCourseOwnershipMap(
     .where(
       and(
         eq(studentEnrollments.userId, userId),
-        inArray(studentEnrollments.courseId, courseIds)
+        inArray(studentEnrollments.courseId, validCourseIds)
       )
     );
   const enrolledSet = new Set(enrollments.map((e) => e.courseId));
@@ -51,7 +76,7 @@ export async function getCourseOwnershipMap(
       and(
         eq(orders.userId, userId),
         eq(orders.status, "pending"),
-        inArray(orderItems.courseId, courseIds)
+        inArray(orderItems.courseId, validCourseIds)
       )
     );
 
@@ -71,7 +96,7 @@ export async function getCourseOwnershipMap(
       and(
         eq(studentTransactions.userId, userId),
         eq(studentTransactions.status, "pending"),
-        inArray(studentTransactions.courseId, courseIds)
+        inArray(studentTransactions.courseId, validCourseIds)
       )
     );
   for (const tx of legacyTxs) {
@@ -87,18 +112,18 @@ export async function getCourseOwnershipMap(
     .where(
       and(
         eq(studentCart.userId, userId),
-        inArray(studentCart.courseId, courseIds)
+        inArray(studentCart.courseId, validCourseIds)
       )
     );
   const cartSet = new Set(cartRows.map((r) => r.courseId));
 
-  // 4. Resolve ownership per course
-  for (const c of courseList) {
-    result[c.id] = resolveCourseOwnership({
-      isEnrolled: enrolledSet.has(c.id),
-      pendingOrderId: pendingMap.get(c.id),
-      isInCart: cartSet.has(c.id),
-      price: c.price,
+  // 4. Resolve ownership per valid course
+  for (const [id, price] of validCourseMap.entries()) {
+    result[id] = resolveCourseOwnership({
+      isEnrolled: enrolledSet.has(id),
+      pendingOrderId: pendingMap.get(id),
+      isInCart: cartSet.has(id),
+      price,
       signedIn: true,
     });
   }
@@ -109,21 +134,12 @@ export async function getCourseOwnershipMap(
 /**
  * Shared server helper to resolve single course ownership:
  * owned | pending-payment | in-cart | free | not-owned
+ * If the course is missing or not published, returns not-owned (STATE-MACHINES §2).
  */
 export async function getOwnership(
   userId: string | null | undefined,
-  courseId: string,
-  price?: number
+  courseId: string
 ): Promise<CourseOwnershipDetail> {
-  let coursePrice = price;
-  if (coursePrice === undefined) {
-    const [c] = await db
-      .select({ price: courses.price })
-      .from(courses)
-      .where(eq(courses.id, courseId))
-      .limit(1);
-    coursePrice = c?.price ?? 0;
-  }
-  const map = await getCourseOwnershipMap(userId, [{ id: courseId, price: coursePrice }]);
+  const map = await getCourseOwnershipMap(userId, [courseId]);
   return map[courseId] ?? { ownership: "not-owned" };
 }
