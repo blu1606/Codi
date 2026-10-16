@@ -149,10 +149,39 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     return () => controller.abort();
   }, [detail, session]);
 
+  // Check and resume pending intent stored in sessionStorage (e.g. from page reload or redirect)
+  useEffect(() => {
+    if (!detail || !session?.user) return;
+    try {
+      const stored = sessionStorage.getItem("codi_pending_course_intent");
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as { courseId?: string; slug?: string; action?: "add-to-cart" | "buy-now" | "enroll-free" };
+      if (parsed.courseId === detail.course.id || parsed.slug === slug) {
+        sessionStorage.removeItem("codi_pending_course_intent");
+        if (parsed.action === "buy-now") {
+          handleBuyNow(true);
+        } else if (parsed.action === "add-to-cart") {
+          handleAddToCart(true);
+        } else if (parsed.action === "enroll-free") {
+          handleEnrollFree(true);
+        }
+      }
+    } catch {
+      // Ignore JSON errors
+    }
+  }, [detail, session?.user, slug]);
+
   const handleAddToCart = async (isGatedReturn = false) => {
     if (!detail || adding) return;
     if (!isGatedReturn && !session?.user) {
       setPendingIntent("add-to-cart");
+      try {
+        sessionStorage.setItem("codi_pending_course_intent", JSON.stringify({
+          action: "add-to-cart",
+          courseId: detail.course.id,
+          slug,
+        }));
+      } catch {}
       setIntentReason("Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.");
       setAuthModalOpen(true);
       return;
@@ -180,6 +209,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         }
         throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
       }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
       setOwnership({ ownership: "in-cart" });
       const successText = result.added ? `Đã thêm “${detail.course.title}” vào giỏ hàng.` : "Khóa học đã có trong giỏ hàng.";
       setCartMessage(successText);
@@ -205,6 +237,13 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     if (!detail || enrolling) return;
     if (!isGatedReturn && !session?.user) {
       setPendingIntent("enroll-free");
+      try {
+        sessionStorage.setItem("codi_pending_course_intent", JSON.stringify({
+          action: "enroll-free",
+          courseId: detail.course.id,
+          slug,
+        }));
+      } catch {}
       setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
       setAuthModalOpen(true);
       return;
@@ -232,6 +271,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         }
         throw new Error(result.error || "Không thể đăng ký khóa học miễn phí.");
       }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
       setOwnership({ ownership: "owned" });
       const successText = `Đã đăng ký “${detail.course.title}”.`;
       setCartMessage(successText);
@@ -250,6 +292,13 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     if (!detail || adding) return;
     if (!isGatedReturn && !session?.user) {
       setPendingIntent("buy-now");
+      try {
+        sessionStorage.setItem("codi_pending_course_intent", JSON.stringify({
+          action: "buy-now",
+          courseId: detail.course.id,
+          slug,
+        }));
+      } catch {}
       setIntentReason("Đăng nhập để mua khoá học.");
       setAuthModalOpen(true);
       return;
@@ -275,10 +324,25 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           setAuthModalOpen(true);
           return;
         }
+        if (response.status === 409) {
+          // Already owned
+          try {
+            sessionStorage.removeItem("codi_pending_course_intent");
+          } catch {}
+          setOwnership({ ownership: "owned" });
+          toast.success("Bạn đã sở hữu khóa học này.");
+          router.push(`/learn/${detail.course.id}` as any);
+          return;
+        }
         throw new Error(result.error || "Không thể xử lý mua ngay.");
       }
-      // D4: Straight to /checkout?order=... with this single order!
-      router.push(`/checkout?order=${result.orderCode}` as any);
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
+      // Direct to course checkout page with order param
+      const targetSlug = result.courseSlug || slug;
+      const targetUrl = `/courses/${encodeURIComponent(targetSlug)}/checkout?order=${encodeURIComponent(result.orderCode)}`;
+      window.location.href = targetUrl;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Không thể xử lý mua ngay.";
       setCartMessage(msg);
@@ -290,8 +354,26 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
   const handleAuthSuccess = async () => {
     setAuthModalOpen(false);
-    const intent = pendingIntent;
+    let intent = pendingIntent;
+    if (!intent) {
+      try {
+        const stored = sessionStorage.getItem("codi_pending_course_intent");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          intent = parsed.action;
+        }
+      } catch {}
+    }
     setPendingIntent(null);
+    if (!intent) return;
+
+    // Refresh authClient session store to guarantee current credentials
+    try {
+      await authClient.getSession();
+    } catch {
+      // Continue anyway
+    }
+
     if (intent === "add-to-cart") {
       await handleAddToCart(true);
     } else if (intent === "buy-now") {
@@ -367,7 +449,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const ownState = ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
-  const ratingBreakdown = detail.ratingBreakdown ?? [92, 24, 8, 3, 1];
+  const ratingBreakdown = detail.ratingBreakdown ?? [0, 0, 0, 0, 0];
   const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0) || 1;
   const reviews = detail.reviews ?? [];
 
@@ -382,6 +464,12 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             <p role="alert" className="text-sm text-muted-foreground">
               Khoá học này hiện không mở bán cho học viên mới.
             </p>
+            {course.hiddenReason && (
+              <p className="text-xs text-muted-foreground bg-muted p-3 rounded-lg border border-border max-w-md mx-auto text-left">
+                <span className="font-semibold block mb-1 text-foreground">Lý do:</span>
+                {course.hiddenReason}
+              </p>
+            )}
             <div className="pt-2">
               <Link
                 href="/courses"
@@ -437,9 +525,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   <span>{course.duration}</span>
                 </span>
                 <span className={styles.metaItem}>
-                  <Star className={`h-4 w-4 ${styles.starFilled}`} />
-                  <strong className="text-foreground">{detail.rating.toFixed(1)}</strong>
-                  <span>({detail.reviewCount} đánh giá)</span>
+                  {detail.rating > 0 && detail.reviewCount > 0 ? (
+                    <>
+                      <Star className={`h-4 w-4 ${styles.starFilled}`} />
+                      <strong className="text-foreground">{detail.rating.toFixed(1)}</strong>
+                      <span>({detail.reviewCount} đánh giá)</span>
+                    </>
+                  ) : (
+                    <span>Chưa có đánh giá</span>
+                  )}
                 </span>
                 <span className={styles.metaItem}>
                   <Users className="h-4 w-4" />
@@ -613,73 +707,78 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                 Đánh giá của học viên
               </h2>
 
-              {/* Score breakdown card */}
-              <div className={styles.ratingBox}>
-                <div className={styles.ratingScore}>
-                  <span className={styles.scoreNum}>{detail.rating.toFixed(1)}</span>
-                  <div className={styles.starsRow}>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} className={`h-4 w-4 ${styles.starFilled}`} />
+              {reviews.length > 0 ? (
+                <>
+                  {/* Score breakdown card */}
+                  <div className={styles.ratingBox}>
+                    <div className={styles.ratingScore}>
+                      <span className={styles.scoreNum}>{detail.rating.toFixed(1)}</span>
+                      <div className={styles.starsRow}>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star key={i} className={`h-4 w-4 ${styles.starFilled}`} />
+                        ))}
+                      </div>
+                      <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
+                    </div>
+
+                    <div className={styles.breakdownList}>
+                      {[5, 4, 3, 2, 1].map((stars, idx) => {
+                        const countVal = ratingBreakdown[idx] ?? 0;
+                        const pct = Math.round((countVal / totalBreakdown) * 100);
+                        return (
+                          <div key={stars} className={styles.breakdownRow}>
+                            <span className={styles.breakdownLabel}>{stars} sao</span>
+                            <div className={styles.breakdownTrack} aria-hidden="true">
+                              <div
+                                className={styles.breakdownFill}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className={styles.breakdownCount}>{countVal}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Reviews list */}
+                  <div className={styles.reviewsList}>
+                    {reviews.map((r) => (
+                      <div key={r.id} className={styles.reviewCard}>
+                        <div className={styles.reviewHeader}>
+                          <div className={styles.userAvatar}>
+                            {getInitials(r.userName)}
+                          </div>
+                          <span className={styles.userName}>{r.userName}</span>
+                          <div className={styles.starsRow}>
+                            {Array.from({ length: r.stars }).map((_, i) => (
+                              <Star key={i} className={`h-3.5 w-3.5 ${styles.starFilled}`} />
+                            ))}
+                          </div>
+                          <span className={styles.reviewDate}>{r.createdAt}</span>
+                        </div>
+
+                        {r.text && <p className={styles.reviewText}>{r.text}</p>}
+
+                        {r.reply && (
+                          <div className={styles.replyBox}>
+                            <div className={styles.replyHeader}>
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              <span>Phản hồi của giảng viên</span>
+                              <span className={styles.replyBadge}>Giảng viên</span>
+                            </div>
+                            <p className={styles.replyText}>{r.reply.text}</p>
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
-                  <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
-                </div>
-
-                <div className={styles.breakdownList}>
-                  {[5, 4, 3, 2, 1].map((stars, idx) => {
-                    const countVal = ratingBreakdown[idx] ?? 0;
-                    const pct = Math.round((countVal / totalBreakdown) * 100);
-                    return (
-                      <div key={stars} className={styles.breakdownRow}>
-                        <span className={styles.breakdownLabel}>{stars} sao</span>
-                        <div className={styles.breakdownTrack} aria-hidden="true">
-                          <div
-                            className={styles.breakdownFill}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className={styles.breakdownCount}>{countVal}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Reviews list */}
-              {reviews.length > 0 ? (
-                <div className={styles.reviewsList}>
-                  {reviews.map((r) => (
-                    <div key={r.id} className={styles.reviewCard}>
-                      <div className={styles.reviewHeader}>
-                        <div className={styles.userAvatar}>
-                          {getInitials(r.userName)}
-                        </div>
-                        <span className={styles.userName}>{r.userName}</span>
-                        <div className={styles.starsRow}>
-                          {Array.from({ length: r.stars }).map((_, i) => (
-                            <Star key={i} className={`h-3.5 w-3.5 ${styles.starFilled}`} />
-                          ))}
-                        </div>
-                        <span className={styles.reviewDate}>{r.createdAt}</span>
-                      </div>
-
-                      {r.text && <p className={styles.reviewText}>{r.text}</p>}
-
-                      {r.reply && (
-                        <div className={styles.replyBox}>
-                          <div className={styles.replyHeader}>
-                            <MessageCircle className="h-3.5 w-3.5" />
-                            <span>Phản hồi của giảng viên</span>
-                            <span className={styles.replyBadge}>Giảng viên</span>
-                          </div>
-                          <p className={styles.replyText}>{r.reply.text}</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                </>
               ) : (
-                <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>
+                <div className="rounded-xl border border-border/60 bg-card p-6 text-center text-muted-foreground">
+                  <p className="text-sm font-medium">Chưa có đánh giá nào cho khoá học này.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Đánh giá và nhận xét từ sinh viên đã học sẽ được hiển thị tại đây.</p>
+                </div>
               )}
             </section>
           </div>

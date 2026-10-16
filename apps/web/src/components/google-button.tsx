@@ -6,32 +6,53 @@ import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 
-export default function GoogleSignInButton({ text = "Tiếp tục với Google" }: { text?: string }) {
+export default function GoogleSignInButton({
+  text = "Tiếp tục với Google",
+  callbackURL,
+}: {
+  text?: string;
+  callbackURL?: string;
+}) {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
-      await authClient.signIn.social(
+      const currentPath =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("next") ||
+            (window.location.pathname === "/login"
+              ? "/dashboard"
+              : window.location.pathname + window.location.search)
+          : "/dashboard";
+      const targetUrl = callbackURL || currentPath;
+
+      const res = await authClient.signIn.social(
         {
           provider: "google",
-          callbackURL: "/dashboard",
+          callbackURL: targetUrl,
         },
         {
+          onSuccess: (ctx: any) => {
+            if (typeof window !== "undefined" && ctx?.data?.url) {
+              window.location.href = ctx.data.url;
+            }
+          },
           onError: (ctx) => {
             setLoading(false);
             toast.error(
               ctx.error.message ||
-                "Chưa cấu hình Google Client ID / Secret trong Better Auth. Vui lòng thử đăng nhập bằng Email/Password."
+                "Đăng nhập với Google thất bại. Vui lòng thử lại hoặc đăng nhập bằng Email."
             );
           },
         }
       );
+      if (typeof window !== "undefined" && res?.data?.url) {
+        window.location.href = res.data.url;
+      }
     } catch {
       setLoading(false);
-      toast.info(
-        "Chức năng Google OAuth đang ở chế độ giao diện (UI). Cần cấu hình Google Client ID/Secret trên Google Console để hoàn tất đăng nhập."
-      );
+      toast.error("Không thể kết nối đến máy chủ Google.");
     }
   };
 

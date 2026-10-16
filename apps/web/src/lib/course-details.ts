@@ -11,6 +11,7 @@ export interface PublicCourse {
   rating: number;
   reviewCount: number;
   status: string;
+  hiddenReason?: string | null;
   createdAt: string;
   publishedAt: Date | null;
   updatedAt: Date;

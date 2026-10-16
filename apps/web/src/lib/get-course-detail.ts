@@ -10,7 +10,6 @@ import {
 } from "@codi-1/db";
 import { db } from "@/services";
 import type { CourseChapter, CourseDetail, CourseReview } from "./course-details";
-import { MOCK_COURSE_REVIEWS } from "./course-mock-reviews";
 
 export const PUBLIC_COURSE_COLUMNS = {
   id: courses.id,
@@ -25,6 +24,7 @@ export const PUBLIC_COURSE_COLUMNS = {
   rating: courses.rating,
   reviewCount: courses.reviewCount,
   status: courses.status,
+  hiddenReason: courses.hiddenReason,
   createdAt: courses.createdAt,
   publishedAt: courses.publishedAt,
   updatedAt: courses.updatedAt,
@@ -97,10 +97,9 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     }
   }
   const { instructorName, instructorImage, ...courseData } = course;
-  const mockExtra = MOCK_COURSE_REVIEWS[slug];
 
   let reviews: CourseReview[] = [];
-  let ratingBreakdown = [0, 0, 0, 0, 0];
+  const ratingBreakdown = [0, 0, 0, 0, 0];
 
   if (Array.isArray(dbReviewsRows) && dbReviewsRows.length > 0) {
     reviews = dbReviewsRows.map((r) => ({
@@ -122,16 +121,13 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
         ratingBreakdown[5 - r.rating]++;
       }
     }
-  } else {
-    reviews = mockExtra?.reviews ?? [];
-    ratingBreakdown = mockExtra?.ratingBreakdown ?? [0, 0, 0, 0, 0];
   }
 
   return {
     course: { ...courseData, createdAt: courseData.createdAt.toISOString() },
     instructor: instructorName ? {
       name: instructorName,
-      title: mockExtra?.instructorTitle ?? null,
+      title: null,
       avatar: instructorImage ?? null,
       bio: null,
     } : null,

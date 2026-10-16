@@ -16,11 +16,13 @@ const course = {
   description: "Khóa học từ database", price: 125000,
   instructorId: "instructor-1", rating: 4.5, reviewCount: 10,
   createdAt: "2026-01-01T00:00:00.000Z",
+  status: "published",
 };
 
-function row(enrollmentCount = "7", coverImageUrl: string | null = "/images/courses/frontend-react-nextjs.svg") {
+function row(enrollmentCount = "7", coverImageUrl: string | null = "/images/courses/frontend-react-nextjs.svg", status = "published") {
   return [course.id, course.slug, course.title, course.category, course.level,
     course.duration, course.description, course.price, course.instructorId, course.rating, course.reviewCount, course.createdAt,
+    status,
     enrollmentCount, coverImageUrl];
 }
 
@@ -43,6 +45,14 @@ describe("GET /api/courses", () => {
     expect(sql).toContain('order by "courses"."title" asc, "courses"."id" asc');
     expect(sql).not.toContain(" limit ");
     expect(params).toEqual(["published"]);
+  });
+
+  it("includes hidden courses when include_hidden=true is provided", async () => {
+    const response = await request("?include_hidden=true");
+    expect(response.status).toBe(200);
+    const [sql, params] = mocks.execute.mock.calls[0];
+    expect(sql).toContain('"courses"."status" in ($1, $2)');
+    expect(params).toEqual(["published", "hidden"]);
   });
 
   it("sorts popular courses by actual enrollment rows, then title and ID", async () => {

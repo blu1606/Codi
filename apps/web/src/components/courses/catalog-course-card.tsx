@@ -23,6 +23,8 @@ const BRAND_MAP: Record<string, { logo: string; bg: string; name: string }> = {
   "course-node-001": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
   "course-python-001": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
   "course-git-001": { logo: "/logos/git.svg", bg: "#f05032", name: "Git" },
+  "course-jest-001": { logo: "/logos/jest.svg", bg: "#25121e", name: "Jest" },
+  "kiem-thu-voi-jest": { logo: "/logos/jest.svg", bg: "#25121e", name: "Jest" },
 };
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -47,7 +49,8 @@ function getLecturerName(course: CatalogCourse): string {
     course.instructorId === "usr-lecturer-002" ||
     course.slug?.includes("node") ||
     course.slug?.includes("python") ||
-    course.slug?.includes("git")
+    course.slug?.includes("git") ||
+    course.slug?.includes("jest")
   ) {
     return "Lê Thu Hà";
   }
@@ -74,6 +77,7 @@ export function CatalogCourseCard({
   onEnrollFree,
 }: Props) {
   const href = `/courses/${encodeURIComponent(course.slug)}` as const;
+  const isHidden = course.status === "hidden";
   const ownState = ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
   const isPrivilegedRole = userRole === "lecturer" || userRole === "admin";
   const brand = BRAND_MAP[course.id] || BRAND_MAP[course.slug];
@@ -113,6 +117,11 @@ export function CatalogCourseCard({
           <span className={`${styles.badge} ${styles.badgeNeutral}`}>
             {LEVEL_LABELS[course.level] ?? course.level}
           </span>
+          {isHidden && (
+            <span className={`${styles.badge} ${styles.badgeWarning}`}>
+              Tạm ngừng
+            </span>
+          )}
           {ownState === "owned" && (
             <span className={`${styles.badge} ${styles.badgeSuccess}`}>
               <Check className="h-3 w-3" />
@@ -158,13 +167,17 @@ export function CatalogCourseCard({
           </span>
 
           <div>
-            {isPrivilegedRole ? (
+            {ownState === "owned" ? (
+              <Link href={`/learn/${course.id}` as any} className={`${styles.ctaBtn} ${styles.ctaPrimary}`}>
+                Tiếp tục học
+              </Link>
+            ) : isHidden ? (
               <Link href={href} className={`${styles.ctaBtn} ${styles.ctaSecondary}`}>
                 Xem chi tiết
               </Link>
-            ) : ownState === "owned" ? (
-              <Link href={`/learn/${course.id}` as any} className={`${styles.ctaBtn} ${styles.ctaPrimary}`}>
-                Tiếp tục học
+            ) : isPrivilegedRole ? (
+              <Link href={href} className={`${styles.ctaBtn} ${styles.ctaSecondary}`}>
+                Xem chi tiết
               </Link>
             ) : ownState === "pending-payment" ? (
               <Link

@@ -27,6 +27,7 @@ import type { CourseOwnershipDetail } from "@/lib/course-ownership";
 import { authClient } from "@/lib/auth-client";
 import { CatalogCourseCard } from "@/components/courses/catalog-course-card";
 import cardStyles from "@/components/courses/catalog-course-card.module.css";
+import AuthModal from "@/components/auth/auth-modal";
 
 const CATEGORIES = [
   "Tất cả",
@@ -99,6 +100,11 @@ export default function CoursesPage() {
   const [ownershipMap, setOwnershipMap] = useState<Record<string, CourseOwnershipDetail>>({});
   const [addingCourseId, setAddingCourseId] = useState<string | null>(null);
   const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
+  const [authModalState, setAuthModalState] = useState<{
+    open: boolean;
+    course?: CatalogCourse;
+    action?: "cart" | "enroll";
+  }>({ open: false });
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const userRole = (session?.user as { role?: string } | undefined)?.role ?? null;
@@ -119,9 +125,11 @@ export default function CoursesPage() {
     fetchCourses(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
-        setCourses(data);
+        // Filter out internal dev learning-path records from public course catalog
+        const publicCourses = data.filter((c) => !c.id.startsWith("dev-path-"));
+        setCourses(publicCourses);
         const courseId = new URLSearchParams(window.location.search).get("course");
-        const linkedCourse = courseId ? data.find((c) => c.id === courseId) : null;
+        const linkedCourse = courseId ? publicCourses.find((c) => c.id === courseId) : null;
         if (linkedCourse) router.replace(`/courses/${encodeURIComponent(linkedCourse.slug)}`);
       })
       .catch(() => {
@@ -297,9 +305,13 @@ export default function CoursesPage() {
   };
 
   // 6. Ownership CTAs Handlers
-  const handleAddToCart = async (course: CatalogCourse) => {
-    if (!session?.user) {
-      router.push("/login");
+  const handleAddToCart = async (course: CatalogCourse, isGatedReturn = false) => {
+    if (!isGatedReturn && !session?.user) {
+      setAuthModalState({
+        open: true,
+        course,
+        action: "cart",
+      });
       return;
     }
     setAddingCourseId(course.id);
@@ -312,6 +324,14 @@ export default function CoursesPage() {
       });
       const result = await response.json();
       if (!response.ok) {
+        if (response.status === 401) {
+          setAuthModalState({
+            open: true,
+            course,
+            action: "cart",
+          });
+          return;
+        }
         setFeedback({
           type: "error",
           text: result.error || "Không thể thêm khóa học vào giỏ.",
@@ -327,6 +347,9 @@ export default function CoursesPage() {
             ? `Đã thêm “${course.title}” vào giỏ hàng.`
             : `Khóa học “${course.title}” đã có trong giỏ hàng.`,
         });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("codi:cart-updated"));
+        }
       }
     } catch {
       setFeedback({ type: "error", text: "Không thể kết nối. Vui lòng thử lại." });
@@ -335,9 +358,13 @@ export default function CoursesPage() {
     }
   };
 
-  const handleEnrollFree = async (course: CatalogCourse) => {
-    if (!session?.user) {
-      router.push("/login");
+  const handleEnrollFree = async (course: CatalogCourse, isGatedReturn = false) => {
+    if (!isGatedReturn && !session?.user) {
+      setAuthModalState({
+        open: true,
+        course,
+        action: "enroll",
+      });
       return;
     }
     setEnrollingCourseId(course.id);
@@ -350,6 +377,14 @@ export default function CoursesPage() {
       });
       const result = await response.json();
       if (!response.ok) {
+        if (response.status === 401) {
+          setAuthModalState({
+            open: true,
+            course,
+            action: "enroll",
+          });
+          return;
+        }
         setFeedback({
           type: "error",
           text: result.error || "Không thể đăng ký khóa học miễn phí.",
@@ -363,6 +398,7 @@ export default function CoursesPage() {
           type: "success",
           text: `Đăng ký thành công “${course.title}”! Bạn có thể bắt đầu học ngay.`,
         });
+        router.push(`/learn/${course.id}` as any);
       }
     } catch {
       setFeedback({ type: "error", text: "Không thể kết nối. Vui lòng thử lại." });
@@ -720,6 +756,35 @@ export default function CoursesPage() {
           </div>
         )}
       </div>
+
+      <AuthModal
+        open={authModalState.open}
+        onOpenChange={(open) => setAuthModalState((prev) => ({ ...prev, open }))}
+        courseTitle={authModalState.course?.title}
+        intentReason={
+          authModalState.action === "cart"
+            ? "thêm khoá học vào giỏ hàng"
+            : "đăng ký khoá học miễn phí"
+        }
+        onSuccess={async () => {
+          const c = authModalState.course;
+          const a = authModalState.action;
+          setAuthModalState({ open: false });
+          if (!c) return;
+
+          try {
+            await authClient.getSession();
+          } catch {
+            // Continue
+          }
+
+          if (a === "cart") {
+            await handleAddToCart(c, true);
+          } else if (a === "enroll") {
+            await handleEnrollFree(c, true);
+          }
+        }}
+      />
     </div>
   );
 }

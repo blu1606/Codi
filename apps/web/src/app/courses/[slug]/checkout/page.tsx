@@ -85,7 +85,8 @@ export default function CheckoutPage({ params, searchParams }: CheckoutPageProps
   if (isPending) return <div className="p-8 text-center">Đang tải...</div>;
 
   if (!session?.user) {
-    router.push("/login");
+    const nextUrl = `/courses/${slug}/checkout${orderCode ? `?order=${encodeURIComponent(orderCode)}` : ""}`;
+    router.push(`/login?next=${encodeURIComponent(nextUrl)}`);
     return null;
   }
 
