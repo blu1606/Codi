@@ -1,3 +1,5 @@
+import type { CourseReview } from "./course-review-contract";
+export type { CourseReview } from "./course-review-contract";
 export interface PublicCourse {
   id: string;
   slug: string;
@@ -34,22 +36,14 @@ export interface CourseChapter {
   lessons: CourseLesson[];
 }
 
-export interface CourseReview {
-  id: string;
-  userName: string;
-  userAvatar?: string | null;
-  stars: number;
-  createdAt: string;
-  text?: string | null;
-  reply?: {
-    text: string;
-    createdAt?: string;
-  } | null;
-}
-
 export interface CourseDetail {
   course: PublicCourse;
-  instructor: { name: string; title: string | null; avatar: string | null; bio: string | null } | null;
+  instructor: {
+    name: string;
+    title: string | null;
+    avatar: string | null;
+    bio: string | null;
+  } | null;
   rating: number;
   reviewCount: number;
   ratingBreakdown?: number[];
@@ -61,22 +55,37 @@ export interface CourseDetail {
   introVideoUrl: string | null;
   introVideoCaptionsUrl: string | null;
   chapters: CourseChapter[];
-  summary: { chapterCount: number; lessonCount: number; durationSeconds: number };
+  summary: {
+    chapterCount: number;
+    lessonCount: number;
+    durationSeconds: number;
+  };
 }
 
 export class CourseDetailError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
     super(message);
     this.name = "CourseDetailError";
   }
 }
 
-export async function fetchCourseDetail(slug: string, signal: AbortSignal): Promise<CourseDetail> {
-  const response = await fetch(`/api/courses/${encodeURIComponent(slug)}`, { signal });
+export async function fetchCourseDetail(
+  slug: string,
+  signal: AbortSignal,
+): Promise<CourseDetail> {
+  const response = await fetch(`/api/courses/${encodeURIComponent(slug)}`, {
+    signal,
+  });
   if (!response.ok) {
-    throw new CourseDetailError(response.status, response.status === 404
-      ? "Khóa học không tồn tại hoặc đã được gỡ bỏ."
-      : "Không thể tải thông tin khóa học. Vui lòng thử lại.");
+    throw new CourseDetailError(
+      response.status,
+      response.status === 404
+        ? "Khóa học không tồn tại hoặc đã được gỡ bỏ."
+        : "Không thể tải thông tin khóa học. Vui lòng thử lại.",
+    );
   }
   const body = await response.json();
   if (!body.course || !Array.isArray(body.chapters) || !body.summary) {

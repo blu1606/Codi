@@ -38,6 +38,7 @@ import {
 } from "@/lib/course-details";
 import type { CourseOwnershipDetail } from "@/lib/course-ownership";
 import AuthModal from "@/components/auth/auth-modal";
+import CourseReviewList from "./course-review-list";
 import styles from "./course-detail.module.css";
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -53,7 +54,9 @@ function getInitials(name?: string | null): string {
   if (!name) return "CD";
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (
+    parts[parts.length - 2][0] + parts[parts.length - 1][0]
+  ).toUpperCase();
 }
 
 function getLessonIcon(type: LessonContentType) {
@@ -79,7 +82,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
   const [detail, setDetail] = useState<CourseDetail | null>(null);
-  const [error, setError] = useState<{ message: string; notFound: boolean } | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    notFound: boolean;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
@@ -87,18 +93,23 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const [openChapters, setOpenChapters] = useState<Set<string>>(new Set());
 
   // Ownership state
-  const [ownership, setOwnership] = useState<CourseOwnershipDetail | null>(null);
+  const [ownership, setOwnership] = useState<CourseOwnershipDetail | null>(
+    null,
+  );
   const [adding, setAdding] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
 
   // Gated Auth Modal state (Flow L2, S03)
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [pendingIntent, setPendingIntent] = useState<"add-to-cart" | "buy-now" | "enroll-free" | null>(null);
+  const [pendingIntent, setPendingIntent] = useState<
+    "add-to-cart" | "buy-now" | "enroll-free" | null
+  >(null);
   const [intentReason, setIntentReason] = useState("");
   const isResumingRef = useRef(false);
 
-  const userRole = (session?.user as { role?: string } | undefined)?.role ?? null;
+  const userRole =
+    (session?.user as { role?: string } | undefined)?.role ?? null;
   const isPrivilegedRole = userRole === "lecturer" || userRole === "admin";
 
   useEffect(() => {
@@ -115,7 +126,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         setError({
-          message: err instanceof Error ? err.message : "Không thể tải khóa học. Vui lòng thử lại.",
+          message:
+            err instanceof Error
+              ? err.message
+              : "Không thể tải khóa học. Vui lòng thử lại.",
           notFound: err instanceof CourseDetailError && err.status === 404,
         });
       })
@@ -192,14 +206,19 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     if (!isGatedReturn && !session?.user) {
       setPendingIntent("add-to-cart");
       try {
-        sessionStorage.setItem("codi_pending_course_intent", JSON.stringify({
-          action: "add-to-cart",
-          courseId: detail.course.id,
-          slug,
-          createdAt: Date.now(),
-        }));
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "add-to-cart",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
       } catch {}
-      setIntentReason("Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.");
+      setIntentReason(
+        "Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.",
+      );
       setAuthModalOpen(true);
       return;
     }
@@ -220,7 +239,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       if (!response.ok) {
         if (response.status === 401) {
           setPendingIntent("add-to-cart");
-          setIntentReason("Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.");
+          setIntentReason(
+            "Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.",
+          );
           setAuthModalOpen(true);
           return;
         }
@@ -230,7 +251,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         sessionStorage.removeItem("codi_pending_course_intent");
       } catch {}
       setOwnership({ ownership: "in-cart" });
-      const successText = result.added ? `Đã thêm “${detail.course.title}” vào giỏ hàng.` : "Khóa học đã có trong giỏ hàng.";
+      const successText = result.added
+        ? `Đã thêm “${detail.course.title}” vào giỏ hàng.`
+        : "Khóa học đã có trong giỏ hàng.";
       setCartMessage(successText);
       toast.success(successText, {
         action: {
@@ -242,7 +265,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         window.dispatchEvent(new CustomEvent("codi:cart-updated"));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Không thể kết nối. Vui lòng thử lại.";
       setCartMessage(msg);
       toast.error(msg);
     } finally {
@@ -255,12 +281,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     if (!isGatedReturn && !session?.user) {
       setPendingIntent("enroll-free");
       try {
-        sessionStorage.setItem("codi_pending_course_intent", JSON.stringify({
-          action: "enroll-free",
-          courseId: detail.course.id,
-          slug,
-          createdAt: Date.now(),
-        }));
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "enroll-free",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
       } catch {}
       setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
       setAuthModalOpen(true);
@@ -297,7 +326,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       setCartMessage(successText);
       toast.success(successText);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Không thể kết nối. Vui lòng thử lại.";
       setCartMessage(msg);
       toast.error(msg);
     } finally {
@@ -310,12 +342,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     if (!isGatedReturn && !session?.user) {
       setPendingIntent("buy-now");
       try {
-        sessionStorage.setItem("codi_pending_course_intent", JSON.stringify({
-          action: "buy-now",
-          courseId: detail.course.id,
-          slug,
-          createdAt: Date.now(),
-        }));
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "buy-now",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
       } catch {}
       setIntentReason("Đăng nhập để mua khoá học.");
       setAuthModalOpen(true);
@@ -361,7 +396,8 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       const targetUrl = `/courses/${encodeURIComponent(targetSlug)}/checkout?order=${encodeURIComponent(result.orderCode)}`;
       window.location.href = targetUrl;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Không thể xử lý mua ngay.";
+      const msg =
+        err instanceof Error ? err.message : "Không thể xử lý mua ngay.";
       setCartMessage(msg);
       toast.error(msg);
     } finally {
@@ -443,14 +479,19 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
             <BookOpen className="size-10 text-muted-foreground mx-auto" />
             <h1 className="text-2xl font-bold">
-              {error?.notFound ? "Không tìm thấy khoá học" : "Chưa thể tải khoá học"}
+              {error?.notFound
+                ? "Không tìm thấy khoá học"
+                : "Chưa thể tải khoá học"}
             </h1>
             <p role="alert" className="text-sm text-muted-foreground">
               {error?.message}
             </p>
             <div className="flex flex-wrap justify-center gap-3 pt-2">
               {!error?.notFound && (
-                <Button onClick={() => setAttempt((v) => v + 1)} className="gap-1.5 cursor-pointer">
+                <Button
+                  onClick={() => setAttempt((v) => v + 1)}
+                  className="gap-1.5 cursor-pointer"
+                >
                   <RotateCw className="h-4 w-4" />
                   Thử lại
                 </Button>
@@ -468,8 +509,16 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     );
   }
 
-  const { course, chapters, summary, instructor, learningOutcomes, requirements } = detail;
-  const ownState = ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
+  const {
+    course,
+    chapters,
+    summary,
+    instructor,
+    learningOutcomes,
+    requirements,
+  } = detail;
+  const ownState =
+    ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
   const ratingBreakdown = detail.ratingBreakdown ?? [0, 0, 0, 0, 0];
@@ -489,7 +538,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             </p>
             {course.hiddenReason && (
               <p className="text-xs text-muted-foreground bg-muted p-3 rounded-lg border border-border max-w-md mx-auto text-left">
-                <span className="font-semibold block mb-1 text-foreground">Lý do:</span>
+                <span className="font-semibold block mb-1 text-foreground">
+                  Lý do:
+                </span>
                 {course.hiddenReason}
               </p>
             )}
@@ -523,8 +574,13 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
         {/* Hidden notice for already-enrolled learners */}
         {course.status === "hidden" && ownState === "owned" && (
-          <div role="status" className="rounded-xl border border-info/30 bg-info/10 p-4 text-xs text-info mb-4">
-            <strong className="block font-semibold mb-1">Khoá học đang tạm ẩn với người mua mới</strong>
+          <div
+            role="status"
+            className="rounded-xl border border-info/30 bg-info/10 p-4 text-xs text-info mb-4"
+          >
+            <strong className="block font-semibold mb-1">
+              Khoá học đang tạm ẩn với người mua mới
+            </strong>
             Bạn đã sở hữu khoá học nên vẫn học bình thường.
           </div>
         )}
@@ -551,7 +607,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   {detail.rating > 0 && detail.reviewCount > 0 ? (
                     <>
                       <Star className={`h-4 w-4 ${styles.starFilled}`} />
-                      <strong className="text-foreground">{detail.rating.toFixed(1)}</strong>
+                      <strong className="text-foreground">
+                        {detail.rating.toFixed(1)}
+                      </strong>
                       <span>({detail.reviewCount} đánh giá)</span>
                     </>
                   ) : (
@@ -560,7 +618,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                 </span>
                 <span className={styles.metaItem}>
                   <Users className="h-4 w-4" />
-                  <span>{course.enrollmentCount.toLocaleString("vi-VN")} học viên</span>
+                  <span>
+                    {course.enrollmentCount.toLocaleString("vi-VN")} học viên
+                  </span>
                 </span>
                 {instructor && (
                   <span className={styles.metaItem}>
@@ -572,7 +632,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             </header>
 
             {/* 01 · Bạn sẽ học được gì? */}
-            <section className={styles.section} aria-labelledby="outcomes-heading">
+            <section
+              className={styles.section}
+              aria-labelledby="outcomes-heading"
+            >
               <h2 id="outcomes-heading" className={styles.sectionTitle}>
                 01 · Bạn sẽ học được gì?
               </h2>
@@ -593,7 +656,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             </section>
 
             {/* 02 · Nội dung khóa học (S02 Syllabus) */}
-            <section className={styles.section} aria-labelledby="curriculum-heading">
+            <section
+              className={styles.section}
+              aria-labelledby="curriculum-heading"
+            >
               <div className={styles.curriculumHeader}>
                 <h2 id="curriculum-heading" className={styles.sectionTitle}>
                   02 · Nội dung khóa học
@@ -602,7 +668,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   <div className={styles.curriculumActions}>
                     <button
                       type="button"
-                      onClick={() => setOpenChapters(new Set(chapters.map((ch) => ch.id)))}
+                      onClick={() =>
+                        setOpenChapters(new Set(chapters.map((ch) => ch.id)))
+                      }
                       className={styles.expandBtn}
                     >
                       Mở rộng tất cả
@@ -619,12 +687,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </div>
 
               <p className={styles.curriculumSummary}>
-                {chapters.length} chương · {summary.lessonCount} bài học · {course.duration}
+                {chapters.length} chương · {summary.lessonCount} bài học ·{" "}
+                {course.duration}
               </p>
 
               {chapters.length === 0 ? (
                 <div className="p-6 rounded-xl border border-dashed border-border bg-muted/20 text-center text-sm text-muted-foreground space-y-1">
-                  <p className="font-semibold text-foreground">Nội dung học đang được chuẩn bị</p>
+                  <p className="font-semibold text-foreground">
+                    Nội dung học đang được chuẩn bị
+                  </p>
                   <p>Giảng viên sẽ sớm cập nhật đề cương.</p>
                 </div>
               ) : (
@@ -633,9 +704,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                     const isOpen = openChapters.has(chapter.id);
                     const chapterDuration = chapter.lessons.reduce(
                       (acc, les) => acc + (les.durationSeconds || 0),
-                      0
+                      0,
                     );
-                    const formattedDuration = formatLessonDuration(chapterDuration);
+                    const formattedDuration =
+                      formatLessonDuration(chapterDuration);
 
                     return (
                       <div key={chapter.id} className={styles.chapterCard}>
@@ -647,7 +719,8 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                         >
                           <span>{chapter.title}</span>
                           <span className={styles.chapterMeta}>
-                            {chapter.lessons.length} bài{formattedDuration ? ` · ${formattedDuration}` : ""}
+                            {chapter.lessons.length} bài
+                            {formattedDuration ? ` · ${formattedDuration}` : ""}
                           </span>
                         </button>
 
@@ -658,11 +731,18 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                               const LessonIcon = getLessonIcon(meta.type);
 
                               return (
-                                <li key={lesson.id} className={styles.lessonItem}>
+                                <li
+                                  key={lesson.id}
+                                  className={styles.lessonItem}
+                                >
                                   <div className={styles.lessonMain}>
-                                    <LessonIcon className={`h-4 w-4 ${styles.lessonIcon}`} />
+                                    <LessonIcon
+                                      className={`h-4 w-4 ${styles.lessonIcon}`}
+                                    />
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
-                                      <span className="font-medium text-foreground">{lesson.title}</span>
+                                      <span className="font-medium text-foreground">
+                                        {lesson.title}
+                                      </span>
                                       <span className="text-[11px] text-muted-foreground font-normal">
                                         {meta.label}
                                       </span>
@@ -676,7 +756,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                                     )}
                                     {lesson.durationSeconds > 0 && (
                                       <span className={styles.lessonDuration}>
-                                        {formatLessonDuration(lesson.durationSeconds)}
+                                        {formatLessonDuration(
+                                          lesson.durationSeconds,
+                                        )}
                                       </span>
                                     )}
                                   </div>
@@ -693,7 +775,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             </section>
 
             {/* 03 · Yêu cầu trước khi học */}
-            <section className={styles.section} aria-labelledby="requirements-heading">
+            <section
+              className={styles.section}
+              aria-labelledby="requirements-heading"
+            >
               <h2 id="requirements-heading" className={styles.sectionTitle}>
                 03 · Yêu cầu trước khi học
               </h2>
@@ -704,12 +789,17 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">Không có yêu cầu đặc biệt.</p>
+                <p className="text-sm text-muted-foreground">
+                  Không có yêu cầu đặc biệt.
+                </p>
               )}
             </section>
 
             {/* 04 · Giảng viên */}
-            <section className={styles.section} aria-labelledby="instructor-heading">
+            <section
+              className={styles.section}
+              aria-labelledby="instructor-heading"
+            >
               <h2 id="instructor-heading" className={styles.sectionTitle}>
                 04 · Giảng viên
               </h2>
@@ -725,7 +815,11 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             </section>
 
             {/* Đánh giá của học viên */}
-            <section className={styles.section} aria-labelledby="reviews-heading">
+            <section
+              id="reviews"
+              className={styles.section}
+              aria-labelledby="reviews-heading"
+            >
               <h2 id="reviews-heading" className={styles.sectionTitle}>
                 Đánh giá của học viên
               </h2>
@@ -735,29 +829,45 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   {/* Score breakdown card */}
                   <div className={styles.ratingBox}>
                     <div className={styles.ratingScore}>
-                      <span className={styles.scoreNum}>{detail.rating.toFixed(1)}</span>
+                      <span className={styles.scoreNum}>
+                        {detail.rating.toFixed(1)}
+                      </span>
                       <div className={styles.starsRow}>
                         {Array.from({ length: 5 }).map((_, i) => (
-                          <Star key={i} className={`h-4 w-4 ${styles.starFilled}`} />
+                          <Star
+                            key={i}
+                            className={`h-4 w-4 ${styles.starFilled}`}
+                          />
                         ))}
                       </div>
-                      <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
+                      <span className={styles.ratingTotal}>
+                        {detail.reviewCount} đánh giá
+                      </span>
                     </div>
 
                     <div className={styles.breakdownList}>
                       {[5, 4, 3, 2, 1].map((stars, idx) => {
                         const countVal = ratingBreakdown[idx] ?? 0;
-                        const pct = Math.round((countVal / totalBreakdown) * 100);
+                        const pct = Math.round(
+                          (countVal / totalBreakdown) * 100,
+                        );
                         return (
                           <div key={stars} className={styles.breakdownRow}>
-                            <span className={styles.breakdownLabel}>{stars} sao</span>
-                            <div className={styles.breakdownTrack} aria-hidden="true">
+                            <span className={styles.breakdownLabel}>
+                              {stars} sao
+                            </span>
+                            <div
+                              className={styles.breakdownTrack}
+                              aria-hidden="true"
+                            >
                               <div
                                 className={styles.breakdownFill}
                                 style={{ width: `${pct}%` }}
                               />
                             </div>
-                            <span className={styles.breakdownCount}>{countVal}</span>
+                            <span className={styles.breakdownCount}>
+                              {countVal}
+                            </span>
                           </div>
                         );
                       })}
@@ -765,42 +875,17 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   </div>
 
                   {/* Reviews list */}
-                  <div className={styles.reviewsList}>
-                    {reviews.map((r) => (
-                      <div key={r.id} className={styles.reviewCard}>
-                        <div className={styles.reviewHeader}>
-                          <div className={styles.userAvatar}>
-                            {getInitials(r.userName)}
-                          </div>
-                          <span className={styles.userName}>{r.userName}</span>
-                          <div className={styles.starsRow}>
-                            {Array.from({ length: r.stars }).map((_, i) => (
-                              <Star key={i} className={`h-3.5 w-3.5 ${styles.starFilled}`} />
-                            ))}
-                          </div>
-                          <span className={styles.reviewDate}>{r.createdAt}</span>
-                        </div>
-
-                        {r.text && <p className={styles.reviewText}>{r.text}</p>}
-
-                        {r.reply && (
-                          <div className={styles.replyBox}>
-                            <div className={styles.replyHeader}>
-                              <MessageCircle className="h-3.5 w-3.5" />
-                              <span>Phản hồi của giảng viên</span>
-                              <span className={styles.replyBadge}>Giảng viên</span>
-                            </div>
-                            <p className={styles.replyText}>{r.reply.text}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <CourseReviewList reviews={reviews} />
                 </>
               ) : (
                 <div className="rounded-xl border border-border/60 bg-card p-6 text-center text-muted-foreground">
-                  <p className="text-sm font-medium">Chưa có đánh giá nào cho khoá học này.</p>
-                  <p className="text-xs text-muted-foreground mt-1">Đánh giá và nhận xét từ sinh viên đã học sẽ được hiển thị tại đây.</p>
+                  <p className="text-sm font-medium">
+                    Chưa có đánh giá nào cho khoá học này.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Đánh giá và nhận xét từ sinh viên đã học sẽ được hiển thị
+                    tại đây.
+                  </p>
                 </div>
               )}
             </section>
@@ -814,24 +899,32 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               <div className={styles.priceSection}>
                 <span className={styles.priceLabel}>Học phí khóa học</span>
                 <span className={styles.priceValue}>
-                  {course.price === 0 ? "Miễn phí" : `${course.price.toLocaleString("vi-VN")} ₫`}
+                  {course.price === 0
+                    ? "Miễn phí"
+                    : `${course.price.toLocaleString("vi-VN")} ₫`}
                 </span>
               </div>
 
               {/* Ownership-aware CTA section (Flow L1, §7.2, decision 42) */}
               {isPrivilegedRole ? (
                 <p className="text-xs text-muted-foreground">
-                  Bạn đang xem với vai trò {userRole}. Chỉ tài khoản học viên mới mua được khoá học.
+                  Bạn đang xem với vai trò {userRole}. Chỉ tài khoản học viên
+                  mới mua được khoá học.
                 </p>
               ) : ownState === "owned" ? (
                 <>
                   <div className={styles.progressSection}>
                     <div className={styles.progressLabelRow}>
-                      <span className="text-muted-foreground">Tiến độ của bạn</span>
+                      <span className="text-muted-foreground">
+                        Tiến độ của bạn
+                      </span>
                       <strong>0/{summary.lessonCount} bài</strong>
                     </div>
                     <div className={styles.progressBarTrack} aria-hidden="true">
-                      <div className={styles.progressBarFill} style={{ width: "0%" }} />
+                      <div
+                        className={styles.progressBarFill}
+                        style={{ width: "0%" }}
+                      />
                     </div>
                   </div>
                   <Link
@@ -847,7 +940,11 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                     Đơn hàng đang chờ thanh toán.
                   </div>
                   <Link
-                    href={(ownership?.pendingOrderId ? `/checkout?order=${ownership.pendingOrderId}` : `/checkout`) as any}
+                    href={
+                      (ownership?.pendingOrderId
+                        ? `/checkout?order=${ownership.pendingOrderId}`
+                        : `/checkout`) as any
+                    }
                     className={styles.ctaPrimaryBtn}
                   >
                     Tiếp tục thanh toán
