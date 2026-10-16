@@ -93,6 +93,7 @@ async function context(
   userId: string,
   courseId: string,
   lock = false,
+  accessOnly = false,
 ) {
   await requireLearner(store, userId);
   const query = store
@@ -190,15 +191,17 @@ async function context(
           )
           .orderBy(asc(lessonSkills.skillId))
       : [];
-  const [path] = await store
-    .select()
-    .from(personalizedLearningPaths)
-    .where(
-      and(
-        eq(personalizedLearningPaths.enrollmentId, enrollment.id),
-        eq(personalizedLearningPaths.status, "active"),
-      ),
-    );
+  const [path] = accessOnly
+    ? []
+    : await store
+        .select()
+        .from(personalizedLearningPaths)
+        .where(
+          and(
+            eq(personalizedLearningPaths.enrollmentId, enrollment.id),
+            eq(personalizedLearningPaths.status, "active"),
+          ),
+        );
   const items = path
     ? await store
         .select()
@@ -243,18 +246,19 @@ async function context(
     path,
     input,
     skills: concepts.map((c) => c.skill),
+    lessonRows: lessons,
   };
 }
 type Context = Awaited<ReturnType<typeof context>>;
 
-export async function assertLearningLessonAccess(
+export async function loadLearningLessonAccess(
   store: Store,
   userId: string,
   courseId: string,
   lessonId: string,
   lockEnrollment = false,
 ) {
-  const ctx = await context(store, userId, courseId, lockEnrollment);
+  const ctx = await context(store, userId, courseId, lockEnrollment, true);
   if (ctx.enrollment.pathStatus === "none")
     throw new LearningPathError("Hãy thiết lập lộ trình trước khi học.");
   const lesson = ctx.input.lessons.find((l) => l.id === lessonId);
@@ -265,7 +269,19 @@ export async function assertLearningLessonAccess(
       `Cần học trước: ${lock.concept} (${lock.lessonTitle}).`,
       403,
     );
-  return lesson;
+  const row = ctx.lessonRows.find((row) => row.lesson.id === lessonId)!;
+  return {
+    accessible: lesson,
+    enrollment: ctx.enrollment,
+    lesson: row.lesson,
+    progress: row.progress,
+  };
+}
+
+export async function assertLearningLessonAccess(
+  ...args: Parameters<typeof loadLearningLessonAccess>
+) {
+  return (await loadLearningLessonAccess(...args)).accessible;
 }
 
 async function view(store: Store, ctx: Context): Promise<CoursePathView> {
@@ -763,7 +779,13 @@ export function createLearningPathService(
             )
             .where(eq(personalizedLearningPaths.id, path.id));
         } else if (command.type === "review") {
-          await saveCourseReview(tx, e.id, courseId, command.rating, command.text);
+          await saveCourseReview(
+            tx,
+            e.id,
+            courseId,
+            command.rating,
+            command.text,
+          );
         }
         return view(tx, await context(tx, userId, courseId));
       });
@@ -947,12 +969,16 @@ export function createLearningPathService(
           ? preserveAi
             ? (ctx.path?.aiRationale ?? "Giữ lộ trình cá nhân hoá hiện tại.")
             : "Theo thứ tự mặc định của giảng viên."
-          : (result?.proposal.rationale ?? "Theo thứ tự mặc định của giảng viên.");
+          : (result?.proposal.rationale ??
+            "Theo thứ tự mặc định của giảng viên.");
         const path = await persistPath(tx, ctx, outcome.items, {
           generatedBy: outcome.generatedBy,
           trigger: job.trigger,
           failed: outcome.status === "failed",
-          model: failure && preserveAi ? ctx.path?.aiModel ?? undefined : result?.model,
+          model:
+            failure && preserveAi
+              ? (ctx.path?.aiModel ?? undefined)
+              : result?.model,
           rationale,
           afterLessonId: job.afterLessonId,
         });

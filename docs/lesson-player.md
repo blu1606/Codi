@@ -4,19 +4,19 @@ Nhánh: `feat/98-lesson-player`, PR riêng vào `develop`. Phụ thuộc #95 →
 
 ## Mở để kiểm tra và chụp ảnh
 
-Chạy `pnpm dev:web`, đăng nhập bằng tài khoản **học viên dev đã seed**. Các khóa dưới đây có nhãn “dữ liệu dev”, tách khỏi khóa và tiến độ hiện có. Không cần reset onboarding.
+Chạy `pnpm --filter web db:seed-lesson-player` để lấy URL bài học của DB local (dòng `locked:` dành cho bài khóa), sau đó chạy `pnpm dev:web`, đăng nhập bằng tài khoản **học viên dev đã seed**. Các khóa dưới đây có nhãn “dữ liệu dev”, tách khỏi khóa và tiến độ hiện có. Không cần reset onboarding.
 
 | Trạng thái | URL trên máy |
 |---|---|
-| Bài đọc, chưa học | http://localhost:3001/learn/dev-player-reading/dd0f2515-4a74-405f-a03d-d463bca8e206 |
-| Video, tự lưu và khôi phục vị trí | http://localhost:3001/learn/dev-player-video/d968a3d3-7eb9-496e-a287-384ded1ed153 |
-| PDF ba trang | http://localhost:3001/learn/dev-player-pdf/dfd5454b-2311-4894-aa18-0fee2cfc14ca |
-| Tài liệu lỗi, thử lại, vẫn đọc tóm tắt được | http://localhost:3001/learn/dev-player-error/0f263d04-6eac-4763-a3ba-55fbe3875b4c |
-| Checklist: đã học, quiz chưa đạt, assignment chờ chấm | http://localhost:3001/learn/dev-player-checklist/2aa7e135-63a1-462e-af5f-16272fb162af |
-| Checklist code: lần nộp gần nhất chưa đạt | http://localhost:3001/learn/dev-player-code/f259a5ff-389b-49dd-a811-d4612025a8cc |
-| Vào URL bài đang khóa | http://localhost:3001/learn/dev-player-reading/28bafadd-2b71-405d-a77a-113e8b17b07f |
-| Đã hoàn thành, thông báo cập nhật và bài tiếp theo | http://localhost:3001/learn/dev-player-completed/7a7ec284-b17a-4ceb-a43b-da7afb73dd6e |
-| Hoàn thành khóa, sao và modal đánh giá | http://localhost:3001/learn/dev-player-complete/2f8253cc-ec64-466b-a08e-48d7c476c9f4 |
+| Bài đọc, chưa học | `/learn/dev-player-reading/<lessonId từ seed>` |
+| Video, tự lưu và khôi phục vị trí | `/learn/dev-player-video/<lessonId từ seed>` |
+| PDF ba trang | `/learn/dev-player-pdf/<lessonId từ seed>` |
+| Tài liệu lỗi, thử lại, vẫn đọc tóm tắt được | `/learn/dev-player-error/<lessonId từ seed>` |
+| Checklist: đã học, quiz chưa đạt, assignment chờ chấm | `/learn/dev-player-checklist/<lessonId từ seed>` |
+| Checklist code: lần nộp gần nhất chưa đạt | `/learn/dev-player-code/<lessonId từ seed>` |
+| Vào URL bài đang khóa | `/learn/dev-player-reading/<lessonId từ seed>` |
+| Đã hoàn thành, thông báo cập nhật và bài tiếp theo | `/learn/dev-player-completed/<lessonId từ seed>` |
+| Hoàn thành khóa, sao và modal đánh giá | `/learn/dev-player-complete/<lessonId từ seed>` |
 
 1. **Reading:** chụp trước khi bấm “Đánh dấu đã học xong”; nút hoàn thành bị khóa và ghi “Còn thiếu: Học nội dung”. Bấm đánh dấu → chụp nút hoàn thành được mở. Bấm hoàn thành → hiện bài tiếp theo, trang không tự chuyển.
 2. **Video:** bấm phát, dừng ở khoảng giây 2; tải lại phải khôi phục gần vị trí đó. Xem hết tự đánh dấu đã học. Video CC0 mẫu của MDN dài khoảng 5 giây, chỉ dùng kiểm tra player.
@@ -76,3 +76,12 @@ pnpm --filter web build
 ```
 
 DB verification tạo fixture riêng trong transaction rồi rollback. Manual browser walkthrough và ảnh do người dùng thực hiện; không suy ra đã kiểm tra browser chỉ từ DOM tests/build/HTTP smoke.
+
+## Sửa theo review PR #126
+
+- Video dùng duration của material để clamp, không dùng thời lượng ước tính cả bài. Material chưa có duration vẫn lưu resume và nhận ended.
+- POST video/PDF trả kết quả gọn, bỏ truy vấn assessment/path items; open/study/complete dựng view sau khi nhả enrollment lock. Guard dùng cùng logic prerequisite với layout.
+- Focus dùng GET; gộp pause/ended; lỗi lưu nằm cạnh tài liệu, có thử lưu riêng. Gateway không JSON có thông báo tiếng Việt.
+- Quiz xét phần trăm chính xác: 69,5% không đạt 70%.
+- Review công khai dùng CourseReview và listPublicCourseReviews chung. Helper lưu/ẩn/hiện cập nhật rating/reviewCount trong transaction. Helper visibility là persistence nội bộ; caller phải kiểm quyền kiểm duyệt và xác nhận trước khi gọi.
+- Media mẫu chuyển khỏi public sang dev-fixtures; route /dev/lesson-player chỉ chạy development và bị loại khỏi production tracing. PDF.js vẫn là dependency runtime.
