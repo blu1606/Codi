@@ -188,12 +188,14 @@ async function main() {
           }),
         /Không tìm thấy tài liệu/,
       );
+      const mediaStartedAt = performance.now();
       const clamped = await run({
         type: "video",
         materialId: video.id,
         seconds: 999,
         ended: false,
       });
+      console.log(`Media save acknowledgement: ${Math.round(performance.now() - mediaStartedAt)} ms (DB dev, inside rollback transaction).`);
       assert.equal(clamped.positionSeconds, 5);
       assert.ok(!("path" in clamped));
       await assert.rejects(

@@ -22,6 +22,7 @@ import {
   Layers3,
   Loader2,
   ShoppingBag,
+  Star,
   Smartphone,
   Sparkles,
   Users ,
