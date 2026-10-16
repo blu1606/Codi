@@ -3,8 +3,8 @@ import type { Database } from "@codi-1/db";
 import { userRoles } from "@codi-1/db/schema/roles";
 import { user } from "@codi-1/db/schema/auth";
 
-export const ROLE = { LEARNER: "LEARNER", LECTURER: "LECTURER", ADMIN: "ADMIN" } as const;
-export type RoleId = (typeof ROLE)[keyof typeof ROLE];
+import type { RoleId } from "./roles";
+export { ROLE, ROLE_LABEL, getPrimaryRole, getRoleHome, type RoleId } from "./roles";
 
 export async function getActiveRoles(db: Database, userId: string): Promise<RoleId[]> {
   const userRecord = await db
