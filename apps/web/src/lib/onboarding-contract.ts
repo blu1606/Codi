@@ -1,25 +1,61 @@
 import { z } from "zod";
-import { ONBOARDING_GOALS, ONBOARDING_LEVELS, WEEKLY_HOURS } from "@codi-1/db/schema/onboarding-values";
+import {
+  ONBOARDING_GOALS,
+  ONBOARDING_LEVELS,
+  WEEKLY_HOURS,
+} from "@codi-1/db/schema/onboarding-values";
 import type { studentEnrollments } from "@codi-1/db/schema/student-profile";
 
 export { ONBOARDING_GOALS, ONBOARDING_LEVELS, WEEKLY_HOURS };
-export const GOAL_LABELS = { project: "Làm được dự án", finish: "Hoàn thành khóa học", interview: "Chuẩn bị phỏng vấn" } as const;
-export const LEVEL_LABELS = { new: "Mới bắt đầu", basic: "Đã biết cơ bản", solid: "Khá vững" } as const;
+export const GOAL_LABELS = {
+  project: "Làm được dự án",
+  finish: "Hoàn thành khóa học",
+  interview: "Chuẩn bị phỏng vấn",
+} as const;
+export const LEVEL_LABELS = {
+  new: "Mới bắt đầu",
+  basic: "Đã biết cơ bản",
+  solid: "Khá vững",
+} as const;
 const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const step = z.number().int().min(0).max(2);
 export const onboardingCommand = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("goal-pick"), step, value: z.union([z.enum(ONBOARDING_GOALS), z.enum(ONBOARDING_LEVELS), z.literal(2), z.literal(5), z.literal(10)]) }).strict(),
+  z
+    .object({
+      type: z.literal("goal-pick"),
+      step,
+      value: z.union([
+        z.enum(ONBOARDING_GOALS),
+        z.enum(ONBOARDING_LEVELS),
+        z.literal(2),
+        z.literal(5),
+        z.literal(10),
+      ]),
+    })
+    .strict(),
   z.object({ type: z.literal("goal-next"), step }).strict(),
   z.object({ type: z.literal("goal-back"), step }).strict(),
   z.object({ type: z.literal("goal-skip") }).strict(),
   z.object({ type: z.literal("goal-edit") }).strict(),
+  z.object({ type: z.literal("goal-cancel") }).strict(),
   z.object({ type: z.literal("fork-default") }).strict(),
   z.object({ type: z.literal("fork-diagnostic") }).strict(),
   z.object({ type: z.literal("diagnostic-start") }).strict(),
   z.object({ type: z.literal("diagnostic-postpone") }).strict(),
   z.object({ type: z.literal("diagnostic-retake") }).strict(),
-  z.object({ type: z.literal("answer"), attemptId: id, questionId: id, optionId: id.nullable(), unknown: z.boolean() }).strict().refine((v) => v.unknown ? v.optionId === null : v.optionId !== null),
-  z.object({ type: z.literal("previous"), attemptId: id, questionId: id }).strict(),
+  z
+    .object({
+      type: z.literal("answer"),
+      attemptId: id,
+      questionId: id,
+      optionId: id.nullable(),
+      unknown: z.boolean(),
+    })
+    .strict()
+    .refine((v) => (v.unknown ? v.optionId === null : v.optionId !== null)),
+  z
+    .object({ type: z.literal("previous"), attemptId: id, questionId: id })
+    .strict(),
   z.object({ type: z.literal("next"), attemptId: id, questionId: id }).strict(),
   z.object({ type: z.literal("submit"), attemptId: id }).strict(),
   z.object({ type: z.literal("request-path") }).strict(),
@@ -27,72 +63,411 @@ export const onboardingCommand = z.discriminatedUnion("type", [
 export type OnboardingCommand = z.infer<typeof onboardingCommand>;
 export type Enrollment = typeof studentEnrollments.$inferSelect;
 export class OnboardingError extends Error {
-  constructor(message: string, public readonly status = 409) { super(message); }
+  constructor(
+    message: string,
+    public readonly status = 409,
+  ) {
+    super(message);
+  }
 }
 export function assertOnboardingAccess(enrollment: Enrollment | undefined) {
-  if (!enrollment) throw new OnboardingError("Bạn chưa đăng ký khoá học này.", 403);
-  if (enrollment.status === "suspended") throw new OnboardingError("Quyền học khoá học này đang tạm ngưng.", 403);
+  if (!enrollment)
+    throw new OnboardingError("Bạn chưa đăng ký khoá học này.", 403);
+  if (enrollment.status === "suspended")
+    throw new OnboardingError("Quyền học khoá học này đang tạm ngưng.", 403);
   return enrollment;
 }
-export function requireDiagnosticState(enrollment: Enrollment, ...allowed: Enrollment["diagnosticStatus"][]) {
-  if (enrollment.goalEditing || !enrollment.goalSetAt || !allowed.includes(enrollment.diagnosticStatus)) {
-    throw new OnboardingError("Trạng thái đã thay đổi. Vui lòng tải lại để tiếp tục.");
+export function requireDiagnosticState(
+  enrollment: Enrollment,
+  ...allowed: Enrollment["diagnosticStatus"][]
+) {
+  if (
+    enrollment.goalEditing ||
+    !enrollment.goalSetAt ||
+    !allowed.includes(enrollment.diagnosticStatus)
+  ) {
+    throw new OnboardingError(
+      "Trạng thái đã thay đổi. Vui lòng tải lại để tiếp tục.",
+    );
   }
 }
 
 // Pure transition policy; SQL writes run under an owner-scoped enrollment row lock.
-export function goalTransition(enrollment: Enrollment, command: OnboardingCommand): Partial<Enrollment> {
+export function goalTransition(
+  enrollment: Enrollment,
+  command: OnboardingCommand,
+): Partial<Enrollment> {
   const { goalStep: current, goalDraft: draft } = enrollment;
-  if (command.type === "goal-edit") {
-    if (!enrollment.goalSetAt || enrollment.goalEditing) throw new OnboardingError("Chưa thể chỉnh mục tiêu.");
-    const legacyGoal = ONBOARDING_GOALS.find((goal) => goal === enrollment.learningGoal) ?? "finish";
-    const hours = WEEKLY_HOURS.find((value) => value * 60 === enrollment.weeklyGoalMinutes) ?? 5;
-    return { goalEditing: true, goalStep: 0, goalDraft: { goal: legacyGoal, level: enrollment.selfAssessedLevel ?? "new", hours } };
+  if (command.type === "goal-cancel") {
+    if (!enrollment.goalSetAt || !enrollment.goalEditing)
+      throw new OnboardingError("Bạn chưa chỉnh sửa mục tiêu.");
+    return { goalEditing: false, goalStep: 0, goalDraft: {} };
   }
-  if (enrollment.goalSetAt && !enrollment.goalEditing) throw new OnboardingError("Mục tiêu đã lưu. Chọn Chỉnh mục tiêu để thay đổi.");
-  if (command.type === "goal-skip") return saveGoal(enrollment, { goal: "finish", level: "new", hours: 5 });
-  if (!("step" in command) || command.step !== current) throw new OnboardingError("Bước thiết lập đã thay đổi.");
+  if (command.type === "goal-edit") {
+    if (!enrollment.goalSetAt || enrollment.goalEditing)
+      throw new OnboardingError("Chưa thể chỉnh mục tiêu.");
+    const legacyGoal =
+      ONBOARDING_GOALS.find((goal) => goal === enrollment.learningGoal) ??
+      "finish";
+    const hours =
+      WEEKLY_HOURS.find(
+        (value) => value * 60 === enrollment.weeklyGoalMinutes,
+      ) ?? 5;
+    return {
+      goalEditing: true,
+      goalStep: 0,
+      goalDraft: {
+        goal: legacyGoal,
+        level: enrollment.selfAssessedLevel ?? "new",
+        hours,
+      },
+    };
+  }
+  if (enrollment.goalSetAt && !enrollment.goalEditing)
+    throw new OnboardingError(
+      "Mục tiêu đã lưu. Chọn Chỉnh mục tiêu để thay đổi.",
+    );
+  if (command.type === "goal-skip")
+    return saveGoal(enrollment, { goal: "finish", level: "new", hours: 5 });
+  if (!("step" in command) || command.step !== current)
+    throw new OnboardingError("Bước thiết lập đã thay đổi.");
   if (command.type === "goal-back") {
     if (current === 0) throw new OnboardingError("Bạn đang ở bước đầu tiên.");
     return { goalStep: current - 1 };
   }
   if (command.type === "goal-pick") {
-    if (current === 0) return { goalDraft: { ...draft, goal: z.enum(ONBOARDING_GOALS).parse(command.value) } };
-    if (current === 1) return { goalDraft: { ...draft, level: z.enum(ONBOARDING_LEVELS).parse(command.value) } };
-    return { goalDraft: { ...draft, hours: z.union([z.literal(2), z.literal(5), z.literal(10)]).parse(command.value) } };
+    if (current === 0)
+      return {
+        goalDraft: {
+          ...draft,
+          goal: z.enum(ONBOARDING_GOALS).parse(command.value),
+        },
+      };
+    if (current === 1)
+      return {
+        goalDraft: {
+          ...draft,
+          level: z.enum(ONBOARDING_LEVELS).parse(command.value),
+        },
+      };
+    return {
+      goalDraft: {
+        ...draft,
+        hours: z
+          .union([z.literal(2), z.literal(5), z.literal(10)])
+          .parse(command.value),
+      },
+    };
   }
-  if (command.type !== "goal-next") throw new OnboardingError("Hành động không hợp lệ.", 400);
-  if ([draft.goal, draft.level, draft.hours][current] === undefined) throw new OnboardingError("Vui lòng chọn một câu trả lời.", 400);
+  if (command.type !== "goal-next")
+    throw new OnboardingError("Hành động không hợp lệ.", 400);
+  if ([draft.goal, draft.level, draft.hours][current] === undefined)
+    throw new OnboardingError("Vui lòng chọn một câu trả lời.", 400);
   if (current < 2) return { goalStep: current + 1 };
   return saveGoal(enrollment, draft);
 }
-function saveGoal(enrollment: Enrollment, draft: Enrollment["goalDraft"]): Partial<Enrollment> {
+function saveGoal(
+  enrollment: Enrollment,
+  draft: Enrollment["goalDraft"],
+): Partial<Enrollment> {
   const goal = z.enum(ONBOARDING_GOALS).parse(draft.goal);
   const level = z.enum(ONBOARDING_LEVELS).parse(draft.level);
-  const hours = z.union([z.literal(2), z.literal(5), z.literal(10)]).parse(draft.hours);
-  return { learningGoal: goal, targetSkillId: null, selfAssessedLevel: level, weeklyGoalMinutes: hours * 60,
-    goalSetAt: new Date(), goalStep: 0, goalDraft: {}, goalEditing: false,
-    ...(enrollment.goalEditing ? { pathStatus: "generating" as const } : { diagnosticStatus: "fork" as const }) };
+  const hours = z
+    .union([z.literal(2), z.literal(5), z.literal(10)])
+    .parse(draft.hours);
+  return {
+    learningGoal: goal,
+    targetSkillId: null,
+    selfAssessedLevel: level,
+    weeklyGoalMinutes: hours * 60,
+    goalSetAt: new Date(),
+    goalStep: 0,
+    goalDraft: {},
+    goalEditing: false,
+    ...(enrollment.goalEditing
+      ? { pathStatus: "generating" as const }
+      : { diagnosticStatus: "fork" as const }),
+  };
 }
 
-export type BktParameters = { bktPInit: number; bktPLearn: number; bktPGuess: number; bktPSlip: number };
-export function updateBkt(prior: number, correct: boolean, params: BktParameters): number {
-  const values = [prior, params.bktPInit, params.bktPLearn, params.bktPGuess, params.bktPSlip];
-  if (values.some((p) => !Number.isFinite(p) || p < 0 || p > 1) || params.bktPGuess + params.bktPSlip >= 1) {
+export type DiagnosticContext = {
+  enrollment: Enrollment;
+  hasDiagnostic: boolean;
+  questions: { id: number; type: string }[];
+  options: { id: number; questionId: number; isCorrect: boolean }[];
+  attempt: { id: number; status: string; gradedAt: Date | null } | undefined;
+  answers: {
+    questionId: number;
+    selectedOptionId: number | null;
+    isUnknown: boolean;
+  }[];
+  activePath:
+    | { createdAt: Date; sourceSubmissionId: number | null }
+    | undefined;
+};
+export type DiagnosticDecision = {
+  patch: Partial<Enrollment>;
+  effect?:
+    | "default-path"
+    | "preserve-path"
+    | "create-attempt"
+    | "save-answer"
+    | "grade";
+  repeatedSubmit?: boolean;
+};
+
+export function canRequestDiagnosticPath({
+  enrollment,
+  attempt,
+  activePath,
+}: Pick<DiagnosticContext, "enrollment" | "attempt" | "activePath">): boolean {
+  if (
+    enrollment.diagnosticStatus !== "done" ||
+    attempt?.status !== "graded" ||
+    !attempt.gradedAt
+  )
+    return false;
+  if (enrollment.pathStatus !== "ready") return true;
+  // A ready path can only be replaced after a newer diagnostic, never by revisiting its result.
+  return (
+    !!activePath &&
+    activePath.sourceSubmissionId !== attempt.id &&
+    attempt.gradedAt > activePath.createdAt
+  );
+}
+
+// All command guards run before SQL effects, inside the enrollment row lock.
+export function diagnosticPolicy(
+  ctx: DiagnosticContext,
+  command: OnboardingCommand,
+): DiagnosticDecision {
+  const { enrollment: e, attempt, questions, options, answers } = ctx;
+  switch (command.type) {
+    case "fork-default":
+      requireDiagnosticState(e, "fork");
+      return { patch: { diagnosticStatus: "skipped" }, effect: "default-path" };
+    case "fork-diagnostic":
+    case "diagnostic-retake":
+      requireDiagnosticState(
+        e,
+        ...(command.type === "fork-diagnostic"
+          ? ["fork" as const]
+          : ["done" as const, "skipped" as const]),
+      );
+      return {
+        patch: { diagnosticStatus: "intro", diagnosticQuestionIndex: 0 },
+      };
+    case "diagnostic-postpone":
+      requireDiagnosticState(e, "intro");
+      return {
+        patch: { diagnosticStatus: "skipped" },
+        effect: "preserve-path",
+      };
+    case "diagnostic-start":
+      requireDiagnosticState(e, "intro", "in-progress");
+      if (!ctx.hasDiagnostic || !questions.length)
+        throw new OnboardingError(
+          "Khoá học này chưa có bài kiểm tra đầu vào.",
+          400,
+        );
+      if (
+        questions.some(
+          (q) =>
+            !["single_choice", "predict_output"].includes(q.type) ||
+            options.filter((o) => o.questionId === q.id && o.isCorrect)
+              .length !== 1 ||
+            options.filter((o) => o.questionId === q.id).length < 2,
+        )
+      ) {
+        throw new OnboardingError(
+          "Bài kiểm tra đầu vào đang được cập nhật. Bạn có thể quay lại sau.",
+        );
+      }
+      if (e.diagnosticStatus === "in-progress") {
+        if (attempt?.status !== "draft")
+          throw new OnboardingError(
+            "Lần làm bài đã thay đổi. Vui lòng tải lại.",
+          );
+        return { patch: {} };
+      }
+      return {
+        patch: { diagnosticStatus: "in-progress" },
+        effect: "create-attempt",
+      };
+    case "request-path":
+      requireDiagnosticState(e, "done");
+      if (!canRequestDiagnosticPath(ctx))
+        throw new OnboardingError(
+          "Lộ trình đã sẵn sàng hoặc chưa có kết quả mới. Vui lòng mở lộ trình hiện tại.",
+        );
+      return {
+        patch:
+          e.pathStatus === "generating" ? {} : { pathStatus: "generating" },
+      };
+    case "answer":
+    case "next":
+    case "previous":
+    case "submit": {
+      if (command.type === "submit" && e.diagnosticStatus === "done") {
+        requireDiagnosticState(e, "done");
+        if (attempt?.id !== command.attemptId || attempt.status !== "graded")
+          throw new OnboardingError(
+            "Lần làm bài đã thay đổi. Vui lòng tải lại.",
+          );
+        return { patch: {}, repeatedSubmit: true };
+      }
+      requireDiagnosticState(e, "in-progress");
+      if (
+        !attempt ||
+        attempt.id !== command.attemptId ||
+        attempt.status !== "draft"
+      )
+        throw new OnboardingError("Lần làm bài đã thay đổi. Vui lòng tải lại.");
+      if (command.type === "submit") {
+        if (
+          !questions.length ||
+          e.diagnosticQuestionIndex !== questions.length - 1
+        )
+          throw new OnboardingError(
+            "Vui lòng hoàn thành các câu hỏi trước.",
+            400,
+          );
+        for (const q of questions) {
+          const answer = answers.find((a) => a.questionId === q.id);
+          if (!answer)
+            throw new OnboardingError(
+              "Vui lòng trả lời mọi câu hoặc chọn Tôi chưa biết.",
+              400,
+            );
+          if (
+            !answer.isUnknown &&
+            !options.some(
+              (o) => o.questionId === q.id && o.id === answer.selectedOptionId,
+            )
+          )
+            throw new OnboardingError(
+              "Nội dung bài kiểm tra đã thay đổi. Vui lòng tải lại.",
+            );
+        }
+        return { patch: { diagnosticStatus: "done" }, effect: "grade" };
+      }
+      const question = questions[e.diagnosticQuestionIndex];
+      if (!question || question.id !== command.questionId)
+        throw new OnboardingError("Câu hỏi đã thay đổi. Vui lòng tải lại.");
+      if (command.type === "answer") {
+        if (
+          command.unknown
+            ? command.optionId !== null
+            : !options.some(
+                (o) =>
+                  o.questionId === question.id && o.id === command.optionId,
+              )
+        )
+          throw new OnboardingError("Lựa chọn không thuộc câu hỏi này.", 400);
+        return { patch: {}, effect: "save-answer" };
+      }
+      const next =
+        e.diagnosticQuestionIndex + (command.type === "next" ? 1 : -1);
+      if (next < 0 || next >= questions.length)
+        throw new OnboardingError("Không thể chuyển đến câu hỏi này.", 400);
+      if (
+        command.type === "next" &&
+        !answers.some((a) => a.questionId === question.id)
+      )
+        throw new OnboardingError(
+          "Vui lòng chọn câu trả lời hoặc Tôi chưa biết.",
+          400,
+        );
+      return { patch: { diagnosticQuestionIndex: next } };
+    }
+    default:
+      throw new OnboardingError("Hành động không hợp lệ.", 400);
+  }
+}
+
+export function showDiagnosticResult(
+  data: Pick<OnboardingView, "enrollment" | "result">,
+  explicitResult = false,
+): boolean {
+  return (
+    data.enrollment.diagnosticStatus === "done" &&
+    !!data.result &&
+    (data.enrollment.pathStatus === "none" || explicitResult)
+  );
+}
+
+export type BktParameters = {
+  bktPInit: number;
+  bktPLearn: number;
+  bktPGuess: number;
+  bktPSlip: number;
+};
+export function updateBkt(
+  prior: number,
+  correct: boolean,
+  params: BktParameters,
+): number {
+  const values = [
+    prior,
+    params.bktPInit,
+    params.bktPLearn,
+    params.bktPGuess,
+    params.bktPSlip,
+  ];
+  if (
+    values.some((p) => !Number.isFinite(p) || p < 0 || p > 1) ||
+    params.bktPGuess + params.bktPSlip >= 1
+  ) {
     throw new OnboardingError("Tham số BKT của khái niệm không hợp lệ.");
   }
   const knows = prior * (correct ? 1 - params.bktPSlip : params.bktPSlip);
-  const guesses = (1 - prior) * (correct ? params.bktPGuess : 1 - params.bktPGuess);
+  const guesses =
+    (1 - prior) * (correct ? params.bktPGuess : 1 - params.bktPGuess);
   // A zero-likelihood observation leaves the prior unchanged before the learning step.
   const posterior = knows + guesses === 0 ? prior : knows / (knows + guesses);
-  return Math.min(1, Math.max(0, posterior + (1 - posterior) * params.bktPLearn));
+  return Math.min(
+    1,
+    Math.max(0, posterior + (1 - posterior) * params.bktPLearn),
+  );
 }
 
 export type OnboardingView = {
-  enrollment: Pick<Enrollment, "learningGoal" | "selfAssessedLevel" | "weeklyGoalMinutes" | "goalDraft" | "goalStep" | "goalEditing" | "diagnosticStatus" | "diagnosticQuestionIndex" | "pathStatus" | "pathSource"> & { goalSet: boolean };
+  canRequestPath: boolean;
+  enrollment: Pick<
+    Enrollment,
+    | "learningGoal"
+    | "selfAssessedLevel"
+    | "weeklyGoalMinutes"
+    | "goalDraft"
+    | "goalStep"
+    | "goalEditing"
+    | "diagnosticStatus"
+    | "diagnosticQuestionIndex"
+    | "pathStatus"
+    | "pathSource"
+  > & { goalSet: boolean };
   course: { id: string; title: string };
-  diagnostic: null | { id: number; title: string; questions: { id: number; text: string; codeSnippet: string | null; options: { id: number; text: string }[] }[] };
+  diagnostic: null | {
+    id: number;
+    title: string;
+    questions: {
+      id: number;
+      text: string;
+      codeSnippet: string | null;
+      options: { id: number; text: string }[];
+    }[];
+  };
   attemptId: number | null;
   answers: { questionId: number; optionId: number | null; unknown: boolean }[];
-  result: null | { right: number; wrong: number; unknown: number; concepts: { id: number; name: string; probability: number | null; evidenceCount: number }[] };
+  result: null | {
+    right: number;
+    wrong: number;
+    unknown: number;
+    concepts: {
+      id: number;
+      name: string;
+      probability: number | null;
+      evidenceCount: number;
+    }[];
+  };
 };

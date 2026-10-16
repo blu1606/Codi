@@ -12,11 +12,16 @@ writes require the same Origin. The browser never receives correctness flags or 
 Migration `20261015142500_course_onboarding` adds the mockup's goal values to the existing enum, plus persisted
 draft/step/editing, self-assessed level and diagnostic cursor fields. Existing enum values and records remain valid.
 No existing tables, columns or values are removed. Apply with the project's `db:migrate` command.
+`project` / `finish` / `interview` are the canonical goals for new onboarding writes. The four schema-v7 enum
+values remain readable for old enrollments; opening goal edit maps them to `finish` in the draft only.
 
 Each mutation locks the owner's enrollment row inside a transaction. Answers belong to a draft assessment
 submission; server checks the active attempt, current question and option ownership. Back/next and choices are
 saved immediately; a reload offers continuation from the saved question. A retake creates a new attempt,
 retaining earlier submissions. Duplicate submission returns the result without applying evidence twice.
+`diagnosticPolicy` is the pure command policy exercised by Vitest on CI for every transition and rejected state.
+Postponing is permitted only at intro; leaving an in-progress test preserves it for resume.
+During goal edit, “Huỷ chỉnh sửa” discards the draft and keeps the saved goal, diagnostic and path unchanged.
 
 Diagnostic correctness is calculated by code, never an LLM. BKT uses each accepted concept's configured
 initial/learn/guess/slip parameters and its existing posterior. Known correct/incorrect answers update the
@@ -35,6 +40,10 @@ This is the durable generation request for #97, which consumes the saved goal, l
 mastery vector, then updates the path/version/state. #96 does not claim to generate an AI path. The destination
 `/learn/[courseId]`, generation execution/recovery and full course-home goal-edit entry are supplied by #97.
 The onboarding ready view already has the confirmed goal-edit and late diagnostic entry actions.
+Completed diagnostics show the result automatically only while `path_status = none`, immediately after submission,
+or with `?view=result`. Revisiting a ready/failed path otherwise shows the final setup screen. A ready path rejects
+`request-path` unless the latest graded diagnostic is newer than the active path and is not already its source
+submission. Viewing an old result opens the existing path; repeated requests while generating do not reset it.
 
 ## Development data and checks
 
@@ -45,16 +54,17 @@ pnpm db:seed-onboarding
 pnpm test:onboarding:db
 ```
 
-The seed creates `dev-onboarding-typescript`, three published lessons, three accepted concepts and a published
+The seed creates a **hidden** `dev-onboarding-typescript`, three published lessons, three accepted concepts and a published
 diagnostic. It enrolls only the accounts from `SEED_ACCOUNT_TARGETS` or, when unset, accounts bearing both the
 `+student@` email tag and `(Student)` name suffix of `seed-accounts.ts`. It does not reset existing progress.
+Rerunning the seed also hides the previously published fixture from the public catalog without changing enrollments.
 The DB verification script creates isolated fixture rows inside a transaction and rolls them back after checking
 ownership, goals, resume, answer scoping, grading, idempotency, retake, default paths, D11 and completed lessons.
 These scripts refuse `NODE_ENV=production`. They are separate from the application API's real-data behavior.
 
 Open http://localhost:3001/learn/dev-onboarding-typescript/onboarding with a seeded learner account.
-Password sign-in preserves this onboarding return destination. Social sign-in and new-account return routing
-retain their existing behavior.
+Password sign-in and new-account email verification preserve this onboarding return destination.
+Social sign-in retains its existing behavior.
 
 ## 📸 Dán ảnh kiểm tra tại đây — người dùng bổ sung
 

@@ -13,6 +13,7 @@ import { Label } from "@codi-1/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useState } from "react";
 import { toast } from "sonner";
 import z from "zod";
@@ -23,7 +24,7 @@ import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
 import OtpInput from "./otp-input";
 
-export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () => void }) {
+export default function SignUpForm({ onSwitchToSignIn, returnTo = "/dashboard" }: { onSwitchToSignIn: () => void; returnTo?: string }) {
   const router = useRouter();
   const { isPending } = authClient.useSession();
   const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
@@ -81,7 +82,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
           onSuccess: () => {
             toast.success("Xác thực email thành công! Đang chuyển hướng vào hệ thống...");
             setTimeout(() => {
-              router.push("/dashboard");
+              router.push(returnTo as Route);
             }, 1000);
           },
           onError: (ctx) => {

@@ -15,7 +15,8 @@ function stableUuid(input: string) {
 
 // Explicit development/test content, never a fallback returned by application APIs.
 export async function seedOnboardingFixture(store: Store, courseId: string, userIds: string[]) {
-  await store.insert(courses).values({ id: courseId, slug: courseId, title: "TypeScript — thực hành onboarding (dev)", category: "Frontend", level: "Beginner", duration: "30 phút", description: "Dữ liệu phát triển cho mục tiêu, bài kiểm tra đầu vào và BKT.", price: 0, status: "published", knowledgeMapStatus: "confirmed" }).onConflictDoNothing();
+  // Hidden fixtures remain available to enrolled QA accounts without appearing in the public catalog.
+  await store.insert(courses).values({ id: courseId, slug: courseId, title: "TypeScript — thực hành onboarding (dev)", category: "Frontend", level: "Beginner", duration: "30 phút", description: "Dữ liệu phát triển cho mục tiêu, bài kiểm tra đầu vào và BKT.", price: 0, status: "hidden", hiddenReason: "Dữ liệu kiểm thử phát triển, không hiển thị trong danh mục công khai.", knowledgeMapStatus: "confirmed" }).onConflictDoUpdate({ target: courses.id, set: { status: "hidden", hiddenReason: "Dữ liệu kiểm thử phát triển, không hiển thị trong danh mục công khai." } });
   const chapterId = stableUuid(`${courseId}:chapter`);
   await store.insert(courseChapters).values({ id: chapterId, courseId, title: "Kiểu dữ liệu cơ bản", position: 0, isPublished: true }).onConflictDoNothing();
   const examples = [

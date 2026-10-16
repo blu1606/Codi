@@ -37,7 +37,7 @@ function LoginContent() {
         {activeTab === "signin" ? (
           <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} returnTo={onboardingReturnPath(searchParams.get("callbackURL"))} />
         ) : (
-          <SignUpForm onSwitchToSignIn={() => setActiveTab("signin")} />
+          <SignUpForm onSwitchToSignIn={() => setActiveTab("signin")} returnTo={onboardingReturnPath(searchParams.get("callbackURL"))} />
         )}
       </div>
     </div>
