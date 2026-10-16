@@ -23,7 +23,7 @@ vi.mock("@/services", () => ({
 
 import { ForbiddenError, ROLE } from "@codi-1/auth";
 import { db } from "@/services";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 function request(body: unknown = { courseId: "course-1" }) {
   return new NextRequest("http://localhost/api/student/cart", {
@@ -134,3 +134,29 @@ describe("POST /api/student/cart validation and failures", () => {
     expect(JSON.stringify(body)).not.toContain("private database connection details");
   });
 });
+
+describe("GET /api/student/cart", () => {
+  it("returns count 0 and empty items for unauthenticated visitors", async () => {
+    mocks.getSession.mockResolvedValue(null);
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ count: 0, items: [] });
+  });
+
+  it("returns user cart items and count when authenticated", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
+    mocks.where.mockResolvedValueOnce([{ courseId: "c-1" }, { courseId: "c-2" }]);
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ count: 2, items: ["c-1", "c-2"] });
+  });
+
+  it("safely handles db errors and returns count 0", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
+    mocks.where.mockRejectedValueOnce(new Error("db down"));
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ count: 0, items: [] });
+  });
+});
+

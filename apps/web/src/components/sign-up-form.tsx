@@ -18,12 +18,19 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/safe-redirect";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
 import OtpInput from "./otp-input";
 
-export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () => void }) {
+export default function SignUpForm({
+  onSwitchToSignIn,
+  onSuccess,
+}: {
+  onSwitchToSignIn: () => void;
+  onSuccess?: () => void;
+}) {
   const router = useRouter();
   const { isPending } = authClient.useSession();
   const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
@@ -79,10 +86,24 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
         },
         {
           onSuccess: () => {
+            try {
+              authClient.$store.notify("$sessionSignal");
+            } catch {
+              // Ignore
+            }
             toast.success("Xác thực email thành công! Đang chuyển hướng vào hệ thống...");
-            setTimeout(() => {
-              router.push("/dashboard");
-            }, 1000);
+            if (onSuccess) {
+              onSuccess();
+            } else {
+              const rawNext =
+                typeof window !== "undefined"
+                  ? new URLSearchParams(window.location.search).get("next")
+                  : null;
+              const next = safeNext(rawNext, "/dashboard");
+              setTimeout(() => {
+                router.push(next as any);
+              }, 1000);
+            }
           },
           onError: (ctx) => {
             toast.error(ctx.error.message || "Mã OTP không chính xác hoặc đã hết hạn 2 phút.");
@@ -280,6 +301,20 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
               )}
             </form.Subscribe>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-3 text-muted-foreground">HOẶC TIẾP TỤC VỚI</span>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <GoogleSignInButton text="Đăng ký với Google" />
+            <GitHubSignInButton text="Đăng ký với GitHub" />
+          </div>
 
           <div className="mt-4 text-center text-xs text-muted-foreground">
             <span>Đã có tài khoản? </span>

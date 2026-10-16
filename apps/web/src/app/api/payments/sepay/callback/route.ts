@@ -59,12 +59,39 @@ export async function POST(req: Request) {
 
     // Check if the transferred amount is equal or greater than the required amount
     if (amountReceived >= tx.amount) {
-      // Process payment: update transaction and enroll student
+      // Process payment: update transaction and enroll student, and settle order if present
       await db.transaction(async (txDB) => {
         // Update transaction status
         await txDB.update(studentTransactions)
           .set({ status: "paid" })
           .where(eq(studentTransactions.id, txId));
+
+        // Settle orders table if an order matches txId
+        const { orders, orderEvents } = await import("@codi-1/db");
+        const matchedOrders = typeof txDB.select === "function"
+          ? await txDB
+              .select({ id: orders.id })
+              .from(orders)
+              .where(eq(orders.code, txId))
+              .limit(1)
+          : [];
+        const matchedOrder = matchedOrders[0];
+
+        if (matchedOrder) {
+          await txDB.update(orders)
+            .set({
+              status: "paid",
+              receivedAmount: amountReceived,
+              paidAt: new Date(),
+            })
+            .where(eq(orders.id, matchedOrder.id));
+
+          await txDB.insert(orderEvents).values({
+            orderId: matchedOrder.id,
+            label: "Đã thanh toán thành công",
+            actorId: tx.userId,
+          });
+        }
 
         // Grant access to the course, avoiding duplicates
         await txDB.insert(studentEnrollments)

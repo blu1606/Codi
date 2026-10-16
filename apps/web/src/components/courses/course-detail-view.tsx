@@ -1,37 +1,116 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, ArrowRight, BookOpen, BrainCircuit, Braces, Check,
-  ChevronDown, ChevronRight, Clock3, Code2, Database, FileText,
-  GitBranch, GraduationCap, Layers3, Loader2, ShoppingBag, Smartphone, Sparkles, Users, Star
+  AlertCircle,
+  BarChart3,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ClipboardCheck,
+  Clock,
+  EyeOff,
+  MessageCircle,
+  Presentation,
+  RotateCw,
+  ShoppingCart,
+  Sparkles,
+  Star,
+  Terminal,
+  Upload,
+  User,
+  Users,
+  Video,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@codi-1/ui/components/button";
 import { Card } from "@codi-1/ui/components/card";
 import { authClient } from "@/lib/auth-client";
-import { CourseDetailError, fetchCourseDetail, formatLessonDuration, type CourseDetail } from "@/lib/course-details";
+import {
+  CourseDetailError,
+  fetchCourseDetail,
+  formatLessonDuration,
+  getLessonTypeMeta,
+  type CourseDetail,
+  type LessonContentType,
+} from "@/lib/course-details";
+import type { CourseOwnershipDetail } from "@/lib/course-ownership";
+import AuthModal from "@/components/auth/auth-modal";
+import CourseReviewList from "./course-review-list";
 import styles from "./course-detail.module.css";
 
-const levels: Record<string, string> = { Beginner: "Cơ bản", Intermediate: "Trung cấp", Advanced: "Nâng cao" };
-const icons: Record<string, typeof Code2> = {
-  Frontend: Braces, Backend: Database, Fullstack: Code2,
-  "Data & AI": BrainCircuit, Mobile: Smartphone, "Computer Science": GitBranch,
+const LEVEL_LABELS: Record<string, string> = {
+  Beginner: "Cơ bản",
+  Intermediate: "Trung cấp",
+  Advanced: "Nâng cao",
+  "Cơ bản": "Cơ bản",
+  "Trung cấp": "Trung cấp",
+  "Nâng cao": "Nâng cao",
 };
+
+function getInitials(name?: string | null): string {
+  if (!name) return "CD";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (
+    parts[parts.length - 2][0] + parts[parts.length - 1][0]
+  ).toUpperCase();
+}
+
+function getLessonIcon(type: LessonContentType) {
+  switch (type) {
+    case "quiz":
+      return ClipboardCheck;
+    case "assignment":
+      return Upload;
+    case "code":
+    case "tutorial":
+      return Terminal;
+    case "pdf":
+      return Presentation;
+    case "reading":
+      return BookOpen;
+    case "video":
+    default:
+      return Video;
+  }
+}
 
 export default function CourseDetailView({ slug }: { slug: string }) {
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
   const [detail, setDetail] = useState<CourseDetail | null>(null);
-  const [error, setError] = useState<{ message: string; notFound: boolean } | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    notFound: boolean;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
+
+  // Curriculum accordion state
   const [openChapters, setOpenChapters] = useState<Set<string>>(new Set());
+
+  // Ownership state
+  const [ownership, setOwnership] = useState<CourseOwnershipDetail | null>(
+    null,
+  );
   const [adding, setAdding] = useState(false);
-  const [inCart, setInCart] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
+
+  // Gated Auth Modal state (Flow L2, S03)
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<
+    "add-to-cart" | "buy-now" | "enroll-free" | null
+  >(null);
+  const [intentReason, setIntentReason] = useState("");
+  const isResumingRef = useRef(false);
+
+  const userRole =
+    (session?.user as { role?: string } | undefined)?.role ?? null;
+  const isPrivilegedRole = userRole === "lecturer" || userRole === "admin";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -41,249 +120,946 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       .then((data) => {
         if (controller.signal.aborted) return;
         setDetail(data);
-        setOpenChapters(new Set(data.chapters.slice(0, 1).map((chapter) => chapter.id)));
+        // Default first chapter open
+        setOpenChapters(new Set(data.chapters.slice(0, 1).map((ch) => ch.id)));
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         setError({
-          message: err instanceof Error ? err.message : "Không thể tải khóa học. Vui lòng thử lại.",
+          message:
+            err instanceof Error
+              ? err.message
+              : "Không thể tải khóa học. Vui lòng thử lại.",
           notFound: err instanceof CourseDetailError && err.status === 404,
         });
       })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
     return () => controller.abort();
   }, [slug, attempt]);
 
-  const handleAddToCart = async () => {
-    if (!detail || adding || sessionLoading || inCart) return;
-    if (!session?.user) { router.push("/login"); return; }
+  // Check ownership
+  useEffect(() => {
+    if (!detail || !session?.user) {
+      setOwnership(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch("/api/courses/ownership", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        courses: [{ id: detail.course.id, price: detail.course.price }],
+      }),
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.ownership?.[detail.course.id]) {
+          setOwnership(data.ownership[detail.course.id]);
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [detail, session]);
+
+  // Check and resume pending intent stored in sessionStorage (e.g. from page reload or redirect)
+  useEffect(() => {
+    if (!detail || !session?.user) return;
+    if (isResumingRef.current) return;
+    try {
+      const stored = sessionStorage.getItem("codi_pending_course_intent");
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as {
+        courseId?: string;
+        slug?: string;
+        action?: "add-to-cart" | "buy-now" | "enroll-free";
+        createdAt?: number;
+      };
+
+      // 15-minute TTL check
+      const INTENT_TTL_MS = 15 * 60 * 1000;
+      if (parsed.createdAt && Date.now() - parsed.createdAt > INTENT_TTL_MS) {
+        sessionStorage.removeItem("codi_pending_course_intent");
+        return;
+      }
+
+      if (parsed.courseId === detail.course.id || parsed.slug === slug) {
+        sessionStorage.removeItem("codi_pending_course_intent");
+        isResumingRef.current = true;
+        if (parsed.action === "buy-now") {
+          handleBuyNow(true);
+        } else if (parsed.action === "add-to-cart") {
+          handleAddToCart(true);
+        } else if (parsed.action === "enroll-free") {
+          handleEnrollFree(true);
+        }
+      }
+    } catch {
+      // Ignore JSON errors
+    }
+  }, [detail, session?.user, slug]);
+
+  const handleAddToCart = async (isGatedReturn = false) => {
+    if (!detail || adding) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("add-to-cart");
+      try {
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "add-to-cart",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {}
+      setIntentReason(
+        "Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.",
+      );
+      setAuthModalOpen(true);
+      return;
+    }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới thêm được khoá học vào giỏ.");
+      return;
+    }
+
     setAdding(true);
     setCartMessage("");
     try {
       const response = await fetch("/api/student/cart", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId: detail.course.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
-      setInCart(true);
-      setCartMessage(result.added ? "Đã thêm khóa học vào giỏ của bạn." : "Khóa học đã có trong giỏ của bạn.");
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("add-to-cart");
+          setIntentReason(
+            "Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.",
+          );
+          setAuthModalOpen(true);
+          return;
+        }
+        throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
+      }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
+      setOwnership({ ownership: "in-cart" });
+      const successText = result.added
+        ? `Đã thêm “${detail.course.title}” vào giỏ hàng.`
+        : "Khóa học đã có trong giỏ hàng.";
+      setCartMessage(successText);
+      toast.success(successText, {
+        action: {
+          label: "Xem giỏ hàng",
+          onClick: () => router.push("/cart" as any),
+        },
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("codi:cart-updated"));
+      }
     } catch (err: unknown) {
-      setCartMessage(err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.");
-    } finally { setAdding(false); }
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Không thể kết nối. Vui lòng thử lại.";
+      setCartMessage(msg);
+      toast.error(msg);
+    } finally {
+      setAdding(false);
+    }
   };
 
-  const toggleChapter = (id: string) => setOpenChapters((current) => {
-    const next = new Set(current);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  const handleEnrollFree = async (isGatedReturn = false) => {
+    if (!detail || enrolling) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("enroll-free");
+      try {
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "enroll-free",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {}
+      setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
+      setAuthModalOpen(true);
+      return;
+    }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới đăng ký được khoá học.");
+      return;
+    }
 
-  if (loading) return (
-    <main className={styles.page} aria-busy="true">
-      <div className={styles.container} role="status">
-        <span className="sr-only">Đang tải thông tin khóa học…</span>
-        <div aria-hidden="true" className="space-y-8 motion-safe:animate-pulse">
-          <div className="h-4 w-48 rounded bg-muted" />
-          <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-            <div className="space-y-6"><div className="h-24 max-w-2xl rounded-xl bg-muted" /><div className="h-12 rounded bg-muted" /><div className="h-64 rounded-2xl bg-muted" /></div>
-            <div className="h-96 rounded-2xl bg-muted" />
+    setEnrolling(true);
+    setCartMessage("");
+    try {
+      const response = await fetch("/api/courses/enroll-free", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: detail.course.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("enroll-free");
+          setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
+          setAuthModalOpen(true);
+          return;
+        }
+        throw new Error(result.error || "Không thể đăng ký khóa học miễn phí.");
+      }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
+      setOwnership({ ownership: "owned" });
+      const successText = `Đã đăng ký “${detail.course.title}”.`;
+      setCartMessage(successText);
+      toast.success(successText);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Không thể kết nối. Vui lòng thử lại.";
+      setCartMessage(msg);
+      toast.error(msg);
+    } finally {
+      setEnrolling(false);
+    }
+  };
+
+  const handleBuyNow = async (isGatedReturn = false) => {
+    if (!detail || adding) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("buy-now");
+      try {
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "buy-now",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {}
+      setIntentReason("Đăng nhập để mua khoá học.");
+      setAuthModalOpen(true);
+      return;
+    }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới mua được khoá học.");
+      return;
+    }
+
+    setAdding(true);
+    setCartMessage("");
+    try {
+      const response = await fetch("/api/orders/buy-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: detail.course.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("buy-now");
+          setIntentReason("Đăng nhập để mua khoá học.");
+          setAuthModalOpen(true);
+          return;
+        }
+        if (response.status === 409) {
+          // Already owned
+          try {
+            sessionStorage.removeItem("codi_pending_course_intent");
+          } catch {}
+          setOwnership({ ownership: "owned" });
+          toast.success("Bạn đã sở hữu khóa học này.");
+          return;
+        }
+        throw new Error(result.error || "Không thể xử lý mua ngay.");
+      }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
+      // Direct to course checkout page with order param
+      const targetSlug = result.courseSlug || slug;
+      const targetUrl = `/courses/${encodeURIComponent(targetSlug)}/checkout?order=${encodeURIComponent(result.orderCode)}`;
+      window.location.href = targetUrl;
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Không thể xử lý mua ngay.";
+      setCartMessage(msg);
+      toast.error(msg);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleAuthSuccess = async () => {
+    setAuthModalOpen(false);
+    if (isResumingRef.current) return;
+    let intent = pendingIntent;
+    if (!intent) {
+      try {
+        const stored = sessionStorage.getItem("codi_pending_course_intent");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          intent = parsed.action;
+        }
+      } catch {}
+    }
+    setPendingIntent(null);
+    try {
+      sessionStorage.removeItem("codi_pending_course_intent");
+    } catch {}
+
+    if (!intent) return;
+    isResumingRef.current = true;
+
+    // Refresh authClient session store to guarantee current credentials
+    try {
+      await authClient.getSession();
+    } catch {
+      // Continue anyway
+    }
+
+    if (intent === "add-to-cart") {
+      await handleAddToCart(true);
+    } else if (intent === "buy-now") {
+      await handleBuyNow(true);
+    } else if (intent === "enroll-free") {
+      await handleEnrollFree(true);
+    }
+  };
+
+  const toggleChapter = (id: string) => {
+    setOpenChapters((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  if (loading) {
+    return (
+      <main className={styles.page} aria-busy="true">
+        <div className={styles.container}>
+          <div className="space-y-6 motion-safe:animate-pulse">
+            <div className="h-4 w-48 rounded bg-muted" />
+            <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+              <div className="space-y-6">
+                <div className="h-10 w-3/4 rounded bg-muted" />
+                <div className="h-16 rounded bg-muted" />
+                <div className="h-40 rounded-xl bg-muted" />
+                <div className="h-64 rounded-xl bg-muted" />
+              </div>
+              <div className="h-80 rounded-xl bg-muted" />
+            </div>
           </div>
         </div>
-      </div>
-    </main>
-  );
+      </main>
+    );
+  }
 
-  if (error || !detail) return (
-    <main className={styles.page}>
-      <div className={styles.container}>
-        <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center ring-0">
-          <BookOpen aria-hidden="true" className="size-10 text-muted-foreground" />
-          <h1 className="text-2xl font-semibold">{error?.notFound ? "Không tìm thấy khóa học" : "Chưa thể tải khóa học"}</h1>
-          <p role="alert" className="text-sm text-muted-foreground">{error?.message}</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            {!error?.notFound && <Button onClick={() => setAttempt((value) => value + 1)} className="h-10 rounded-lg px-4">Thử lại</Button>}
-            <Button variant="outline" nativeButton={false} render={<Link href="/courses" />} className="h-10 rounded-lg px-4">Xem các khóa học</Button>
-          </div>
-        </Card>
-      </div>
-    </main>
-  );
+  if (error || !detail) {
+    return (
+      <main className={styles.page}>
+        <div className={styles.container}>
+          <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
+            <BookOpen className="size-10 text-muted-foreground mx-auto" />
+            <h1 className="text-2xl font-bold">
+              {error?.notFound
+                ? "Không tìm thấy khoá học"
+                : "Chưa thể tải khoá học"}
+            </h1>
+            <p role="alert" className="text-sm text-muted-foreground">
+              {error?.message}
+            </p>
+            <div className="flex flex-wrap justify-center gap-3 pt-2">
+              {!error?.notFound && (
+                <Button
+                  onClick={() => setAttempt((v) => v + 1)}
+                  className="gap-1.5 cursor-pointer"
+                >
+                  <RotateCw className="h-4 w-4" />
+                  Thử lại
+                </Button>
+              )}
+              <Link
+                href="/courses"
+                className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+              >
+                Xem danh sách khoá học
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
-  const { course, chapters, summary } = detail;
-  const Icon = icons[course.category] ?? Code2;
-  const allExpanded = chapters.length > 0 && chapters.every((chapter) => openChapters.has(chapter.id));
-  const level = levels[course.level] ?? course.level;
+  const {
+    course,
+    chapters,
+    summary,
+    instructor,
+    learningOutcomes,
+    requirements,
+  } = detail;
+  const ownState =
+    ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
+  const levelText = LEVEL_LABELS[course.level] ?? course.level;
+
+  const ratingBreakdown = detail.ratingBreakdown ?? [0, 0, 0, 0, 0];
+  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0) || 1;
+  const reviews = detail.reviews ?? [];
+
+  // Hidden/unavailable course check (Flow L1, S02)
+  if (course.status !== "published" && ownState !== "owned") {
+    return (
+      <main className={styles.page}>
+        <div className={styles.container}>
+          <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
+            <EyeOff className="size-10 text-muted-foreground mx-auto" />
+            <h1 className="text-2xl font-bold">Khoá học tạm ngừng bán</h1>
+            <p role="alert" className="text-sm text-muted-foreground">
+              Khoá học này hiện không mở bán cho học viên mới.
+            </p>
+            {course.hiddenReason && (
+              <p className="text-xs text-muted-foreground bg-muted p-3 rounded-lg border border-border max-w-md mx-auto text-left">
+                <span className="font-semibold block mb-1 text-foreground">
+                  Lý do:
+                </span>
+                {course.hiddenReason}
+              </p>
+            )}
+            <div className="pt-2">
+              <Link
+                href="/courses"
+                className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Khám phá khoá học khác
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className={styles.page}>
       <div className={styles.container}>
-        <nav aria-label="Đường dẫn" className={styles.breadcrumb}>
-          <Link href="/courses"><ArrowLeft aria-hidden="true" className="size-4" /> Khóa học</Link>
-          <ChevronRight aria-hidden="true" className="size-3.5" />
+        {/* Breadcrumb: Khoá học / Category / Title */}
+        <nav aria-label="Breadcrumb" className={styles.breadcrumb}>
+          <Link href="/courses">Khoá học</Link>
+          <span>/</span>
           <span>{course.category}</span>
+          <span>/</span>
+          <span className={styles.breadcrumbCurrent} aria-current="page">
+            {course.title}
+          </span>
         </nav>
 
+        {/* Hidden notice for already-enrolled learners */}
+        {course.status === "hidden" && ownState === "owned" && (
+          <div
+            role="status"
+            className="rounded-xl border border-info/30 bg-info/10 p-4 text-xs text-info mb-4"
+          >
+            <strong className="block font-semibold mb-1">
+              Khoá học đang tạm ẩn với người mua mới
+            </strong>
+            Bạn đã sở hữu khoá học nên vẫn học bình thường.
+          </div>
+        )}
+
         <div className={styles.layout}>
-          <header id="overview" className={styles.intro}>
-            <div className={styles.badges}>
-              <span className={styles.category}><Icon aria-hidden="true" className="size-3.5" />{course.category}</span>
-              <span className={styles.level}>{level}</span>
-            </div>
-            <h1 className={styles.title}>{course.title}</h1>
-            <p className={styles.description}>{course.description}</p>
-            <div className={styles.metadata}>
-              {detail.rating > 0 && (
-                <span className="flex items-center text-primary">
-                  <span className="font-bold mr-1">{detail.rating.toFixed(1)}</span>
-                  <Star aria-hidden="true" className="size-4 fill-current" />
-                  <span className="text-muted-foreground ml-1 font-normal">({detail.reviewCount} đánh giá)</span>
+          {/* Main Column */}
+          <div className={styles.mainCol}>
+            {/* Header info */}
+            <header className={styles.header}>
+              <h1 className={styles.title}>{course.title}</h1>
+              <p className={styles.description}>{course.description}</p>
+
+              {/* Meta stats row */}
+              <div className={styles.metaRow}>
+                <span className={styles.metaItem}>
+                  <BarChart3 className="h-4 w-4" />
+                  <span>{levelText}</span>
                 </span>
-              )}
-              <span><Users aria-hidden="true" className="size-4" /><strong>{course.enrollmentCount.toLocaleString("vi-VN")}</strong> học viên đã đăng ký</span>
-              <span><Clock3 aria-hidden="true" className="size-4" />{course.duration}</span>
-            </div>
-            <nav aria-label="Các phần của khóa học" className={styles.sectionNav}>
-              <a href="#outcomes">Bạn sẽ học được gì</a>
-              <a href="#curriculum">Nội dung khóa học</a>
-              <a href="#requirements">Yêu cầu</a>
-              {detail.instructor && <a href="#instructor">Giảng viên</a>}
-            </nav>
-          </header>
-
-          <aside className={styles.sidebar} aria-label="Đăng ký khóa học">
-            <Card className={styles.enrollmentCard}>
-              {detail.introVideoUrl && detail.introVideoCaptionsUrl ? (
-                <video className={styles.cover} controls crossOrigin="anonymous" preload="metadata" poster={detail.coverImageUrl ?? undefined} aria-label={`Giới thiệu: ${course.title}`} src={detail.introVideoUrl}>
-                  <track kind="captions" src={detail.introVideoCaptionsUrl} srcLang="vi" label="Tiếng Việt" default />
-                </video>
-              ) : (
-                <div className={styles.cover}>
-                  {detail.coverImageUrl ? (
-                    <Image src={detail.coverImageUrl} alt={course.title} fill sizes="(max-width: 1024px) 100vw, 360px" className="object-cover" unoptimized />
+                <span className={styles.metaItem}>
+                  <Clock className="h-4 w-4" />
+                  <span>{course.duration}</span>
+                </span>
+                <span className={styles.metaItem}>
+                  {detail.rating > 0 && detail.reviewCount > 0 ? (
+                    <>
+                      <Star className={`h-4 w-4 ${styles.starFilled}`} />
+                      <strong className="text-foreground">
+                        {detail.rating.toFixed(1)}
+                      </strong>
+                      <span>({detail.reviewCount} đánh giá)</span>
+                    </>
                   ) : (
-                    <div className={styles.coverArt} aria-hidden="true">
-                      <span className={styles.coverBrand}>CODI <span>/ COURSE</span></span>
-                      <Icon className={styles.coverIcon} strokeWidth={1.2} />
-                      <span className={styles.coverCategory}>{course.category}</span>
-                      <span className={styles.coverCode}>{"{ learn. build. grow. }"}</span>
-                    </div>
+                    <span>Chưa có đánh giá</span>
                   )}
-                </div>
-              )}
-              <div className={styles.cardBody}>
-                <p className={styles.priceLabel}>Học phí khóa học</p>
-                <p className={styles.price}>{course.price === 0 ? "Miễn phí" : `${course.price.toLocaleString("vi-VN")} ₫`}</p>
-                <Button onClick={handleAddToCart} disabled={adding || sessionLoading || inCart} className={styles.enrollButton}>
-                  {adding ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <ShoppingBag aria-hidden="true" className="size-4" />}
-                  {inCart ? "Đã trong giỏ hàng" : "Thêm vào giỏ"}
-                  {!adding && !inCart && <ArrowRight aria-hidden="true" className="ml-auto size-4" />}
-                </Button>
-                {cartMessage && <p role="status" className="mt-3 text-sm leading-6 text-muted-foreground">{cartMessage}</p>}
-                <dl className={styles.facts}>
-                  <div><dt><GraduationCap aria-hidden="true" className="size-4" />Trình độ</dt><dd>{level}</dd></div>
-                  <div><dt><Layers3 aria-hidden="true" className="size-4" />Số chương</dt><dd>{summary.chapterCount}</dd></div>
-                  <div><dt><BookOpen aria-hidden="true" className="size-4" />Số bài học</dt><dd>{summary.lessonCount}</dd></div>
-                  <div><dt><Clock3 aria-hidden="true" className="size-4" />Thời lượng</dt><dd>{course.duration}</dd></div>
-                </dl>
-                <p className={styles.cardNote}>Xem nội dung và yêu cầu bên dưới để chọn khóa học phù hợp với bạn.</p>
+                </span>
+                <span className={styles.metaItem}>
+                  <Users className="h-4 w-4" />
+                  <span>
+                    {course.enrollmentCount.toLocaleString("vi-VN")} học viên
+                  </span>
+                </span>
+                {instructor && (
+                  <span className={styles.metaItem}>
+                    <User className="h-4 w-4" />
+                    <span>{instructor.name}</span>
+                  </span>
+                )}
               </div>
-            </Card>
-            <Link href={`/ai?topic=${encodeURIComponent(course.title)}`} className={styles.advisor}>
-              <Sparkles aria-hidden="true" className="size-4 shrink-0" />
-              <span>Chưa chắc khóa học phù hợp?<strong>Hỏi trợ lý AI Codi</strong></span>
-              <ArrowRight aria-hidden="true" className="ml-auto size-4" />
-            </Link>
-          </aside>
+            </header>
 
-          <div className={styles.content}>
-            <section id="outcomes" className={styles.section} aria-labelledby="outcomes-title">
-              <div className={styles.sectionHeading}><span className={styles.sectionNumber}>01</span><h2 id="outcomes-title">Bạn sẽ học được gì?</h2></div>
-              {detail.learningOutcomes.length > 0 ? (
-                <ul className={styles.outcomes}>
-                  {detail.learningOutcomes.map((outcome, index) => <li key={index}><Check aria-hidden="true" className="size-4 shrink-0" /><span>{outcome}</span></li>)}
-                </ul>
-              ) : <p className={styles.emptyText}>Mục tiêu học tập của khóa học đang được cập nhật.</p>}
-              {detail.targetAudience && <div className={styles.audience}><h3>Khóa học dành cho ai?</h3><p>{detail.targetAudience}</p></div>}
-            </section>
-
-            <section id="curriculum" className={styles.section} aria-labelledby="curriculum-title">
-              <div className={styles.sectionHeading}><span className={styles.sectionNumber}>02</span><h2 id="curriculum-title">Nội dung khóa học</h2></div>
-              <div className={styles.curriculumToolbar}>
-                <p><strong>{summary.chapterCount}</strong> chương <span>·</span> <strong>{summary.lessonCount}</strong> bài học{summary.durationSeconds > 0 && <> <span>·</span> {formatLessonDuration(summary.durationSeconds)}</>}</p>
-                {chapters.length > 0 && <button type="button" onClick={() => setOpenChapters(allExpanded ? new Set() : new Set(chapters.map((chapter) => chapter.id)))}>{allExpanded ? "Thu gọn tất cả" : "Mở rộng tất cả"}</button>}
-              </div>
-              {chapters.length === 0 ? (
-                <Card className={styles.emptyCurriculum}>
-                  <span className={styles.emptyIcon}><BookOpen aria-hidden="true" className="size-6" /></span>
-                  <h3>Nội dung học đang được chuẩn bị</h3>
-                  <p>Chương và bài học sẽ xuất hiện tại đây khi được công bố. Bạn có thể xem thông tin khóa học và quay lại sau.</p>
-                </Card>
-              ) : (
-                <div className={styles.chapters}>
-                  {chapters.map((chapter, index) => (
-                    <div key={chapter.id} className={styles.chapter}>
-                      <h3>
-                        <button type="button" aria-expanded={openChapters.has(chapter.id)} aria-controls={`chapter-${chapter.id}`} onClick={() => toggleChapter(chapter.id)} className={styles.chapterToggle}>
-                          <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
-                          <span>{index + 1}. {chapter.title}</span>
-                          <small>{chapter.lessons.length} bài học</small>
-                        </button>
-                      </h3>
-                      <div id={`chapter-${chapter.id}`} hidden={!openChapters.has(chapter.id)}>
-                        {chapter.lessons.length === 0 ? <p className={styles.emptyChapter}>Bài học trong chương đang được cập nhật.</p> : (
-                          <ol className={styles.lessons}>
-                            {chapter.lessons.map((lesson, lessonIndex) => <li key={lesson.id}>
-                              <FileText aria-hidden="true" className="size-4 shrink-0" />
-                              <div><p>{index + 1}.{lessonIndex + 1} {lesson.title}</p>{lesson.description && <span>{lesson.description}</span>}</div>
-                              {lesson.durationSeconds > 0 && <time>{formatLessonDuration(lesson.durationSeconds)}</time>}
-                            </li>)}
-                          </ol>
-                        )}
-                      </div>
+            {/* 01 · Bạn sẽ học được gì? */}
+            <section
+              className={styles.section}
+              aria-labelledby="outcomes-heading"
+            >
+              <h2 id="outcomes-heading" className={styles.sectionTitle}>
+                01 · Bạn sẽ học được gì?
+              </h2>
+              {learningOutcomes.length > 0 ? (
+                <div className={styles.outcomesGrid}>
+                  {learningOutcomes.map((outcome, idx) => (
+                    <div key={idx} className={styles.outcomeItem}>
+                      <Check className={`h-4 w-4 ${styles.checkIcon}`} />
+                      <span>{outcome}</span>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Giảng viên đang cập nhật mục tiêu khoá học.
+                </p>
               )}
             </section>
 
-            <section id="requirements" className={styles.section} aria-labelledby="requirements-title">
-              <div className={styles.sectionHeading}><span className={styles.sectionNumber}>03</span><h2 id="requirements-title">Yêu cầu trước khi học</h2></div>
-              {detail.requirements.length > 0 ? <ul className={styles.requirements}>{detail.requirements.map((requirement, index) => <li key={index}>{requirement}</li>)}</ul> : <p className={styles.emptyText}>Thông tin về kiến thức và công cụ cần chuẩn bị đang được cập nhật.</p>}
-            </section>
-            
-            {detail.instructor && (
-              <section id="instructor" className={styles.section} aria-labelledby="instructor-title">
-                <div className={styles.sectionHeading}>
-                  <span className={styles.sectionNumber}>04</span>
-                  <h2 id="instructor-title">Giảng viên</h2>
-                </div>
-                <Card className="flex flex-col sm:flex-row gap-6 p-6 mt-4 border-border/50">
-                  {detail.instructor.avatar && <div className="shrink-0 flex justify-center">
-                    <Image
-                      src={detail.instructor.avatar}
-                      alt={detail.instructor.name}
-                      width={120}
-                      height={120}
-                      className="rounded-full object-cover border-2 border-primary/10"
-                      unoptimized
-                    />
-                  </div>}
-                  <div className="space-y-3">
-                    <div>
-                      <h3 className="text-xl font-bold">{detail.instructor.name}</h3>
-                      {detail.instructor.title && <p className="text-sm font-medium text-primary">{detail.instructor.title}</p>}
-                    </div>
-                    <p className="text-sm leading-relaxed text-muted-foreground">{detail.instructor.bio ?? "Thông tin giới thiệu giảng viên đang được cập nhật."}</p>
+            {/* 02 · Nội dung khóa học (S02 Syllabus) */}
+            <section
+              className={styles.section}
+              aria-labelledby="curriculum-heading"
+            >
+              <div className={styles.curriculumHeader}>
+                <h2 id="curriculum-heading" className={styles.sectionTitle}>
+                  02 · Nội dung khóa học
+                </h2>
+                {chapters.length > 0 && (
+                  <div className={styles.curriculumActions}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenChapters(new Set(chapters.map((ch) => ch.id)))
+                      }
+                      className={styles.expandBtn}
+                    >
+                      Mở rộng tất cả
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOpenChapters(new Set())}
+                      className={styles.expandBtn}
+                    >
+                      Thu gọn tất cả
+                    </button>
                   </div>
-                </Card>
-              </section>
-            )}
+                )}
+              </div>
 
-            <Link href="/courses" className={styles.backLink}><ArrowLeft aria-hidden="true" className="size-4" /> Khám phá các khóa học khác</Link>
+              <p className={styles.curriculumSummary}>
+                {chapters.length} chương · {summary.lessonCount} bài học ·{" "}
+                {course.duration}
+              </p>
+
+              {chapters.length === 0 ? (
+                <div className="p-6 rounded-xl border border-dashed border-border bg-muted/20 text-center text-sm text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Nội dung học đang được chuẩn bị
+                  </p>
+                  <p>Giảng viên sẽ sớm cập nhật đề cương.</p>
+                </div>
+              ) : (
+                <div className={styles.chaptersList}>
+                  {chapters.map((chapter) => {
+                    const isOpen = openChapters.has(chapter.id);
+                    const chapterDuration = chapter.lessons.reduce(
+                      (acc, les) => acc + (les.durationSeconds || 0),
+                      0,
+                    );
+                    const formattedDuration =
+                      formatLessonDuration(chapterDuration);
+
+                    return (
+                      <div key={chapter.id} className={styles.chapterCard}>
+                        <button
+                          type="button"
+                          onClick={() => toggleChapter(chapter.id)}
+                          aria-expanded={isOpen}
+                          className={styles.chapterToggle}
+                        >
+                          <span>{chapter.title}</span>
+                          <span className={styles.chapterMeta}>
+                            {chapter.lessons.length} bài
+                            {formattedDuration ? ` · ${formattedDuration}` : ""}
+                          </span>
+                        </button>
+
+                        {isOpen && (
+                          <ul className={styles.lessonsList}>
+                            {chapter.lessons.map((lesson) => {
+                              const meta = getLessonTypeMeta(lesson.title);
+                              const LessonIcon = getLessonIcon(meta.type);
+
+                              return (
+                                <li
+                                  key={lesson.id}
+                                  className={styles.lessonItem}
+                                >
+                                  <div className={styles.lessonMain}>
+                                    <LessonIcon
+                                      className={`h-4 w-4 ${styles.lessonIcon}`}
+                                    />
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
+                                      <span className="font-medium text-foreground">
+                                        {lesson.title}
+                                      </span>
+                                      <span className="text-[11px] text-muted-foreground font-normal">
+                                        {meta.label}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {lesson.isFreePreview && (
+                                      <span className="inline-flex items-center rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground border border-accent/30">
+                                        Học thử
+                                      </span>
+                                    )}
+                                    {lesson.durationSeconds > 0 && (
+                                      <span className={styles.lessonDuration}>
+                                        {formatLessonDuration(
+                                          lesson.durationSeconds,
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* 03 · Yêu cầu trước khi học */}
+            <section
+              className={styles.section}
+              aria-labelledby="requirements-heading"
+            >
+              <h2 id="requirements-heading" className={styles.sectionTitle}>
+                03 · Yêu cầu trước khi học
+              </h2>
+              {requirements.length > 0 ? (
+                <ul className={styles.requirementsList}>
+                  {requirements.map((req, idx) => (
+                    <li key={idx}>{req}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Không có yêu cầu đặc biệt.
+                </p>
+              )}
+            </section>
+
+            {/* 04 · Giảng viên */}
+            <section
+              className={styles.section}
+              aria-labelledby="instructor-heading"
+            >
+              <h2 id="instructor-heading" className={styles.sectionTitle}>
+                04 · Giảng viên
+              </h2>
+              <div className={styles.instructorCard}>
+                <div className={styles.instructorAvatar}>
+                  {getInitials(instructor?.name)}
+                </div>
+                <div className={styles.instructorInfo}>
+                  <h3>{instructor?.name ?? "Codi"}</h3>
+                  <p>{instructor?.title ?? "Giảng viên tại Codi"}</p>
+                </div>
+              </div>
+            </section>
+
+            {/* Đánh giá của học viên */}
+            <section
+              id="reviews"
+              className={styles.section}
+              aria-labelledby="reviews-heading"
+            >
+              <h2 id="reviews-heading" className={styles.sectionTitle}>
+                Đánh giá của học viên
+              </h2>
+
+              {reviews.length > 0 ? (
+                <>
+                  {/* Score breakdown card */}
+                  <div className={styles.ratingBox}>
+                    <div className={styles.ratingScore}>
+                      <span className={styles.scoreNum}>
+                        {detail.rating.toFixed(1)}
+                      </span>
+                      <div className={styles.starsRow}>
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`h-4 w-4 ${styles.starFilled}`}
+                          />
+                        ))}
+                      </div>
+                      <span className={styles.ratingTotal}>
+                        {detail.reviewCount} đánh giá
+                      </span>
+                    </div>
+
+                    <div className={styles.breakdownList}>
+                      {[5, 4, 3, 2, 1].map((stars, idx) => {
+                        const countVal = ratingBreakdown[idx] ?? 0;
+                        const pct = Math.round(
+                          (countVal / totalBreakdown) * 100,
+                        );
+                        return (
+                          <div key={stars} className={styles.breakdownRow}>
+                            <span className={styles.breakdownLabel}>
+                              {stars} sao
+                            </span>
+                            <div
+                              className={styles.breakdownTrack}
+                              aria-hidden="true"
+                            >
+                              <div
+                                className={styles.breakdownFill}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className={styles.breakdownCount}>
+                              {countVal}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Reviews list */}
+                  <CourseReviewList reviews={reviews} />
+                </>
+              ) : (
+                <div className="rounded-xl border border-border/60 bg-card p-6 text-center text-muted-foreground">
+                  <p className="text-sm font-medium">
+                    Chưa có đánh giá nào cho khoá học này.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Đánh giá và nhận xét từ sinh viên đã học sẽ được hiển thị
+                    tại đây.
+                  </p>
+                </div>
+              )}
+            </section>
           </div>
+
+          {/* Sticky Sidebar (S02 Purchase Card) */}
+          <aside className={styles.sidebar} aria-label="Đăng ký khóa học">
+            <div className={styles.sidebarCard}>
+              <h2 className={styles.sidebarTitle}>Đăng ký khóa học</h2>
+
+              <div className={styles.priceSection}>
+                <span className={styles.priceLabel}>Học phí khóa học</span>
+                <span className={styles.priceValue}>
+                  {course.price === 0
+                    ? "Miễn phí"
+                    : `${course.price.toLocaleString("vi-VN")} ₫`}
+                </span>
+              </div>
+
+              {/* Ownership-aware CTA section (Flow L1, §7.2, decision 42) */}
+              {isPrivilegedRole ? (
+                <p className="text-xs text-muted-foreground">
+                  Bạn đang xem với vai trò {userRole}. Chỉ tài khoản học viên
+                  mới mua được khoá học.
+                </p>
+              ) : ownState === "owned" ? (
+                <>
+                  <div className={styles.progressSection}>
+                    <div className={styles.progressLabelRow}>
+                      <span className="text-muted-foreground">
+                        Tiến độ của bạn
+                      </span>
+                      <strong>0/{summary.lessonCount} bài</strong>
+                    </div>
+                    <div className={styles.progressBarTrack} aria-hidden="true">
+                      <div
+                        className={styles.progressBarFill}
+                        style={{ width: "0%" }}
+                      />
+                    </div>
+                  </div>
+                  <Link
+                    href={`/learn/${course.id}` as any}
+                    className={styles.ctaPrimaryBtn}
+                  >
+                    Tiếp tục học
+                  </Link>
+                </>
+              ) : ownState === "pending-payment" ? (
+                <>
+                  <div className="rounded-lg bg-warning/10 p-3 text-xs text-warning border border-warning/20">
+                    Đơn hàng đang chờ thanh toán.
+                  </div>
+                  <Link
+                    href={
+                      (ownership?.pendingOrderId
+                        ? `/checkout?order=${ownership.pendingOrderId}`
+                        : `/checkout`) as any
+                    }
+                    className={styles.ctaPrimaryBtn}
+                  >
+                    Tiếp tục thanh toán
+                  </Link>
+                </>
+              ) : ownState === "in-cart" ? (
+                <div className="flex flex-col gap-2.5">
+                  <div className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-primary bg-primary/10 rounded-lg py-2">
+                    <Check className="h-4 w-4" />
+                    Đã trong giỏ hàng
+                  </div>
+                  <Link href={"/cart" as any} className={styles.ctaPrimaryBtn}>
+                    Thanh toán
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleBuyNow()}
+                    disabled={adding}
+                    className={styles.ctaSecondaryBtn}
+                  >
+                    Mua ngay
+                  </button>
+                </div>
+              ) : ownState === "free" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleEnrollFree()}
+                    disabled={enrolling}
+                    className={styles.ctaPrimaryBtn}
+                  >
+                    {enrolling ? "Đang xử lý…" : "Đăng ký miễn phí"}
+                  </button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Khoá miễn phí: vào học ngay, không cần thanh toán.
+                  </p>
+                </>
+              ) : (
+                /* Paid course: Mua ngay (primary) + Thêm vào giỏ (secondary) (mockup decision 42) */
+                <div className="flex flex-col gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleBuyNow()}
+                    disabled={adding}
+                    className={styles.ctaPrimaryBtn}
+                  >
+                    Mua ngay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddToCart()}
+                    disabled={adding}
+                    className={styles.ctaSecondaryBtn}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    {adding ? "Đang thêm…" : "Thêm vào giỏ"}
+                  </button>
+                </div>
+              )}
+
+              {cartMessage && (
+                <p role="status" className="text-xs text-primary font-medium">
+                  {cartMessage}
+                </p>
+              )}
+
+              {/* Facts list */}
+              <dl className={styles.factsList}>
+                <div className={styles.factRow}>
+                  <dt>Trình độ</dt>
+                  <dd>{levelText}</dd>
+                </div>
+                <div className={styles.factRow}>
+                  <dt>Số chương</dt>
+                  <dd>{chapters.length}</dd>
+                </div>
+                <div className={styles.factRow}>
+                  <dt>Số bài học</dt>
+                  <dd>{summary.lessonCount}</dd>
+                </div>
+                <div className={styles.factRow}>
+                  <dt>Thời lượng</dt>
+                  <dd>{course.duration}</dd>
+                </div>
+              </dl>
+
+              {/* AI Advisor Link */}
+              <Link
+                href={`/ai?prompt=${encodeURIComponent(`Khoá "${course.title}" có phù hợp với tôi không?`)}`}
+                className={styles.aiAdvisorLink}
+              >
+                <Sparkles className="h-4 w-4 shrink-0" />
+                <span>Hỏi trợ lý AI Codi</span>
+              </Link>
+            </div>
+          </aside>
         </div>
       </div>
+
+      {/* S03 Gated Sign-in / OTP Modal */}
+      <AuthModal
+        open={authModalOpen}
+        onOpenChange={(open) => {
+          setAuthModalOpen(open);
+          if (!open) {
+            setPendingIntent(null);
+            try {
+              sessionStorage.removeItem("codi_pending_course_intent");
+            } catch {}
+          }
+        }}
+        intentReason={intentReason}
+        courseTitle={detail?.course.title}
+        onSuccess={handleAuthSuccess}
+      />
     </main>
   );
 }
