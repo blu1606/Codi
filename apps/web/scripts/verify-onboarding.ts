@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { createDb, type Database } from "@codi-1/db";
 import { user } from "@codi-1/db/schema/auth";
-import { quizOptions } from "@codi-1/db/schema/assessments";
+import { assessmentSubmissions, quizOptions } from "@codi-1/db/schema/assessments";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
 import { enrollmentSkillMastery, lessonProgress, personalizedLearningPaths, pathItems } from "@codi-1/db/schema/learning";
 import { createOnboardingService } from "../src/lib/onboarding-service";
@@ -62,10 +62,18 @@ try {
     const [enrollment] = await tx.select().from(studentEnrollments).where(and(eq(studentEnrollments.userId, userId), eq(studentEnrollments.courseId, fixture.courseId)));
     assert.ok(enrollment);
     await tx.insert(lessonProgress).values({ enrollmentId: enrollment.id, lessonId: fixture.lessonIds[0]!, status: "completed", studiedAt: new Date(), completedAt: new Date() });
-    const [ai] = await tx.insert(personalizedLearningPaths).values({ enrollmentId: enrollment.id, version: 1, generatedBy: "ai", trigger: "diagnostic_completed" }).returning();
+    const [ai] = await tx.insert(personalizedLearningPaths).values({ enrollmentId: enrollment.id, version: 1, generatedBy: "ai", trigger: "diagnostic_completed", sourceSubmissionId: attemptId }).returning();
     assert.ok(ai);
     await tx.insert(pathItems).values({ pathId: ai.id, lessonId: fixture.lessonIds[0]!, position: 1, isSkippable: true });
     await tx.update(studentEnrollments).set({ pathStatus: "ready", pathSource: "ai" }).where(eq(studentEnrollments.id, enrollment.id));
+    const ready = await service.get(userId, fixture.courseId);
+    assert.equal(ready.canRequestPath, false);
+    await assert.rejects(() => run({ type: "request-path" }), /đã sẵn sàng/);
+    await assert.rejects(() => run({ type: "submit", attemptId: attemptId + 1 }), /Lần làm bài/);
+    await run({ type: "goal-edit" });
+    await run({ type: "goal-pick", step: 0, value: "interview" });
+    const cancelled = await run({ type: "goal-cancel" });
+    assert.deepEqual(cancelled.enrollment, ready.enrollment, "Cancel must preserve saved goals and ready AI path");
     const beforeProgress = await tx.select().from(lessonProgress).where(eq(lessonProgress.enrollmentId, enrollment.id));
     await run({ type: "diagnostic-retake" });
     const postponed = await run({ type: "diagnostic-postpone" });
@@ -78,7 +86,18 @@ try {
     assert.notEqual(retake.attemptId, attemptId);
     assert.equal(retake.answers.length, 0);
     await assert.rejects(() => run({ type: "answer", attemptId, questionId: q[0]!.id, optionId: correct.id, unknown: false }), /Lần làm bài/);
-    await run({ type: "diagnostic-postpone" });
+    await assert.rejects(() => run({ type: "diagnostic-postpone" }), /Trạng thái/);
+    // A late retake can replace the existing path only after new grading evidence.
+    for (const [index, question] of q.entries()) {
+      await run({ type: "answer", attemptId: retake.attemptId!, questionId: question.id, optionId: null, unknown: true });
+      if (index < q.length - 1) await run({ type: "next", attemptId: retake.attemptId!, questionId: question.id });
+    }
+    await tx.update(personalizedLearningPaths).set({ createdAt: new Date(0) }).where(eq(personalizedLearningPaths.id, ai.id));
+    const regraded = await run({ type: "submit", attemptId: retake.attemptId! });
+    assert.equal(regraded.canRequestPath, true);
+    assert.equal((await run({ type: "request-path" })).enrollment.pathStatus, "generating");
+    const [latestGrading] = await tx.select().from(assessmentSubmissions).where(eq(assessmentSubmissions.id, retake.attemptId!));
+    assert.equal(latestGrading?.status, "graded");
     await run({ type: "goal-edit" });
     const edited = await run({ type: "goal-skip" });
     assert.equal(edited.enrollment.pathStatus, "generating");
