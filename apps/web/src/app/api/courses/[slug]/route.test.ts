@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(), courseFrom: vi.fn(), courseJoin: vi.fn(), courseWhere: vi.fn(),
   groupBy: vi.fn(), courseLimit: vi.fn(), detailsFrom: vi.fn(), detailsWhere: vi.fn(),
   detailsLimit: vi.fn(), chapterFrom: vi.fn(), lessonJoin: vi.fn(), chapterWhere: vi.fn(), orderBy: vi.fn(),
+  reviewFrom: vi.fn(), reviewJoin: vi.fn(), reviewWhere: vi.fn(), reviewOrder: vi.fn(), reviewLimit: vi.fn(),
 }));
 
 vi.mock("@/services", () => ({ db: { select: mocks.select } }));
@@ -25,7 +26,8 @@ beforeEach(() => {
   mocks.select
     .mockReturnValueOnce({ from: mocks.courseFrom })
     .mockReturnValueOnce({ from: mocks.detailsFrom })
-    .mockReturnValueOnce({ from: mocks.chapterFrom });
+    .mockReturnValueOnce({ from: mocks.chapterFrom })
+    .mockReturnValueOnce({ from: mocks.reviewFrom });
   mocks.courseFrom.mockReturnValue({ leftJoin: mocks.courseJoin });
   mocks.courseJoin.mockReturnValue({ leftJoin: mocks.courseJoin, where: mocks.courseWhere });
   mocks.courseWhere.mockReturnValue({ groupBy: mocks.groupBy });
@@ -38,9 +40,24 @@ beforeEach(() => {
   mocks.lessonJoin.mockReturnValue({ where: mocks.chapterWhere });
   mocks.chapterWhere.mockReturnValue({ orderBy: mocks.orderBy });
   mocks.orderBy.mockResolvedValue([]);
+  mocks.reviewFrom.mockReturnValue({ innerJoin: mocks.reviewJoin });
+  mocks.reviewJoin.mockReturnValue({ innerJoin: mocks.reviewJoin, where: mocks.reviewWhere });
+  mocks.reviewWhere.mockReturnValue({ orderBy: mocks.reviewOrder });
+  mocks.reviewOrder.mockReturnValue({ limit: mocks.reviewLimit });
+  mocks.reviewLimit.mockResolvedValue([]);
 });
 
 describe("GET /api/courses/[slug]", () => {
+  it("returns only visible, course-scoped public reviews without exposing private identity data", async () => {
+    const date = new Date("2026-10-16T00:00:00Z");
+    mocks.reviewLimit.mockResolvedValue([{ id: 1, name: "Học viên", rating: 4, text: "Hữu ích", lecturerReply: "Cảm ơn bạn", createdAt: date }]);
+    const body = await (await request()).json();
+    expect(body.reviews).toEqual([{ id: 1, name: "Học viên", rating: 4, text: "Hữu ích", lecturerReply: "Cảm ơn bạn", createdAt: date.toISOString() }]);
+    const filter = new PgDialect().sqlToQuery(mocks.reviewWhere.mock.calls[0][0]);
+    expect(filter.params).toEqual([course.id, course.id, true]); expect(filter.sql).toContain('"course_reviews"."is_visible"');
+    expect(Object.keys(mocks.select.mock.calls[3][0])).toEqual(["id", "name", "rating", "text", "lecturerReply", "createdAt"]);
+    expect(mocks.reviewLimit).toHaveBeenCalledWith(50);
+  });
   it("returns the database course with honest empty content and no fabricated metadata", async () => {
     const response = await request();
     const body = await response.json();

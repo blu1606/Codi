@@ -14,10 +14,15 @@ import { learningPathService } from "@/lib/learning-path-runtime";
 export default async function LessonAccessLayout({ children, params }: { children: ReactNode; params: Promise<{ courseId: string; lessonId: string }> }) {
   const { courseId, lessonId } = await params;
   const courseHome = `/learn/${encodeURIComponent(courseId)}` as Route;
+  const intent = `${courseHome}/${encodeURIComponent(lessonId)}`;
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) redirect(`/login?callbackURL=${encodeURIComponent(courseHome)}`);
+  if (!session?.user) redirect(`/login?callbackURL=${encodeURIComponent(intent)}`);
   try {
     if (!(await getActiveRoles(db, session.user.id)).includes(ROLE.LEARNER)) throw new LearningPathError("Bạn không có quyền học viên đang hoạt động.", 403);
+    const path = await learningPathService.get(session.user.id, courseId);
+    const row = path.rows.find((item) => item.id === lessonId);
+    if (path.status === "none") return <main className="mx-auto max-w-2xl space-y-4 p-6"><h1 className="text-2xl font-semibold">Thiết lập lộ trình trước khi học</h1><Link className="text-primary underline" href={`${courseHome}/onboarding` as Route}>Bắt đầu thiết lập</Link></main>;
+    if (row?.status === "locked" && row.lock) return <main className="mx-auto max-w-2xl space-y-4 p-6"><Alert variant="warning"><AlertTitle>Bài học này đang bị khoá</AlertTitle><AlertDescription>Bạn cần học “{row.lock.concept}” trước (bài “{row.lock.lessonTitle}”).</AlertDescription></Alert><Link className="block text-primary underline" href={`${courseHome}/${encodeURIComponent(row.lock.lessonId)}` as Route}>Đến bài cần học trước</Link><Link className="block text-primary underline" href={courseHome}>Về lộ trình</Link></main>;
     await learningPathService.assertLessonAccess(session.user.id, courseId, lessonId);
   } catch (error) {
     if (!(error instanceof LearningPathError)) throw error;

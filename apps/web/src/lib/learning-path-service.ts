@@ -12,6 +12,7 @@ import { assessmentAnswers, assessmentSubmissions, assessments, quizQuestions } 
 import { aiInteractionLogs } from "@codi-1/db/schema/ai-interaction-logs";
 import { courseReviews } from "@codi-1/db/schema/interaction";
 import { updateBkt } from "./onboarding-contract";
+import { saveCourseReview } from "./course-review-service";
 import { constrainPath, defaultPathItems as defaultItems, generationOutcome, graphLayers, LearningPathError, levelOf, lockInfo, pathDiff, pathProposal, selectPath, type CoursePathView, type KnowledgeMapView, type LearningPathCommand, type PathInput, type PathItem, type PathProposal } from "./learning-path-contract";
 
 type Store = Pick<Database, "select" | "insert" | "update">;
@@ -186,7 +187,7 @@ export function createLearningPathService(db: Database, generator?: PathGenerato
           if (!path || path.id !== command.pathId) throw new LearningPathError("Lộ trình đã thay đổi. Vui lòng tải lại.");
           await tx.update(personalizedLearningPaths).set(command.type === "ack-highlights" ? { highlightsSeenAt: new Date() } : { updateDismissedAt: new Date() }).where(eq(personalizedLearningPaths.id, path.id));
         } else if (command.type === "review") {
-          await tx.insert(courseReviews).values({ enrollmentId: e.id, courseId, rating: command.rating, text: command.text || null }).onConflictDoUpdate({ target: courseReviews.enrollmentId, set: { rating: command.rating, text: command.text || null, updatedAt: new Date() } });
+          await saveCourseReview(tx, e.id, courseId, command.rating, command.text);
         }
         return view(tx, await context(tx, userId, courseId));
       });

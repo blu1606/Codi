@@ -18,6 +18,8 @@ export const lessonProgress = pgTable.withRLS("lesson_progress", {
   studiedAt: timestamp("studied_at", { withTimezone: true }),
   // Resume position for video.
   lastPositionSeconds: integer("last_position_seconds"),
+  // Per-material resume and rendered PDF pages. Reading/study is a learner attestation, not mastery evidence.
+  mediaProgress: jsonb("media_progress").$type<Record<string, { seconds?: number; pages?: number[]; pageCount?: number; lastPage?: number }>>().default({}).notNull(),
   firstStartedAt: timestamp("first_started_at", { withTimezone: true }),
   lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),

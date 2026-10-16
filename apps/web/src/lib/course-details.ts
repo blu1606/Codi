@@ -18,6 +18,7 @@ export interface CourseDetail {
   instructor: { name: string; title: string | null; avatar: string | null; bio: string | null } | null;
   rating: number;
   reviewCount: number;
+  reviews?: { id: number; name: string; rating: number; text: string | null; lecturerReply: string | null; createdAt: string }[];
   learningOutcomes: string[];
   requirements: string[];
   targetAudience: string | null;

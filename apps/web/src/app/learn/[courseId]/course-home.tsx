@@ -100,7 +100,7 @@ export default function CourseHome({ courseId }: { courseId: string }) {
   </main>;
 }
 
-function ReviewForm({ data, initialRating, open, onOpenChange, save }: { initialRating: number | null; data: CoursePathView; open: boolean; onOpenChange: (value: boolean) => void; save: (rating: number, text: string) => Promise<void> }) {
+export function ReviewForm({ data, initialRating, open, onOpenChange, save }: { initialRating: number | null; data: CoursePathView; open: boolean; onOpenChange: (value: boolean) => void; save: (rating: number, text: string) => Promise<void> }) {
   const [rating, setRating] = useState(initialRating ?? data.review?.rating ?? 0);
   const [text, setText] = useState(data.review?.text ?? "");
   const [error, setError] = useState<string | null>(null);

@@ -280,6 +280,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </section>
             )}
 
+            <section id="reviews" className={styles.section} aria-labelledby="reviews-title">
+              <h2 id="reviews-title" className="text-xl font-semibold">Đánh giá của học viên</h2>
+              {detail.reviews?.length ? <ul className="mt-5 space-y-5">{detail.reviews.map((review) => <li key={review.id}><Card className="space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><strong>{review.name}</strong><span className="inline-flex items-center gap-1 text-sm"><Star aria-hidden="true" className="size-4 fill-current text-star" />{review.rating}/5 sao</span></div><time className="text-xs text-muted-foreground" dateTime={review.createdAt}>{new Intl.DateTimeFormat("vi-VN").format(new Date(review.createdAt))}</time>{review.text && <p className="whitespace-pre-wrap break-words text-sm leading-7">{review.text}</p>}{review.lecturerReply && <div className="space-y-2 rounded-lg bg-muted p-4"><p className="text-sm font-semibold">Phản hồi từ giảng viên</p><p className="whitespace-pre-wrap break-words text-sm">{review.lecturerReply}</p></div>}</Card></li>)}</ul> : <p className="mt-4 text-sm text-muted-foreground">Chưa có đánh giá nào.</p>}
+            </section>
             <Link href="/courses" className={styles.backLink}><ArrowLeft aria-hidden="true" className="size-4" /> Khám phá các khóa học khác</Link>
           </div>
         </div>
