@@ -541,6 +541,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
       submittedAt: assessmentSubmissions.submittedAt,
       lessonId: assessments.lessonId,
       correct: assessmentSubmissions.isPassed,
+      solutionViewed: sql<boolean>`coalesce((${assessmentSubmissions.codingRun}->>'solutionViewed')::boolean, false)`,
     })
     .from(assessmentSubmissions)
     .innerJoin(
@@ -564,7 +565,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
       ),
     );
   const observations = [
-    ...quiz,
+    ...quiz.map((row) => ({ ...row, solutionViewed: false })),
     ...code.map((row) => ({ ...row, key: "code", position: 0, questionId: 0 })),
   ].sort(
     (a, b) =>
@@ -599,10 +600,13 @@ async function consumeEvidence(store: Store, ctx: Context) {
           ),
         );
       const values = {
-        pMastery: updateBkt(
-          prior?.pMastery ?? skill.bktPInit,
-          observation.correct,
-          skill,
+        pMastery: Math.min(
+          observation.solutionViewed ? 0.7 : 1,
+          updateBkt(
+            prior?.pMastery ?? skill.bktPInit,
+            observation.correct,
+            skill,
+          ),
         ),
         evidenceCount: (prior?.evidenceCount ?? 0) + 1,
         correctCount: (prior?.correctCount ?? 0) + Number(observation.correct),

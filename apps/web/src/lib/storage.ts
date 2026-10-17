@@ -23,6 +23,27 @@ export function getR2Client(): S3Client | null {
 
 export const R2_BUCKET = ENV.R2_BUCKET || "codi-avatars";
 
+// Assignment objects never use the public avatar bucket or its CDN URLs.
+function assignmentBucket() {
+  const bucket = ENV.R2_ASSIGNMENT_BUCKET;
+  if (!bucket || bucket === R2_BUCKET) throw new Error("Private assignment storage is not configured");
+  return bucket;
+}
+export const assignmentFiles = {
+  async put(key: string, buffer: Buffer) {
+    const client = getR2Client();
+    if (!client) throw new Error("Assignment storage unavailable");
+    await client.send(new PutObjectCommand({ Bucket: assignmentBucket(), Key: key, Body: buffer, ContentType: "application/octet-stream" }));
+  },
+  async get(key: string) {
+    const client = getR2Client();
+    if (!client) throw new Error("Assignment storage unavailable");
+    const result = await client.send(new GetObjectCommand({ Bucket: assignmentBucket(), Key: key }));
+    if (!result.Body) throw new Error("Assignment file unavailable");
+    return { body: result.Body.transformToWebStream(), size: result.ContentLength };
+  },
+};
+
 /**
  * Upload an image buffer to Cloudflare R2
  */
