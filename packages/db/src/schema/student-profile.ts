@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { ONBOARDING_GOALS, ONBOARDING_LEVELS, type GoalDraft } from "./onboarding-values";
 import { user } from "./auth";
 import { courses } from "./courses";
 import { courseLessons } from "./course-content";
@@ -20,7 +21,10 @@ export const studentActivities = pgTable("student_activities", {
 }, (table) => [uniqueIndex("student_activities_user_date_idx").on(table.userId, table.occurredAt)]);
 
 // UC-12 Set Course Learning Goal — an input to path generation, so it is structured, not prose.
-export const learningGoal = pgEnum("learning_goal", ["complete_course", "pass_assessments", "master_specific_skill", "refresh_basics"]);
+// ONBOARDING_GOALS (project/finish/interview) is canonical for new course goal writes (§7).
+// The four schema-v7 values remain readable for existing enrollments; goal edit maps them to finish.
+export const learningGoal = pgEnum("learning_goal", ["complete_course", "pass_assessments", "master_specific_skill", "refresh_basics", ...ONBOARDING_GOALS]);
+export const selfAssessedLevel = pgEnum("self_assessed_level", ONBOARDING_LEVELS);
 export const enrollmentStatus = pgEnum("enrollment_status", ["active", "completed", "suspended"]);
 // Onboarding diagnostic and personalised-path states (STATE-MACHINES.md §7, §8).
 export const diagnosticStatus = pgEnum("diagnostic_status", ["none", "fork", "intro", "in-progress", "done", "skipped"]);
@@ -44,6 +48,12 @@ export const studentEnrollments = pgTable("student_enrollments", {
   targetSkillId: bigint("target_skill_id", { mode: "number" }).references(() => skills.id, { onDelete: "set null" }),
   weeklyGoalMinutes: integer("weekly_goal_minutes"),
   goalSetAt: timestamp("goal_set_at", { withTimezone: true }),
+  selfAssessedLevel: selfAssessedLevel("self_assessed_level"),
+  goalDraft: jsonb("goal_draft").$type<GoalDraft>().default({}).notNull(),
+  goalStep: integer("goal_step").default(0).notNull(),
+  goalEditing: boolean("goal_editing").default(false).notNull(),
+  diagnosticQuestionIndex: integer("diagnostic_question_index").default(0).notNull(),
+  diagnosticCardDismissedAt: timestamp("diagnostic_card_dismissed_at", { withTimezone: true }),
   diagnosticStatus: diagnosticStatus("diagnostic_status").default("none").notNull(),
   pathStatus: pathStatus("path_status").default("none").notNull(),
   pathSource: pathSource("path_source"),
@@ -52,6 +62,8 @@ export const studentEnrollments = pgTable("student_enrollments", {
 }, (table) => [
   uniqueIndex("student_enrollments_user_course_idx").on(table.userId, table.courseId),
   check("student_enrollments_progress_check", sql`${table.progress} BETWEEN 0 AND 100`),
+  check("student_enrollments_goal_step_check", sql`${table.goalStep} BETWEEN 0 AND 2`),
+  check("student_enrollments_diagnostic_index_check", sql`${table.diagnosticQuestionIndex} >= 0`),
   check("student_enrollments_completed_check", sql`${table.status} <> 'completed' OR ${table.completedAt} IS NOT NULL`),
   check("student_enrollments_target_skill_check", sql`${table.targetSkillId} IS NULL OR ${table.learningGoal} = 'master_specific_skill'`),
 ]);

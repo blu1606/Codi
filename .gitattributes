@@ -1,5 +1,8 @@
 * text=auto
 
+# Preserve PDF byte offsets across Windows/Linux checkouts.
+*.pdf binary
+
 # Force LF for shell scripts, SQL files, and Dockerfiles
 *.sh text eol=lf
 *.sql text eol=lf
