@@ -114,7 +114,7 @@ export const assessmentAnswers = pgTable.withRLS("assessment_answers", {
   questionId: bigint("question_id", { mode: "number" }).notNull().references(() => quizQuestions.id),
   selectedOptionId: bigint("selected_option_id", { mode: "number" }).references(() => quizOptions.id),
   answerText: text("answer_text"),
-  // "Tôi chưa biết" in the diagnostic: no option, not correct, still evidence for BKT.
+  // "Tôi chưa biết" is distinct from wrong: no selected option or correctness likelihood.
   isUnknown: boolean("is_unknown").default(false).notNull(),
   isCorrect: boolean("is_correct"),
   earnedPoints: numeric("earned_points", { precision: 6, scale: 2, mode: "number" }).default(0).notNull(),

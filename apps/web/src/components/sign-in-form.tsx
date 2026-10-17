@@ -14,6 +14,7 @@ import { Input } from "@codi-1/ui/components/input";
 import { Label } from "@codi-1/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -26,8 +27,10 @@ const REMEMBER_EMAIL_KEY = "codi_remember_email";
 
 export default function SignInForm({
   onSwitchToSignUp,
+  returnTo = "/dashboard",
 }: {
   onSwitchToSignUp: () => void;
+  returnTo?: string;
 }) {
   const router = useRouter();
   const { isPending } = authClient.useSession();
@@ -55,7 +58,7 @@ export default function SignInForm({
             } catch {
               // Ignore storage errors in restricted contexts
             }
-            router.push("/dashboard");
+            router.push(returnTo as Route);
             toast.success("Đăng nhập thành công!");
           },
           onError: (error) => {
