@@ -392,3 +392,5 @@ export default function CourseHome({
     </main>
   );
 }
+
+export { ReviewForm } from "./course-home-sections";

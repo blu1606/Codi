@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3001",
-    "build": "next build",
+    "dev": "node scripts/prepare-pdf-assets.mjs && next dev --port 3001",
+    "build": "node scripts/prepare-pdf-assets.mjs && next build",
     "check-types": "tsc --noEmit",
     "start": "next start --port 3001",
     "env:generate": "varlock codegen",
@@ -13,7 +13,9 @@
     "db:seed-onboarding": "tsx --env-file=.env scripts/seed-onboarding-dev.ts",
     "test:onboarding:db": "tsx --env-file=.env scripts/verify-onboarding.ts",
     "test:learning-path:db": "tsx --env-file=.env scripts/verify-learning-path.ts",
-    "db:seed-learning-path": "tsx --env-file=.env scripts/seed-learning-path-dev.ts"
+    "db:seed-learning-path": "tsx --env-file=.env scripts/seed-learning-path-dev.ts",
+    "db:seed-lesson-player": "tsx --env-file=.env scripts/seed-lesson-player-dev.ts",
+    "test:lesson-player:db": "tsx --env-file=.env scripts/verify-lesson-player.ts"
   },
   "dependencies": {
     "@ai-sdk/devtools": "^1.0.15",
@@ -36,6 +38,7 @@
     "lucide-react": "catalog:",
     "next": "^16.3.4",
     "next-themes": "catalog:",
+    "pdfjs-dist": "^6.4.299",
     "radix-ui": "^1.6.7",
     "react": "catalog:",
     "react-dom": "catalog:",
