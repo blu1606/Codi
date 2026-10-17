@@ -1,4 +1,10 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { createAssignmentFiles } from "./assignment-storage";
+import { LearningPathError } from "./learning-path-contract";
 
 import { ENV } from "@/env";
 
@@ -13,6 +19,8 @@ export function getR2Client(): S3Client | null {
 
   return new S3Client({
     region: "auto",
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId,
@@ -26,23 +34,24 @@ export const R2_BUCKET = ENV.R2_BUCKET || "codi-avatars";
 // Assignment objects never use the public avatar bucket or its CDN URLs.
 function assignmentBucket() {
   const bucket = ENV.R2_ASSIGNMENT_BUCKET;
-  if (!bucket || bucket === R2_BUCKET) throw new Error("Private assignment storage is not configured");
+  if (!bucket || bucket === R2_BUCKET) throw storageUnavailable();
   return bucket;
 }
-export const assignmentFiles = {
-  async put(key: string, buffer: Buffer) {
-    const client = getR2Client();
-    if (!client) throw new Error("Assignment storage unavailable");
-    await client.send(new PutObjectCommand({ Bucket: assignmentBucket(), Key: key, Body: buffer, ContentType: "application/octet-stream" }));
-  },
-  async get(key: string) {
-    const client = getR2Client();
-    if (!client) throw new Error("Assignment storage unavailable");
-    const result = await client.send(new GetObjectCommand({ Bucket: assignmentBucket(), Key: key }));
-    if (!result.Body) throw new Error("Assignment file unavailable");
-    return { body: result.Body.transformToWebStream(), size: result.ContentLength };
-  },
-};
+export const assignmentFiles = createAssignmentFiles(() => ({
+  client: assignmentClient(),
+  bucket: assignmentBucket(),
+}));
+function storageUnavailable() {
+  return new LearningPathError(
+    "Kho tệp bài tập chưa được cấu hình. Vui lòng liên hệ quản trị viên.",
+    503,
+  );
+}
+function assignmentClient() {
+  const client = getR2Client();
+  if (!client) throw storageUnavailable();
+  return client;
+}
 
 /**
  * Upload an image buffer to Cloudflare R2
@@ -67,7 +76,7 @@ export async function uploadToR2({
       Key: key,
       Body: buffer,
       ContentType: contentType,
-    })
+    }),
   );
 
   // If a public domain is configured and it's not the internal S3 endpoint, use it directly.
@@ -97,9 +106,8 @@ export async function getObjectFromR2(key: string) {
     new GetObjectCommand({
       Bucket: R2_BUCKET,
       Key: key,
-    })
+    }),
   );
 
   return response;
 }
-

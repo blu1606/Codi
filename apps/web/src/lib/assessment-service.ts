@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import {
@@ -13,15 +13,20 @@ import { LearningPathError } from "./learning-path-contract";
 import {
   assessmentCommand,
   assignmentFileLimit,
-  gradeQuiz,
-  requireAssignment,
+  quizTransition,
+  assignmentTransition,
   requireEditableAssignment,
   requireQuizQuestions,
   requireUpload,
   type AssessmentCommand,
   type AssessmentView,
   type AssignmentDraft,
+  type PreparedUpload,
 } from "./assessment-contract";
+import {
+  signUploadTicket,
+  verifyUploadTicket,
+} from "./assessment-upload-ticket";
 
 type Store = Pick<Database, "select" | "insert" | "update" | "delete">;
 type Scope = {
@@ -30,8 +35,11 @@ type Scope = {
   lessonId: string;
   assessmentId: number;
 };
-type FileStore = {
-  put: (key: string, buffer: Buffer) => Promise<void>;
+export type FileStore = {
+  presign: (key: string, size: number, expiresIn: number) => Promise<string>;
+  head: (key: string) => Promise<{ size: number; etag: string }>;
+  copy: (source: string, key: string, etag: string) => Promise<void>;
+  delete: (key: string) => Promise<void>;
   get: (key: string) => Promise<{ body: ReadableStream; size?: number }>;
 };
 const emptyDraft = (): AssignmentDraft => ({
@@ -163,6 +171,10 @@ function project(ctx: Context, scope: Scope): AssessmentView {
     previousScore:
       ctx.submissions.find((x) => x.status === "graded" && x.id !== s?.id)
         ?.score ?? null,
+    previousQuizPercent:
+      ctx.submissions.find((x) => x.status === "graded" && x.id !== s?.id)
+        ?.quizPercent ?? null,
+    unavailableReason: a.type === "quiz" ? quizUnavailable(questions) : null,
     submission: s
       ? {
           id: s.id,
@@ -211,22 +223,91 @@ function project(ctx: Context, scope: Scope): AssessmentView {
 
 async function saveDraft(store: Store, ctx: Context, draft: AssignmentDraft) {
   requireEditableAssignment(ctx.submission?.status);
-  if (ctx.submission)
-    await store
-      .update(assessmentSubmissions)
-      .set({ assignmentDraft: draft, savedAt: new Date() })
-      .where(eq(assessmentSubmissions.id, ctx.submission.id));
-  else
-    await store
-      .insert(assessmentSubmissions)
-      .values({
-        assessmentId: ctx.assessment.id,
-        enrollmentId: ctx.enrollment.id,
-        attempt: 1,
-        assignmentDraft: draft,
-      });
+  const [saved] = ctx.submission
+    ? await store
+        .update(assessmentSubmissions)
+        .set({ assignmentDraft: draft, savedAt: new Date() })
+        .where(eq(assessmentSubmissions.id, ctx.submission.id))
+        .returning()
+    : await store
+        .insert(assessmentSubmissions)
+        .values({
+          assessmentId: ctx.assessment.id,
+          enrollmentId: ctx.enrollment.id,
+          attempt: 1,
+          assignmentDraft: draft,
+        })
+        .returning();
+  return saved!;
 }
-export function createAssessmentService(db: Database, files?: FileStore) {
+function quizUnavailable(questions: Context["questions"]) {
+  try {
+    requireQuizQuestions(questions);
+    return null;
+  } catch (error) {
+    return error instanceof LearningPathError
+      ? error.message
+      : "Quiz chưa sẵn sàng.";
+  }
+}
+const versionOf = (ctx: Context) =>
+  createHash("sha256")
+    .update(
+      JSON.stringify(
+        ctx.submission
+          ? [
+              ctx.submission.id,
+              ctx.submission.status,
+              ctx.submission.savedAt?.toISOString(),
+              ctx.submission.submittedAt?.toISOString(),
+              ctx.submission.fileUrl,
+              ctx.submission.assignmentDraft,
+            ]
+          : null,
+      ),
+    )
+    .digest("hex");
+function requireFileAssignment(ctx: Context) {
+  if (
+    ctx.assessment.type !== "assignment" ||
+    !["file", "file_or_link"].includes(ctx.assessment.submissionFormat ?? "")
+  )
+    throw new LearningPathError("Bài tập không nhận tệp.", 400);
+  requireEditableAssignment(ctx.submission?.status);
+}
+const referencedKeys = (ctx: Context) =>
+  [ctx.submission?.fileUrl, ctx.submission?.assignmentDraft?.fileKey].filter(
+    (key): key is string => !!key,
+  );
+const unavailable = async (): Promise<never> => {
+  throw new LearningPathError(
+    "Kho tệp bài tập chưa được cấu hình. Vui lòng liên hệ quản trị viên.",
+    503,
+  );
+};
+const unavailableFiles: FileStore = {
+  presign: unavailable,
+  head: unavailable,
+  copy: unavailable,
+  delete: unavailable,
+  get: unavailable,
+};
+export function createAssessmentService(
+  db: Database,
+  files: FileStore = unavailableFiles,
+  uploadSecret = "",
+) {
+  async function cleanup(keys: string[]) {
+    for (const key of new Set(keys)) {
+      try {
+        await files.delete(key);
+      } catch {
+        console.error(
+          "Assignment object cleanup failed; run the documented storage sweep.",
+        );
+      }
+    }
+  }
   return {
     async get(scope: Scope) {
       return db.transaction(
@@ -236,216 +317,266 @@ export function createAssessmentService(db: Database, files?: FileStore) {
     },
     async execute(scope: Scope, input: AssessmentCommand) {
       const command = assessmentCommand.parse(input);
-      return db.transaction(async (tx) => {
+      const obsolete: string[] = [];
+      const view = await db.transaction(async (tx) => {
         const ctx = await context(tx, scope, true);
         const { assessment: a, submission: s, questions } = ctx;
         const now = new Date();
-        if (command.type.startsWith("quiz-")) {
-          if (a.type !== "quiz")
-            throw new LearningPathError("Đây không phải quiz.", 400);
-          requireQuizQuestions(questions);
-          if (command.type === "quiz-open" || command.type === "quiz-retake") {
-            if (
-              command.type === "quiz-retake" &&
-              (!s || s.id !== command.submissionId || s.status !== "graded")
-            )
-              throw new LearningPathError(
-                "Lần làm đã thay đổi. Hãy tải lại.",
-                409,
+        if (
+          command.type === "quiz-open" ||
+          command.type === "quiz-retake" ||
+          command.type === "quiz-answer" ||
+          command.type === "quiz-submit"
+        ) {
+          const transition = quizTransition(
+            {
+              type: a.type,
+              submission: s,
+              questions,
+              answers: ctx.answers,
+              maxScore: a.maxScore,
+              passingScore: a.passingScore ?? 70,
+            },
+            command,
+          );
+          if (transition.type === "create") {
+            const [created] = await tx
+              .insert(assessmentSubmissions)
+              .values({
+                assessmentId: a.id,
+                enrollmentId: ctx.enrollment.id,
+                attempt: transition.attempt,
+              })
+              .returning();
+            ctx.submission = created!;
+            ctx.submissions = [created!, ...ctx.submissions];
+            ctx.answers = [];
+          } else if (transition.type === "answer") {
+            const values = {
+              submissionId: transition.submissionId,
+              questionId: transition.questionId,
+              selectedOptionId: transition.optionId,
+              isCorrect: null,
+              earnedPoints: 0,
+            };
+            const [answer] = await tx
+              .insert(assessmentAnswers)
+              .values(values)
+              .onConflictDoUpdate({
+                target: [
+                  assessmentAnswers.submissionId,
+                  assessmentAnswers.questionId,
+                ],
+                set: {
+                  selectedOptionId: transition.optionId,
+                  isCorrect: null,
+                  earnedPoints: 0,
+                },
+              })
+              .returning();
+            ctx.answers = [
+              ...ctx.answers.filter(
+                (x) => x.questionId !== transition.questionId,
+              ),
+              answer!,
+            ];
+          } else if (transition.type === "grade") {
+            const result = transition.result;
+            const values = result.review.map((r) => ({
+              submissionId: transition.submissionId,
+              questionId: r.questionId,
+              selectedOptionId:
+                ctx.answers.find((x) => x.questionId === r.questionId)
+                  ?.selectedOptionId ?? null,
+              isCorrect: r.isCorrect,
+              earnedPoints: r.isCorrect
+                ? questions.find((q) => q.id === r.questionId)!.points
+                : 0,
+            }));
+            // Enrollment/submission locks serialize answers, so replace the attempt's answers in one batch.
+            await tx
+              .delete(assessmentAnswers)
+              .where(
+                eq(assessmentAnswers.submissionId, transition.submissionId),
               );
-            if (!s || command.type === "quiz-retake")
-              await tx
-                .insert(assessmentSubmissions)
-                .values({
-                  assessmentId: a.id,
-                  enrollmentId: ctx.enrollment.id,
-                  attempt: (s?.attempt ?? 0) + 1,
-                });
-          } else if (
-            command.type === "quiz-answer" ||
-            command.type === "quiz-submit"
-          ) {
-            if (!s || s.id !== command.submissionId || s.status !== "draft")
-              throw new LearningPathError(
-                "Lần làm đã nộp hoặc đã thay đổi. Hãy tải lại.",
-                409,
-              );
-            if (command.type === "quiz-answer") {
-              const q = questions.find((q) => q.id === command.questionId);
-              if (!q?.options.some((o) => o.id === command.optionId))
-                throw new LearningPathError("Đáp án không thuộc câu hỏi.", 400);
-              await tx
-                .insert(assessmentAnswers)
-                .values({
-                  submissionId: s.id,
-                  questionId: q.id,
-                  selectedOptionId: command.optionId,
-                })
-                .onConflictDoUpdate({
-                  target: [
-                    assessmentAnswers.submissionId,
-                    assessmentAnswers.questionId,
-                  ],
-                  set: {
-                    selectedOptionId: command.optionId,
-                    isCorrect: null,
-                    earnedPoints: 0,
-                  },
-                });
-            } else {
-              const missing = questions.filter(
-                (q) =>
-                  !ctx.answers.some(
-                    (x) => x.questionId === q.id && x.selectedOptionId !== null,
-                  ),
-              ).length;
-              if (missing && !command.confirmUnanswered)
-                throw new LearningPathError(
-                  `Còn ${missing} câu chưa trả lời. Câu chưa trả lời sẽ được tính là sai.`,
-                  409,
-                );
-              const result = gradeQuiz(
-                questions,
-                ctx.answers,
-                a.maxScore,
-                a.passingScore ?? 70,
-              );
-              for (const r of result.review) {
-                await tx
-                  .insert(assessmentAnswers)
-                  .values({
-                    submissionId: s.id,
-                    questionId: r.questionId,
-                    selectedOptionId:
-                      ctx.answers.find((x) => x.questionId === r.questionId)
-                        ?.selectedOptionId ?? null,
-                    isCorrect: r.isCorrect,
-                    earnedPoints: r.isCorrect
-                      ? questions.find((q) => q.id === r.questionId)!.points
-                      : 0,
-                  })
-                  .onConflictDoUpdate({
-                    target: [
-                      assessmentAnswers.submissionId,
-                      assessmentAnswers.questionId,
-                    ],
-                    set: {
-                      isCorrect: r.isCorrect,
-                      earnedPoints: r.isCorrect
-                        ? questions.find((q) => q.id === r.questionId)!.points
-                        : 0,
-                    },
-                  });
-              }
-              await tx
-                .update(assessmentSubmissions)
-                .set({
-                  status: "graded",
-                  score: result.score,
-                  quizPercent: result.percent,
-                  isPassed: result.isPassed,
-                  submittedAt: now,
-                  gradedAt: now,
-                  savedAt: now,
-                })
-                .where(eq(assessmentSubmissions.id, s.id));
-            }
+            ctx.answers = await tx
+              .insert(assessmentAnswers)
+              .values(values)
+              .returning();
+            const [graded] = await tx
+              .update(assessmentSubmissions)
+              .set({
+                status: "graded",
+                score: result.score,
+                quizPercent: result.percent,
+                isPassed: result.isPassed,
+                submittedAt: now,
+                gradedAt: now,
+                savedAt: now,
+              })
+              .where(eq(assessmentSubmissions.id, transition.submissionId))
+              .returning();
+            ctx.submission = graded!;
           }
         } else {
-          if (a.type !== "assignment")
-            throw new LearningPathError("Đây không phải bài tập.", 400);
-          requireEditableAssignment(s?.status);
-          if (command.type === "assignment-cancel") {
-            if (s)
-              await tx
-                .update(assessmentSubmissions)
-                .set({ assignmentDraft: null })
-                .where(eq(assessmentSubmissions.id, s.id));
-          } else if (
-            command.type === "assignment-draft" ||
-            command.type === "assignment-submit"
-          ) {
-            const draft = {
-              ...draftOf(ctx),
-              linkUrl: command.linkUrl,
-              answerText: command.answerText,
+          const before = referencedKeys(ctx);
+          const transition = assignmentTransition(
+            {
+              type: a.type,
+              submission: s,
+              draft: draftOf(ctx),
+              format: a.submissionFormat,
+            },
+            command,
+          );
+          if (transition.type === "cancel") {
+            const [updated] = await tx
+              .update(assessmentSubmissions)
+              .set({ assignmentDraft: null, savedAt: now })
+              .where(eq(assessmentSubmissions.id, s!.id))
+              .returning();
+            ctx.submission = updated!;
+          } else if (transition.type === "draft") {
+            ctx.submission = await saveDraft(tx, ctx, transition.draft);
+          } else {
+            const draft = transition.draft;
+            const values = {
+              status: "pending" as const,
+              answerText: draft.answerText,
+              linkUrl: draft.linkUrl || null,
+              fileUrl: draft.fileKey,
+              fileName: draft.fileName,
+              assignmentDraft: null,
+              savedAt: now,
+              submittedAt: now,
             };
-            if (command.type === "assignment-draft")
-              await saveDraft(tx, ctx, draft);
-            else {
-              requireAssignment(a.submissionFormat, draft);
-              const values = {
-                status: "pending" as const,
-                answerText: draft.answerText,
-                linkUrl: draft.linkUrl || null,
-                fileUrl: draft.fileKey,
-                fileName: draft.fileName,
-                assignmentDraft: null,
-                savedAt: now,
-                submittedAt: now,
-              };
-              if (s)
-                await tx
+            const [updated] = s
+              ? await tx
                   .update(assessmentSubmissions)
                   .set(values)
-                  .where(eq(assessmentSubmissions.id, s.id));
-              else
-                await tx
+                  .where(eq(assessmentSubmissions.id, s.id))
+                  .returning()
+              : await tx
                   .insert(assessmentSubmissions)
                   .values({
                     assessmentId: a.id,
                     enrollmentId: ctx.enrollment.id,
                     attempt: 1,
                     ...values,
-                  });
-            }
+                  })
+                  .returning();
+            ctx.submission = updated!;
           }
+          obsolete.push(
+            ...before.filter((key) => !referencedKeys(ctx).includes(key)),
+          );
         }
-        return project(await context(tx, scope), scope);
+        // Reuse the authorized context: no second learning-path load while holding enrollment lock.
+        return project(ctx, scope);
       });
+      await cleanup(obsolete);
+      return view;
     },
-    async uploadLimit(scope: Scope) {
+    async prepareUpload(
+      scope: Scope,
+      name: string,
+      size: number,
+    ): Promise<PreparedUpload> {
       const ctx = await context(db, scope);
-      if (
-        ctx.assessment.type !== "assignment" ||
-        !["file", "file_or_link"].includes(
-          ctx.assessment.submissionFormat ?? "",
-        )
-      )
-        throw new LearningPathError("Bài tập không nhận tệp.", 400);
-      requireEditableAssignment(ctx.submission?.status);
-      return assignmentFileLimit(ctx.assessment.maxFileSizeMb);
-    },
-    async upload(scope: Scope, name: string, buffer: Buffer) {
-      const limit = await this.uploadLimit(scope);
-      requireUpload(buffer.length, name, limit);
-      if (!files)
+      requireFileAssignment(ctx);
+      requireUpload(
+        size,
+        name,
+        assignmentFileLimit(ctx.assessment.maxFileSizeMb),
+      );
+      const expiresIn = 300;
+      if (!uploadSecret)
         throw new LearningPathError(
-          "Chưa thể tải tệp lên. Vui lòng thử lại sau.",
+          "Kho tệp bài tập chưa được cấu hình. Vui lòng liên hệ quản trị viên.",
           503,
         );
-      const key = `assignments/${randomUUID()}`;
-      await files.put(key, buffer);
-      return db.transaction(async (tx) => {
-        const ctx = await context(tx, scope, true);
-        if (
-          !["file", "file_or_link"].includes(
-            ctx.assessment.submissionFormat ?? "",
-          )
-        )
-          throw new LearningPathError("Bài tập không nhận tệp.", 400);
-        requireUpload(
-          buffer.length,
+      const key = `assignment-uploads/${randomUUID()}`;
+      const url = await files.presign(key, size, expiresIn);
+      const token = signUploadTicket(
+        {
+          ...scope,
+          key,
           name,
-          assignmentFileLimit(ctx.assessment.maxFileSizeMb),
+          size,
+          version: versionOf(ctx),
+          expiresAt: Date.now() + expiresIn * 1000,
+        },
+        uploadSecret,
+      );
+      return { url, token, expiresIn };
+    },
+    async confirmUpload(scope: Scope, token: string) {
+      const ticket = verifyUploadTicket(token, uploadSecret);
+      if (
+        ticket.userId !== scope.userId ||
+        ticket.courseId !== scope.courseId ||
+        ticket.lessonId !== scope.lessonId ||
+        ticket.assessmentId !== scope.assessmentId
+      )
+        throw new LearningPathError(
+          "Phiên tải tệp không thuộc bài làm này.",
+          403,
         );
-        await saveDraft(tx, ctx, {
-          ...draftOf(ctx),
-          fileKey: key,
-          fileName: name,
+      // Check ownership before accessing storage, then recheck it with locks before writing.
+      const access = await context(db, scope);
+      requireFileAssignment(access);
+      if (ticket.version !== versionOf(access))
+        throw new LearningPathError(
+          "Bài làm đã thay đổi. Hãy tải lại trước khi tải tệp lên.",
+          409,
+        );
+      const head = await files.head(ticket.key);
+      requireUpload(
+        head.size,
+        ticket.name,
+        assignmentFileLimit(access.assessment.maxFileSizeMb),
+      );
+      if (head.size !== ticket.size)
+        throw new LearningPathError(
+          "Kích thước tệp đã thay đổi. Hãy tải lên lại.",
+          400,
+        );
+      const key = `assignments/${randomUUID()}`;
+      const obsolete: string[] = [];
+      let committed = false;
+      try {
+        const view = await db.transaction(async (tx) => {
+          const ctx = await context(tx, scope, true);
+          requireFileAssignment(ctx);
+          if (ticket.version !== versionOf(ctx))
+            throw new LearningPathError(
+              "Bài làm đã thay đổi. Hãy tải lại trước khi tải tệp lên.",
+              409,
+            );
+          requireUpload(
+            head.size,
+            ticket.name,
+            assignmentFileLimit(ctx.assessment.maxFileSizeMb),
+          );
+          // Copy with If-Match to an immutable key: reusing a presigned PUT cannot mutate submitted work.
+          await files.copy(ticket.key, key, head.etag);
+          const before = referencedKeys(ctx);
+          ctx.submission = await saveDraft(tx, ctx, {
+            ...draftOf(ctx),
+            fileKey: key,
+            fileName: ticket.name,
+          });
+          obsolete.push(
+            ...before.filter((old) => !referencedKeys(ctx).includes(old)),
+          );
+          return project(ctx, scope);
         });
-        return project(await context(tx, scope), scope);
-      });
+        committed = true;
+        await cleanup([ticket.key, ...obsolete]);
+        return view;
+      } finally {
+        if (!committed) await cleanup([key]);
+      }
     },
     async download(scope: Scope, draft: boolean) {
       const ctx = await context(db, scope);
@@ -454,11 +585,6 @@ export function createAssessmentService(db: Database, files?: FileStore) {
       const name = draft ? s?.assignmentDraft?.fileName : s?.fileName;
       if (!key?.startsWith("assignments/") || !name)
         throw new LearningPathError("Không tìm thấy tệp bài làm.", 404);
-      if (!files)
-        throw new LearningPathError(
-          "Chưa thể tải tệp. Vui lòng thử lại sau.",
-          503,
-        );
       return { ...(await files.get(key)), name };
     },
   };

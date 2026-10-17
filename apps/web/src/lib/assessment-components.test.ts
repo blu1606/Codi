@@ -106,6 +106,57 @@ afterEach(async () => {
 });
 
 describe("quiz player", () => {
+  it("shows unavailable questions without offering a quiz that will fail to open", async () => {
+    await mount(
+      vi.fn().mockResolvedValue(
+        response({
+          ...blank,
+          unavailableReason:
+            "Quiz chưa có bộ câu hỏi hợp lệ. Vui lòng liên hệ giảng viên.",
+        }),
+      ),
+    );
+    expect(document.body.textContent).toContain("liên hệ giảng viên");
+    expect(button("Làm quiz")).toBeUndefined();
+  });
+  it("queues rapid answer changes while keeping the options usable", async () => {
+    let acknowledge!: (response: Response) => void;
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response({ ...blank, submission: sub() }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            acknowledge = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ...blank,
+          submission: sub({ answers: [{ questionId: 1, optionId: 11 }] }),
+        }),
+      );
+    await mount(fetcher);
+    const options = document.querySelectorAll<HTMLInputElement>(
+      'input[type="radio"]',
+    );
+    await act(async () => options[0]!.click());
+    expect(document.querySelector("fieldset")!.disabled).toBe(false);
+    await act(async () => options[1]!.click());
+    expect(options[1]!.checked).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await act(async () =>
+      acknowledge(
+        response({
+          ...blank,
+          submission: sub({ answers: [{ questionId: 1, optionId: 10 }] }),
+        }),
+      ),
+    );
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(options[1]!.checked).toBe(true);
+    expect(JSON.parse(fetcher.mock.calls[2]![1].body).optionId).toBe(11);
+  });
   it("loads the real assessment and starts a persisted attempt", async () => {
     const fetcher = vi
       .fn()
@@ -284,32 +335,31 @@ describe("assignment player", () => {
       .mockResolvedValueOnce(response(data));
     await mount(fetcher);
     await click("Nộp lại (trước khi được chấm)");
+    fetcher.mockResolvedValueOnce(response(data));
     await input("textarea", "Bài sửa chưa nộp");
     await click("Huỷ nộp lại");
-    expect(JSON.parse(fetcher.mock.calls[1]![1].body)).toEqual({
+    expect(JSON.parse(fetcher.mock.calls[2]![1].body)).toEqual({
       type: "assignment-cancel",
     });
     expect(document.body.textContent).toContain("Bài gốc");
-      await act(async () => root!.unmount());
-      root = undefined;
-      expect(fetcher).toHaveBeenCalledTimes(2);
+    await act(async () => root!.unmount());
+    root = undefined;
+    expect(fetcher).toHaveBeenCalledTimes(3);
   });
   it("shows grades and feedback without an editable form or resubmit", async () => {
     await mount(
-      vi
-        .fn()
-        .mockResolvedValue(
-          response({
-            ...assignment,
-            submission: sub({
-              status: "graded",
-              score: 8.5,
-              isPassed: true,
-              feedback: "Giải thích tốt",
-              gradedAt: "2026-10-17T00:00:00Z",
-            }),
+      vi.fn().mockResolvedValue(
+        response({
+          ...assignment,
+          submission: sub({
+            status: "graded",
+            score: 8.5,
+            isPassed: true,
+            feedback: "Giải thích tốt",
+            gradedAt: "2026-10-17T00:00:00Z",
           }),
-        ),
+        }),
+      ),
     );
     expect(document.body.textContent).toContain("Đã chấm: 8,5/10");
     expect(document.body.textContent).toContain("Giải thích tốt");
@@ -329,6 +379,117 @@ describe("assignment player", () => {
           JSON.parse(call[1].body).answerText === "Nháp cuối cùng",
       ),
     ).toBe(true);
+  });
+  it("flushes the latest draft with keepalive on pagehide", async () => {
+    const fetcher = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(response(assignment)));
+    await mount(fetcher);
+    await input("textarea", "Nháp khi đóng tab");
+    await act(async () => window.dispatchEvent(new Event("pagehide")));
+    expect(fetcher.mock.calls[1]![1]).toMatchObject({
+      keepalive: true,
+      method: "POST",
+    });
+    expect(JSON.parse(fetcher.mock.calls[1]![1].body).answerText).toBe(
+      "Nháp khi đóng tab",
+    );
+  });
+  it("uploads an 8 MB file directly to R2 and confirms only metadata via the app", async () => {
+    const uploaded = {
+      ...assignment,
+      submission: sub({
+        draft: {
+          fileName: "work.zip",
+          fileUrl: "/api/file?draft=1",
+          linkUrl: "",
+          answerText: "",
+        },
+      }),
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response(assignment))
+      .mockResolvedValueOnce(response(assignment))
+      .mockResolvedValueOnce(
+        response({
+          url: "https://private.r2.test/signed",
+          token: "signed-ticket",
+          expiresIn: 300,
+        }),
+      )
+      .mockResolvedValueOnce(response(uploaded));
+    const requests: { method: string; url: string; body?: unknown }[] = [];
+    class UploadXHR {
+      upload = { onprogress: (_event: unknown) => {} };
+      onload = () => {};
+      status = 200;
+      open(method: string, url: string) {
+        requests.push({ method, url });
+      }
+      setRequestHeader() {}
+      send(body: unknown) {
+        requests.at(-1)!.body = body;
+        this.onload();
+      }
+      abort() {}
+    }
+    vi.stubGlobal("XMLHttpRequest", UploadXHR);
+    await mount(fetcher);
+    const selected = new File([new Uint8Array(8 * 1024 * 1024)], "work.zip");
+    const element =
+      document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(element, "files", { value: [selected] });
+    await act(async () =>
+      element.dispatchEvent(new Event("change", { bubbles: true })),
+    );
+    expect(requests).toEqual([
+      { method: "PUT", url: "https://private.r2.test/signed", body: selected },
+    ]);
+    expect(JSON.parse(fetcher.mock.calls[2]![1].body)).toEqual({
+      type: "prepare",
+      name: "work.zip",
+      size: selected.size,
+    });
+    expect(JSON.parse(fetcher.mock.calls[3]![1].body)).toEqual({
+      type: "confirm",
+      token: "signed-ticket",
+    });
+    expect(document.body.textContent).toContain("Tệp đã lưu: work.zip");
+  });
+  it("removes the draft file without falling back to the submitted file", async () => {
+    const data = {
+      ...assignment,
+      submission: sub({
+        status: "pending",
+        fileName: "old.zip",
+        draft: {
+          fileName: "new.zip",
+          fileUrl: "/api/file?draft=1",
+          linkUrl: "https://example.com",
+          answerText: "",
+        },
+      }),
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response(data))
+      .mockResolvedValueOnce(response(data))
+      .mockResolvedValueOnce(
+        response({
+          ...data,
+          submission: {
+            ...data.submission,
+            draft: { ...data.submission.draft, fileName: null, fileUrl: null },
+          },
+        }),
+      );
+    await mount(fetcher);
+    await click("Gỡ tệp");
+    expect(JSON.parse(fetcher.mock.calls[2]![1].body)).toEqual({
+      type: "assignment-remove-file",
+    });
+    expect(document.body.textContent).not.toContain("Tệp đã lưu:");
   });
   it("renders an upload failure with retry and no browser parser errors", async () => {
     await mount(vi.fn().mockResolvedValueOnce(response(assignment)));

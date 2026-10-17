@@ -11,6 +11,7 @@ export async function seedAssessmentFixture(
   tx: Pick<Database, "select" | "insert">,
   courseId: string,
   userIds: string[],
+  questionCount = 3,
 ) {
   const fixture = await seedOnboardingFixture(tx, courseId, userIds);
   const lessonId = fixture.lessonIds[0]!;
@@ -22,26 +23,24 @@ export async function seedAssessmentFixture(
         and(eq(assessments.lessonId, lessonId), eq(assessments.type, type)),
       );
     if (!existing)
-      await tx
-        .insert(assessments)
-        .values({
-          courseId,
-          lessonId,
-          type,
-          title:
-            type === "quiz"
-              ? "Quiz cuối bài: Chuỗi TypeScript"
-              : "Bài tập: Xử lý chuỗi",
-          instructions:
-            type === "quiz"
-              ? "Chọn một đáp án đúng cho mỗi câu."
-              : "Viết hàm chào người dùng và nộp tệp hoặc đường dẫn repository. Giải thích cách bạn xử lý chuỗi rỗng.",
-          maxScore: type === "quiz" ? 100 : 10,
-          passingScore: type === "quiz" ? 70 : 50,
-          submissionFormat: type === "assignment" ? "file_or_link" : null,
-          maxFileSizeMb: type === "assignment" ? 20 : null,
-          status: "published",
-        });
+      await tx.insert(assessments).values({
+        courseId,
+        lessonId,
+        type,
+        title:
+          type === "quiz"
+            ? "Quiz cuối bài: Chuỗi TypeScript"
+            : "Bài tập: Xử lý chuỗi",
+        instructions:
+          type === "quiz"
+            ? "Chọn một đáp án đúng cho mỗi câu."
+            : "Viết hàm chào người dùng và nộp tệp hoặc đường dẫn repository. Giải thích cách bạn xử lý chuỗi rỗng.",
+        maxScore: type === "quiz" ? 100 : 10,
+        passingScore: type === "quiz" ? 70 : 50,
+        submissionFormat: type === "assignment" ? "file_or_link" : null,
+        maxFileSizeMb: type === "assignment" ? 20 : null,
+        status: "published",
+      });
   }
   const checks = await tx
     .select()
@@ -69,7 +68,8 @@ export async function seedAssessmentFixture(
       explanation: "Thuộc tính length cho biết độ dài chuỗi.",
     },
   ];
-  for (const [position, item] of examples.entries()) {
+  for (let position = 0; position < questionCount; position++) {
+    const item = examples[position % examples.length]!;
     await tx
       .insert(quizQuestions)
       .values({

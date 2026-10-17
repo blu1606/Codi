@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import type {
   AssessmentCommand,
   AssessmentView,
+  PreparedUpload,
 } from "@/lib/assessment-contract";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 
@@ -146,12 +147,34 @@ export function QuizAssessment({
   const [warning, setWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const s = data.submission;
+  const [selections, setSelections] = useState<Record<string, number>>({});
+  const selected = (questionId: number) =>
+    selections[`${s?.id}:${questionId}`] ??
+    s?.answers.find((a) => a.questionId === questionId)?.optionId;
   const question = data.questions[Math.min(index, data.questions.length - 1)];
-  const missing = data.questions.filter(
-    (q) =>
-      !s?.answers.some((a) => a.questionId === q.id && a.optionId !== null),
-  ).length;
+  const missing = data.questions.filter((q) => selected(q.id) == null).length;
   const act = async (command: AssessmentCommand) => {
+    if (command.type === "quiz-answer") {
+      const key = `${command.submissionId}:${command.questionId}`;
+      setSelections((current) => ({ ...current, [key]: command.optionId }));
+      setError(null);
+      try {
+        await send(command);
+      } catch (cause) {
+        setSelections((current) => {
+          if (current[key] !== command.optionId) return current;
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Không thể lưu đáp án. Hãy chọn lại.",
+        );
+      }
+      return;
+    }
     if (submitting.current) return;
     submitting.current = true;
     setBusy(true);
@@ -162,7 +185,7 @@ export function QuizAssessment({
         setWarning(false);
         toast(
           result.submission?.isPassed
-            ? `Bạn đạt ${Math.round(((result.submission.score ?? 0) / data.maxScore) * 100)}%. Tốt lắm!`
+            ? `Bạn đạt ${result.submission.quizPercent ?? Math.round(((result.submission.score ?? 0) / data.maxScore) * 100)}%. Tốt lắm!`
             : "Quiz chưa đạt. Bạn có thể làm lại.",
         );
       }
@@ -188,7 +211,9 @@ export function QuizAssessment({
         <p className="whitespace-pre-wrap text-sm">{data.instructions}</p>
       )}
       {error && <Alert variant="destructive">{error}</Alert>}
-      {!s ? (
+      {data.unavailableReason ? (
+        <Alert>{data.unavailableReason}</Alert>
+      ) : !s ? (
         <Button disabled={busy} onClick={() => void act({ type: "quiz-open" })}>
           {busy && <LoaderCircle className="size-4 animate-spin" />}Làm quiz
         </Button>
@@ -290,8 +315,9 @@ export function QuizAssessment({
           {data.previousScore !== null && (
             <p className="text-sm text-muted-foreground">
               Kết quả lần trước:{" "}
-              {Math.round((data.previousScore / data.maxScore) * 100)}%. Cần nộp
-              lần làm hiện tại để tính kết quả.
+              {data.previousQuizPercent ??
+                Math.round((data.previousScore / data.maxScore) * 100)}
+              %. Cần nộp lần làm hiện tại để tính kết quả.
             </p>
           )}
           <div className="flex flex-wrap justify-between gap-2 text-sm">
@@ -334,9 +360,7 @@ export function QuizAssessment({
                   className="mt-1"
                   type="radio"
                   name={`quiz-${data.id}-${question.id}`}
-                  checked={s.answers.some(
-                    (a) => a.questionId === question.id && a.optionId === o.id,
-                  )}
+                  checked={selected(question.id) === o.id}
                   onChange={() =>
                     void act({
                       type: "quiz-answer",
@@ -471,6 +495,19 @@ function AssignmentAssessment({
   const pendingFields = useRef<typeof fields | null>(null);
   const sendRef = useRef(send);
   sendRef.current = send;
+  useEffect(() => {
+    const flush = () => {
+      if (!pendingFields.current) return;
+      clearTimeout(timer.current);
+      const latest = pendingFields.current;
+      pendingFields.current = null;
+      void sendRef
+        .current({ type: "assignment-draft", ...latest })
+        .catch(() => {});
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
   useEffect(
     () => () => {
       clearTimeout(timer.current);
@@ -497,7 +534,7 @@ function AssignmentAssessment({
     }, 600);
   };
   const draft = s?.draft;
-  const fileName = draft?.fileName ?? s?.fileName;
+  const fileName = draft ? draft.fileName : s?.fileName;
   const ready =
     data.submissionFormat === "file"
       ? !!fileName
@@ -535,37 +572,41 @@ function AssignmentAssessment({
     try {
       await send({ type: "assignment-draft", ...fields });
       await waitForSaves();
-      const body = await new Promise<AssessmentView>((resolve, reject) => {
+      const metadata = async <T,>(input: unknown) =>
+        readLessonResponse<T>(
+          await fetch(`${endpoint}/file`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          }),
+          "Không thể tải tệp lên. Vui lòng thử lại.",
+        );
+      const prepared = await metadata<PreparedUpload>({
+        type: "prepare",
+        name: selected.name,
+        size: selected.size,
+      });
+      await new Promise<void>((resolve, reject) => {
         const request = new XMLHttpRequest();
         xhr.current = request;
-        request.open("POST", `${endpoint}/file`);
+        request.open("PUT", prepared.url);
         request.setRequestHeader("Content-Type", "application/octet-stream");
-        request.setRequestHeader(
-          "X-File-Name",
-          encodeURIComponent(selected.name),
-        );
         request.upload.onprogress = (event) => {
           if (event.lengthComputable)
             setProgress(Math.round((event.loaded / event.total) * 100));
         };
-        request.onload = () => {
-          let body: AssessmentView & { error?: string };
-          try {
-            body = JSON.parse(request.responseText);
-          } catch {
-            reject(new Error("Tải lên thất bại. Vui lòng thử lại."));
-            return;
-          }
-          if (request.status >= 200 && request.status < 300) resolve(body);
-          else
-            reject(
-              new Error(body.error ?? "Tải lên thất bại. Vui lòng thử lại."),
-            );
-        };
+        request.onload = () =>
+          request.status >= 200 && request.status < 300
+            ? resolve()
+            : reject(new Error("Tải lên thất bại. Vui lòng thử lại."));
         request.onerror = () =>
           reject(new Error("Tải lên thất bại do mất kết nối."));
         request.onabort = () => reject(new Error("Đã huỷ tải tệp."));
         request.send(selected);
+      });
+      const body = await metadata<AssessmentView>({
+        type: "confirm",
+        token: prepared.token,
       });
       onUpload(body);
       setSaved("Đã lưu tệp và bản nháp.");
@@ -627,13 +668,18 @@ function AssignmentAssessment({
           </p>
         </details>
       )}
+      {error && !editing && <Alert variant="destructive">{error}</Alert>}
       {s?.status === "graded" ? (
         <div className="space-y-3 rounded-lg border p-4">
           <h3 className="flex items-center gap-2 font-semibold">
             <CheckCircle2 className="size-5 text-success" />
             Đã chấm: {s.score?.toLocaleString("vi-VN")}/{data.maxScore}
           </h3>
-          <p className="text-sm">{(s.score ?? 0) / data.maxScore * 100 >= data.passingScore ? "Đạt" : "Chưa đạt"}</p>
+          <p className="text-sm">
+            {((s.score ?? 0) / data.maxScore) * 100 >= data.passingScore
+              ? "Đạt"
+              : "Chưa đạt"}
+          </p>
           <p className="text-sm text-muted-foreground">
             Nhận xét của giảng viên
             {s.gradedAt
@@ -662,12 +708,31 @@ function AssignmentAssessment({
           <SubmissionContent submission={s} />
           <Button
             variant="outline"
-            onClick={() => {
-              setFields({
-                linkUrl: s.linkUrl ?? "",
-                answerText: s.answerText ?? "",
-              });
-              setEditing(true);
+            onClick={async () => {
+              if (guard.current) return;
+              guard.current = true;
+              setBusy(true);
+              try {
+                await send({
+                  type: "assignment-draft",
+                  linkUrl: s.linkUrl ?? "",
+                  answerText: s.answerText ?? "",
+                });
+                setFields({
+                  linkUrl: s.linkUrl ?? "",
+                  answerText: s.answerText ?? "",
+                });
+                setEditing(true);
+              } catch (cause) {
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Không thể mở bản nháp.",
+                );
+              } finally {
+                guard.current = false;
+                setBusy(false);
+              }
             }}
           >
             Nộp lại (trước khi được chấm)
@@ -706,7 +771,38 @@ function AssignmentAssessment({
                 Tối đa {data.maxFileSizeMb}MB
               </p>
               {fileName && (
-                <p className="break-words text-sm">Tệp đã lưu: {fileName}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="break-words text-sm">Tệp đã lưu: {fileName}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (guard.current) return;
+                      guard.current = true;
+                      setBusy(true);
+                      clearTimeout(timer.current);
+                      pendingFields.current = null;
+                      try {
+                        await send({ type: "assignment-draft", ...fields });
+                        await send({ type: "assignment-remove-file" });
+                        file.current = null;
+                      } catch (cause) {
+                        setError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "Không thể gỡ tệp.",
+                        );
+                      } finally {
+                        guard.current = false;
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Gỡ tệp
+                  </Button>
+                </div>
               )}
               {progress !== null && (
                 <div role="status" className="space-y-2">

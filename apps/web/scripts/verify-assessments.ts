@@ -27,42 +27,75 @@ async function main() {
       const suffix = randomUUID();
       const learner = `assessment-qa-${suffix}`,
         other = `assessment-other-${suffix}`;
-      await tx
-        .insert(user)
-        .values(
-          [learner, other].map((id) => ({
-            id,
-            name: "Assessment verification",
-            email: `${id}@example.invalid`,
-            banned: false,
-          })),
-        );
+      await tx.insert(user).values(
+        [learner, other].map((id) => ({
+          id,
+          name: "Assessment verification",
+          email: `${id}@example.invalid`,
+          banned: false,
+        })),
+      );
       await tx
         .insert(userRoles)
         .values(
           [learner, other].map((userId) => ({ userId, roleId: "LEARNER" })),
         );
-      const f = await seedAssessmentFixture(tx, `assessment-qa-${suffix}`, [
-        learner,
-      ]);
+      const f = await seedAssessmentFixture(
+        tx,
+        `assessment-qa-${suffix}`,
+        [learner],
+        10,
+      );
       const database = tx as unknown as Database;
       const storage = new Map<string, Buffer>();
       let storageFails = false;
-      const service = createAssessmentService(database, {
-        put: async (key, buffer) => {
-          if (storageFails) throw new Error("simulated storage outage");
-          storage.set(key, buffer);
-        },
-        get: async (key) => ({
-          body: new ReadableStream({
-            start(controller) {
-              controller.enqueue(new Uint8Array(storage.get(key)!));
-              controller.close();
-            },
+      const service = createAssessmentService(
+        database,
+        {
+          presign: async (key) => {
+            if (storageFails) throw new Error("simulated storage outage");
+            return key;
+          },
+          head: async (key) => ({
+            size: storage.get(key)!.length,
+            etag: "fixture-etag",
           }),
-          size: storage.get(key)!.length,
-        }),
-      });
+          copy: async (source, key) => {
+            storage.set(key, storage.get(source)!);
+          },
+          delete: async (key) => {
+            storage.delete(key);
+          },
+          get: async (key) => ({
+            body: new ReadableStream({
+              start(controller) {
+                controller.enqueue(new Uint8Array(storage.get(key)!));
+                controller.close();
+              },
+            }),
+            size: storage.get(key)!.length,
+          }),
+        },
+        "assessment-verification-secret",
+      );
+      const upload = async (
+        scope: Parameters<typeof service.prepareUpload>[0],
+        name: string,
+        buffer: Buffer,
+      ) => {
+        const prepared = await service.prepareUpload(
+          scope,
+          name,
+          buffer.length,
+        );
+        storage.set(prepared.url, buffer);
+        const view = await service.confirmUpload(scope, prepared.token);
+        await assert.rejects(
+          () => service.confirmUpload(scope, prepared.token),
+          /đã thay đổi/,
+        );
+        return view;
+      };
       const quiz = {
         userId: learner,
         courseId: f.courseId,
@@ -87,7 +120,7 @@ async function main() {
       );
       await assert.rejects(
         () =>
-          service.upload(
+          upload(
             { ...assignment, userId: other },
             "work.txt",
             Buffer.from("work"),
@@ -149,14 +182,12 @@ async function main() {
         .from(skills)
         .where(eq(skills.courseId, f.courseId))
         .orderBy(asc(skills.id));
-      await tx
-        .insert(skillPrerequisites)
-        .values({
-          skillId: concepts[0]!.id,
-          prerequisiteSkillId: concepts[1]!.id,
-          source: "lecturer",
-          review: "accepted",
-        });
+      await tx.insert(skillPrerequisites).values({
+        skillId: concepts[0]!.id,
+        prerequisiteSkillId: concepts[1]!.id,
+        source: "lecturer",
+        review: "accepted",
+      });
       await assert.rejects(() => service.get(quiz), /Cần học trước/);
       await tx
         .delete(skillPrerequisites)
@@ -198,7 +229,7 @@ async function main() {
       });
       assert.equal(view.submission!.quizPercent, 0);
       assert.equal(view.submission!.isPassed, false);
-      assert.equal(view.submission!.review.length, 3);
+      assert.equal(view.submission!.review.length, f.questions.length);
       await assert.rejects(
         () =>
           service.execute(quiz, {
@@ -225,14 +256,24 @@ async function main() {
           }),
         /đã thay đổi/,
       );
-      for (const q of f.questions)
+      const answerLatencies: number[] = [];
+      for (const q of f.questions) {
+        const started = performance.now();
         await service.execute(quiz, {
           type: "quiz-answer",
           submissionId: second,
           questionId: q.id,
           optionId: q.options.find((o) => o.isCorrect)!.id,
         });
-      assert.equal((await service.get(quiz)).submission!.answers.length, 3);
+        answerLatencies.push(Math.round(performance.now() - started));
+      }
+      console.log(
+        `Quiz answer acknowledgement (DB dev, rollback transaction): ${answerLatencies.join(", ")} ms; one authorized context per answer.`,
+      );
+      assert.equal(
+        (await service.get(quiz)).submission!.answers.length,
+        f.questions.length,
+      );
       view = await service.execute(quiz, {
         type: "quiz-submit",
         submissionId: second,
@@ -302,25 +343,44 @@ async function main() {
       );
       await assert.rejects(
         () =>
-          service.upload(
-            assignment,
-            "too-big.txt",
-            Buffer.alloc(20 * 1024 * 1024 + 1),
-          ),
+          upload(assignment, "too-big.txt", Buffer.alloc(20 * 1024 * 1024 + 1)),
         /vượt quá/,
       );
       storageFails = true;
       await assert.rejects(
-        () => service.upload(assignment, "work.txt", Buffer.from("work")),
+        () => upload(assignment, "work.txt", Buffer.from("work")),
         /storage outage/,
       );
       storageFails = false;
-      view = await service.upload(
+      view = await upload(
         assignment,
         "bài làm.txt",
         Buffer.from("assignment contents"),
       );
       assert.equal(view.submission!.draft!.fileName, "bài làm.txt");
+      const prepared = await service.prepareUpload(
+        assignment,
+        "mismatch.zip",
+        8,
+      );
+      storage.set(prepared.url, Buffer.alloc(9));
+      await assert.rejects(
+        () => service.confirmUpload(assignment, prepared.token),
+        /Kích thước/,
+      );
+      storage.set(prepared.url, Buffer.alloc(20 * 1024 * 1024 + 1));
+      await assert.rejects(
+        () => service.confirmUpload(assignment, prepared.token),
+        /vượt quá/,
+      );
+      await assert.rejects(
+        () =>
+          service.confirmUpload(
+            { ...assignment, userId: other },
+            prepared.token,
+          ),
+        /không thuộc/,
+      );
       assert.ok(!JSON.stringify(view).includes("assignments/"));
       assert.equal(
         await new Response(
@@ -354,8 +414,46 @@ async function main() {
       view = await service.get(assignment);
       assert.equal(view.submission!.answerText, "Bài nộp gốc");
       assert.equal(view.submission!.draft!.answerText, "Nháp nộp lại");
+      const replacement = await upload(
+        assignment,
+        "replacement.zip",
+        Buffer.alloc(8 * 1024 * 1024),
+      );
+      const submittedKey = [...storage.keys()].find(
+        (key) =>
+          key.startsWith("assignments/") &&
+          storage.get(key)!.toString() === "assignment contents",
+      )!;
+      assert.ok(
+        submittedKey,
+        "submitted file is preserved during replacement editing",
+      );
+      assert.equal(replacement.submission!.draft!.fileName, "replacement.zip");
+      const objectsBeforeCancel = storage.size;
       await service.execute(assignment, { type: "assignment-cancel" });
+      assert.equal(
+        storage.size,
+        objectsBeforeCancel - 1,
+        "cancel removes only replacement object",
+      );
+      assert.ok(
+        storage.has(submittedKey),
+        "cancel keeps original submitted file",
+      );
       assert.equal((await service.get(assignment)).submission!.draft, null);
+      await assert.rejects(
+        () => service.execute(assignment, { type: "assignment-cancel" }),
+        /Không có bản nháp/,
+      );
+      await service.execute(assignment, { type: "assignment-remove-file" });
+      assert.equal(
+        (await service.get(assignment)).submission!.draft!.fileName,
+        null,
+      );
+      assert.ok(
+        storage.has(submittedKey),
+        "removal only changes draft before resubmitting",
+      );
       view = await service.execute(assignment, {
         type: "assignment-submit",
         linkUrl: "https://example.com/replacement",
@@ -364,6 +462,12 @@ async function main() {
       assert.equal(view.submission!.id, assignmentId);
       assert.equal(view.submission!.attempt, 1);
       assert.equal(view.submission!.answerText, "Bài nộp mới");
+      assert.equal(view.submission!.fileName, null);
+      assert.equal(
+        storage.has(submittedKey),
+        false,
+        "replacement commit removes obsolete submitted file",
+      );
 
       step = "graded assignment is immutable for learners";
       await tx
@@ -393,7 +497,7 @@ async function main() {
         /không thể nộp lại/,
       );
       await assert.rejects(
-        () => service.upload(assignment, "changed.txt", Buffer.from("changed")),
+        () => upload(assignment, "changed.txt", Buffer.from("changed")),
         /không thể nộp lại/,
       );
       const rows = await tx
