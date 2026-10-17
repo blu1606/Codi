@@ -15,7 +15,9 @@
     "test:learning-path:db": "tsx --env-file=.env scripts/verify-learning-path.ts",
     "db:seed-learning-path": "tsx --env-file=.env scripts/seed-learning-path-dev.ts",
     "db:seed-lesson-player": "tsx --env-file=.env scripts/seed-lesson-player-dev.ts",
-    "test:lesson-player:db": "tsx --env-file=.env scripts/verify-lesson-player.ts"
+    "test:lesson-player:db": "tsx --env-file=.env scripts/verify-lesson-player.ts",
+    "test:assessments:db": "tsx --env-file=.env scripts/verify-assessments.ts",
+    "db:seed-assessments": "tsx --env-file=.env scripts/seed-assessments-dev.ts"
   },
   "dependencies": {
     "@ai-sdk/devtools": "^1.0.15",

@@ -49,6 +49,7 @@ export type ChecklistSubmission = {
   mode: "run" | "submit" | null;
   status: "draft" | "pending" | "graded";
   score: number | null;
+  quizPercent?: number | null;
   isPassed: boolean | null;
   submittedAt: Date | string | null;
 };
@@ -99,7 +100,7 @@ export function lessonChecklist(
       ];
   for (const a of assessments.filter((a) => a.type === "quiz")) {
     const s = latest(a.id);
-    const percent = s?.score == null ? null : (s.score / a.maxScore) * 100;
+    const percent = s?.quizPercent ?? (s?.score == null ? null : (s.score / a.maxScore) * 100);
     const done =
       s?.status === "graded" &&
       !!s.submittedAt &&
