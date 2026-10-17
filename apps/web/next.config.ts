@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: { "/*": ["./dev-fixtures/**/*"] },
   reactCompiler: true,
   transpilePackages: ["shiki"],
+  serverExternalPackages: ["@codi-1/coding-runner"],
 };
 
 export default withVarlock(nextConfig);
