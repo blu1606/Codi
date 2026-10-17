@@ -6,12 +6,13 @@ const mocks = vi.hoisted(() => ({ session: vi.fn(), roles: vi.fn(), get: vi.fn()
 vi.mock("@/services", () => ({ auth: { api: { getSession: mocks.session } }, db: {} }));
 vi.mock("@codi-1/auth", () => ({ getActiveRoles: mocks.roles, ROLE: { LEARNER: "LEARNER" } }));
 vi.mock("@/lib/onboarding-service", () => ({ createOnboardingService: () => mocks }));
+vi.mock("@/lib/learning-path-runtime", () => ({ scheduleLearningPath: vi.fn() }));
 import { GET, POST } from "./route";
 
 const origin = "https://codi.test";
 const ctx = () => ({ params: Promise.resolve({ courseId: "owned-course" }) });
 const request = (body: unknown, source: string | null = origin) => new NextRequest(`${origin}/api/learn/owned-course/onboarding`, { method: "POST", headers: { "Content-Type": "application/json", ...(source ? { origin: source } : {}) }, body: JSON.stringify(body) });
-beforeEach(() => { vi.resetAllMocks(); mocks.session.mockResolvedValue({ user: { id: "viewer" } }); mocks.roles.mockResolvedValue(["LEARNER"]); mocks.get.mockResolvedValue({ course: { id: "owned-course" } }); mocks.execute.mockResolvedValue({ success: true }); });
+beforeEach(() => { vi.resetAllMocks(); mocks.session.mockResolvedValue({ user: { id: "viewer" } }); mocks.roles.mockResolvedValue(["LEARNER"]); mocks.get.mockResolvedValue({ course: { id: "owned-course" } }); mocks.execute.mockResolvedValue({ enrollment: { pathStatus: "none" } }); });
 
 describe("onboarding authentication and input guards", () => {
   it("reads using session identity and URL course, with no-store caching", async () => {

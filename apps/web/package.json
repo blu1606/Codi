@@ -11,7 +11,9 @@
     "auth:generate": "varlock run -- pnpm dlx auth@latest generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes",
     "db:seed-accounts": "tsx --env-file=.env scripts/seed-accounts.ts",
     "db:seed-onboarding": "tsx --env-file=.env scripts/seed-onboarding-dev.ts",
-    "test:onboarding:db": "tsx --env-file=.env scripts/verify-onboarding.ts"
+    "test:onboarding:db": "tsx --env-file=.env scripts/verify-onboarding.ts",
+    "test:learning-path:db": "tsx --env-file=.env scripts/verify-learning-path.ts",
+    "db:seed-learning-path": "tsx --env-file=.env scripts/seed-learning-path-dev.ts"
   },
   "dependencies": {
     "@ai-sdk/devtools": "^1.0.15",

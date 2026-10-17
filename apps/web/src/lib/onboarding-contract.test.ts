@@ -32,6 +32,7 @@ function enrollment(overrides: Partial<Enrollment> = {}): Enrollment {
     goalStep: 0,
     goalEditing: false,
     diagnosticQuestionIndex: 0,
+    diagnosticCardDismissedAt: null,
     diagnosticStatus: "none",
     pathStatus: "none",
     pathSource: null,

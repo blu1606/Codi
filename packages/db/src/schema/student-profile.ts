@@ -53,6 +53,7 @@ export const studentEnrollments = pgTable("student_enrollments", {
   goalStep: integer("goal_step").default(0).notNull(),
   goalEditing: boolean("goal_editing").default(false).notNull(),
   diagnosticQuestionIndex: integer("diagnostic_question_index").default(0).notNull(),
+  diagnosticCardDismissedAt: timestamp("diagnostic_card_dismissed_at", { withTimezone: true }),
   diagnosticStatus: diagnosticStatus("diagnostic_status").default("none").notNull(),
   pathStatus: pathStatus("path_status").default("none").notNull(),
   pathSource: pathSource("path_source"),
