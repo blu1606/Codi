@@ -21,6 +21,7 @@ import { Card, CardContent } from "@codi-1/ui/components/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@codi-1/ui/components/dialog";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@codi-1/ui/components/empty";
 import { undoToast } from "@codi-1/ui/components/undo-toast";
+import { toast } from "sonner";
 import type { CartCourse, CartSummaryData } from "@/lib/cart-contract";
 import { formatVnd } from "@/lib/cart-contract";
 
@@ -111,6 +112,7 @@ export function CartView() {
 
   const [cancellingOrder, setCancellingOrder] = useState(false);
   const [undoSeconds, setUndoSeconds] = useState<number>(0);
+  const toastIdRef = useState<{ current: string | number | null }>({ current: null })[0];
 
   useEffect(() => {
     if (!lastRemoved || undoSeconds <= 0) return;
@@ -118,13 +120,17 @@ export function CartView() {
       setUndoSeconds((prev) => {
         if (prev <= 1) {
           setLastRemoved(null);
+          if (toastIdRef.current) {
+            toast.dismiss(toastIdRef.current);
+            toastIdRef.current = null;
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [lastRemoved, undoSeconds]);
+  }, [lastRemoved, undoSeconds, toastIdRef]);
 
   const handleCancelPendingOrder = async (orderId?: number, orderCode?: string) => {
     if (!orderId && !orderCode) return;
@@ -161,7 +167,7 @@ export function CartView() {
       setUndoSeconds(10);
       await fetchCart(currentVoucherCode);
 
-      undoToast(`Đã xoá "${course.title}" khỏi giỏ hàng`, async () => {
+      const tid = undoToast(`Đã xoá "${course.title}" khỏi giỏ hàng`, async () => {
         await fetch("/api/student/cart", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -171,6 +177,7 @@ export function CartView() {
         setUndoSeconds(0);
         await fetchCart(currentVoucherCode);
       });
+      toastIdRef.current = tid;
     } catch {
       setError("Không thể xóa khóa học. Vui lòng thử lại.");
     }
@@ -186,6 +193,10 @@ export function CartView() {
       });
       setLastRemoved(null);
       setUndoSeconds(0);
+      if (toastIdRef.current) {
+        toast.dismiss(toastIdRef.current);
+        toastIdRef.current = null;
+      }
       await fetchCart(currentVoucherCode);
     } catch {
       setError("Không thể hoàn tác. Vui lòng thử lại.");
