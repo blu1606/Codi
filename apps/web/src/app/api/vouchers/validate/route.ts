@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
 import { vouchers } from "@codi-1/db";
-import { validateVoucher } from "@/lib/cart-service";
+import { getCartSummary, validateVoucher } from "@/lib/cart-service";
 import { auth, db } from "@/services";
 
 export async function POST(request: Request) {
@@ -40,7 +40,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Nhập mã giảm giá trước khi bấm Áp dụng." }, { status: 400 });
     }
 
-    const subtotal = "subtotal" in body && typeof body.subtotal === "number" ? body.subtotal : 0;
+    const summary = await getCartSummary(db, userId);
+    const subtotal = summary.subtotal;
 
     const [voucherRow] = await db
       .select()

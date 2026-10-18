@@ -20,6 +20,13 @@ function LoginContent() {
     }
   }, [tabParam]);
 
+  const rawReturn = searchParams.get("returnTo") || searchParams.get("callbackURL") || searchParams.get("next");
+  const returnTarget = (() => {
+    if (!rawReturn || /[\\\u0000-\u0020]/.test(rawReturn)) return "/dashboard";
+    if (rawReturn === "/cart" || /^\/courses\/[a-z0-9-]+$/.test(rawReturn)) return rawReturn;
+    return onboardingReturnPath(rawReturn);
+  })();
+
   return (
     <div className="login-cyber-violet relative flex min-h-[calc(100vh-4rem)] w-full items-center justify-center overflow-y-auto bg-background p-4 py-8 sm:p-8">
       <div
@@ -35,9 +42,9 @@ function LoginContent() {
 
       <div className="relative z-10 w-full max-w-md">
         {activeTab === "signin" ? (
-          <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} returnTo={onboardingReturnPath(searchParams.get("callbackURL"))} />
+          <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} returnTo={returnTarget} />
         ) : (
-          <SignUpForm onSwitchToSignIn={() => setActiveTab("signin")} returnTo={onboardingReturnPath(searchParams.get("callbackURL"))} />
+          <SignUpForm onSwitchToSignIn={() => setActiveTab("signin")} returnTo={returnTarget} />
         )}
       </div>
     </div>

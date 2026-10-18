@@ -127,4 +127,63 @@ describe("validateVoucher unit tests", () => {
       expect(result.voucher.discount).toBe(150000);
     }
   });
+
+  it("accepts voucher when used count is exactly usageLimit - 1", () => {
+    const voucher = makeVoucher({
+      usageLimit: 10,
+      usedCount: 9,
+      minOrderAmount: 100000,
+      type: "amount",
+      value: 50000,
+    });
+    const result = validateVoucher(voucher, 200000);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.voucher.discount).toBe(50000);
+    }
+  });
+
+  it("accepts voucher when subtotal is exactly equal to minOrderAmount", () => {
+    const voucher = makeVoucher({
+      minOrderAmount: 500000,
+      type: "amount",
+      value: 50000,
+    });
+    const result = validateVoucher(voucher, 500000);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.voucher.discount).toBe(50000);
+    }
+  });
+
+  it("rounds percentage discount with odd numbers (e.g. 15% of 333,333)", () => {
+    const voucher = makeVoucher({
+      type: "percent",
+      value: 15,
+      minOrderAmount: 0,
+      maxDiscountAmount: null,
+    });
+    // 333,333 * 0.15 = 49,999.95 -> rounded to 50,000
+    const result = validateVoucher(voucher, 333333);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.voucher.discount).toBe(50000);
+    }
+  });
+
+  it("applies full percentage discount when maxDiscountAmount is null", () => {
+    const voucher = makeVoucher({
+      type: "percent",
+      value: 20,
+      minOrderAmount: 0,
+      maxDiscountAmount: null,
+    });
+    // 20% of 5,000,000 = 1,000,000 without cap
+    const result = validateVoucher(voucher, 5000000);
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.voucher.discount).toBe(1000000);
+    }
+  });
 });
+

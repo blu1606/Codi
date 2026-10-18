@@ -34,9 +34,10 @@ export async function POST(request: Request) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: "Chỉ học viên mới có thể đặt hàng" }, { status: 403 });
     }
+    const status = typeof error?.status === "number" ? error.status : 400;
     return NextResponse.json(
-      { error: error?.message || "Không thể tạo đơn hàng. Vui lòng thử lại." },
-      { status: 400 },
+      { error: error?.message || "Không thể tạo đơn hàng. Vui lòng thử lại.", code: error?.code },
+      { status },
     );
   }
 }

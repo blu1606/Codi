@@ -215,13 +215,19 @@ export function CartView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           voucherCode: currentVoucherCode || undefined,
-          replaceOrderId: replaceOrderId ?? data?.pendingOrder?.id,
+          replaceOrderId,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
+        if (res.status === 409 && json.code === "PENDING_ORDER_EXISTS") {
+          setShowReplaceModal(true);
+          setCheckoutLoading(false);
+          return;
+        }
         throw new Error(json.error || "Không thể tạo đơn hàng.");
       }
+      setShowReplaceModal(false);
       window.location.href = `/checkout?order=${json.orderId}`;
     } catch (err: any) {
       setError(err?.message || "Lỗi tạo đơn hàng.");
@@ -230,7 +236,11 @@ export function CartView() {
   };
 
   const handleStartCheckout = () => {
-    executeCheckout(data?.pendingOrder?.id);
+    if (data?.pendingOrder) {
+      setShowReplaceModal(true);
+      return;
+    }
+    executeCheckout();
   };
 
   if (loading && !data) {
@@ -528,6 +538,49 @@ export function CartView() {
           </div>
         </div>
       )}
+
+      {/* S06 / Flow L3 Replace Order Confirmation Dialog */}
+      <Dialog open={showReplaceModal} onOpenChange={setShowReplaceModal}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>Bạn còn một đơn hàng chưa thanh toán</DialogTitle>
+            <DialogDescription>
+              Đơn <strong>{data?.pendingOrder?.code}</strong> ({formatVnd(data?.pendingOrder?.totalAmount || 0)}) đang chờ thanh toán. Bạn muốn làm gì?
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Tạo đơn mới sẽ huỷ đơn cũ. Nếu bạn đã chuyển khoản cho đơn cũ, hãy chọn tiếp tục đơn cũ.
+          </p>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowReplaceModal(false)}
+            >
+              Đóng
+            </Button>
+            {data?.pendingOrder && (
+              <Link href={{ pathname: "/checkout", query: { order: data.pendingOrder.id } }}>
+                <Button variant="secondary" size="sm">
+                  Tiếp tục đơn cũ
+                </Button>
+              </Link>
+            )}
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={checkoutLoading}
+              onClick={() => {
+                if (data?.pendingOrder) {
+                  executeCheckout(data.pendingOrder.id);
+                }
+              }}
+            >
+              {checkoutLoading ? "Đang xử lý…" : "Huỷ đơn cũ, tạo đơn mới"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

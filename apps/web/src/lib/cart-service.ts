@@ -36,8 +36,12 @@ export function validateVoucher(
     return { valid: false, error: "Mã này đã ngừng áp dụng." };
   }
   if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
-    const d = new Date(voucher.expiresAt);
-    const dateFormatted = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    const dateFormatted = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(voucher.expiresAt));
     return { valid: false, error: `Mã đã hết hạn từ ${dateFormatted}.` };
   }
   if (voucher.usageLimit !== null && voucher.usedCount >= voucher.usageLimit) {
