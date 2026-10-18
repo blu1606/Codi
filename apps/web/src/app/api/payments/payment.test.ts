@@ -43,12 +43,120 @@ it.each(["out", "wrong-account"])("ignores unrelated transfer %s before database
  const response = await callback(request({ transferType: kind === "out" ? "out" : "in", accountNumber: kind === "wrong-account" ? "999" : "12345678", content: "CODI12345", transferAmount: 125000 }));
  expect(response.status).toBe(200); expect(mocks.limit).not.toHaveBeenCalled();
 });
-it("enrolls only a sufficiently funded authenticated incoming transfer", async () => {
- mocks.limit.mockResolvedValue([{ id: "CODI12345", amount: 125000, status: "pending", userId: "session-user", courseId: "db-id" }]);
- const update = vi.fn(); const enroll = vi.fn();
- mocks.transaction.mockImplementation(async (fn) => fn({ update: () => ({ set: (value: unknown) => { update(value); return { where: vi.fn() }; } }), insert: () => ({ values: (value: unknown) => { enroll(value); return { onConflictDoNothing: vi.fn() }; } }) }));
- await callback(request({ transferType: "in", accountNumber: "12345678", content: "CODI12345", transferAmount: 1 }));
- expect(mocks.transaction).not.toHaveBeenCalled();
- await callback(request({ transferType: "in", accountNumber: "12345678", content: "CODI12345", transferAmount: 125000 }));
- expect(update).toHaveBeenCalledWith({ status: "paid" }); expect(enroll).toHaveBeenCalledWith({ userId: "session-user", courseId: "db-id" });
+it("enrolls only a sufficiently funded authenticated incoming transfer and settles matched order", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI12345",
+      amount: 125000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "db-id",
+    },
+  ]);
+  const update = vi.fn();
+  const enroll = vi.fn();
+  const insertEvent = vi.fn();
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      update: () => ({
+        set: (value: unknown) => {
+          update(value);
+          return {
+            where: () => ({
+              returning: vi.fn().mockImplementation(() => [{ id: "order-123", totalAmount: 125000 }]),
+            }),
+          };
+        },
+      }),
+      insert: () => ({
+        values: (value: unknown) => {
+          if (value && typeof value === "object" && "orderId" in value) {
+            insertEvent(value);
+            return {};
+          }
+          enroll(value);
+          return { onConflictDoNothing: vi.fn() };
+        },
+      }),
+    }),
+  );
+
+  await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 1,
+    }),
+  );
+  expect(mocks.transaction).not.toHaveBeenCalled();
+
+  await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 125000,
+    }),
+  );
+  expect(update).toHaveBeenCalledWith(
+    expect.objectContaining({ status: "paid" }),
+  );
+  expect(enroll).toHaveBeenCalledWith({
+    userId: "session-user",
+    courseId: "db-id",
+  });
+  expect(insertEvent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      orderId: "order-123",
+      actorId: "session-user",
+    }),
+  );
+});
+
+it("ignores callback if transaction is already processed concurrently", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI12345",
+      amount: 125000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "db-id",
+    },
+  ]);
+  const enroll = vi.fn();
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      update: () => ({
+        set: () => ({
+          where: () => ({
+            returning: vi.fn().mockReturnValue([]),
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: (value: unknown) => {
+          enroll(value);
+          return { onConflictDoNothing: vi.fn() };
+        },
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 125000,
+    }),
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({
+    success: true,
+    message: "Already processed",
+  });
+  expect(enroll).not.toHaveBeenCalled();
 });

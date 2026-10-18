@@ -14,6 +14,10 @@ export async function POST(request: Request) {
     const userId = session.user.id;
     await requireRole(db, userId, ROLE.LEARNER);
 
+    if (request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
+      return NextResponse.json({ error: "Yêu cầu Content-Type application/json" }, { status: 415 });
+    }
+
     let body: unknown;
     try {
       body = await request.json();
@@ -49,23 +53,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Insert into studentEnrollments
-    await db
-      .insert(studentEnrollments)
-      .values({
-        userId,
-        courseId,
-        status: "active",
-        progress: 0,
-      })
-      .onConflictDoNothing();
+    // Atomic enrollment insertion and cart cleanup
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(studentEnrollments)
+        .values({
+          userId,
+          courseId,
+          status: "active",
+          progress: 0,
+        })
+        .onConflictDoNothing();
 
-    // Clean up cart if course was in cart
-    await db
-      .delete(studentCart)
-      .where(
-        and(eq(studentCart.userId, userId), eq(studentCart.courseId, courseId))
-      );
+      await tx
+        .delete(studentCart)
+        .where(
+          and(eq(studentCart.userId, userId), eq(studentCart.courseId, courseId))
+        );
+    });
 
     return NextResponse.json({ success: true, courseId });
   } catch (error) {

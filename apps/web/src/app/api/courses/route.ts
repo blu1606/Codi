@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asc, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/services";
-import { courses, courseDetails, studentEnrollments } from "@codi-1/db";
+import { courses, courseDetails, studentEnrollments, user } from "@codi-1/db";
 
 export async function GET(request: NextRequest) {
   const sort = request.nextUrl.searchParams.get("sort") ?? "title";
@@ -32,12 +32,14 @@ export async function GET(request: NextRequest) {
         reviewCount: courses.reviewCount, createdAt: courses.createdAt,
         status: courses.status,
         enrollmentCount, coverImageUrl: courseDetails.coverImageUrl,
+        instructorName: user.name,
       })
       .from(courses)
       .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
       .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))
+      .leftJoin(user, eq(courses.instructorId, user.id))
       .where(statusFilter)
-      .groupBy(courses.id, courseDetails.coverImageUrl)
+      .groupBy(courses.id, courseDetails.coverImageUrl, user.name)
       .orderBy(...(sort === "popular"
         ? [desc(enrollmentCount), asc(courses.title), asc(courses.id)]
         : [asc(courses.title), asc(courses.id)]));

@@ -51,61 +51,74 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "Transaction not found" });
     }
 
-    if (tx.status === "paid") {
-      return NextResponse.json({ success: true, message: "Already processed" });
-    }
-
     const amountReceived = data.transferAmount || data.amountIn || 0;
 
     // Check if the transferred amount is equal or greater than the required amount
-    if (amountReceived >= tx.amount) {
-      // Process payment: update transaction and enroll student, and settle order if present
-      await db.transaction(async (txDB) => {
-        // Update transaction status
-        await txDB.update(studentTransactions)
-          .set({ status: "paid" })
-          .where(eq(studentTransactions.id, txId));
-
-        // Settle orders table if an order matches txId
-        const { orders, orderEvents } = await import("@codi-1/db");
-        const matchedOrders = typeof txDB.select === "function"
-          ? await txDB
-              .select({ id: orders.id })
-              .from(orders)
-              .where(eq(orders.code, txId))
-              .limit(1)
-          : [];
-        const matchedOrder = matchedOrders[0];
-
-        if (matchedOrder) {
-          await txDB.update(orders)
-            .set({
-              status: "paid",
-              receivedAmount: amountReceived,
-              paidAt: new Date(),
-            })
-            .where(eq(orders.id, matchedOrder.id));
-
-          await txDB.insert(orderEvents).values({
-            orderId: matchedOrder.id,
-            label: "Đã thanh toán thành công",
-            actorId: tx.userId,
-          });
-        }
-
-        // Grant access to the course, avoiding duplicates
-        await txDB.insert(studentEnrollments)
-          .values({
-            userId: tx.userId,
-            courseId: tx.courseId,
-          })
-          .onConflictDoNothing();
-      });
-      console.log(`Successfully processed transaction ${txId}`);
-    } else {
+    if (amountReceived < tx.amount) {
       console.log(`Insufficient amount for ${txId}. Expected ${tx.amount}, got ${amountReceived}`);
       return NextResponse.json({ success: true, message: "Insufficient amount" });
     }
+
+    const { orders, orderEvents } = await import("@codi-1/db");
+    const { and } = await import("drizzle-orm");
+
+    // Process payment atomically within transaction
+    const processResult = await db.transaction(async (txDB) => {
+      // 1. Atomically update transaction status if still pending
+      const updatedTx = await txDB
+        .update(studentTransactions)
+        .set({ status: "paid" })
+        .where(
+          and(
+            eq(studentTransactions.id, txId),
+            eq(studentTransactions.status, "pending")
+          )
+        )
+        .returning({ id: studentTransactions.id });
+
+      // If already processed by a concurrent webhook request, exit early
+      if (updatedTx.length === 0) {
+        return { alreadyProcessed: true };
+      }
+
+      // 2. Atomically settle orders table if a pending order matches txId
+      const updatedOrders = await txDB
+        .update(orders)
+        .set({
+          status: "paid",
+          receivedAmount: amountReceived,
+          paidAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(orders.code, txId), eq(orders.status, "pending")))
+        .returning({ id: orders.id, totalAmount: orders.totalAmount });
+
+      const matchedOrder = updatedOrders[0];
+      if (matchedOrder) {
+        await txDB.insert(orderEvents).values({
+          orderId: matchedOrder.id,
+          label: "Đã thanh toán thành công",
+          actorId: tx.userId,
+        });
+      }
+
+      // 3. Grant access to the course, avoiding duplicates
+      await txDB
+        .insert(studentEnrollments)
+        .values({
+          userId: tx.userId,
+          courseId: tx.courseId,
+        })
+        .onConflictDoNothing();
+
+      return { alreadyProcessed: false };
+    });
+
+    if (processResult.alreadyProcessed) {
+      return NextResponse.json({ success: true, message: "Already processed" });
+    }
+
+    console.log(`Successfully processed transaction ${txId}`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

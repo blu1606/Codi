@@ -141,7 +141,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
   // Check ownership
   useEffect(() => {
-    if (!detail || !session?.user) {
+    if (!detail || !session?.user?.id) {
       setOwnership(null);
       return;
     }
@@ -150,7 +150,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        courses: [{ id: detail.course.id, price: detail.course.price }],
+        courses: [{ id: detail.course.id }],
       }),
       signal: controller.signal,
     })
@@ -162,7 +162,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [detail, session]);
+  }, [detail, session?.user?.id]);
 
   // Check and resume pending intent stored in sessionStorage (e.g. from page reload or redirect)
   useEffect(() => {
@@ -188,13 +188,19 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       if (parsed.courseId === detail.course.id || parsed.slug === slug) {
         sessionStorage.removeItem("codi_pending_course_intent");
         isResumingRef.current = true;
-        if (parsed.action === "buy-now") {
-          handleBuyNow(true);
-        } else if (parsed.action === "add-to-cart") {
-          handleAddToCart(true);
-        } else if (parsed.action === "enroll-free") {
-          handleEnrollFree(true);
-        }
+        void (async () => {
+          try {
+            if (parsed.action === "buy-now") {
+              await handleBuyNow(true);
+            } else if (parsed.action === "add-to-cart") {
+              await handleAddToCart(true);
+            } else if (parsed.action === "enroll-free") {
+              await handleEnrollFree(true);
+            }
+          } finally {
+            isResumingRef.current = false;
+          }
+        })();
       }
     } catch {
       // Ignore JSON errors
@@ -433,15 +439,18 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       // Continue anyway
     }
 
-    if (intent === "add-to-cart") {
-      await handleAddToCart(true);
-    } else if (intent === "buy-now") {
-      await handleBuyNow(true);
-    } else if (intent === "enroll-free") {
-      await handleEnrollFree(true);
+    try {
+      if (intent === "add-to-cart") {
+        await handleAddToCart(true);
+      } else if (intent === "buy-now") {
+        await handleBuyNow(true);
+      } else if (intent === "enroll-free") {
+        await handleEnrollFree(true);
+      }
+    } finally {
+      isResumingRef.current = false;
     }
   };
-
   const toggleChapter = (id: string) => {
     setOpenChapters((current) => {
       const next = new Set(current);
@@ -522,7 +531,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
   const ratingBreakdown = detail.ratingBreakdown ?? [0, 0, 0, 0, 0];
-  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0) || 1;
+  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0);
   const reviews = detail.reviews ?? [];
 
   // Hidden/unavailable course check (Flow L1, S02)
@@ -824,7 +833,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                 Đánh giá của học viên
               </h2>
 
-              {reviews.length > 0 ? (
+              {reviews.length > 0 || detail.reviewCount > 0 ? (
                 <>
                   {/* Score breakdown card */}
                   <div className={styles.ratingBox}>
@@ -845,33 +854,35 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                       </span>
                     </div>
 
-                    <div className={styles.breakdownList}>
-                      {[5, 4, 3, 2, 1].map((stars, idx) => {
-                        const countVal = ratingBreakdown[idx] ?? 0;
-                        const pct = Math.round(
-                          (countVal / totalBreakdown) * 100,
-                        );
-                        return (
-                          <div key={stars} className={styles.breakdownRow}>
-                            <span className={styles.breakdownLabel}>
-                              {stars} sao
-                            </span>
-                            <div
-                              className={styles.breakdownTrack}
-                              aria-hidden="true"
-                            >
+                    {totalBreakdown > 0 ? (
+                      <div className={styles.breakdownList}>
+                        {[5, 4, 3, 2, 1].map((stars, idx) => {
+                          const countVal = ratingBreakdown[idx] ?? 0;
+                          const pct = Math.round(
+                            (countVal / totalBreakdown) * 100,
+                          );
+                          return (
+                            <div key={stars} className={styles.breakdownRow}>
+                              <span className={styles.breakdownLabel}>
+                                {stars} sao
+                              </span>
                               <div
-                                className={styles.breakdownFill}
-                                style={{ width: `${pct}%` }}
-                              />
+                                className={styles.breakdownTrack}
+                                aria-hidden="true"
+                              >
+                                <div
+                                  className={styles.breakdownFill}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span className={styles.breakdownCount}>
+                                {countVal}
+                              </span>
                             </div>
-                            <span className={styles.breakdownCount}>
-                              {countVal}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Reviews list */}
@@ -908,32 +919,16 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               {/* Ownership-aware CTA section (Flow L1, §7.2, decision 42) */}
               {isPrivilegedRole ? (
                 <p className="text-xs text-muted-foreground">
-                  Bạn đang xem với vai trò {userRole}. Chỉ tài khoản học viên
+                  Bạn đang xem với vai trò {userRole === "lecturer" ? "giảng viên" : "quản trị viên"}. Chỉ tài khoản học viên
                   mới mua được khoá học.
                 </p>
               ) : ownState === "owned" ? (
-                <>
-                  <div className={styles.progressSection}>
-                    <div className={styles.progressLabelRow}>
-                      <span className="text-muted-foreground">
-                        Tiến độ của bạn
-                      </span>
-                      <strong>0/{summary.lessonCount} bài</strong>
-                    </div>
-                    <div className={styles.progressBarTrack} aria-hidden="true">
-                      <div
-                        className={styles.progressBarFill}
-                        style={{ width: "0%" }}
-                      />
-                    </div>
-                  </div>
-                  <Link
-                    href={`/learn/${course.id}` as any}
-                    className={styles.ctaPrimaryBtn}
-                  >
-                    Tiếp tục học
-                  </Link>
-                </>
+                <Link
+                  href={`/learn/${course.id}` as any}
+                  className={styles.ctaPrimaryBtn}
+                >
+                  Tiếp tục học
+                </Link>
               ) : ownState === "pending-payment" ? (
                 <>
                   <div className="rounded-lg bg-warning/10 p-3 text-xs text-warning border border-warning/20">

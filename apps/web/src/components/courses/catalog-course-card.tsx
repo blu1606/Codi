@@ -7,24 +7,24 @@ import type { CatalogCourse } from "@/lib/course-catalog";
 import type { CourseOwnershipDetail } from "@/lib/course-ownership";
 import styles from "./catalog-course-card.module.css";
 
-const BRAND_MAP: Record<string, { logo: string; bg: string; name: string }> = {
-  "course-1": { logo: "/logos/react.svg", bg: "#20232a", name: "React" },
-  "frontend-react-nextjs": { logo: "/logos/react.svg", bg: "#20232a", name: "React" },
-  "course-2": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
-  "backend-nodejs-typescript": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
-  "course-3": { logo: "/logos/typescript.svg", bg: "#3178c6", name: "TypeScript" },
-  "dsa-interview-prep": { logo: "/logos/typescript.svg", bg: "#3178c6", name: "TypeScript" },
-  "course-4": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
-  "ai-engineering": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
-  "course-5": { logo: "/logos/react.svg", bg: "#20232a", name: "React Native" },
-  "react-native-expo": { logo: "/logos/react.svg", bg: "#20232a", name: "React Native" },
-  "course-react-001": { logo: "/logos/react.svg", bg: "#20232a", name: "React" },
-  "course-js-001": { logo: "/logos/javascript.svg", bg: "#f7df1e", name: "JavaScript" },
-  "course-node-001": { logo: "/logos/nodedotjs.svg", bg: "#233056", name: "Node.js" },
-  "course-python-001": { logo: "/logos/python.svg", bg: "#306998", name: "Python" },
-  "course-git-001": { logo: "/logos/git.svg", bg: "#f05032", name: "Git" },
-  "course-jest-001": { logo: "/logos/jest.svg", bg: "#25121e", name: "Jest" },
-  "kiem-thu-voi-jest": { logo: "/logos/jest.svg", bg: "#25121e", name: "Jest" },
+const BRAND_MAP: Record<string, { logo: string; name: string }> = {
+  "course-1": { logo: "/logos/react.svg", name: "React" },
+  "frontend-react-nextjs": { logo: "/logos/react.svg", name: "React" },
+  "course-2": { logo: "/logos/nodedotjs.svg", name: "Node.js" },
+  "backend-nodejs-typescript": { logo: "/logos/nodedotjs.svg", name: "Node.js" },
+  "course-3": { logo: "/logos/typescript.svg", name: "TypeScript" },
+  "dsa-interview-prep": { logo: "/logos/typescript.svg", name: "TypeScript" },
+  "course-4": { logo: "/logos/python.svg", name: "Python" },
+  "ai-engineering": { logo: "/logos/python.svg", name: "Python" },
+  "course-5": { logo: "/logos/react.svg", name: "React Native" },
+  "react-native-expo": { logo: "/logos/react.svg", name: "React Native" },
+  "course-react-001": { logo: "/logos/react.svg", name: "React" },
+  "course-js-001": { logo: "/logos/javascript.svg", name: "JavaScript" },
+  "course-node-001": { logo: "/logos/nodedotjs.svg", name: "Node.js" },
+  "course-python-001": { logo: "/logos/python.svg", name: "Python" },
+  "course-git-001": { logo: "/logos/git.svg", name: "Git" },
+  "course-jest-001": { logo: "/logos/jest.svg", name: "Jest" },
+  "kiem-thu-voi-jest": { logo: "/logos/jest.svg", name: "Jest" },
 };
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -37,24 +37,7 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 function getLecturerName(course: CatalogCourse): string {
-  if (course.instructorName) return course.instructorName;
-  if (
-    course.instructorId === "usr-lecturer-001" ||
-    course.slug?.includes("react") ||
-    course.slug?.includes("javascript")
-  ) {
-    return "Trần Quốc Huy";
-  }
-  if (
-    course.instructorId === "usr-lecturer-002" ||
-    course.slug?.includes("node") ||
-    course.slug?.includes("python") ||
-    course.slug?.includes("git") ||
-    course.slug?.includes("jest")
-  ) {
-    return "Lê Thu Hà";
-  }
-  return "Codi";
+  return course.instructorName || "Codi";
 }
 
 interface Props {
@@ -88,7 +71,6 @@ export function CatalogCourseCard({
         href={href}
         className={styles.coverLink}
         aria-label={`Xem chi tiết: ${course.title}`}
-        style={!course.coverImageUrl && brand?.bg ? { backgroundColor: brand.bg } : undefined}
       >
         {course.coverImageUrl ? (
           <Image

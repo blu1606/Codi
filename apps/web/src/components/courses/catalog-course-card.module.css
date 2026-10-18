@@ -96,18 +96,13 @@
 }
 
 .badgeSuccess {
-  background: var(--success-soft, #dcfce7);
-  color: var(--success, #15803d);
-}
-
-:global(.dark) .badgeSuccess {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .badgeAccent {
-  background: var(--accent-soft, rgba(13, 148, 136, 0.1));
-  color: var(--accent-active, #0d9488);
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
 .badgeWarning {
@@ -167,8 +162,8 @@
 .starIcon {
   width: 14px;
   height: 14px;
-  fill: #f59e0b;
-  color: #f59e0b;
+  fill: var(--star);
+  color: var(--star);
   flex-shrink: 0;
 }
 

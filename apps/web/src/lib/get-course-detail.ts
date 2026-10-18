@@ -108,8 +108,8 @@ export async function getCourseDetail(
       durationSeconds += row.durationSeconds ?? 0;
     }
   }
-  const { instructorName, instructorImage, ...courseData } = course;
 
+  const { instructorName, instructorImage, ...courseData } = course;
   const ratingBreakdown = [0, 0, 0, 0, 0];
   for (const review of reviews) ratingBreakdown[5 - review.stars]!++;
 
