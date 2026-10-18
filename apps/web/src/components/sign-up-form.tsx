@@ -179,8 +179,8 @@ export default function SignUpForm({ onSwitchToSignIn, returnTo = "/dashboard" }
 
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <GoogleSignInButton text="Đăng ký với Google" />
-            <GitHubSignInButton text="Đăng ký với GitHub" />
+            <GoogleSignInButton text="Đăng ký với Google" callbackURL={returnTo} />
+            <GitHubSignInButton text="Đăng ký với GitHub" callbackURL={returnTo} />
           </div>
 
           <div className="relative my-4">

@@ -128,4 +128,89 @@ describe("filterCourseCatalog", () => {
     expect(result[0].id).toBe(sampleCourses[0].id);
     expect(frozenInput).toHaveLength(2);
   });
+
+  describe("lọc theo giá (price)", () => {
+    const mixedCourses = [
+      { id: "c1", title: "Free Course", category: "Frontend", level: "Beginner", description: "Free", price: 0 },
+      { id: "c2", title: "Paid Course", category: "Backend", level: "Intermediate", description: "Paid", price: 200000 },
+    ];
+
+    it("lọc các khóa học miễn phí (free)", () => {
+      const result = filterCourseCatalog(mixedCourses, "", "Tất cả", "Tất cả cấp độ", { price: "free" });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("c1");
+    });
+
+    it("lọc các khóa học có phí (paid)", () => {
+      const result = filterCourseCatalog(mixedCourses, "", "Tất cả", "Tất cả cấp độ", { price: "paid" });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("c2");
+    });
+  });
+
+  describe("sắp xếp (sort)", () => {
+    const list = [
+      { id: "c1", title: "Course 1", category: "Frontend", level: "Beginner", description: "", price: 300000, enrollmentCount: 50, rating: 4.8, createdAt: "2026-01-01" },
+      { id: "c2", title: "Course 2", category: "Backend", level: "Intermediate", description: "", price: 100000, enrollmentCount: 150, rating: 4.2, createdAt: "2026-03-01" },
+      { id: "c3", title: "Course 3", category: "Mobile", level: "Advanced", description: "", price: 200000, enrollmentCount: 10, rating: 4.9, createdAt: "2026-02-01" },
+    ];
+
+    it("sắp xếp theo độ phổ biến (popular): số học viên giảm dần", () => {
+      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "popular" });
+      expect(result.map((c) => c.id)).toEqual(["c2", "c1", "c3"]);
+    });
+
+    it("sắp xếp theo mới nhất (newest)", () => {
+      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "newest" });
+      expect(result.map((c) => c.id)).toEqual(["c2", "c3", "c1"]);
+    });
+
+    it("sắp xếp theo giá tăng dần (price-asc)", () => {
+      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "price-asc" });
+      expect(result.map((c) => c.id)).toEqual(["c2", "c3", "c1"]);
+    });
+
+    it("sắp xếp theo giá giảm dần (price-desc)", () => {
+      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "price-desc" });
+      expect(result.map((c) => c.id)).toEqual(["c1", "c3", "c2"]);
+    });
+
+    it("sắp xếp theo đánh giá cao nhất (rating)", () => {
+      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "rating" });
+      expect(result.map((c) => c.id)).toEqual(["c3", "c1", "c2"]);
+    });
+  });
+
+  describe("getTypeaheadSuggestions", () => {
+    const catalog = [
+      { id: "c1", title: "React Fundamentals", category: "Frontend", level: "Beginner", description: "Learn React" },
+      { id: "c2", title: "React Native Mobile", category: "Mobile", level: "Intermediate", description: "Build apps" },
+      { id: "c3", title: "Node.js Backend", category: "Backend", level: "Beginner", description: "APIs with Node" },
+    ];
+
+    it("gợi ý và gom nhóm chính xác theo danh mục", async () => {
+      const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
+      const result = getTypeaheadSuggestions(catalog, "React");
+      expect(result.matches).toHaveLength(2);
+      expect(result.isEmpty).toBe(false);
+      expect(Object.keys(result.grouped)).toEqual(["Frontend", "Mobile"]);
+      expect(result.grouped["Frontend"][0].id).toBe("c1");
+      expect(result.grouped["Mobile"][0].id).toBe("c2");
+    });
+
+    it("trả về isEmpty: true khi không có gợi ý phù hợp", async () => {
+      const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
+      const result = getTypeaheadSuggestions(catalog, "PythonMachineLearning");
+      expect(result.matches).toHaveLength(0);
+      expect(result.isEmpty).toBe(true);
+      expect(result.grouped).toEqual({});
+    });
+
+    it("trả về mảng rỗng khi query rỗng", async () => {
+      const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
+      const result = getTypeaheadSuggestions(catalog, "   ");
+      expect(result.matches).toHaveLength(0);
+      expect(result.isEmpty).toBe(false);
+    });
+  });
 });

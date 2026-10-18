@@ -6,7 +6,13 @@ import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 
-export default function GoogleSignInButton({ text = "Tiếp tục với Google" }: { text?: string }) {
+export default function GoogleSignInButton({
+  text = "Tiếp tục với Google",
+  callbackURL = "/dashboard",
+}: {
+  text?: string;
+  callbackURL?: string;
+}) {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
@@ -15,7 +21,7 @@ export default function GoogleSignInButton({ text = "Tiếp tục với Google" 
       await authClient.signIn.social(
         {
           provider: "google",
-          callbackURL: "/dashboard",
+          callbackURL,
         },
         {
           onError: (ctx) => {

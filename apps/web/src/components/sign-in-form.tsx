@@ -255,8 +255,8 @@ export default function SignInForm({
           </div>
 
           <div className="space-y-3">
-            <GoogleSignInButton text="Continue with Google" />
-            <GitHubSignInButton text="Continue with GitHub" />
+            <GoogleSignInButton text="Continue with Google" callbackURL={returnTo} />
+            <GitHubSignInButton text="Continue with GitHub" callbackURL={returnTo} />
           </div>
 
           <div className="pt-4 text-center text-sm text-muted-foreground">
