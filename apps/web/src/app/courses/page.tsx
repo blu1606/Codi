@@ -103,6 +103,9 @@ export default function CoursesPage() {
 
   const userRole = (session?.user as { role?: string } | undefined)?.role ?? null;
 
+  // Hydrate filters from URL query parameters on initial load
+  const initialCourseIdRef = useRef<string | null>(null);
+
   // 1. Fetch catalog courses
   useEffect(() => {
     const controller = new AbortController();
@@ -113,9 +116,11 @@ export default function CoursesPage() {
       .then((data) => {
         if (controller.signal.aborted) return;
         setCourses(data);
-        const courseId = new URLSearchParams(window.location.search).get("course");
-        const linkedCourse = courseId ? data.find((c) => c.id === courseId) : null;
-        if (linkedCourse) router.replace(`/courses/${encodeURIComponent(linkedCourse.slug)}`);
+        const targetCourseId = initialCourseIdRef.current;
+        const linkedCourse = targetCourseId ? data.find((c) => c.id === targetCourseId) : null;
+        if (linkedCourse) {
+          router.replace(`/courses/${encodeURIComponent(linkedCourse.slug)}`);
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -134,11 +139,15 @@ export default function CoursesPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+    initialCourseIdRef.current = params.get("course");
+
     const qParam = params.get("q");
     if (qParam) setSearchTerm(qParam);
 
     const catParam = params.get("cat");
-    if (catParam) setSelectedCategory(catParam);
+    if (catParam && (CATEGORIES as readonly string[]).includes(catParam)) {
+      setSelectedCategory(catParam);
+    }
 
     const levelParam = params.get("level");
     if (levelParam) {
@@ -151,9 +160,8 @@ export default function CoursesPage() {
         setSelectedLevel("Advanced");
       } else if (normalized === "all" || normalized === "tất cả") {
         setSelectedLevel("all");
-      } else {
-        setSelectedLevel(levelParam);
       }
+      // Unknown or invalid level parameter is ignored
     }
 
     const priceParam = params.get("price");
@@ -177,7 +185,13 @@ export default function CoursesPage() {
   // Sync active filters and sort to URL query params
   useEffect(() => {
     if (!isHydratedRef.current || typeof window === "undefined") return;
+    const currentParams = new URLSearchParams(window.location.search);
     const params = new URLSearchParams();
+
+    // Preserve unmanaged or temporary params like course deep-link
+    const courseParam = currentParams.get("course");
+    if (courseParam) params.set("course", courseParam);
+
     if (searchTerm.trim()) params.set("q", searchTerm.trim());
     if (selectedCategory !== "Tất cả") params.set("cat", selectedCategory);
     if (selectedLevel !== "all") params.set("level", selectedLevel);

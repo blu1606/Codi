@@ -151,7 +151,8 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const handleAddToCart = async () => {
     if (!detail || adding || sessionLoading) return;
     if (!session?.user) {
-      router.push("/login");
+      const nextPath = `/courses/${encodeURIComponent(detail.course.slug)}`;
+      router.push(`/login?next=${encodeURIComponent(nextPath)}`);
       return;
     }
     setAdding(true);
@@ -176,7 +177,8 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const handleEnrollFree = async () => {
     if (!detail || enrolling || sessionLoading) return;
     if (!session?.user) {
-      router.push("/login");
+      const nextPath = `/courses/${encodeURIComponent(detail.course.slug)}`;
+      router.push(`/login?next=${encodeURIComponent(nextPath)}`);
       return;
     }
     setEnrolling(true);
@@ -196,17 +198,6 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     } finally {
       setEnrolling(false);
     }
-  };
-
-  const handleBuyNow = async () => {
-    if (!detail || sessionLoading) return;
-    if (!session?.user) {
-      router.push("/login" as any);
-      return;
-    }
-    // Add to cart and redirect straight to cart/checkout
-    await handleAddToCart();
-    router.push("/cart" as any);
   };
 
   const toggleChapter = (id: string) => {
@@ -276,8 +267,8 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const allExpanded = chapters.length > 0 && chapters.every((ch) => openChapters.has(ch.id));
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
-  const ratingBreakdown = detail.ratingBreakdown ?? [92, 24, 8, 3, 1];
-  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0) || 1;
+  const ratingBreakdown = detail.ratingBreakdown ?? [0, 0, 0, 0, 0];
+  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0);
   const reviews = detail.reviews ?? [];
 
   return (
@@ -489,24 +480,26 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                       <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
                     </div>
 
-                    <div className={styles.breakdownList}>
-                      {[5, 4, 3, 2, 1].map((stars, idx) => {
-                        const countVal = ratingBreakdown[idx] ?? 0;
-                        const pct = totalBreakdown > 0 ? Math.round((countVal / totalBreakdown) * 100) : 0;
-                        return (
-                          <div key={stars} className={styles.breakdownRow}>
-                            <span className={styles.breakdownLabel}>{stars} sao</span>
-                            <div className={styles.breakdownTrack} aria-hidden="true">
-                              <div
-                                className={styles.breakdownFill}
-                                style={{ width: `${pct}%` }}
-                              />
+                    {totalBreakdown > 0 ? (
+                      <div className={styles.breakdownList}>
+                        {[5, 4, 3, 2, 1].map((stars, idx) => {
+                          const countVal = ratingBreakdown[idx] ?? 0;
+                          const pct = Math.round((countVal / totalBreakdown) * 100);
+                          return (
+                            <div key={stars} className={styles.breakdownRow}>
+                              <span className={styles.breakdownLabel}>{stars} sao</span>
+                              <div className={styles.breakdownTrack} aria-hidden="true">
+                                <div
+                                  className={styles.breakdownFill}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span className={styles.breakdownCount}>{countVal}</span>
                             </div>
-                            <span className={styles.breakdownCount}>{countVal}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Reviews list */}
@@ -611,26 +604,16 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   </p>
                 </>
               ) : (
-                /* Paid course: Mua ngay (primary) + Thêm vào giỏ (secondary) (mockup decision 42) */
-                <div className="flex flex-col gap-2.5">
-                  <button
-                    type="button"
-                    onClick={handleBuyNow}
-                    disabled={adding}
-                    className={styles.ctaPrimaryBtn}
-                  >
-                    Mua ngay
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddToCart}
-                    disabled={adding}
-                    className={styles.ctaSecondaryBtn}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    {adding ? "Đang thêm…" : "Thêm vào giỏ"}
-                  </button>
-                </div>
+                /* Paid course: Thêm vào giỏ. (Mua ngay pending backend createBuyNowOrder implementation theo D4) */
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={adding}
+                  className={styles.ctaPrimaryBtn}
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  {adding ? "Đang thêm…" : "Thêm vào giỏ hàng"}
+                </button>
               )}
 
               {cartMessage && (

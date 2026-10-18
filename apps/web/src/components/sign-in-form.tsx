@@ -13,7 +13,7 @@ import { Checkbox } from "@codi-1/ui/components/checkbox";
 import { Input } from "@codi-1/ui/components/input";
 import { Label } from "@codi-1/ui/components/label";
 import { useForm } from "@tanstack/react-form";
-import { useRouter } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -24,12 +24,22 @@ import Loader from "./loader";
 
 const REMEMBER_EMAIL_KEY = "codi_remember_email";
 
+function getSafeRedirectUrl(nextParam: string | null): string {
+  if (!nextParam) return "/dashboard";
+  if (nextParam.startsWith("/") && !nextParam.startsWith("//")) {
+    return nextParam;
+  }
+  return "/dashboard";
+}
+
 export default function SignInForm({
   onSwitchToSignUp,
 }: {
   onSwitchToSignUp: () => void;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextParam = searchParams.get("next");
   const { isPending } = authClient.useSession();
   const [rememberMe, setRememberMe] = useState(false);
 
@@ -55,7 +65,8 @@ export default function SignInForm({
             } catch {
               // Ignore storage errors in restricted contexts
             }
-            router.push("/dashboard");
+            const targetUrl = getSafeRedirectUrl(nextParam);
+            router.push(targetUrl as any);
             toast.success("Đăng nhập thành công!");
           },
           onError: (error) => {
