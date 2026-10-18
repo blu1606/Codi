@@ -22,7 +22,7 @@ function LoginContent() {
   }, [tabParam]);
 
   const rawReturn = searchParams.get("returnTo") || searchParams.get("callbackURL") || searchParams.get("next");
-  const sanitizedReturnTo = rawReturn ? safeNext(rawReturn, onboardingReturnPath(rawReturn)) : "/dashboard";
+  const sanitizedReturnTo = safeNext(rawReturn, onboardingReturnPath(rawReturn));
 
   return (
     <div className="login-cyber-violet relative flex min-h-[calc(100vh-4rem)] w-full items-center justify-center overflow-y-auto bg-background p-4 py-8 sm:p-8">
