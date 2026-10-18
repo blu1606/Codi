@@ -33,6 +33,7 @@ export const assessmentCommand = z.discriminatedUnion("type", [
     .object({ type: z.literal("assignment-submit"), ...assignmentFields.shape })
     .strict(),
   z.object({ type: z.literal("assignment-cancel") }).strict(),
+  z.object({ type: z.literal("assignment-remove-file") }).strict(),
 ]);
 export type AssessmentCommand = z.infer<typeof assessmentCommand>;
 export type AssignmentDraft = z.infer<typeof assignmentFields> & {
@@ -95,7 +96,137 @@ export type AssessmentView = {
     }[];
   };
   previousScore: number | null;
+  previousQuizPercent?: number | null;
+  unavailableReason?: string | null;
 };
+
+export const uploadRequest = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("prepare"),
+      name: z.string().max(255),
+      size: z.number().int().positive(),
+    })
+    .strict(),
+  z
+    .object({ type: z.literal("confirm"), token: z.string().max(8000) })
+    .strict(),
+]);
+export type PreparedUpload = { url: string; token: string; expiresIn: number };
+
+type QuizCommand = Extract<AssessmentCommand, { type: `quiz-${string}` }>;
+type AssignmentCommand = Extract<
+  AssessmentCommand,
+  { type: `assignment-${string}` }
+>;
+type Attempt = {
+  id: number;
+  attempt: number;
+  status: "draft" | "pending" | "graded";
+};
+export function quizTransition(
+  state: {
+    type: string;
+    submission: Attempt | null | undefined;
+    questions: QuizQuestion[];
+    answers: { questionId: number; selectedOptionId: number | null }[];
+    maxScore: number;
+    passingScore: number;
+  },
+  command: QuizCommand,
+) {
+  if (state.type !== "quiz")
+    throw new LearningPathError("Đây không phải quiz.", 400);
+  requireQuizQuestions(state.questions);
+  const s = state.submission;
+  if (command.type === "quiz-open")
+    return {
+      type: s ? ("unchanged" as const) : ("create" as const),
+      attempt: 1,
+    };
+  if (command.type === "quiz-retake") {
+    if (!s || s.id !== command.submissionId || s.status !== "graded")
+      throw new LearningPathError("Lần làm đã thay đổi. Hãy tải lại.", 409);
+    return { type: "create" as const, attempt: s.attempt + 1 };
+  }
+  if (!s || s.id !== command.submissionId || s.status !== "draft")
+    throw new LearningPathError(
+      "Lần làm đã nộp hoặc đã thay đổi. Hãy tải lại.",
+      409,
+    );
+  if (command.type === "quiz-answer") {
+    const q = state.questions.find((q) => q.id === command.questionId);
+    if (!q?.options.some((o) => o.id === command.optionId))
+      throw new LearningPathError("Đáp án không thuộc câu hỏi.", 400);
+    return {
+      type: "answer" as const,
+      submissionId: s.id,
+      questionId: q.id,
+      optionId: command.optionId,
+    };
+  }
+  const missing = state.questions.filter(
+    (q) =>
+      !state.answers.some(
+        (a) => a.questionId === q.id && a.selectedOptionId !== null,
+      ),
+  ).length;
+  if (missing && !command.confirmUnanswered)
+    throw new LearningPathError(
+      `Còn ${missing} câu chưa trả lời. Câu chưa trả lời sẽ được tính là sai.`,
+      409,
+    );
+  return {
+    type: "grade" as const,
+    submissionId: s.id,
+    result: gradeQuiz(
+      state.questions,
+      state.answers,
+      state.maxScore,
+      state.passingScore,
+    ),
+  };
+}
+
+export function assignmentTransition(
+  state: {
+    type: string;
+    submission:
+      | { status: string; assignmentDraft: AssignmentDraft | null }
+      | null
+      | undefined;
+    draft: AssignmentDraft;
+    format: AssessmentView["submissionFormat"];
+  },
+  command: AssignmentCommand,
+) {
+  if (state.type !== "assignment")
+    throw new LearningPathError("Đây không phải bài tập.", 400);
+  requireEditableAssignment(state.submission?.status);
+  if (command.type === "assignment-cancel") {
+    if (!state.submission?.assignmentDraft)
+      throw new LearningPathError("Không có bản nháp để huỷ.", 409);
+    return { type: "cancel" as const };
+  }
+  if (command.type === "assignment-remove-file") {
+    if (!state.draft.fileKey)
+      throw new LearningPathError("Không có tệp để gỡ.", 409);
+    return {
+      type: "draft" as const,
+      draft: { ...state.draft, fileKey: null, fileName: null },
+    };
+  }
+  const draft = {
+    ...state.draft,
+    linkUrl: command.linkUrl,
+    answerText: command.answerText,
+  };
+  if (command.type === "assignment-submit") {
+    requireAssignment(state.format, draft);
+    return { type: "submit" as const, draft };
+  }
+  return { type: "draft" as const, draft };
+}
 
 export function requireQuizQuestions(questions: QuizQuestion[]) {
   if (

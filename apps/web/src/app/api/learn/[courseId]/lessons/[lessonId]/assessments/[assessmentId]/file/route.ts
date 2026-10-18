@@ -3,11 +3,12 @@ import { assessmentService } from "@/lib/assessment-runtime";
 import {
   assessmentFailure,
   assessmentScope,
-  readUpload,
   type AssessmentContext,
 } from "@/lib/assessment-http";
 import { privateHeaders } from "@/lib/learning-path-http";
 import { LearningPathError } from "@/lib/learning-path-contract";
+import { uploadRequest } from "@/lib/assessment-contract";
+import { readUpload } from "@/lib/assessment-http";
 
 export const maxDuration = 60;
 export async function POST(request: NextRequest, context: AssessmentContext) {
@@ -15,16 +16,14 @@ export async function POST(request: NextRequest, context: AssessmentContext) {
     if (request.headers.get("origin") !== request.nextUrl.origin)
       throw new LearningPathError("Yêu cầu không hợp lệ.", 403);
     const scope = await assessmentScope(request, context);
-    const limit = await assessmentService.uploadLimit(scope);
-    let name: string;
-    try {
-      name = decodeURIComponent(request.headers.get("x-file-name") ?? "");
-    } catch {
-      throw new LearningPathError("Tên tệp không hợp lệ.", 400);
-    }
-    const buffer = await readUpload(request, limit);
+    // This endpoint accepts metadata only. File bytes go directly to private R2.
+    const input = uploadRequest.parse(
+      JSON.parse((await readUpload(request, 12000)).toString("utf8")),
+    );
     return NextResponse.json(
-      await assessmentService.upload(scope, name, buffer),
+      input.type === "prepare"
+        ? await assessmentService.prepareUpload(scope, input.name, input.size)
+        : await assessmentService.confirmUpload(scope, input.token),
       { headers: privateHeaders },
     );
   } catch (error) {

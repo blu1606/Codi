@@ -9,6 +9,11 @@ import {
 } from "./learning-path-http";
 
 export function assessmentFailure(error: unknown) {
+  if (error instanceof SyntaxError)
+    return NextResponse.json(
+      { error: "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại." },
+      { status: 400, headers: privateHeaders },
+    );
   if (error instanceof LearningPathError || error instanceof ZodError)
     return learningFailure(error);
   return NextResponse.json(

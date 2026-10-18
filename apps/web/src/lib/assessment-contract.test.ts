@@ -9,6 +9,8 @@ import {
   requireUpload,
   type AssignmentDraft,
   type QuizQuestion,
+  quizTransition,
+  assignmentTransition,
 } from "./assessment-contract";
 import { lessonChecklist } from "./lesson-player-contract";
 
@@ -30,6 +32,240 @@ const draft: AssignmentDraft = {
   fileKey: null,
   fileName: null,
 };
+describe("server quiz transitions", () => {
+  const state = {
+    type: "quiz",
+    submission: { id: 2, attempt: 3, status: "draft" as const },
+    questions,
+    answers: [
+      { questionId: 1, selectedOptionId: 10 },
+      { questionId: 2, selectedOptionId: 20 },
+      { questionId: 3, selectedOptionId: 30 },
+    ],
+    maxScore: 100,
+    passingScore: 70,
+  };
+  it("opens the first attempt", () =>
+    expect(
+      quizTransition({ ...state, submission: null }, { type: "quiz-open" }),
+    ).toEqual({ type: "create", attempt: 1 }));
+  it.each(["draft", "graded"] as const)(
+    "open preserves existing %s attempt",
+    (status) =>
+      expect(
+        quizTransition(
+          { ...state, submission: { ...state.submission, status } },
+          { type: "quiz-open" },
+        ).type,
+      ).toBe("unchanged"),
+  );
+  it("retake creates the next attempt only from the latest graded submission", () =>
+    expect(
+      quizTransition(
+        { ...state, submission: { ...state.submission, status: "graded" } },
+        { type: "quiz-retake", submissionId: 2 },
+      ),
+    ).toEqual({ type: "create", attempt: 4 }));
+  it.each([
+    null,
+    { id: 1, attempt: 2, status: "graded" as const },
+    { id: 2, attempt: 3, status: "draft" as const },
+    { id: 2, attempt: 3, status: "pending" as const },
+  ])("rejects a missing, stale or unsubmitted retake: %j", (submission) =>
+    expect(() =>
+      quizTransition(
+        { ...state, submission },
+        { type: "quiz-retake", submissionId: 2 },
+      ),
+    ).toThrow("đã thay đổi"),
+  );
+  it("saves an answer only on its own question", () =>
+    expect(
+      quizTransition(state, {
+        type: "quiz-answer",
+        submissionId: 2,
+        questionId: 1,
+        optionId: 11,
+      }),
+    ).toMatchObject({ type: "answer", questionId: 1, optionId: 11 }));
+  it.each([
+    { questionId: 99, optionId: 10 },
+    { questionId: 1, optionId: 20 },
+  ])("rejects a foreign question or option %j", (answer) =>
+    expect(() =>
+      quizTransition(state, {
+        type: "quiz-answer",
+        submissionId: 2,
+        ...answer,
+      }),
+    ).toThrow("không thuộc"),
+  );
+  for (const command of [
+    { type: "quiz-answer", submissionId: 2, questionId: 1, optionId: 10 },
+    { type: "quiz-submit", submissionId: 2, confirmUnanswered: true },
+  ] as const) {
+    it.each([
+      null,
+      { id: 1, attempt: 2, status: "draft" as const },
+      { id: 2, attempt: 3, status: "pending" as const },
+      { id: 2, attempt: 3, status: "graded" as const },
+    ])(
+      `rejects ${command.type} for missing/stale/non-draft attempt %j`,
+      (submission) =>
+        expect(() => quizTransition({ ...state, submission }, command)).toThrow(
+          "đã nộp hoặc đã thay đổi",
+        ),
+    );
+  }
+  it("submits and grades a fully answered draft", () =>
+    expect(
+      quizTransition(state, {
+        type: "quiz-submit",
+        submissionId: 2,
+        confirmUnanswered: false,
+      }),
+    ).toMatchObject({
+      type: "grade",
+      result: { percent: 100, isPassed: true },
+    }));
+  it("requires explicit confirmation for unanswered questions", () =>
+    expect(() =>
+      quizTransition(
+        { ...state, answers: [] },
+        { type: "quiz-submit", submissionId: 2, confirmUnanswered: false },
+      ),
+    ).toThrow("3 câu chưa trả lời"));
+  it("treats confirmed unanswered questions as wrong", () =>
+    expect(
+      quizTransition(
+        { ...state, answers: [] },
+        { type: "quiz-submit", submissionId: 2, confirmUnanswered: true },
+      ),
+    ).toMatchObject({
+      type: "grade",
+      result: { percent: 0, isPassed: false },
+    }));
+  it("rejects quiz commands on an assignment", () =>
+    expect(() =>
+      quizTransition({ ...state, type: "assignment" }, { type: "quiz-open" }),
+    ).toThrow("không phải quiz"));
+  it("rejects unsupported question types before starting", () =>
+    expect(() =>
+      quizTransition(
+        { ...state, questions: [{ ...questions[0]!, type: "fill_in_blank" }] },
+        { type: "quiz-open" },
+      ),
+    ).toThrow("chưa có bộ câu hỏi hợp lệ"));
+});
+
+describe("server assignment transitions", () => {
+  const state = {
+    type: "assignment",
+    submission: null as {
+      status: string;
+      assignmentDraft: AssignmentDraft | null;
+    } | null,
+    draft,
+    format: "link" as const,
+  };
+  const fields = { linkUrl: "https://example.com/work", answerText: "Bài làm" };
+  it.each([
+    null,
+    { status: "draft", assignmentDraft: draft },
+    { status: "pending", assignmentDraft: draft },
+  ])("saves a separate draft in %j", (submission) =>
+    expect(
+      assignmentTransition(
+        { ...state, submission },
+        { type: "assignment-draft", ...fields },
+      ),
+    ).toEqual({ type: "draft", draft: { ...draft, ...fields } }),
+  );
+  it.each([
+    null,
+    { status: "draft", assignmentDraft: draft },
+    { status: "pending", assignmentDraft: draft },
+  ])("submits or replaces the same pending row in %j", (submission) =>
+    expect(
+      assignmentTransition(
+        { ...state, submission },
+        { type: "assignment-submit", ...fields },
+      ),
+    ).toEqual({ type: "submit", draft: { ...draft, ...fields } }),
+  );
+  it("cancels an existing draft without changing submitted content", () =>
+    expect(
+      assignmentTransition(
+        { ...state, submission: { status: "pending", assignmentDraft: draft } },
+        { type: "assignment-cancel" },
+      ),
+    ).toEqual({ type: "cancel" }));
+  it.each([null, { status: "pending", assignmentDraft: null }])(
+    "rejects cancel without a draft %j",
+    (submission) =>
+      expect(() =>
+        assignmentTransition(
+          { ...state, submission },
+          { type: "assignment-cancel" },
+        ),
+      ).toThrow("Không có bản nháp"),
+  );
+  it.each([
+    "assignment-draft",
+    "assignment-submit",
+    "assignment-cancel",
+    "assignment-remove-file",
+  ] as const)("rejects %s once graded (D8)", (type) =>
+    expect(() =>
+      assignmentTransition(
+        { ...state, submission: { status: "graded", assignmentDraft: draft } },
+        { type, ...fields },
+      ),
+    ).toThrow("không thể nộp lại"),
+  );
+  it("removes the draft file and keeps the other fields", () =>
+    expect(
+      assignmentTransition(
+        {
+          ...state,
+          draft: {
+            ...draft,
+            ...fields,
+            fileKey: "assignments/file",
+            fileName: "work.zip",
+          },
+        },
+        { type: "assignment-remove-file" },
+      ),
+    ).toEqual({ type: "draft", draft: { ...draft, ...fields } }));
+  it("rejects removal without a file", () =>
+    expect(() =>
+      assignmentTransition(state, { type: "assignment-remove-file" }),
+    ).toThrow("Không có tệp"));
+  it("rejects empty required work", () =>
+    expect(() =>
+      assignmentTransition(state, {
+        type: "assignment-submit",
+        linkUrl: "",
+        answerText: "",
+      }),
+    ).toThrow("Cần bổ sung"));
+  it("rejects unsafe links", () =>
+    expect(() =>
+      assignmentTransition(state, {
+        type: "assignment-submit",
+        linkUrl: "javascript:alert(1)",
+        answerText: "",
+      }),
+    ).toThrow("Đường dẫn"));
+  it("rejects assignment commands on a quiz", () =>
+    expect(() =>
+      assignmentTransition(
+        { ...state, type: "quiz" },
+        { type: "assignment-draft", ...fields },
+      ),
+    ).toThrow("không phải bài tập"));
+});
 describe("quiz grading and commands", () => {
   it("grades by correct questions and rounds to an integer before checking the threshold", () => {
     const result = gradeQuiz(

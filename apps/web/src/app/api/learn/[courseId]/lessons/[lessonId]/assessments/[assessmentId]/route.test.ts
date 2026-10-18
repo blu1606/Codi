@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   roles: vi.fn(),
   get: vi.fn(),
   execute: vi.fn(),
-  upload: vi.fn(),
-  uploadLimit: vi.fn(),
+  prepareUpload: vi.fn(),
+  confirmUpload: vi.fn(),
   download: vi.fn(),
 }));
 vi.mock("@/services", () => ({
@@ -48,9 +48,13 @@ const uploadRequest = (source: string | null = origin) =>
     method: "POST",
     headers: {
       ...(source ? { origin: source } : {}),
-      "x-file-name": encodeURIComponent("bài làm.txt"),
+      "Content-Type": "application/json",
     },
-    body: "work",
+    body: JSON.stringify({
+      type: "prepare",
+      name: "bài làm.txt",
+      size: 8 * 1024 * 1024,
+    }),
   });
 beforeEach(() => {
   vi.resetAllMocks();
@@ -58,8 +62,12 @@ beforeEach(() => {
   mocks.roles.mockResolvedValue(["LEARNER"]);
   mocks.get.mockResolvedValue({ id: 7 });
   mocks.execute.mockResolvedValue({ id: 7 });
-  mocks.upload.mockResolvedValue({ id: 7 });
-  mocks.uploadLimit.mockResolvedValue(1024);
+  mocks.prepareUpload.mockResolvedValue({
+    url: "https://private.r2.test/put",
+    token: "signed",
+    expiresIn: 300,
+  });
+  mocks.confirmUpload.mockResolvedValue({ id: 7 });
   mocks.download.mockImplementation(async () => ({
     body: new ReadableStream({
       start(c) {
@@ -91,7 +99,7 @@ describe("quiz and assignment endpoints", () => {
     );
     expect((await upload(uploadRequest(), ctx())).status).toBe(401);
     expect((await download(request(), ctx())).status).toBe(401);
-    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.prepareUpload).not.toHaveBeenCalled();
   });
   it.each(["ADMIN", "LECTURER", "REVOKED"])(
     "rejects a non-learner %s",
@@ -145,18 +153,62 @@ describe("quiz and assignment endpoints", () => {
       command,
     );
   });
-  it("checks upload permission before reading the file and persists the decoded filename", async () => {
-    expect((await upload(uploadRequest(), ctx())).status).toBe(200);
-    expect(mocks.upload).toHaveBeenCalledWith(
+  it("passes only metadata to prepare an 8 MB direct upload", async () => {
+    const response = await upload(uploadRequest(), ctx());
+    expect(response.status).toBe(200);
+    expect(mocks.prepareUpload).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "viewer" }),
       "bài làm.txt",
-      Buffer.from("work"),
+      8 * 1024 * 1024,
+    );
+    expect(await response.json()).toMatchObject({
+      token: "signed",
+      expiresIn: 300,
+    });
+  });
+  it("confirms an upload with the signed ticket", async () => {
+    expect(
+      (await upload(request({ type: "confirm", token: "signed" }), ctx()))
+        .status,
+    ).toBe(200);
+    expect(mocks.confirmUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "viewer" }),
+      "signed",
     );
   });
-  it("rejects oversized streaming bodies", async () => {
-    mocks.uploadLimit.mockResolvedValue(3);
-    expect((await upload(uploadRequest(), ctx())).status).toBe(413);
-    expect(mocks.upload).not.toHaveBeenCalled();
+  it("rejects binary bodies and malformed metadata", async () => {
+    const binary = new NextRequest(`${origin}/api/file`, {
+      method: "POST",
+      headers: { origin },
+      body: "binary-file-content",
+    });
+    expect((await upload(binary, ctx())).status).toBe(400);
+    expect(
+      (
+        await upload(
+          request({ type: "prepare", name: "work", size: -1 }),
+          ctx(),
+        )
+      ).status,
+    ).toBe(400);
+    expect(mocks.prepareUpload).not.toHaveBeenCalled();
+  });
+  it("bounds metadata requests before buffering", async () => {
+    const oversized = new NextRequest(`${origin}/api/file`, {
+      method: "POST",
+      headers: { origin },
+      body: "x".repeat(12001),
+    });
+    expect((await upload(oversized, ctx())).status).toBe(413);
+    expect(mocks.prepareUpload).not.toHaveBeenCalled();
+  });
+  it("reports missing private bucket configuration as 503", async () => {
+    mocks.prepareUpload.mockRejectedValue(
+      new LearningPathError("Kho tệp bài tập chưa được cấu hình.", 503),
+    );
+    const response = await upload(uploadRequest(), ctx());
+    expect(response.status).toBe(503);
+    expect(await response.text()).toContain("chưa được cấu hình");
   });
   it("returns private downloads as attachments, never executable HTML", async () => {
     const response = await download(request(), ctx());
@@ -191,7 +243,9 @@ describe("quiz and assignment endpoints", () => {
     },
   );
   it("does not leak storage errors", async () => {
-    mocks.upload.mockRejectedValue(new Error("secret bucket credential"));
+    mocks.prepareUpload.mockRejectedValue(
+      new Error("secret bucket credential"),
+    );
     const response = await upload(uploadRequest(), ctx());
     expect(response.status).toBe(500);
     expect(await response.text()).not.toContain("secret");
