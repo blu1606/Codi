@@ -13,6 +13,7 @@ import SignUpForm from "../sign-up-form";
 export interface AuthModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  returnTo?: string;
   intentReason?: string;
   courseTitle?: string;
   onSuccess: () => void;
@@ -21,6 +22,7 @@ export interface AuthModalProps {
 export default function AuthModal({
   open,
   onOpenChange,
+  returnTo,
   intentReason,
   courseTitle,
   onSuccess,
@@ -47,6 +49,7 @@ export default function AuthModal({
                   onSuccess();
                   onOpenChange(false);
                 }}
+                returnTo={returnTo}
                 courseTitle={courseTitle}
                 intentReason={intentReason}
               />
@@ -57,6 +60,7 @@ export default function AuthModal({
                   onSuccess();
                   onOpenChange(false);
                 }}
+                returnTo={returnTo}
               />
             )}
           </div>

@@ -168,7 +168,7 @@ describe("GET /api/courses/[slug]", () => {
     const dialect = new PgDialect();
     expect(
       dialect.sqlToQuery(mocks.courseWhere.mock.calls[0][0]).params,
-    ).toEqual([course.slug]);
+    ).toEqual([course.slug, "published"]);
     expect(
       dialect.sqlToQuery(mocks.detailsWhere.mock.calls[0][0]).params,
     ).toEqual([course.id]);

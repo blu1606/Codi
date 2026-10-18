@@ -198,8 +198,8 @@ export default function SignUpForm({
 
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <GoogleSignInButton text="Đăng ký với Google" />
-            <GitHubSignInButton text="Đăng ký với GitHub" />
+            <GoogleSignInButton text="Đăng ký với Google" callbackURL={returnTo} />
+            <GitHubSignInButton text="Đăng ký với GitHub" callbackURL={returnTo} />
           </div>
 
           <div className="relative my-4">
@@ -300,20 +300,6 @@ export default function SignUpForm({
               )}
             </form.Subscribe>
           </form>
-
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-3 text-muted-foreground">HOẶC TIẾP TỤC VỚI</span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <GoogleSignInButton text="Đăng ký với Google" callbackURL={returnTo} />
-            <GitHubSignInButton text="Đăng ký với GitHub" callbackURL={returnTo} />
-          </div>
 
           <div className="mt-4 text-center text-xs text-muted-foreground">
             <span>Đã có tài khoản? </span>

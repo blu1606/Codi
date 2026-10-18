@@ -55,4 +55,27 @@ describe("fetchCourses", () => {
       "Dữ liệu khóa học không hợp lệ."
     );
   });
+
+  it("handles deep link matching by finding target course from fetched catalog", async () => {
+    const mockCourses = [
+      { id: "c1", title: "Course 1", slug: "dsa-interview-prep", price: 100000 },
+      { id: "c2", title: "Course 2", slug: "react-nextjs", price: 200000 },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ courses: mockCourses }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const controller = new AbortController();
+    const courses = await fetchCourses(controller.signal);
+    const targetCourse = courses.find((c) => c.id === "c1");
+    expect(targetCourse).toBeDefined();
+    expect(targetCourse?.slug).toBe("dsa-interview-prep");
+
+    const nonExistent = courses.find((c) => c.id === "unknown-id");
+    expect(nonExistent).toBeUndefined();
+  });
 });

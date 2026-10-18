@@ -82,10 +82,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const router = useRouter();
   const { data: session, isPending: sessionLoading } = authClient.useSession();
   const [detail, setDetail] = useState<CourseDetail | null>(null);
-  const [error, setError] = useState<{
-    message: string;
-    notFound: boolean;
-  } | null>(null);
+  const [error, setError] = useState<{ message: string; notFound: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
@@ -126,10 +123,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         setError({
-          message:
-            err instanceof Error
-              ? err.message
-              : "Không thể tải khóa học. Vui lòng thử lại.",
+          message: err instanceof Error ? err.message : "Không thể tải khóa học. Vui lòng thử lại.",
           notFound: err instanceof CourseDetailError && err.status === 404,
         });
       })
@@ -531,42 +525,12 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
-  const ratingBreakdown = detail.ratingBreakdown ?? [0, 0, 0, 0, 0];
-  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0);
   const reviews = detail.reviews ?? [];
-
-  // Hidden/unavailable course check (Flow L1, S02)
-  if (course.status !== "published" && ownState !== "owned") {
-    return (
-      <main className={styles.page}>
-        <div className={styles.container}>
-          <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
-            <EyeOff className="size-10 text-muted-foreground mx-auto" />
-            <h1 className="text-2xl font-bold">Khoá học tạm ngừng bán</h1>
-            <p role="alert" className="text-sm text-muted-foreground">
-              Khoá học này hiện không mở bán cho học viên mới.
-            </p>
-            {course.hiddenReason && (
-              <p className="text-xs text-muted-foreground bg-muted p-3 rounded-lg border border-border max-w-md mx-auto text-left">
-                <span className="font-semibold block mb-1 text-foreground">
-                  Lý do:
-                </span>
-                {course.hiddenReason}
-              </p>
-            )}
-            <div className="pt-2">
-              <Link
-                href="/courses"
-                className="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
-              >
-                Khám phá khoá học khác
-              </Link>
-            </div>
-          </Card>
-        </div>
-      </main>
-    );
-  }
+  // Calculate star breakdown [5-star, 4-star, 3-star, 2-star, 1-star] from reviews
+  const ratingBreakdown = [5, 4, 3, 2, 1].map(
+    (stars) => reviews.filter((r) => r.stars === stars).length,
+  );
+  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0);
 
   return (
     <main className={styles.page}>
@@ -843,12 +807,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                         {detail.rating.toFixed(1)}
                       </span>
                       <div className={styles.starsRow}>
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`h-4 w-4 ${styles.starFilled}`}
-                          />
-                        ))}
+                        {Array.from({ length: 5 }).map((_, i) => {
+                          const isFilled = i < Math.round(detail.rating);
+                          return (
+                            <Star
+                              key={i}
+                              className={`h-4 w-4 ${isFilled ? styles.starFilled : "text-muted-foreground/30 fill-transparent"}`}
+                            />
+                          );
+                        })}
                       </div>
                       <span className={styles.ratingTotal}>
                         {detail.reviewCount} đánh giá
@@ -1052,6 +1019,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
             } catch {}
           }
         }}
+        returnTo={`/courses/${course.slug}`}
         intentReason={intentReason}
         courseTitle={detail?.course.title}
         onSuccess={handleAuthSuccess}

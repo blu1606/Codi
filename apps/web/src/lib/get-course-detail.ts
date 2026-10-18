@@ -24,7 +24,6 @@ export const PUBLIC_COURSE_COLUMNS = {
   rating: courses.rating,
   reviewCount: courses.reviewCount,
   status: courses.status,
-  hiddenReason: courses.hiddenReason,
   createdAt: courses.createdAt,
   publishedAt: courses.publishedAt,
   updatedAt: courses.updatedAt,
@@ -43,7 +42,7 @@ export async function getCourseDetail(
     .from(courses)
     .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
     .leftJoin(user, eq(courses.instructorId, user.id))
-    .where(eq(courses.slug, slug))
+    .where(and(eq(courses.slug, slug), eq(courses.status, "published")))
     .groupBy(courses.id, user.id)
     .limit(1);
   if (!course) return null;
@@ -110,9 +109,6 @@ export async function getCourseDetail(
   }
 
   const { instructorName, instructorImage, ...courseData } = course;
-  const ratingBreakdown = [0, 0, 0, 0, 0];
-  for (const review of reviews) ratingBreakdown[5 - review.stars]!++;
-
   return {
     course: { ...courseData, createdAt: courseData.createdAt.toISOString() },
     instructor: instructorName
@@ -125,7 +121,6 @@ export async function getCourseDetail(
       : null,
     rating: course.rating,
     reviewCount: course.reviewCount,
-    ratingBreakdown,
     reviews,
     learningOutcomes: details?.learningOutcomes ?? [],
     requirements: details?.requirements ?? [],

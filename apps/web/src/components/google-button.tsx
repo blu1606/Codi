@@ -9,7 +9,7 @@ import { safeNext } from "@/lib/safe-redirect";
 
 export default function GoogleSignInButton({
   text = "Tiếp tục với Google",
-  callbackURL,
+  callbackURL = "/dashboard",
 }: {
   text?: string;
   callbackURL?: string;
@@ -19,26 +19,14 @@ export default function GoogleSignInButton({
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
-      const rawCurrentPath =
-        typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search).get("next") ||
-            (window.location.pathname === "/login"
-              ? "/dashboard"
-              : window.location.pathname + window.location.search)
-          : "/dashboard";
-      const targetUrl = safeNext(callbackURL || rawCurrentPath, "/dashboard");
+      const targetUrl = safeNext(callbackURL, "/dashboard");
 
-      const res = await authClient.signIn.social(
+      await authClient.signIn.social(
         {
           provider: "google",
           callbackURL: targetUrl,
         },
         {
-          onSuccess: (ctx: any) => {
-            if (typeof window !== "undefined" && ctx?.data?.url) {
-              window.location.href = ctx.data.url;
-            }
-          },
           onError: (ctx) => {
             setLoading(false);
             toast.error(
@@ -48,9 +36,6 @@ export default function GoogleSignInButton({
           },
         }
       );
-      if (typeof window !== "undefined" && res?.data?.url) {
-        window.location.href = res.data.url;
-      }
     } catch {
       setLoading(false);
       toast.error("Không thể kết nối đến máy chủ Google.");
