@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   typedRoutes: true,
+  outputFileTracingExcludes: { "/*": ["./dev-fixtures/**/*"] },
   reactCompiler: true,
   transpilePackages: ["shiki"],
 };

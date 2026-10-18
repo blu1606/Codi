@@ -2,6 +2,7 @@ import { and, asc, count, eq, getTableColumns } from "drizzle-orm";
 import { courseChapters, courseDetails, courseLessons, courses, studentEnrollments, user } from "@codi-1/db";
 import { db } from "@/services";
 import type { CourseChapter, CourseDetail } from "./course-details";
+import { listPublicCourseReviews } from "./course-review-service";
 
 export async function getCourseDetail(slug: string): Promise<CourseDetail | null> {
   const [course] = await db
@@ -19,7 +20,7 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     .limit(1);
   if (!course) return null;
 
-  const [detailsRows, rows] = await Promise.all([
+  const [detailsRows, rows, reviews] = await Promise.all([
     db.select().from(courseDetails).where(eq(courseDetails.courseId, course.id)).limit(1),
     db.select({
       chapterId: courseChapters.id, chapterTitle: courseChapters.title,
@@ -29,6 +30,7 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
       .leftJoin(courseLessons, and(eq(courseLessons.chapterId, courseChapters.id), eq(courseLessons.isPublished, true)))
       .where(and(eq(courseChapters.courseId, course.id), eq(courseChapters.isPublished, true)))
       .orderBy(asc(courseChapters.position), asc(courseChapters.id), asc(courseLessons.position), asc(courseLessons.id)),
+    listPublicCourseReviews(db, course.id),
   ]);
   const details = detailsRows[0];
   const chapters = new Map<string, CourseChapter>();
@@ -50,7 +52,6 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     }
   }
   const { instructorName, instructorImage, ...courseData } = course;
-
   return {
     course: { ...courseData, createdAt: courseData.createdAt.toISOString() },
     instructor: instructorName ? {
@@ -61,8 +62,7 @@ export async function getCourseDetail(slug: string): Promise<CourseDetail | null
     } : null,
     rating: course.rating,
     reviewCount: course.reviewCount,
-    ratingBreakdown: [0, 0, 0, 0, 0],
-    reviews: [],
+    reviews,
     learningOutcomes: details?.learningOutcomes ?? [],
     requirements: details?.requirements ?? [],
     targetAudience: details?.targetAudience ?? null,

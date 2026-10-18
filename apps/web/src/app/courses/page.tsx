@@ -120,6 +120,13 @@ export default function CoursesPage() {
         const linkedCourse = targetCourseId ? data.find((c) => c.id === targetCourseId) : null;
         if (linkedCourse) {
           router.replace(`/courses/${encodeURIComponent(linkedCourse.slug)}`);
+        } else if (targetCourseId && typeof window !== "undefined") {
+          // If the course id doesn't exist, remove it from URL so it doesn't linger
+          initialCourseIdRef.current = null;
+          const currentParams = new URLSearchParams(window.location.search);
+          currentParams.delete("course");
+          const qs = currentParams.toString();
+          window.history.replaceState(null, "", qs ? `/courses?${qs}` : "/courses");
         }
       })
       .catch(() => {

@@ -32,6 +32,7 @@ import {
   type CourseDetail,
 } from "@/lib/course-details";
 import type { CourseOwnershipDetail } from "@/lib/course-ownership";
+import CourseReviewList from "./course-review-list";
 import styles from "./course-detail.module.css";
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -267,9 +268,12 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const allExpanded = chapters.length > 0 && chapters.every((ch) => openChapters.has(ch.id));
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
-  const ratingBreakdown = detail.ratingBreakdown ?? [0, 0, 0, 0, 0];
-  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0);
   const reviews = detail.reviews ?? [];
+  // Calculate star breakdown [5-star, 4-star, 3-star, 2-star, 1-star] from reviews
+  const ratingBreakdown = [5, 4, 3, 2, 1].map(
+    (stars) => reviews.filter((r) => r.stars === stars).length,
+  );
+  const totalBreakdown = ratingBreakdown.reduce((sum, n) => sum + n, 0);
 
   return (
     <main className={styles.page}>
@@ -473,9 +477,15 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                     <div className={styles.ratingScore}>
                       <span className={styles.scoreNum}>{detail.rating.toFixed(1)}</span>
                       <div className={styles.starsRow}>
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star key={i} className={`h-4 w-4 ${styles.starFilled}`} />
-                        ))}
+                        {Array.from({ length: 5 }).map((_, i) => {
+                          const isFilled = i < Math.round(detail.rating);
+                          return (
+                            <Star
+                              key={i}
+                              className={`h-4 w-4 ${isFilled ? styles.starFilled : "text-muted-foreground/30 fill-transparent"}`}
+                            />
+                          );
+                        })}
                       </div>
                       <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
                     </div>
@@ -503,39 +513,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   </div>
 
                   {/* Reviews list */}
-                  {reviews.length > 0 ? (
-                    <div className={styles.reviewsList}>
-                      {reviews.map((r) => (
-                        <div key={r.id} className={styles.reviewCard}>
-                          <div className={styles.reviewHeader}>
-                            <div className={styles.userAvatar}>
-                              {getInitials(r.userName)}
-                            </div>
-                            <span className={styles.userName}>{r.userName}</span>
-                            <div className={styles.starsRow}>
-                              {Array.from({ length: r.stars }).map((_, i) => (
-                                <Star key={i} className={`h-3.5 w-3.5 ${styles.starFilled}`} />
-                              ))}
-                            </div>
-                            <span className={styles.reviewDate}>{r.createdAt}</span>
-                          </div>
-
-                          {r.text && <p className={styles.reviewText}>{r.text}</p>}
-
-                          {r.reply && (
-                            <div className={styles.replyBox}>
-                              <div className={styles.replyHeader}>
-                                <MessageCircle className="h-3.5 w-3.5" />
-                                <span>Phản hồi của giảng viên</span>
-                                <span className={styles.replyBadge}>Giảng viên</span>
-                              </div>
-                              <p className={styles.replyText}>{r.reply.text}</p>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
+                  <CourseReviewList reviews={reviews} />
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>

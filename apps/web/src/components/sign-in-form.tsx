@@ -13,7 +13,8 @@ import { Checkbox } from "@codi-1/ui/components/checkbox";
 import { Input } from "@codi-1/ui/components/input";
 import { Label } from "@codi-1/ui/components/label";
 import { useForm } from "@tanstack/react-form";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -24,22 +25,14 @@ import Loader from "./loader";
 
 const REMEMBER_EMAIL_KEY = "codi_remember_email";
 
-function getSafeRedirectUrl(nextParam: string | null): string {
-  if (!nextParam) return "/dashboard";
-  if (nextParam.startsWith("/") && !nextParam.startsWith("//")) {
-    return nextParam;
-  }
-  return "/dashboard";
-}
-
 export default function SignInForm({
   onSwitchToSignUp,
+  returnTo = "/dashboard",
 }: {
   onSwitchToSignUp: () => void;
+  returnTo?: string;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const nextParam = searchParams.get("next");
   const { isPending } = authClient.useSession();
   const [rememberMe, setRememberMe] = useState(false);
 
@@ -65,8 +58,7 @@ export default function SignInForm({
             } catch {
               // Ignore storage errors in restricted contexts
             }
-            const targetUrl = getSafeRedirectUrl(nextParam);
-            router.push(targetUrl as any);
+            router.push(returnTo as Route);
             toast.success("Đăng nhập thành công!");
           },
           onError: (error) => {
@@ -263,8 +255,8 @@ export default function SignInForm({
           </div>
 
           <div className="space-y-3">
-            <GoogleSignInButton text="Continue with Google" />
-            <GitHubSignInButton text="Continue with GitHub" />
+            <GoogleSignInButton text="Continue with Google" callbackURL={returnTo} />
+            <GitHubSignInButton text="Continue with GitHub" callbackURL={returnTo} />
           </div>
 
           <div className="pt-4 text-center text-sm text-muted-foreground">

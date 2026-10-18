@@ -6,7 +6,13 @@ import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 
-export default function GitHubSignInButton({ text = "Tiếp tục với GitHub" }: { text?: string }) {
+export default function GitHubSignInButton({
+  text = "Tiếp tục với GitHub",
+  callbackURL = "/dashboard",
+}: {
+  text?: string;
+  callbackURL?: string;
+}) {
   const [loading, setLoading] = useState(false);
 
   const handleGitHubSignIn = async () => {
@@ -15,7 +21,7 @@ export default function GitHubSignInButton({ text = "Tiếp tục với GitHub" 
       await authClient.signIn.social(
         {
           provider: "github",
-          callbackURL: "/dashboard",
+          callbackURL,
         },
         {
           onError: (ctx) => {
