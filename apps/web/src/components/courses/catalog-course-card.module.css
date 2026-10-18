@@ -105,6 +105,16 @@
   color: var(--accent-foreground);
 }
 
+.badgeWarning {
+  background: var(--warning-soft, #fffbeb);
+  color: var(--warning, #b45309);
+}
+
+:global(.dark) .badgeWarning {
+  background: var(--warning-soft, #4a3d0f);
+  color: var(--warning, #eab308);
+}
+
 .title {
   display: -webkit-box;
   overflow: hidden;

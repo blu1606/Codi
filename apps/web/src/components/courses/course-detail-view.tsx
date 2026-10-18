@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  AlertCircle,
   BarChart3,
   BookOpen,
   Check,
   ChevronDown,
+  ClipboardCheck,
   Clock,
-  Clock3,
-  FileText,
+  EyeOff,
   MessageCircle,
   Presentation,
   RotateCw,
@@ -18,10 +19,12 @@ import {
   Sparkles,
   Star,
   Terminal,
+  Upload,
   User,
   Users,
   Video,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@codi-1/ui/components/button";
 import { Card } from "@codi-1/ui/components/card";
 import { authClient } from "@/lib/auth-client";
@@ -29,9 +32,12 @@ import {
   CourseDetailError,
   fetchCourseDetail,
   formatLessonDuration,
+  getLessonTypeMeta,
   type CourseDetail,
+  type LessonContentType,
 } from "@/lib/course-details";
 import type { CourseOwnershipDetail } from "@/lib/course-ownership";
+import AuthModal from "@/components/auth/auth-modal";
 import CourseReviewList from "./course-review-list";
 import styles from "./course-detail.module.css";
 
@@ -48,36 +54,28 @@ function getInitials(name?: string | null): string {
   if (!name) return "CD";
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[parts.length - 2][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (
+    parts[parts.length - 2][0] + parts[parts.length - 1][0]
+  ).toUpperCase();
 }
 
-function getLessonIcon(title: string) {
-  const lower = title.toLowerCase();
-  if (
-    lower.includes("video") ||
-    lower.includes("giới thiệu") ||
-    lower.includes("cài đặt") ||
-    lower.includes("state") ||
-    lower.includes("props") ||
-    lower.includes("useeffect") ||
-    lower.includes("router cơ bản") ||
-    lower.includes("component") ||
-    lower.includes("gọi api")
-  ) {
-    return Video;
+function getLessonIcon(type: LessonContentType) {
+  switch (type) {
+    case "quiz":
+      return ClipboardCheck;
+    case "assignment":
+      return Upload;
+    case "code":
+    case "tutorial":
+      return Terminal;
+    case "pdf":
+      return Presentation;
+    case "reading":
+      return BookOpen;
+    case "video":
+    default:
+      return Video;
   }
-  if (
-    lower.includes("thử thách") ||
-    lower.includes("luyện tập") ||
-    lower.includes("code") ||
-    lower.includes("reducer")
-  ) {
-    return Terminal;
-  }
-  if (lower.includes("pdf") || lower.includes("slide") || lower.includes("sự kiện") || lower.includes("context api")) {
-    return Presentation;
-  }
-  return BookOpen;
 }
 
 export default function CourseDetailView({ slug }: { slug: string }) {
@@ -92,12 +90,23 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   const [openChapters, setOpenChapters] = useState<Set<string>>(new Set());
 
   // Ownership state
-  const [ownership, setOwnership] = useState<CourseOwnershipDetail | null>(null);
+  const [ownership, setOwnership] = useState<CourseOwnershipDetail | null>(
+    null,
+  );
   const [adding, setAdding] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
 
-  const userRole = (session?.user as { role?: string } | undefined)?.role ?? null;
+  // Gated Auth Modal state (Flow L2, S03)
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [pendingIntent, setPendingIntent] = useState<
+    "add-to-cart" | "buy-now" | "enroll-free" | null
+  >(null);
+  const [intentReason, setIntentReason] = useState("");
+  const isResumingRef = useRef(false);
+
+  const userRole =
+    (session?.user as { role?: string } | undefined)?.role ?? null;
   const isPrivilegedRole = userRole === "lecturer" || userRole === "admin";
 
   useEffect(() => {
@@ -149,13 +158,76 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     return () => controller.abort();
   }, [detail, session?.user?.id]);
 
-  const handleAddToCart = async () => {
-    if (!detail || adding || sessionLoading) return;
-    if (!session?.user) {
-      const nextPath = `/courses/${encodeURIComponent(detail.course.slug)}`;
-      router.push(`/login?next=${encodeURIComponent(nextPath)}`);
+  // Check and resume pending intent stored in sessionStorage (e.g. from page reload or redirect)
+  useEffect(() => {
+    if (!detail || !session?.user) return;
+    if (isResumingRef.current) return;
+    try {
+      const stored = sessionStorage.getItem("codi_pending_course_intent");
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as {
+        courseId?: string;
+        slug?: string;
+        action?: "add-to-cart" | "buy-now" | "enroll-free";
+        createdAt?: number;
+      };
+
+      // 15-minute TTL check
+      const INTENT_TTL_MS = 15 * 60 * 1000;
+      if (parsed.createdAt && Date.now() - parsed.createdAt > INTENT_TTL_MS) {
+        sessionStorage.removeItem("codi_pending_course_intent");
+        return;
+      }
+
+      if (parsed.courseId === detail.course.id || parsed.slug === slug) {
+        sessionStorage.removeItem("codi_pending_course_intent");
+        setPendingIntent(null);
+        isResumingRef.current = true;
+        void (async () => {
+          try {
+            if (parsed.action === "buy-now") {
+              await handleBuyNow(true);
+            } else if (parsed.action === "add-to-cart") {
+              await handleAddToCart(true);
+            } else if (parsed.action === "enroll-free") {
+              await handleEnrollFree(true);
+            }
+          } finally {
+            isResumingRef.current = false;
+          }
+        })();
+      }
+    } catch {
+      // Ignore JSON errors
+    }
+  }, [detail, session?.user, slug]);
+
+  const handleAddToCart = async (isGatedReturn = false) => {
+    if (!detail || adding) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("add-to-cart");
+      try {
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "add-to-cart",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {}
+      setIntentReason(
+        "Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.",
+      );
+      setAuthModalOpen(true);
       return;
     }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới thêm được khoá học vào giỏ.");
+      return;
+    }
+
     setAdding(true);
     setCartMessage("");
     try {
@@ -165,23 +237,70 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         body: JSON.stringify({ courseId: detail.course.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("add-to-cart");
+          setIntentReason(
+            "Đăng nhập để thêm khoá học vào giỏ. Sau khi đăng nhập, khoá học sẽ được thêm tự động.",
+          );
+          setAuthModalOpen(true);
+          return;
+        }
+        throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
+      }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
       setOwnership({ ownership: "in-cart" });
-      setCartMessage(result.added ? `Đã thêm “${detail.course.title}” vào giỏ hàng.` : "Khóa học đã có trong giỏ hàng.");
+      const successText = result.added
+        ? `Đã thêm “${detail.course.title}” vào giỏ hàng.`
+        : "Khóa học đã có trong giỏ hàng.";
+      setCartMessage(successText);
+      toast.success(successText, {
+        action: {
+          label: "Xem giỏ hàng",
+          onClick: () => router.push("/cart" as any),
+        },
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("codi:cart-updated"));
+      }
     } catch (err: unknown) {
-      setCartMessage(err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.");
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Không thể kết nối. Vui lòng thử lại.";
+      setCartMessage(msg);
+      toast.error(msg);
     } finally {
       setAdding(false);
     }
   };
 
-  const handleEnrollFree = async () => {
-    if (!detail || enrolling || sessionLoading) return;
-    if (!session?.user) {
-      const nextPath = `/courses/${encodeURIComponent(detail.course.slug)}`;
-      router.push(`/login?next=${encodeURIComponent(nextPath)}`);
+  const handleEnrollFree = async (isGatedReturn = false) => {
+    if (!detail || enrolling) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("enroll-free");
+      try {
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "enroll-free",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {}
+      setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
+      setAuthModalOpen(true);
       return;
     }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới đăng ký được khoá học.");
+      return;
+    }
+
     setEnrolling(true);
     setCartMessage("");
     try {
@@ -191,16 +310,142 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         body: JSON.stringify({ courseId: detail.course.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Không thể đăng ký khóa học miễn phí.");
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("enroll-free");
+          setIntentReason("Đăng nhập để đăng ký khoá học miễn phí.");
+          setAuthModalOpen(true);
+          return;
+        }
+        throw new Error(result.error || "Không thể đăng ký khóa học miễn phí.");
+      }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
       setOwnership({ ownership: "owned" });
-      setCartMessage(`Đăng ký thành công “${detail.course.title}”! Bạn có thể bắt đầu học ngay.`);
+      const successText = `Đã đăng ký “${detail.course.title}”.`;
+      setCartMessage(successText);
+      toast.success(successText);
     } catch (err: unknown) {
-      setCartMessage(err instanceof Error ? err.message : "Không thể kết nối. Vui lòng thử lại.");
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Không thể kết nối. Vui lòng thử lại.";
+      setCartMessage(msg);
+      toast.error(msg);
     } finally {
       setEnrolling(false);
     }
   };
 
+  const handleBuyNow = async (isGatedReturn = false) => {
+    if (!detail || adding) return;
+    if (!isGatedReturn && !session?.user) {
+      setPendingIntent("buy-now");
+      try {
+        sessionStorage.setItem(
+          "codi_pending_course_intent",
+          JSON.stringify({
+            action: "buy-now",
+            courseId: detail.course.id,
+            slug,
+            createdAt: Date.now(),
+          }),
+        );
+      } catch {}
+      setIntentReason("Đăng nhập để mua khoá học.");
+      setAuthModalOpen(true);
+      return;
+    }
+    if (isPrivilegedRole) {
+      toast.warning("Chỉ tài khoản học viên mới mua được khoá học.");
+      return;
+    }
+
+    setAdding(true);
+    setCartMessage("");
+    try {
+      const response = await fetch("/api/orders/buy-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: detail.course.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (response.status === 401) {
+          setPendingIntent("buy-now");
+          setIntentReason("Đăng nhập để mua khoá học.");
+          setAuthModalOpen(true);
+          return;
+        }
+        if (response.status === 409) {
+          // Already owned
+          try {
+            sessionStorage.removeItem("codi_pending_course_intent");
+          } catch {}
+          setOwnership({ ownership: "owned" });
+          toast.success("Bạn đã sở hữu khóa học này.");
+          return;
+        }
+        throw new Error(result.error || "Không thể xử lý mua ngay.");
+      }
+      try {
+        sessionStorage.removeItem("codi_pending_course_intent");
+      } catch {}
+      // Direct to course checkout page with order param
+      const targetSlug = result.courseSlug || slug;
+      const targetUrl = `/courses/${encodeURIComponent(targetSlug)}/checkout?order=${encodeURIComponent(result.orderCode)}`;
+      window.location.href = targetUrl;
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Không thể xử lý mua ngay.";
+      setCartMessage(msg);
+      toast.error(msg);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleAuthSuccess = async () => {
+    setAuthModalOpen(false);
+    if (isResumingRef.current) return;
+    let intent = pendingIntent;
+    if (!intent) {
+      try {
+        const stored = sessionStorage.getItem("codi_pending_course_intent");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          intent = parsed.action;
+        }
+      } catch {}
+    }
+    setPendingIntent(null);
+    try {
+      sessionStorage.removeItem("codi_pending_course_intent");
+    } catch {}
+
+    if (!intent) return;
+    isResumingRef.current = true;
+
+    // Refresh authClient session store to guarantee current credentials
+    try {
+      await authClient.getSession();
+    } catch {
+      // Continue anyway
+    }
+
+    try {
+      if (intent === "add-to-cart") {
+        await handleAddToCart(true);
+      } else if (intent === "buy-now") {
+        await handleBuyNow(true);
+      } else if (intent === "enroll-free") {
+        await handleEnrollFree(true);
+      }
+    } finally {
+      isResumingRef.current = false;
+    }
+  };
   const toggleChapter = (id: string) => {
     setOpenChapters((current) => {
       const next = new Set(current);
@@ -238,14 +483,19 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
             <BookOpen className="size-10 text-muted-foreground mx-auto" />
             <h1 className="text-2xl font-bold">
-              {error?.notFound ? "Không tìm thấy khoá học" : "Chưa thể tải khoá học"}
+              {error?.notFound
+                ? "Không tìm thấy khoá học"
+                : "Chưa thể tải khoá học"}
             </h1>
             <p role="alert" className="text-sm text-muted-foreground">
               {error?.message}
             </p>
             <div className="flex flex-wrap justify-center gap-3 pt-2">
               {!error?.notFound && (
-                <Button onClick={() => setAttempt((v) => v + 1)} className="gap-1.5 cursor-pointer">
+                <Button
+                  onClick={() => setAttempt((v) => v + 1)}
+                  className="gap-1.5 cursor-pointer"
+                >
                   <RotateCw className="h-4 w-4" />
                   Thử lại
                 </Button>
@@ -263,9 +513,16 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     );
   }
 
-  const { course, chapters, summary, instructor, learningOutcomes, requirements } = detail;
-  const ownState = ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
-  const allExpanded = chapters.length > 0 && chapters.every((ch) => openChapters.has(ch.id));
+  const {
+    course,
+    chapters,
+    summary,
+    instructor,
+    learningOutcomes,
+    requirements,
+  } = detail;
+  const ownState =
+    ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
   const levelText = LEVEL_LABELS[course.level] ?? course.level;
 
   const reviews = detail.reviews ?? [];
@@ -289,6 +546,19 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           </span>
         </nav>
 
+        {/* Hidden notice for already-enrolled learners */}
+        {course.status === "hidden" && ownState === "owned" && (
+          <div
+            role="status"
+            className="rounded-xl border border-info/30 bg-info/10 p-4 text-xs text-info mb-4"
+          >
+            <strong className="block font-semibold mb-1">
+              Khoá học đang tạm ẩn với người mua mới
+            </strong>
+            Bạn đã sở hữu khoá học nên vẫn học bình thường.
+          </div>
+        )}
+
         <div className={styles.layout}>
           {/* Main Column */}
           <div className={styles.mainCol}>
@@ -297,7 +567,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               <h1 className={styles.title}>{course.title}</h1>
               <p className={styles.description}>{course.description}</p>
 
-              {/* Meta stats row matching Screenshot 1 */}
+              {/* Meta stats row */}
               <div className={styles.metaRow}>
                 <span className={styles.metaItem}>
                   <BarChart3 className="h-4 w-4" />
@@ -308,13 +578,23 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   <span>{course.duration}</span>
                 </span>
                 <span className={styles.metaItem}>
-                  <Star className={`h-4 w-4 ${styles.starFilled}`} />
-                  <strong className="text-foreground">{detail.rating.toFixed(1)}</strong>
-                  <span>({detail.reviewCount} đánh giá)</span>
+                  {detail.rating > 0 && detail.reviewCount > 0 ? (
+                    <>
+                      <Star className={`h-4 w-4 ${styles.starFilled}`} />
+                      <strong className="text-foreground">
+                        {detail.rating.toFixed(1)}
+                      </strong>
+                      <span>({detail.reviewCount} đánh giá)</span>
+                    </>
+                  ) : (
+                    <span>Chưa có đánh giá</span>
+                  )}
                 </span>
                 <span className={styles.metaItem}>
                   <Users className="h-4 w-4" />
-                  <span>{course.enrollmentCount.toLocaleString("vi-VN")} học viên</span>
+                  <span>
+                    {course.enrollmentCount.toLocaleString("vi-VN")} học viên
+                  </span>
                 </span>
                 {instructor && (
                   <span className={styles.metaItem}>
@@ -325,8 +605,11 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </div>
             </header>
 
-            {/* 01 · Bạn sẽ học được gì? (Screenshot 1) */}
-            <section className={styles.section} aria-labelledby="outcomes-heading">
+            {/* 01 · Bạn sẽ học được gì? */}
+            <section
+              className={styles.section}
+              aria-labelledby="outcomes-heading"
+            >
               <h2 id="outcomes-heading" className={styles.sectionTitle}>
                 01 · Bạn sẽ học được gì?
               </h2>
@@ -346,8 +629,11 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               )}
             </section>
 
-            {/* 02 · Nội dung khóa học (Screenshot 1) */}
-            <section className={styles.section} aria-labelledby="curriculum-heading">
+            {/* 02 · Nội dung khóa học (S02 Syllabus) */}
+            <section
+              className={styles.section}
+              aria-labelledby="curriculum-heading"
+            >
               <div className={styles.curriculumHeader}>
                 <h2 id="curriculum-heading" className={styles.sectionTitle}>
                   02 · Nội dung khóa học
@@ -356,7 +642,9 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   <div className={styles.curriculumActions}>
                     <button
                       type="button"
-                      onClick={() => setOpenChapters(new Set(chapters.map((ch) => ch.id)))}
+                      onClick={() =>
+                        setOpenChapters(new Set(chapters.map((ch) => ch.id)))
+                      }
                       className={styles.expandBtn}
                     >
                       Mở rộng tất cả
@@ -373,22 +661,27 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </div>
 
               <p className={styles.curriculumSummary}>
-                {chapters.length} chương · {summary.lessonCount} bài học · {course.duration}
+                {chapters.length} chương · {summary.lessonCount} bài học ·{" "}
+                {course.duration}
               </p>
 
               {chapters.length === 0 ? (
-                <div className="p-6 rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground">
-                  Nội dung học đang được chuẩn bị. Giảng viên sẽ sớm cập nhật đề cương.
+                <div className="p-6 rounded-xl border border-dashed border-border bg-muted/20 text-center text-sm text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Nội dung học đang được chuẩn bị
+                  </p>
+                  <p>Giảng viên sẽ sớm cập nhật đề cương.</p>
                 </div>
               ) : (
                 <div className={styles.chaptersList}>
-                  {chapters.map((chapter, i) => {
+                  {chapters.map((chapter) => {
                     const isOpen = openChapters.has(chapter.id);
                     const chapterDuration = chapter.lessons.reduce(
                       (acc, les) => acc + (les.durationSeconds || 0),
-                      0
+                      0,
                     );
-                    const formattedDuration = formatLessonDuration(chapterDuration);
+                    const formattedDuration =
+                      formatLessonDuration(chapterDuration);
 
                     return (
                       <div key={chapter.id} className={styles.chapterCard}>
@@ -400,25 +693,49 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                         >
                           <span>{chapter.title}</span>
                           <span className={styles.chapterMeta}>
-                            {chapter.lessons.length} bài{formattedDuration ? ` · ${formattedDuration}` : ""}
+                            {chapter.lessons.length} bài
+                            {formattedDuration ? ` · ${formattedDuration}` : ""}
                           </span>
                         </button>
 
                         {isOpen && (
                           <ul className={styles.lessonsList}>
                             {chapter.lessons.map((lesson) => {
-                              const LessonIcon = getLessonIcon(lesson.title);
+                              const meta = getLessonTypeMeta(lesson.title);
+                              const LessonIcon = getLessonIcon(meta.type);
+
                               return (
-                                <li key={lesson.id} className={styles.lessonItem}>
+                                <li
+                                  key={lesson.id}
+                                  className={styles.lessonItem}
+                                >
                                   <div className={styles.lessonMain}>
-                                    <LessonIcon className={`h-4 w-4 ${styles.lessonIcon}`} />
-                                    <span>{lesson.title}</span>
+                                    <LessonIcon
+                                      className={`h-4 w-4 ${styles.lessonIcon}`}
+                                    />
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
+                                      <span className="font-medium text-foreground">
+                                        {lesson.title}
+                                      </span>
+                                      <span className="text-[11px] text-muted-foreground font-normal">
+                                        {meta.label}
+                                      </span>
+                                    </div>
                                   </div>
-                                  {lesson.durationSeconds > 0 && (
-                                    <span className={styles.lessonDuration}>
-                                      {formatLessonDuration(lesson.durationSeconds)}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {lesson.isFreePreview && (
+                                      <span className="inline-flex items-center rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground border border-accent/30">
+                                        Học thử
+                                      </span>
+                                    )}
+                                    {lesson.durationSeconds > 0 && (
+                                      <span className={styles.lessonDuration}>
+                                        {formatLessonDuration(
+                                          lesson.durationSeconds,
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
                                 </li>
                               );
                             })}
@@ -431,8 +748,11 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               )}
             </section>
 
-            {/* 03 · Yêu cầu trước khi học (Screenshot 2) */}
-            <section className={styles.section} aria-labelledby="requirements-heading">
+            {/* 03 · Yêu cầu trước khi học */}
+            <section
+              className={styles.section}
+              aria-labelledby="requirements-heading"
+            >
               <h2 id="requirements-heading" className={styles.sectionTitle}>
                 03 · Yêu cầu trước khi học
               </h2>
@@ -443,12 +763,17 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">Không có yêu cầu đặc biệt.</p>
+                <p className="text-sm text-muted-foreground">
+                  Không có yêu cầu đặc biệt.
+                </p>
               )}
             </section>
 
-            {/* 04 · Giảng viên (Screenshot 2) */}
-            <section className={styles.section} aria-labelledby="instructor-heading">
+            {/* 04 · Giảng viên */}
+            <section
+              className={styles.section}
+              aria-labelledby="instructor-heading"
+            >
               <h2 id="instructor-heading" className={styles.sectionTitle}>
                 04 · Giảng viên
               </h2>
@@ -463,19 +788,24 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               </div>
             </section>
 
-            {/* Đánh giá của học viên (Screenshot 2) */}
-            <section className={styles.section} aria-labelledby="reviews-heading">
+            {/* Đánh giá của học viên */}
+            <section
+              id="reviews"
+              className={styles.section}
+              aria-labelledby="reviews-heading"
+            >
               <h2 id="reviews-heading" className={styles.sectionTitle}>
                 Đánh giá của học viên
               </h2>
 
-              {/* Reviews section */}
-              {detail.reviewCount > 0 ? (
+              {reviews.length > 0 || detail.reviewCount > 0 ? (
                 <>
                   {/* Score breakdown card */}
                   <div className={styles.ratingBox}>
                     <div className={styles.ratingScore}>
-                      <span className={styles.scoreNum}>{detail.rating.toFixed(1)}</span>
+                      <span className={styles.scoreNum}>
+                        {detail.rating.toFixed(1)}
+                      </span>
                       <div className={styles.starsRow}>
                         {Array.from({ length: 5 }).map((_, i) => {
                           const isFilled = i < Math.round(detail.rating);
@@ -487,24 +817,35 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                           );
                         })}
                       </div>
-                      <span className={styles.ratingTotal}>{detail.reviewCount} đánh giá</span>
+                      <span className={styles.ratingTotal}>
+                        {detail.reviewCount} đánh giá
+                      </span>
                     </div>
 
                     {totalBreakdown > 0 ? (
                       <div className={styles.breakdownList}>
                         {[5, 4, 3, 2, 1].map((stars, idx) => {
                           const countVal = ratingBreakdown[idx] ?? 0;
-                          const pct = Math.round((countVal / totalBreakdown) * 100);
+                          const pct = Math.round(
+                            (countVal / totalBreakdown) * 100,
+                          );
                           return (
                             <div key={stars} className={styles.breakdownRow}>
-                              <span className={styles.breakdownLabel}>{stars} sao</span>
-                              <div className={styles.breakdownTrack} aria-hidden="true">
+                              <span className={styles.breakdownLabel}>
+                                {stars} sao
+                              </span>
+                              <div
+                                className={styles.breakdownTrack}
+                                aria-hidden="true"
+                              >
                                 <div
                                   className={styles.breakdownFill}
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
-                              <span className={styles.breakdownCount}>{countVal}</span>
+                              <span className={styles.breakdownCount}>
+                                {countVal}
+                              </span>
                             </div>
                           );
                         })}
@@ -516,12 +857,20 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   <CourseReviewList reviews={reviews} />
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>
+                <div className="rounded-xl border border-border/60 bg-card p-6 text-center text-muted-foreground">
+                  <p className="text-sm font-medium">
+                    Chưa có đánh giá nào cho khoá học này.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Đánh giá và nhận xét từ sinh viên đã học sẽ được hiển thị
+                    tại đây.
+                  </p>
+                </div>
               )}
             </section>
           </div>
 
-          {/* Sticky Sidebar matching Screenshots 1 & 2 */}
+          {/* Sticky Sidebar (S02 Purchase Card) */}
           <aside className={styles.sidebar} aria-label="Đăng ký khóa học">
             <div className={styles.sidebarCard}>
               <h2 className={styles.sidebarTitle}>Đăng ký khóa học</h2>
@@ -529,14 +878,17 @@ export default function CourseDetailView({ slug }: { slug: string }) {
               <div className={styles.priceSection}>
                 <span className={styles.priceLabel}>Học phí khóa học</span>
                 <span className={styles.priceValue}>
-                  {course.price === 0 ? "Miễn phí" : `${course.price.toLocaleString("vi-VN")} ₫`}
+                  {course.price === 0
+                    ? "Miễn phí"
+                    : `${course.price.toLocaleString("vi-VN")} ₫`}
                 </span>
               </div>
 
-              {/* Ownership-aware CTA section */}
+              {/* Ownership-aware CTA section (Flow L1, §7.2, decision 42) */}
               {isPrivilegedRole ? (
                 <p className="text-xs text-muted-foreground">
-                  Bạn đang xem với vai trò {userRole === "lecturer" ? "giảng viên" : "quản trị viên"}. Chỉ tài khoản học viên mới mua được khoá học.
+                  Bạn đang xem với vai trò {userRole === "lecturer" ? "giảng viên" : "quản trị viên"}. Chỉ tài khoản học viên
+                  mới mua được khoá học.
                 </p>
               ) : ownState === "owned" ? (
                 <Link
@@ -551,27 +903,39 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                     Đơn hàng đang chờ thanh toán.
                   </div>
                   <Link
-                    href={(ownership?.pendingOrderId ? `/checkout?order=${ownership.pendingOrderId}` : "/checkout") as any}
+                    href={
+                      (ownership?.pendingOrderId
+                        ? `/checkout?order=${ownership.pendingOrderId}`
+                        : `/checkout`) as any
+                    }
                     className={styles.ctaPrimaryBtn}
                   >
                     Tiếp tục thanh toán
                   </Link>
                 </>
               ) : ownState === "in-cart" ? (
-                <>
-                  <button type="button" disabled className={styles.ctaSecondaryBtn}>
+                <div className="flex flex-col gap-2.5">
+                  <div className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-primary bg-primary/10 rounded-lg py-2">
                     <Check className="h-4 w-4" />
                     Đã trong giỏ hàng
-                  </button>
+                  </div>
                   <Link href={"/cart" as any} className={styles.ctaPrimaryBtn}>
-                    Xem giỏ hàng / Thanh toán
+                    Thanh toán
                   </Link>
-                </>
+                  <button
+                    type="button"
+                    onClick={() => handleBuyNow()}
+                    disabled={adding}
+                    className={styles.ctaSecondaryBtn}
+                  >
+                    Mua ngay
+                  </button>
+                </div>
               ) : ownState === "free" ? (
                 <>
                   <button
                     type="button"
-                    onClick={handleEnrollFree}
+                    onClick={() => handleEnrollFree()}
                     disabled={enrolling}
                     className={styles.ctaPrimaryBtn}
                   >
@@ -582,16 +946,26 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                   </p>
                 </>
               ) : (
-                /* Paid course: Thêm vào giỏ. (Mua ngay pending backend createBuyNowOrder implementation theo D4) */
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  disabled={adding}
-                  className={styles.ctaPrimaryBtn}
-                >
-                  <ShoppingCart className="h-4 w-4" />
-                  {adding ? "Đang thêm…" : "Thêm vào giỏ hàng"}
-                </button>
+                /* Paid course: Mua ngay (primary) + Thêm vào giỏ (secondary) (mockup decision 42) */
+                <div className="flex flex-col gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleBuyNow()}
+                    disabled={adding}
+                    className={styles.ctaPrimaryBtn}
+                  >
+                    Mua ngay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddToCart()}
+                    disabled={adding}
+                    className={styles.ctaSecondaryBtn}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    {adding ? "Đang thêm…" : "Thêm vào giỏ"}
+                  </button>
+                </div>
               )}
 
               {cartMessage && (
@@ -632,6 +1006,24 @@ export default function CourseDetailView({ slug }: { slug: string }) {
           </aside>
         </div>
       </div>
+
+      {/* S03 Gated Sign-in / OTP Modal */}
+      <AuthModal
+        open={authModalOpen}
+        onOpenChange={(open) => {
+          setAuthModalOpen(open);
+          if (!open) {
+            setPendingIntent(null);
+            try {
+              sessionStorage.removeItem("codi_pending_course_intent");
+            } catch {}
+          }
+        }}
+        returnTo={`/courses/${course.slug}`}
+        intentReason={intentReason}
+        courseTitle={detail?.course.title}
+        onSuccess={handleAuthSuccess}
+      />
     </main>
   );
 }

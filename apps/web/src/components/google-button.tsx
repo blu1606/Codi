@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/safe-redirect";
 
 export default function GoogleSignInButton({
   text = "Tiếp tục với Google",
@@ -18,26 +19,26 @@ export default function GoogleSignInButton({
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
+      const targetUrl = safeNext(callbackURL, "/dashboard");
+
       await authClient.signIn.social(
         {
           provider: "google",
-          callbackURL,
+          callbackURL: targetUrl,
         },
         {
           onError: (ctx) => {
             setLoading(false);
             toast.error(
               ctx.error.message ||
-                "Chưa cấu hình Google Client ID / Secret trong Better Auth. Vui lòng thử đăng nhập bằng Email/Password."
+                "Đăng nhập với Google thất bại. Vui lòng thử lại hoặc đăng nhập bằng Email."
             );
           },
         }
       );
     } catch {
       setLoading(false);
-      toast.info(
-        "Chức năng Google OAuth đang ở chế độ giao diện (UI). Cần cấu hình Google Client ID/Secret trên Google Console để hoàn tất đăng nhập."
-      );
+      toast.error("Không thể kết nối đến máy chủ Google.");
     }
   };
 

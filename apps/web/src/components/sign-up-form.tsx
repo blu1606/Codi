@@ -19,12 +19,21 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/safe-redirect";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
 import OtpInput from "./otp-input";
 
-export default function SignUpForm({ onSwitchToSignIn, returnTo = "/dashboard" }: { onSwitchToSignIn: () => void; returnTo?: string }) {
+export default function SignUpForm({
+  onSwitchToSignIn,
+  onSuccess,
+  returnTo = "/dashboard",
+}: {
+  onSwitchToSignIn: () => void;
+  onSuccess?: () => void;
+  returnTo?: string;
+}) {
   const router = useRouter();
   const { isPending } = authClient.useSession();
   const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
@@ -80,10 +89,20 @@ export default function SignUpForm({ onSwitchToSignIn, returnTo = "/dashboard" }
         },
         {
           onSuccess: () => {
+            try {
+              authClient.$store.notify("$sessionSignal");
+            } catch {
+              // Ignore
+            }
             toast.success("Xác thực email thành công! Đang chuyển hướng vào hệ thống...");
-            setTimeout(() => {
-              router.push(returnTo as Route);
-            }, 1000);
+            if (onSuccess) {
+              onSuccess();
+            } else {
+              const safeDestination = safeNext(returnTo, "/dashboard");
+              setTimeout(() => {
+                router.push(safeDestination as Route);
+              }, 1000);
+            }
           },
           onError: (ctx) => {
             toast.error(ctx.error.message || "Mã OTP không chính xác hoặc đã hết hạn 2 phút.");

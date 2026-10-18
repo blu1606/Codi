@@ -23,6 +23,8 @@ const BRAND_MAP: Record<string, { logo: string; name: string }> = {
   "course-node-001": { logo: "/logos/nodedotjs.svg", name: "Node.js" },
   "course-python-001": { logo: "/logos/python.svg", name: "Python" },
   "course-git-001": { logo: "/logos/git.svg", name: "Git" },
+  "course-jest-001": { logo: "/logos/jest.svg", name: "Jest" },
+  "kiem-thu-voi-jest": { logo: "/logos/jest.svg", name: "Jest" },
 };
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -58,6 +60,7 @@ export function CatalogCourseCard({
   onEnrollFree,
 }: Props) {
   const href = `/courses/${encodeURIComponent(course.slug)}` as const;
+  const isHidden = course.status === "hidden";
   const ownState = ownership?.ownership ?? (course.price === 0 ? "free" : "not-owned");
   const isPrivilegedRole = userRole === "lecturer" || userRole === "admin";
   const brand = BRAND_MAP[course.id] || BRAND_MAP[course.slug];
@@ -96,6 +99,11 @@ export function CatalogCourseCard({
           <span className={`${styles.badge} ${styles.badgeNeutral}`}>
             {LEVEL_LABELS[course.level] ?? course.level}
           </span>
+          {isHidden && (
+            <span className={`${styles.badge} ${styles.badgeWarning}`}>
+              Tạm ngừng
+            </span>
+          )}
           {ownState === "owned" && (
             <span className={`${styles.badge} ${styles.badgeSuccess}`}>
               <Check className="h-3 w-3" />
@@ -141,13 +149,17 @@ export function CatalogCourseCard({
           </span>
 
           <div>
-            {isPrivilegedRole ? (
+            {ownState === "owned" ? (
+              <Link href={`/learn/${course.id}` as any} className={`${styles.ctaBtn} ${styles.ctaPrimary}`}>
+                Tiếp tục học
+              </Link>
+            ) : isHidden ? (
               <Link href={href} className={`${styles.ctaBtn} ${styles.ctaSecondary}`}>
                 Xem chi tiết
               </Link>
-            ) : ownState === "owned" ? (
-              <Link href={`/learn/${course.id}` as any} className={`${styles.ctaBtn} ${styles.ctaPrimary}`}>
-                Tiếp tục học
+            ) : isPrivilegedRole ? (
+              <Link href={href} className={`${styles.ctaBtn} ${styles.ctaSecondary}`}>
+                Xem chi tiết
               </Link>
             ) : ownState === "pending-payment" ? (
               <Link

@@ -15,6 +15,7 @@ import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 import NotificationMenu from "./notification-menu";
 import BrandLogo from "./brand-logo";
+import CartNavButton from "./cart-nav-button";
 
 export default function Header() {
   const pathname = usePathname();
@@ -43,7 +44,7 @@ export default function Header() {
         <div data-codi-intro-nav aria-busy={isPending || loading}>{nav(false)}</div>
       </div>
       <div data-codi-intro-account className="flex shrink-0 items-center gap-1 sm:gap-2">
-        {role === ROLE.LEARNER && <Link href={{ pathname: "/cart" }} aria-label="Giỏ hàng" className="hidden size-11 items-center justify-center rounded-md hover:bg-muted sm:flex"><ShoppingCart aria-hidden="true" className="size-5" /></Link>}
+        {role === ROLE.LEARNER && <CartNavButton />}
         <ModeToggle />
         <NotificationMenu />
         <UserMenu role={role} />

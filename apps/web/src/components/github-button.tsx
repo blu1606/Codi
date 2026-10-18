@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/safe-redirect";
 
 export default function GitHubSignInButton({
   text = "Tiếp tục với GitHub",
@@ -18,26 +19,26 @@ export default function GitHubSignInButton({
   const handleGitHubSignIn = async () => {
     try {
       setLoading(true);
+      const targetUrl = safeNext(callbackURL, "/dashboard");
+
       await authClient.signIn.social(
         {
           provider: "github",
-          callbackURL,
+          callbackURL: targetUrl,
         },
         {
           onError: (ctx) => {
             setLoading(false);
             toast.error(
               ctx.error.message ||
-                "Chưa cấu hình GitHub Client ID / Secret trong Better Auth. Vui lòng kiểm tra file .env."
+                "Đăng nhập với GitHub thất bại. Vui lòng thử lại hoặc đăng nhập bằng Email."
             );
           },
         }
       );
     } catch {
       setLoading(false);
-      toast.info(
-        "Chức năng GitHub OAuth đang ở chế độ giao diện (UI). Cần cấu hình GitHub Client ID/Secret để hoàn tất đăng nhập."
-      );
+      toast.error("Không thể kết nối đến máy chủ GitHub.");
     }
   };
 

@@ -1,7 +1,19 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ limit: vi.fn(), values: vi.fn(), getSession: vi.fn(), transaction: vi.fn() }));
 vi.mock("@/services", () => ({
- db: { select: () => ({ from: () => ({ where: () => ({ limit: mocks.limit }) }) }), insert: () => ({ values: mocks.values }), transaction: mocks.transaction },
+ db: {
+   select: () => {
+     const queryObj: any = {
+       where: () => ({ limit: mocks.limit }),
+       limit: mocks.limit,
+     };
+     queryObj.innerJoin = () => queryObj;
+     queryObj.from = () => queryObj;
+     return queryObj;
+   },
+   insert: () => ({ values: mocks.values }),
+   transaction: mocks.transaction
+ },
  auth: { api: { getSession: mocks.getSession } }
 }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
@@ -22,6 +34,10 @@ it.each([undefined, "", "   "])("fails closed without a webhook secret (%s)", as
 });
 it("rejects invalid webhook authentication", async () => { expect((await callback(request({}, false))).status).toBe(401); });
 it("returns authoritative price and configured receiver for a database-only slug", async () => {
+ mocks.limit
+   .mockResolvedValueOnce([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000 }])
+   .mockResolvedValueOnce([])
+   .mockResolvedValueOnce([]);
  const response = await create(request({ courseSlug: "database-only", amount: 1, userId: "attacker" }));
  expect(response.status).toBe(200);
  expect(await response.json()).toMatchObject({ amount: 125000, receiver: { bankCode: "VCB", accountNumber: "12345678" }, course: { id: "db-id", title: "Database course" } });
@@ -43,12 +59,215 @@ it.each(["out", "wrong-account"])("ignores unrelated transfer %s before database
  const response = await callback(request({ transferType: kind === "out" ? "out" : "in", accountNumber: kind === "wrong-account" ? "999" : "12345678", content: "CODI12345", transferAmount: 125000 }));
  expect(response.status).toBe(200); expect(mocks.limit).not.toHaveBeenCalled();
 });
-it("enrolls only a sufficiently funded authenticated incoming transfer", async () => {
- mocks.limit.mockResolvedValue([{ id: "CODI12345", amount: 125000, status: "pending", userId: "session-user", courseId: "db-id" }]);
- const update = vi.fn(); const enroll = vi.fn();
- mocks.transaction.mockImplementation(async (fn) => fn({ update: () => ({ set: (value: unknown) => { update(value); return { where: vi.fn() }; } }), insert: () => ({ values: (value: unknown) => { enroll(value); return { onConflictDoNothing: vi.fn() }; } }) }));
- await callback(request({ transferType: "in", accountNumber: "12345678", content: "CODI12345", transferAmount: 1 }));
- expect(mocks.transaction).not.toHaveBeenCalled();
- await callback(request({ transferType: "in", accountNumber: "12345678", content: "CODI12345", transferAmount: 125000 }));
- expect(update).toHaveBeenCalledWith({ status: "paid" }); expect(enroll).toHaveBeenCalledWith({ userId: "session-user", courseId: "db-id" });
+it("enrolls only a sufficiently funded authenticated incoming transfer and settles matched order", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI12345",
+      amount: 125000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "db-id",
+    },
+  ]);
+  const update = vi.fn();
+  const enroll = vi.fn();
+  const insertEvent = vi.fn();
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: vi.fn().mockResolvedValue([{ id: "order-123", status: "pending" }]),
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (value: unknown) => {
+          update(value);
+          return {
+            where: () => ({
+              returning: vi.fn().mockImplementation(() => [{ id: "order-123", totalAmount: 125000 }]),
+            }),
+          };
+        },
+      }),
+      insert: () => ({
+        values: (value: unknown) => {
+          if (value && typeof value === "object" && "orderId" in value) {
+            insertEvent(value);
+            return {};
+          }
+          enroll(value);
+          return { onConflictDoNothing: vi.fn() };
+        },
+      }),
+    }),
+  );
+
+  await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 1,
+    }),
+  );
+  expect(mocks.transaction).not.toHaveBeenCalled();
+
+  await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 125000,
+    }),
+  );
+  expect(update).toHaveBeenCalledWith(
+    expect.objectContaining({ status: "paid" }),
+  );
+  expect(enroll).toHaveBeenCalledWith({
+    userId: "session-user",
+    courseId: "db-id",
+  });
+  expect(insertEvent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      orderId: "order-123",
+      actorId: "session-user",
+    }),
+  );
+});
+
+it("does not enroll learner if the order is already cancelled or expired", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI12345",
+      amount: 125000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "db-id",
+    },
+  ]);
+  const update = vi.fn();
+  const enroll = vi.fn();
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: vi.fn().mockResolvedValue([{ id: "order-123", status: "cancelled" }]),
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (value: unknown) => {
+          update(value);
+          return {
+            where: vi.fn(),
+          };
+        },
+      }),
+      insert: () => ({
+        values: (value: unknown) => {
+          enroll(value);
+          return { onConflictDoNothing: vi.fn() };
+        },
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 125000,
+    }),
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({
+    success: true,
+    message: "Order not pending, marked for reconciliation",
+  });
+  expect(update).toHaveBeenCalledWith({ status: "failed" });
+  expect(enroll).not.toHaveBeenCalled();
+});
+
+it("reuses and validates orderCode in create-transaction", async () => {
+  mocks.limit
+    .mockResolvedValueOnce([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000 }])
+    .mockResolvedValueOnce([{ id: 10, code: "CODI12345", totalAmount: 120000 }])
+    .mockResolvedValueOnce([]); // existingTx check
+
+  const response = await create(
+    request({ courseId: "db-id", orderCode: "CODI12345" })
+  );
+
+  expect(response.status).toBe(200);
+  const data = await response.json();
+  expect(data.transactionId).toBe("CODI12345");
+  expect(data.amount).toBe(120000);
+  expect(mocks.values).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: "CODI12345",
+      userId: "session-user",
+      courseId: "db-id",
+      amount: 120000,
+      status: "pending",
+    })
+  );
+});
+
+it("ignores callback if transaction is already processed concurrently", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI12345",
+      amount: 125000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "db-id",
+    },
+  ]);
+  const enroll = vi.fn();
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
+      update: () => ({
+        set: () => ({
+          where: () => ({
+            returning: vi.fn().mockReturnValue([]),
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: (value: unknown) => {
+          enroll(value);
+          return { onConflictDoNothing: vi.fn() };
+        },
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 125000,
+    }),
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({
+    success: true,
+    message: "Already processed",
+  });
+  expect(enroll).not.toHaveBeenCalled();
 });

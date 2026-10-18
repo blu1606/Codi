@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, count, desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/services";
 import { courses, courseDetails, studentEnrollments, user } from "@codi-1/db";
 
@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const sort = request.nextUrl.searchParams.get("sort") ?? "title";
   const limitParam = request.nextUrl.searchParams.get("limit");
   const limit = limitParam === null ? undefined : Number(limitParam);
+  const includeHidden = request.nextUrl.searchParams.get("include_hidden") === "true";
 
   if (sort !== "title" && sort !== "popular") {
     return NextResponse.json({ error: "Invalid sort" }, { status: 400 });
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
   try {
     // Count enrollment rows, not activity events, so each learner is counted once.
     const enrollmentCount = count(studentEnrollments.id);
+    const statusFilter = includeHidden
+      ? inArray(courses.status, ["published", "hidden"])
+      : eq(courses.status, "published");
+
     // Public catalogue fields only: lifecycle, pricing audit and knowledge-map columns stay internal.
     const query = db
       .select({
@@ -25,6 +30,7 @@ export async function GET(request: NextRequest) {
         level: courses.level, duration: courses.duration, description: courses.description,
         price: courses.price, instructorId: courses.instructorId, rating: courses.rating,
         reviewCount: courses.reviewCount, createdAt: courses.createdAt,
+        status: courses.status,
         enrollmentCount, coverImageUrl: courseDetails.coverImageUrl,
         instructorName: user.name,
       })
@@ -32,7 +38,7 @@ export async function GET(request: NextRequest) {
       .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
       .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))
       .leftJoin(user, eq(courses.instructorId, user.id))
-      .where(eq(courses.status, "published"))
+      .where(statusFilter)
       .groupBy(courses.id, courseDetails.coverImageUrl, user.name)
       .orderBy(...(sort === "popular"
         ? [desc(enrollmentCount), asc(courses.title), asc(courses.id)]
