@@ -68,7 +68,7 @@ export async function getEditableCourse(courseId: string) {
 /**
  * Đánh dấu bản đồ kiến thức là 'stale' nếu khoá học đã xuất bản bị chỉnh sửa nội dung (D17).
  */
-async function markKnowledgeMapStaleIfPublished(
+export async function markKnowledgeMapStaleIfPublished(
   course: typeof courses.$inferSelect,
   executor: any = db
 ) {

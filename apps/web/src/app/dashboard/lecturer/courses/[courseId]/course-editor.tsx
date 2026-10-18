@@ -11,6 +11,7 @@ import {
   BookOpen,
   Check,
   CheckCircle2,
+  Code2,
   Eye,
   FileText,
   HelpCircle,
@@ -573,6 +574,17 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                               >
                                 <HelpCircle className="size-3.5 text-primary" />
                                 Quiz
+                              </Link>
+                              {/* Nút thêm / sửa bài tập code */}
+                              <Link
+                                href={`/dashboard/lecturer/courses/${courseId}/code/${ls.id}`}
+                                className={cn(
+                                  buttonVariants({ variant: "outline", size: "sm" }),
+                                  "text-xs gap-1"
+                                )}
+                              >
+                                <Code2 className="size-3.5 text-primary" />
+                                Code
                               </Link>
                               <Button
                                 variant="ghost"
