@@ -96,10 +96,12 @@ export default function CourseDetailView({ slug }: { slug: string }) {
     return () => controller.abort();
   }, [slug, attempt]);
 
+  const [buying, setBuying] = useState(false);
+
   const handleAddToCart = async () => {
-    if (!detail || adding || sessionLoading || inCart) return;
+    if (!detail || adding || buying || sessionLoading || inCart) return;
     if (!session?.user) {
-      router.push("/login");
+      router.push(`/login?returnTo=${encodeURIComponent(`/courses/${slug}`)}` as any);
       return;
     }
     setAdding(true);
@@ -127,6 +129,39 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       );
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!detail || buying || adding || sessionLoading) return;
+    if (!session?.user) {
+      router.push(`/login?returnTo=${encodeURIComponent(`/courses/${slug}`)}` as any);
+      return;
+    }
+    setBuying(true);
+    setCartMessage("");
+    try {
+      const response = await fetch("/api/orders/buy-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: detail.course.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Không thể khởi tạo mua ngay.");
+      }
+      if (result.orderId) {
+        router.push(`/checkout?order=${result.orderId}` as any);
+      } else if (result.orderCode) {
+        router.push(`/courses/${encodeURIComponent(slug)}/checkout?order=${result.orderCode}` as any);
+      }
+    } catch (err: unknown) {
+      setCartMessage(
+        err instanceof Error
+          ? err.message
+          : "Không thể kết nối. Vui lòng thử lại.",
+      );
+      setBuying(false);
     }
   };
 
@@ -319,24 +354,42 @@ export default function CourseDetailView({ slug }: { slug: string }) {
                     ? "Miễn phí"
                     : `${course.price.toLocaleString("vi-VN")} ₫`}
                 </p>
-                <Button
-                  onClick={handleAddToCart}
-                  disabled={adding || sessionLoading || inCart}
-                  className={styles.enrollButton}
-                >
-                  {adding ? (
-                    <Loader2
-                      aria-hidden="true"
-                      className="size-4 animate-spin"
-                    />
-                  ) : (
-                    <ShoppingBag aria-hidden="true" className="size-4" />
+                <div className="flex flex-col gap-2.5 mt-5">
+                  {course.price > 0 && (
+                    <Button
+                      onClick={handleBuyNow}
+                      disabled={buying || adding || sessionLoading}
+                      className="w-full h-11 rounded-lg text-sm font-semibold"
+                    >
+                      {buying ? (
+                        <Loader2
+                          aria-hidden="true"
+                          className="size-4 animate-spin"
+                        />
+                      ) : null}
+                      {buying ? "Đang xử lý…" : "Mua ngay"}
+                    </Button>
                   )}
-                  {inCart ? "Đã trong giỏ hàng" : "Thêm vào giỏ"}
-                  {!adding && !inCart && (
-                    <ArrowRight aria-hidden="true" className="ml-auto size-4" />
-                  )}
-                </Button>
+                  <Button
+                    onClick={handleAddToCart}
+                    variant={course.price > 0 ? "outline" : "default"}
+                    disabled={adding || buying || sessionLoading || inCart}
+                    className="w-full h-11 rounded-lg text-sm font-semibold"
+                  >
+                    {adding ? (
+                      <Loader2
+                        aria-hidden="true"
+                        className="size-4 animate-spin"
+                      />
+                    ) : (
+                      <ShoppingBag aria-hidden="true" className="size-4" />
+                    )}
+                    {inCart ? "Đã trong giỏ hàng" : course.price === 0 ? "Đăng ký miễn phí" : "Thêm vào giỏ"}
+                    {!adding && !inCart && course.price > 0 && (
+                      <ArrowRight aria-hidden="true" className="ml-auto size-4" />
+                    )}
+                  </Button>
+                </div>
                 {cartMessage && (
                   <p
                     role="status"

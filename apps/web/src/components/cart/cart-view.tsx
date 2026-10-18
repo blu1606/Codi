@@ -109,6 +109,46 @@ export function CartView() {
     await fetchCart("");
   };
 
+  const [cancellingOrder, setCancellingOrder] = useState(false);
+  const [undoSeconds, setUndoSeconds] = useState<number>(0);
+
+  useEffect(() => {
+    if (!lastRemoved || undoSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setUndoSeconds((prev) => {
+        if (prev <= 1) {
+          setLastRemoved(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lastRemoved, undoSeconds]);
+
+  const handleCancelPendingOrder = async (orderId?: number, orderCode?: string) => {
+    if (!orderId && !orderCode) return;
+    setCancellingOrder(true);
+    try {
+      const res = await fetch("/api/orders/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, orderCode }),
+      });
+      if (res.ok) {
+        setShowReplaceModal(false);
+        await fetchCart(currentVoucherCode);
+      } else {
+        const json = await res.json().catch(() => ({}));
+        setError(json.error || "Không thể hủy đơn hàng.");
+      }
+    } catch {
+      setError("Lỗi kết nối khi hủy đơn hàng.");
+    } finally {
+      setCancellingOrder(false);
+    }
+  };
+
   const handleRemoveItem = async (course: CartCourse) => {
     try {
       const res = await fetch("/api/student/cart", {
@@ -118,6 +158,7 @@ export function CartView() {
       });
       if (!res.ok) throw new Error("Không thể xoá khóa học");
       setLastRemoved(course);
+      setUndoSeconds(10);
       await fetchCart(currentVoucherCode);
 
       undoToast(`Đã xoá "${course.title}" khỏi giỏ hàng`, async () => {
@@ -127,6 +168,7 @@ export function CartView() {
           body: JSON.stringify({ courseId: course.id }),
         });
         setLastRemoved(null);
+        setUndoSeconds(0);
         await fetchCart(currentVoucherCode);
       });
     } catch {
@@ -143,6 +185,7 @@ export function CartView() {
         body: JSON.stringify({ courseId: lastRemoved.id }),
       });
       setLastRemoved(null);
+      setUndoSeconds(0);
       await fetchCart(currentVoucherCode);
     } catch {
       setError("Không thể hoàn tác. Vui lòng thử lại.");
@@ -224,9 +267,20 @@ export function CartView() {
                 })}
               </AlertDescription>
             </div>
-            <Link href={{ pathname: "/checkout", query: { order: pendingOrder.id } }}>
-              <Button size="sm" className="whitespace-nowrap">Tiếp tục thanh toán</Button>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={cancellingOrder}
+                onClick={() => handleCancelPendingOrder(pendingOrder.id, pendingOrder.code)}
+                className="whitespace-nowrap"
+              >
+                {cancellingOrder ? "Đang huỷ…" : "Huỷ đơn này"}
+              </Button>
+              <Link href={{ pathname: "/checkout", query: { order: pendingOrder.id } }}>
+                <Button size="sm" className="whitespace-nowrap">Tiếp tục thanh toán</Button>
+              </Link>
+            </div>
           </div>
         </Alert>
       )}
@@ -239,7 +293,7 @@ export function CartView() {
         </Alert>
       )}
 
-      {/* In-page Undo banner */}
+      {/* In-page Undo banner with 10s countdown */}
       {lastRemoved && (
         <Alert variant="info" className="mb-6 flex items-center justify-between">
           <div>
@@ -247,7 +301,7 @@ export function CartView() {
           </div>
           <Button variant="secondary" size="sm" onClick={handleUndo} className="flex items-center gap-1.5">
             <RotateCcw className="size-4" />
-            Hoàn tác
+            Hoàn tác {undoSeconds > 0 ? `(${undoSeconds}s)` : ""}
           </Button>
         </Alert>
       )}
@@ -476,9 +530,18 @@ export function CartView() {
               Đóng
             </Button>
             {pendingOrder && (
-              <Link href={{ pathname: "/checkout", query: { order: pendingOrder.id } }}>
-                <Button variant="secondary">Tiếp tục đơn cũ</Button>
-              </Link>
+              <>
+                <Button
+                  variant="outline"
+                  disabled={cancellingOrder}
+                  onClick={() => handleCancelPendingOrder(pendingOrder.id, pendingOrder.code)}
+                >
+                  {cancellingOrder ? "Đang huỷ…" : "Huỷ đơn này"}
+                </Button>
+                <Link href={{ pathname: "/checkout", query: { order: pendingOrder.id } }}>
+                  <Button variant="secondary">Tiếp tục đơn cũ</Button>
+                </Link>
+              </>
             )}
             <Button
               variant="default"

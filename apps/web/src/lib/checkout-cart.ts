@@ -87,7 +87,8 @@ export async function createOrderFromCart(
     await db.insert(orderItems).values({
       orderId: order.id,
       courseId: item.id,
-      price: item.price,
+      courseTitle: item.title,
+      unitPrice: item.price,
     });
   }
 
