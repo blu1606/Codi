@@ -85,6 +85,7 @@ export default function CoursesPage() {
       if (!response.ok) {
         setCartMessage(result.error || "Không thể thêm khóa học vào giỏ.");
       } else {
+        window.dispatchEvent(new CustomEvent("codi:cart-updated"));
         setCartMessage(result.added ? "Đã thêm khóa học vào giỏ." : "Khóa học đã có trong giỏ.");
       }
     } catch {

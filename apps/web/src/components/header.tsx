@@ -15,6 +15,7 @@ import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 import NotificationMenu from "./notification-menu";
 import BrandLogo from "./brand-logo";
+import CartNavButton from "./cart-nav-button";
 
 export default function Header() {
   const pathname = usePathname();
@@ -43,7 +44,7 @@ export default function Header() {
         <div data-codi-intro-nav aria-busy={isPending || loading}>{nav(false)}</div>
       </div>
       <div data-codi-intro-account className="flex shrink-0 items-center gap-1 sm:gap-2">
-        {role === ROLE.LEARNER && <Link href={{ pathname: "/cart" }} aria-label="Giỏ hàng" className="hidden size-11 items-center justify-center rounded-md hover:bg-muted sm:flex"><ShoppingCart aria-hidden="true" className="size-5" /></Link>}
+        {role === ROLE.LEARNER && <CartNavButton />}
         <ModeToggle />
         <NotificationMenu />
         <UserMenu role={role} />
@@ -52,7 +53,7 @@ export default function Header() {
     {error && <div role="status" className="mx-auto flex max-w-[1200px] items-center gap-2 px-4 pb-2 text-xs text-destructive">Không thể tải menu theo vai trò.<Button variant="link" size="sm" onClick={retry}>Thử lại</Button></div>}
     <Sheet open={mobileOpen} onOpenChange={setMobileOpen} title="Menu Codi">
       {nav(true)}
-      {role === ROLE.LEARNER && <Link className="mt-2 flex min-h-11 items-center gap-2 rounded-md px-3 text-sm hover:bg-accent" href={{ pathname: "/cart" }} onClick={() => setMobileOpen(false)}><ShoppingCart aria-hidden="true" className="size-4" />Giỏ hàng</Link>}
+      {role === ROLE.LEARNER && <div onClick={() => setMobileOpen(false)}><CartNavButton mobile /></div>}
     </Sheet>
   </header>;
 }

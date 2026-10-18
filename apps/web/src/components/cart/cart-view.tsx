@@ -175,9 +175,11 @@ export function CartView() {
         });
         setLastRemoved(null);
         setUndoSeconds(0);
+        window.dispatchEvent(new CustomEvent("codi:cart-updated"));
         await fetchCart(currentVoucherCode);
       });
       toastIdRef.current = tid;
+      window.dispatchEvent(new CustomEvent("codi:cart-updated"));
     } catch {
       setError("Không thể xóa khóa học. Vui lòng thử lại.");
     }
@@ -197,6 +199,7 @@ export function CartView() {
         toast.dismiss(toastIdRef.current);
         toastIdRef.current = null;
       }
+      window.dispatchEvent(new CustomEvent("codi:cart-updated"));
       await fetchCart(currentVoucherCode);
     } catch {
       setError("Không thể hoàn tác. Vui lòng thử lại.");

@@ -116,6 +116,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       if (!response.ok)
         throw new Error(result.error || "Không thể thêm khóa học vào giỏ.");
       setInCart(true);
+      window.dispatchEvent(new CustomEvent("codi:cart-updated"));
       setCartMessage(
         result.added
           ? "Đã thêm khóa học vào giỏ của bạn."
@@ -150,10 +151,10 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       if (!response.ok) {
         throw new Error(result.error || "Không thể khởi tạo mua ngay.");
       }
-      if (result.orderId) {
+      if (result.orderCode) {
+        router.push(`/courses/${encodeURIComponent(slug)}/checkout?order=${encodeURIComponent(result.orderCode)}` as any);
+      } else if (result.orderId) {
         router.push(`/checkout?order=${result.orderId}` as any);
-      } else if (result.orderCode) {
-        router.push(`/courses/${encodeURIComponent(slug)}/checkout?order=${result.orderCode}` as any);
       }
     } catch (err: unknown) {
       setCartMessage(
