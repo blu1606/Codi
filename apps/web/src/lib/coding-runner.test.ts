@@ -51,6 +51,34 @@ describe("JavaScript WebAssembly sandbox", () => {
     expect(r.phase).toBe("runtime");
     expect(r.outcomes[0]?.line).toBe(2);
   });
+  it("preserves the original error when its stack cannot be serialized", async () => {
+    const r = await runJavaScript({
+      code: "function sumEven() { const e = new Error('original error'); e.stack = 'x'.repeat(5000); throw e; }",
+      tests,
+    });
+    expect(r.outcomes[0]?.error).toContain("original error");
+  });
+  it("explicitly rejects unsupported Promise results", async () => {
+    const r = await runJavaScript({
+      code: "async function sumEven() { return 6; }",
+      tests,
+    });
+    expect(r.outcomes[0]?.phase).toBe("runtime");
+    expect(r.outcomes[0]?.error).toContain("Async/Promise");
+    expect(r.outcomes[0]?.actual).toBeNull();
+  });
+  it("runs samples before hidden tests so a hidden timeout cannot contaminate sample results", async () => {
+    const r = await runJavaScript({
+      code: "",
+      timeoutMs: 50,
+      tests: [
+        { id: 2, input: "while(true) {}", isSample: false },
+        { id: 1, input: "42", isSample: true },
+      ],
+    });
+    expect(r.outcomes[0]).toMatchObject({ id: 1, phase: "done", actual: "42" });
+    expect(r.outcomes[1]).toMatchObject({ id: 2, phase: "timeout" });
+  });
   it("interrupts an infinite loop and accounts for every test", async () => {
     const r = await runJavaScript({
       code: "while(true) {}",

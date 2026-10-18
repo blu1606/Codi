@@ -1,7 +1,9 @@
 import { Worker } from "node:worker_threads";
 
+const maxWorkers = 4;
+let activeWorkers = 0;
+
 // The worker only hosts the WebAssembly interpreter. Learner code never executes in Node.
-// A hard wall-clock deadline also covers engine initialization, native regexp and serialization.
 export function runJavaScript(input) {
   if (
     typeof input.code !== "string" ||
@@ -11,46 +13,63 @@ export function runJavaScript(input) {
   )
     return Promise.reject(new Error("Invalid sandbox input"));
   const timeoutMs = Math.min(3000, Math.max(25, input.timeoutMs ?? 3000));
+  if (activeWorkers >= maxWorkers)
+    return Promise.reject(new Error("Sandbox busy"));
+  activeWorkers++;
   return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const worker = new Worker(new URL("./worker.mjs", import.meta.url), {
-      workerData: { ...input, timeoutMs },
-      execArgv: [],
-      env: {},
-      resourceLimits: {
-        maxOldGenerationSizeMb: 64,
-        maxYoungGenerationSizeMb: 8,
-        stackSizeMb: 2,
-      },
-    });
+    let worker;
+    try {
+      worker = new Worker(new URL("./worker.mjs", import.meta.url), {
+        // Samples always precede hidden tests so hidden timeouts cannot affect public outcomes.
+        workerData: {
+          ...input,
+          tests: [...input.tests].sort(
+            (a, b) => Number(b.isSample) - Number(a.isSample),
+          ),
+          timeoutMs,
+        },
+        execArgv: [],
+        env: {},
+        resourceLimits: {
+          maxOldGenerationSizeMb: 64,
+          maxYoungGenerationSizeMb: 8,
+          stackSizeMb: 2,
+        },
+      });
+    } catch {
+      activeWorkers--;
+      reject(new Error("Sandbox unavailable"));
+      return;
+    }
     let settled = false;
     const finish = (error, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      void worker.terminate();
+      // Keep the slot until the worker has actually stopped.
+      void worker.terminate().catch(() => {});
       if (error) reject(new Error("Sandbox unavailable"));
       else resolve(result);
     };
-    const timer = setTimeout(
-      () =>
-        finish(null, {
-          phase: "timeout",
-          durationMs: Date.now() - started,
-          logs: [],
-          outcomes: input.tests.map((t) => ({
-            id: t.id,
-            actual: null,
-            phase: "timeout",
-            error: "Quá thời gian chạy (3 giây).",
-            line: null,
-          })),
-        }),
-      timeoutMs + 1500,
+    // Cold initialization and wall-clock watchdog failures are infrastructure errors,
+    // never graded submissions. Only QuickJS guest interrupts produce graded timeouts.
+    let timer = setTimeout(
+      () => finish(new Error("Sandbox initialization timeout")),
+      10000,
     );
-    worker.once("message", (result) => finish(null, result));
+    worker.on("message", (message) => {
+      if (message.type === "ready") {
+        clearTimeout(timer);
+        timer = setTimeout(
+          () => finish(new Error("Sandbox watchdog timeout")),
+          timeoutMs + 1500,
+        );
+        worker.postMessage({ type: "start" });
+      } else if (message.type === "result") finish(null, message.result);
+    });
     worker.once("error", (error) => finish(error));
     worker.once("exit", () => {
+      activeWorkers--;
       if (!settled) finish(new Error("Worker exited"));
     });
   });

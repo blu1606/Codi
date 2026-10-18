@@ -11,6 +11,7 @@ import {
 import {
   codingExercises,
   codingTestCases,
+  codingRunLeases,
 } from "@codi-1/db/schema/coding-exercises";
 import { lessonProgress } from "@codi-1/db/schema/learning";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
@@ -31,16 +32,14 @@ async function main() {
       const suffix = randomUUID(),
         learner = `coding-${suffix}`,
         other = `coding-other-${suffix}`;
-      await tx
-        .insert(user)
-        .values(
-          [learner, other].map((id) => ({
-            id,
-            name: "Coding verification",
-            email: `${id}@example.invalid`,
-            banned: false,
-          })),
-        );
+      await tx.insert(user).values(
+        [learner, other].map((id) => ({
+          id,
+          name: "Coding verification",
+          email: `${id}@example.invalid`,
+          banned: false,
+        })),
+      );
       await tx
         .insert(userRoles)
         .values(
@@ -49,6 +48,19 @@ async function main() {
       const f = await seedCodingFixture(tx, `coding-qa-${suffix}`, [learner]);
       const database = tx as unknown as Database;
       const service = createCodingService(database);
+      // The verification intentionally executes many commands back-to-back. Clear only
+      // this fixture user's cooldown; production lease/rate guards remain in the service.
+      async function allowNextRun() {
+        await tx
+          .update(codingRunLeases)
+          .set({ lastStartedAt: new Date(0) })
+          .where(eq(codingRunLeases.userId, learner));
+      }
+      const execute = (async (scope, command) => {
+        if (command.type === "run" || command.type === "submit")
+          await allowNextRun();
+        return service.execute(scope, command);
+      }) as typeof service.execute;
       const player = createLessonPlayerService(database);
       const scope = {
         userId: learner,
@@ -67,7 +79,7 @@ async function main() {
       );
       await assert.rejects(
         () =>
-          service.execute(
+          execute(
             { ...scope, userId: other },
             { type: "run", code: codingSolution },
           ),
@@ -104,10 +116,10 @@ async function main() {
       assert.equal(initial.solution, null);
       assert.equal(initial.hints.length, 1);
       await assert.rejects(
-        () => service.execute(scope, { type: "solution", confirmed: true }),
+        () => execute(scope, { type: "solution", confirmed: true }),
         /Lời giải mở/,
       );
-      await service.execute(scope, { type: "draft", code: codingSolution });
+      await execute(scope, { type: "draft", code: codingSolution });
       assert.equal((await service.get(scope)).code, codingSolution);
       await assert.rejects(
         () =>
@@ -115,7 +127,7 @@ async function main() {
         /code|hoàn thành/i,
       );
       step = "sample run never counts; submit includes hidden tests";
-      const run = await service.execute(scope, {
+      const run = await execute(scope, {
         type: "run",
         code: codingSolution,
       });
@@ -123,7 +135,7 @@ async function main() {
       assert.equal(run.lastRun?.hiddenTotal, 0);
       assert.equal(run.passed, false);
       assert.equal(run.submits, 0);
-      const passed = await service.execute(scope, {
+      const passed = await execute(scope, {
         type: "submit",
         code: codingSolution,
       });
@@ -147,21 +159,21 @@ async function main() {
       }
       step =
         "D7 latest submit counts; later run and reset preserve the counted result";
-      const runtime = await service.execute(scope, {
+      const runtime = await execute(scope, {
         type: "run",
         code: "throw new Error('sample failure')",
       });
       assert.equal(runtime.passed, true);
       assert.equal(runtime.score, 100);
       assert.equal(runtime.lastRun?.phase, "runtime");
-      const reset = await service.execute(scope, {
+      const reset = await execute(scope, {
         type: "reset",
         confirmed: true,
       });
       assert.equal(reset.passed, true);
       assert.equal(reset.lastRun, null);
       assert.equal(reset.code, initial.starterCode);
-      const fail = await service.execute(scope, {
+      const fail = await execute(scope, {
         type: "submit",
         code: "function sumEven() { return 0; }",
       });
@@ -176,27 +188,28 @@ async function main() {
       );
       step =
         "three failures unlock solution; hidden runtime errors/logs stay private";
-      await service.execute(scope, {
+      await execute(scope, {
         type: "submit",
         code: "function sumEven() { return 0; }",
       });
-      await service.execute(scope, {
+      await execute(scope, {
         type: "submit",
         code: "function sumEven() { return 0; }",
       });
-      const viewed = await service.execute(scope, {
+      const viewed = await execute(scope, {
         type: "solution",
         confirmed: true,
       });
       assert.equal(viewed.solutionViewed, true);
       assert.equal(viewed.solution, codingSolution);
-      const privateError = await service.execute(scope, {
+      const privateError = await execute(scope, {
         type: "submit",
         code: "function sumEven(a) { if (a.some(x=>x<0)) { console.log(a); throw new Error(JSON.stringify(a)); } return 0; }",
       });
       assert.ok(!JSON.stringify(privateError).includes("[-4,-3,-2,0]"));
       step =
         "timeout and unavailable runner are distinct and keep earlier work";
+      await allowNextRun();
       const timeout = await createCodingService(database, async (input) => ({
         phase: "timeout",
         durationMs: 3000,
@@ -214,6 +227,7 @@ async function main() {
         .select()
         .from(assessmentSubmissions)
         .where(eq(assessmentSubmissions.assessmentId, f.codingId));
+      await allowNextRun();
       await assert.rejects(
         () =>
           createCodingService(database, async () => {
@@ -236,7 +250,7 @@ async function main() {
         .where(eq(codingExercises.id, f.exerciseId));
       assert.equal((await service.get(scope)).available, false);
       await assert.rejects(
-        () => service.execute(scope, { type: "run", code: "pass" }),
+        () => execute(scope, { type: "run", code: "pass" }),
         /Python chưa sẵn sàng/,
       );
       await tx
@@ -244,11 +258,11 @@ async function main() {
         .set({ language: "javascript" })
         .where(eq(codingExercises.id, f.exerciseId));
       step = "completion sticks after a later failed submission";
-      await service.execute(scope, { type: "submit", code: codingSolution });
+      await execute(scope, { type: "submit", code: codingSolution });
       await player.execute(learner, f.courseId, f.lessonId, {
         type: "complete",
       });
-      await service.execute(scope, {
+      await execute(scope, {
         type: "submit",
         code: "function sumEven(){return 0}",
       });

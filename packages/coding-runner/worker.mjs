@@ -2,13 +2,21 @@ import { parentPort, workerData } from "node:worker_threads";
 import { getQuickJS } from "quickjs-emscripten";
 
 const QuickJS = await getQuickJS();
+await new Promise((resolve) => {
+  parentPort.once("message", resolve);
+  parentPort.postMessage({ type: "ready" });
+});
 const started = Date.now();
 const deadline = started + workerData.timeoutMs;
 const logs = [];
 const outcomes = [];
 let phase = "done";
+let guestTimedOut = false;
 for (const test of workerData.tests) {
+  const testStarted = Date.now();
   if (Date.now() >= deadline) {
+    if (!guestTimedOut)
+      throw new Error("Sandbox deadline reached outside guest execution");
     phase = "timeout";
     outcomes.push({
       id: test.id,
@@ -16,6 +24,7 @@ for (const test of workerData.tests) {
       phase: "timeout",
       error: "Quá thời gian chạy (3 giây).",
       line: null,
+      durationMs: 0,
     });
     continue;
   }
@@ -30,6 +39,7 @@ for (const test of workerData.tests) {
     const keys = Object.keys, stringify = JSON.stringify, str = String, create = Object.create;
     const sort = Function.prototype.call.bind(Array.prototype.sort);
     const array = Array.isArray, finite = Number.isFinite;
+    const PromiseType = Promise;
     function normalize(v, depth = 0) {
       if (depth > 12) throw new Error('Kết quả lồng quá sâu.');
       if (v === undefined) return '[undefined]';
@@ -37,6 +47,7 @@ for (const test of workerData.tests) {
       if (typeof v === 'bigint') return str(v) + 'n';
       if (typeof v === 'number' && !finite(v)) return str(v);
       if (v !== null && typeof v === 'object') {
+        if (v instanceof PromiseType) throw new Error('Async/Promise chưa được hỗ trợ. Hãy dùng hàm đồng bộ.');
         const ks = sort(keys(v));
         if (ks.length > 1000) throw new Error('Kết quả quá lớn.');
         const out = array(v) ? [] : create(null);
@@ -54,12 +65,27 @@ for (const test of workerData.tests) {
   );
   // Only learner execution is interruptible; interrupting trusted bootstrap can leave
   // no serializer available to report the result. The outer worker deadline covers it.
-  runtime.setInterruptHandler(() => Date.now() >= deadline);
+  let interrupted = false;
+  runtime.setInterruptHandler(() => {
+    interrupted = Date.now() >= deadline;
+    return interrupted;
+  });
   function serialize(handle) {
     const result = vm.callFunction(serializer, vm.undefined, handle);
     if (result.error) {
-      result.error.dispose();
-      throw new Error("Không thể đọc kết quả hoặc kết quả quá lớn.");
+      let message = "Không thể đọc kết quả hoặc kết quả quá lớn.";
+      try {
+        const prop = vm.getProp(result.error, "message");
+        try {
+          message = vm.getString(prop).slice(0, 2000);
+        } finally {
+          prop.dispose();
+        }
+      } catch {
+      } finally {
+        result.error.dispose();
+      }
+      throw new Error(message);
     }
     return result.value.consume((h) => vm.getString(h));
   }
@@ -87,7 +113,7 @@ for (const test of workerData.tests) {
     const evaluate = (code, filename, startup) => {
       const result = vm.evalCode(code, filename, { type: "global" });
       if (result.error) {
-        testPhase = Date.now() >= deadline ? "timeout" : "runtime";
+        testPhase = interrupted ? "timeout" : "runtime";
         if (testPhase === "timeout") {
           error = "Quá thời gian chạy (3 giây).";
           result.error.dispose();
@@ -104,6 +130,11 @@ for (const test of workerData.tests) {
             message.dispose();
           }
           if (startup && name === "SyntaxError") testPhase = "syntax";
+        } catch {
+          error = "Không thể chạy code hoặc vượt giới hạn bộ nhớ.";
+        }
+        // A hostile/oversized stack must not overwrite the original error message.
+        try {
           const stackHandle = vm.getProp(result.error, "stack");
           let stack;
           try {
@@ -113,9 +144,7 @@ for (const test of workerData.tests) {
           }
           const match = /bai-lam\.js:(\d+)/.exec(stack);
           line = match ? Number(match[1]) : null;
-        } catch {
-          error = "Không thể chạy code hoặc vượt giới hạn bộ nhớ.";
-        }
+        } catch {}
         result.error.dispose();
         return null;
       }
@@ -133,20 +162,36 @@ for (const test of workerData.tests) {
         }
       }
     }
-  } catch {
-    testPhase = Date.now() >= deadline ? "timeout" : "runtime";
-    error = "Không thể đọc kết quả hoặc kết quả quá lớn.";
+  } catch (cause) {
+    testPhase = interrupted ? "timeout" : "runtime";
+    error =
+      testPhase === "timeout"
+        ? "Quá thời gian chạy (3 giây)."
+        : cause instanceof Error
+          ? cause.message
+          : "Không thể đọc kết quả hoặc kết quả quá lớn.";
   } finally {
     serializer.dispose();
     vm.dispose();
     runtime.dispose();
   }
   if (testPhase !== "done" && phase === "done") phase = testPhase;
-  outcomes.push({ id: test.id, actual, phase: testPhase, error, line });
+  if (interrupted) guestTimedOut = true;
+  outcomes.push({
+    id: test.id,
+    actual,
+    phase: testPhase,
+    error,
+    line,
+    durationMs: Date.now() - testStarted,
+  });
 }
 parentPort.postMessage({
-  phase,
-  durationMs: Date.now() - started,
-  logs,
-  outcomes,
+  type: "result",
+  result: {
+    phase,
+    durationMs: Date.now() - started,
+    logs,
+    outcomes,
+  },
 });

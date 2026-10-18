@@ -14,6 +14,7 @@ export type RunnerResult = {
     phase: RunPhase;
     error: string | null;
     line: number | null;
+    durationMs?: number;
   }[];
 };
 export function runJavaScript(input: RunnerInput): Promise<RunnerResult>;

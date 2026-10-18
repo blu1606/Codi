@@ -76,6 +76,10 @@ export default function LessonCoding({
           throw new Error(
             result.error ?? "Không thể lưu bài làm. Vui lòng thử lại.",
           );
+        if (command.type === "draft") {
+          persisted.current = result.code;
+          return null;
+        }
         const next = result as CodingView;
         persisted.current = next.code;
         if (live.current) {
@@ -163,6 +167,7 @@ export default function LessonCoding({
           ? { type, confirmed: true }
           : { type, code: value.current },
       );
+      if (!next) return;
       if (type === "submit") {
         if (next.passed && !data?.passed)
           toast.success(
@@ -378,8 +383,8 @@ export default function LessonCoding({
                 </Button>
               ) : (
                 <p className="text-muted-foreground">
-                  Lời giải mở khi bạn đạt tất cả test hoặc sau 3 lần nộp chưa
-                  đạt.
+                  Lời giải mở khi bạn đạt tất cả test hoặc sau 3 lần nộp chạy
+                  xong nhưng chưa đạt.
                 </p>
               )}
             </div>

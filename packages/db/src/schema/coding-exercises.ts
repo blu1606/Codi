@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { assessmentSubmissions, assessments } from "./assessments";
 import { studentEnrollments } from "./student-profile";
+import { user } from "./auth";
 
 // Flow L6b / S11g / S23b. One exercise per CODING assessment; runs and submissions are
 // assessment_submissions rows (mode run | submit) with one result row per test case.
@@ -59,6 +60,7 @@ export const codingTestCases = pgTable.withRLS(
     // Sample tests run on "Chạy" and are visible; hidden tests only run on "Nộp bài".
     isSample: boolean("is_sample").default(false).notNull(),
     position: integer("position").notNull(),
+    // Reserved for authoring. §12 grades the unweighted percentage of passing tests.
     points: numeric("points", { precision: 6, scale: 2, mode: "number" })
       .default(1)
       .notNull(),
@@ -123,3 +125,11 @@ export const codingTestResults = pgTable.withRLS(
     index("coding_test_results_test_case_idx").on(table.testCaseId),
   ],
 );
+
+// Cross-instance per-user lease and cooldown. No connection is held during execution.
+export const codingRunLeases = pgTable.withRLS("coding_run_leases", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  runningUntil: timestamp("running_until", { withTimezone: true }).notNull(),
+  lastStartedAt: timestamp("last_started_at", { withTimezone: true }).notNull(),
+});
