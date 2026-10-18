@@ -133,6 +133,16 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
   );
   const totalPending = pendingConcepts + pendingEdges;
 
+  const acceptedConcepts = useMemo(
+    () => concepts.filter((c) => c.review === "accepted" || c.review === "edited").length,
+    [concepts]
+  );
+  const acceptedEdges = useMemo(
+    () => edges.filter((e) => e.review === "accepted" || e.review === "edited").length,
+    [edges]
+  );
+  const totalAccepted = acceptedConcepts + acceptedEdges;
+
   // Selected concept for side panel
   const selectedConcept = useMemo(
     () => (selectedNodeId ? concepts.find((c) => c.id === selectedNodeId) : null),
@@ -541,7 +551,9 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
         <Alert variant="info">
           <Sparkles className="size-4" />
           <AlertTitle className="font-semibold">
-            AI đề xuất — còn {totalPending} mục chờ bạn xem lại
+            {totalAccepted > 0
+              ? `Đang duyệt dở dang (Partially accepted) — ${totalAccepted} mục đã duyệt, còn ${totalPending} mục chờ xem lại`
+              : `Sẵn sàng xem lại (Ready for review) — còn ${totalPending} mục do AI đề xuất`}
           </AlertTitle>
           <AlertDescription>
             Chấp nhận, sửa hoặc bỏ từng khái niệm và quan hệ "cần học trước". Bản đồ chỉ được dùng sau khi bạn xác nhận.

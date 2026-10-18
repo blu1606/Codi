@@ -1,9 +1,11 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import {
+  aiInteractionLogs,
   courseChapters,
   courseLessons,
   courses,
@@ -19,7 +21,7 @@ import {
 import { createNotificationService } from "@/lib/notification-service";
 import { db } from "@/services";
 import { getEditableCourse } from "../actions";
-import { verifyLecturerSession } from "../../../actions";
+import { verifyLecturerSession } from "@/lib/lecturer-auth";
 
 export interface KnowledgeMapConceptDto {
   id: number;
@@ -209,6 +211,15 @@ export async function runKnowledgeMapAnalysis(courseId: string) {
     throw new Error("Khoá học chưa có bài học nào để phân tích. Hãy thêm ít nhất 1 bài học.");
   }
 
+  // Tính content_hash từ cấu trúc các bài học để kiểm tra thay đổi
+  const contentHash = createHash("sha256")
+    .update(
+      JSON.stringify(
+        lessons.map((l) => ({ id: l.id, title: l.title, position: l.position }))
+      )
+    )
+    .digest("hex");
+
   // Lấy các khái niệm hiện có
   const existingSkills = await db
     .select()
@@ -270,11 +281,26 @@ export async function runKnowledgeMapAnalysis(courseId: string) {
     }
   }
 
-  // Cập nhật trạng thái khoá học sang ready
+  // Ghi log kiểm toán vào bảng ai_interaction_logs (UC-26 / Task #116)
+  try {
+    await db.insert(aiInteractionLogs).values({
+      userId: user.id,
+      courseId,
+      requestType: "extract_knowledge_map",
+      model: "gemini-1.5-flash",
+      userPrompt: `Trích xuất bản đồ kiến thức cho khoá học ${course.title} (${lessons.length} bài học)`,
+      aiResponse: `Đã trích xuất ${finalSkillCount} khái niệm và quan hệ tiên quyết`,
+      isSuccess: true,
+    });
+  } catch {}
+
+  // Cập nhật trạng thái khoá học sang ready kèm model và contentHash
   await db
     .update(courses)
     .set({
       knowledgeMapStatus: "ready",
+      knowledgeMapModel: "gemini-1.5-flash",
+      knowledgeMapContentHash: contentHash,
       knowledgeMapGeneratedAt: new Date(),
     })
     .where(eq(courses.id, courseId));
