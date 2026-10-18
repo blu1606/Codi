@@ -1,8 +1,17 @@
+import { timingSafeEqual } from "node:crypto";
 import { getSepayConfig } from "@/lib/sepay-config";
 import { NextResponse } from "next/server";
 import { db } from "@/services";
+import { orders, orderEvents } from "@codi-1/db";
 import { studentTransactions, studentEnrollments } from "@codi-1/db/schema/student-profile";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+
+function verifyApiKey(authHeader: string | null, secret: string): boolean {
+  if (!authHeader) return false;
+  const expected = `Apikey ${secret}`;
+  if (authHeader.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+}
 
 export async function POST(req: Request) {
   try {
@@ -13,7 +22,7 @@ export async function POST(req: Request) {
     }
     const apiKey = config.webhookSecret;
     const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Apikey ${apiKey}`) {
+    if (!verifyApiKey(authHeader, apiKey)) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
@@ -59,12 +68,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "Insufficient amount" });
     }
 
-    const { orders, orderEvents } = await import("@codi-1/db");
-    const { and } = await import("drizzle-orm");
-
     // Process payment atomically within transaction
     const processResult = await db.transaction(async (txDB) => {
-      // 1. Atomically update transaction status if still pending
+      // 1. Check if there is an associated order in the `orders` table
+      const [existingOrder] = await txDB
+        .select({ id: orders.id, status: orders.status })
+        .from(orders)
+        .where(eq(orders.code, txId))
+        .limit(1);
+
+      // If an order exists for this code, but it is not pending (e.g. cancelled/expired/refunded),
+      // do NOT settle as paid and do NOT grant enrollment. Mark transaction as failed/needs-reconciliation.
+      if (existingOrder && existingOrder.status !== "pending") {
+        await txDB
+          .update(studentTransactions)
+          .set({ status: "failed" })
+          .where(and(eq(studentTransactions.id, txId), eq(studentTransactions.status, "pending")));
+
+        return { orderNotPending: true, orderStatus: existingOrder.status };
+      }
+
+      // 2. Atomically update transaction status if still pending
       const updatedTx = await txDB
         .update(studentTransactions)
         .set({ status: "paid" })
@@ -81,28 +105,33 @@ export async function POST(req: Request) {
         return { alreadyProcessed: true };
       }
 
-      // 2. Atomically settle orders table if a pending order matches txId
-      const updatedOrders = await txDB
-        .update(orders)
-        .set({
-          status: "paid",
-          receivedAmount: amountReceived,
-          paidAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(orders.code, txId), eq(orders.status, "pending")))
-        .returning({ id: orders.id, totalAmount: orders.totalAmount });
+      // 3. Atomically settle orders table if a pending order matches txId
+      if (existingOrder && existingOrder.status === "pending") {
+        const updatedOrders = await txDB
+          .update(orders)
+          .set({
+            status: "paid",
+            receivedAmount: amountReceived,
+            paidAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(orders.code, txId), eq(orders.status, "pending")))
+          .returning({ id: orders.id, totalAmount: orders.totalAmount });
 
-      const matchedOrder = updatedOrders[0];
-      if (matchedOrder) {
-        await txDB.insert(orderEvents).values({
-          orderId: matchedOrder.id,
-          label: "Đã thanh toán thành công",
-          actorId: tx.userId,
-        });
+        const matchedOrder = updatedOrders[0];
+        if (matchedOrder) {
+          await txDB.insert(orderEvents).values({
+            orderId: matchedOrder.id,
+            label: "Đã thanh toán thành công",
+            actorId: tx.userId,
+          });
+        } else {
+          // Order was concurrently modified or not pending, stop enrollment
+          return { orderNotPending: true };
+        }
       }
 
-      // 3. Grant access to the course, avoiding duplicates
+      // 4. Grant access to the course, avoiding duplicates
       await txDB
         .insert(studentEnrollments)
         .values({
@@ -111,11 +140,16 @@ export async function POST(req: Request) {
         })
         .onConflictDoNothing();
 
-      return { alreadyProcessed: false };
+      return { success: true };
     });
 
     if (processResult.alreadyProcessed) {
       return NextResponse.json({ success: true, message: "Already processed" });
+    }
+
+    if (processResult.orderNotPending) {
+      console.warn(`Order ${txId} is not in pending state (was ${processResult.orderStatus ?? "non-pending"}). Ignored enrollment, marked for reconciliation.`);
+      return NextResponse.json({ success: true, message: "Order not pending, marked for reconciliation" });
     }
 
     console.log(`Successfully processed transaction ${txId}`);

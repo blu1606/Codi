@@ -187,6 +187,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
 
       if (parsed.courseId === detail.course.id || parsed.slug === slug) {
         sessionStorage.removeItem("codi_pending_course_intent");
+        setPendingIntent(null);
         isResumingRef.current = true;
         void (async () => {
           try {

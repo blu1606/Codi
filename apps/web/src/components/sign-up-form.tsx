@@ -13,6 +13,7 @@ import { Label } from "@codi-1/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useState } from "react";
 import { toast } from "sonner";
 import z from "zod";
@@ -27,9 +28,11 @@ import OtpInput from "./otp-input";
 export default function SignUpForm({
   onSwitchToSignIn,
   onSuccess,
+  returnTo = "/dashboard",
 }: {
   onSwitchToSignIn: () => void;
   onSuccess?: () => void;
+  returnTo?: string;
 }) {
   const router = useRouter();
   const { isPending } = authClient.useSession();
@@ -95,13 +98,9 @@ export default function SignUpForm({
             if (onSuccess) {
               onSuccess();
             } else {
-              const rawNext =
-                typeof window !== "undefined"
-                  ? new URLSearchParams(window.location.search).get("next")
-                  : null;
-              const next = safeNext(rawNext, "/dashboard");
+              const safeDestination = safeNext(returnTo, "/dashboard");
               setTimeout(() => {
-                router.push(next as any);
+                router.push(safeDestination as Route);
               }, 1000);
             }
           },
@@ -312,8 +311,8 @@ export default function SignUpForm({
           </div>
 
           <div className="space-y-3">
-            <GoogleSignInButton text="Đăng ký với Google" />
-            <GitHubSignInButton text="Đăng ký với GitHub" />
+            <GoogleSignInButton text="Đăng ký với Google" callbackURL={returnTo} />
+            <GitHubSignInButton text="Đăng ký với GitHub" callbackURL={returnTo} />
           </div>
 
           <div className="mt-4 text-center text-xs text-muted-foreground">

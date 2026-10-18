@@ -103,7 +103,39 @@ export async function POST(req: Request) {
         finalAmount = existingTx.amount;
       }
     } else {
-      transactionId = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
+      const { orders } = await import("@codi-1/db");
+      let generatedId: string | null = null;
+      let attempts = 0;
+
+      while (attempts < 5) {
+        attempts++;
+        const candidate = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
+
+        const [existingOrder] = await db
+          .select({ id: orders.id })
+          .from(orders)
+          .where(eq(orders.code, candidate))
+          .limit(1);
+
+        if (existingOrder) continue;
+
+        const [existingTx] = await db
+          .select({ id: studentTransactions.id })
+          .from(studentTransactions)
+          .where(eq(studentTransactions.id, candidate))
+          .limit(1);
+
+        if (existingTx) continue;
+
+        generatedId = candidate;
+        break;
+      }
+
+      if (!generatedId) {
+        return NextResponse.json({ error: "Không thể tạo mã giao dịch duy nhất. Vui lòng thử lại." }, { status: 500 });
+      }
+
+      transactionId = generatedId;
       await db.insert(studentTransactions).values({
         id: transactionId,
         userId: session.user.id,

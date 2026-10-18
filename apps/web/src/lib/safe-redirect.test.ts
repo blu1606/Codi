@@ -38,4 +38,12 @@ describe("safeNext (Open Redirect Prevention)", () => {
     expect(safeNext("\\example.com")).toBe("/dashboard");
     expect(safeNext("/test\\evil.com")).toBe("/dashboard");
   });
+
+  it("rejects control characters, tabs, newlines, and unprintable characters", () => {
+    expect(safeNext("/\texample.com")).toBe("/dashboard");
+    expect(safeNext("/\nexample.com")).toBe("/dashboard");
+    expect(safeNext("/\rexample.com")).toBe("/dashboard");
+    expect(safeNext("/\u0000evil.com")).toBe("/dashboard");
+    expect(safeNext("/%09/evil.com")).toBe("/%09/evil.com");
+  });
 });

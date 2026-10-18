@@ -8,6 +8,11 @@ export function safeNext(next?: string | null, fallback: string = "/dashboard"):
     return fallback;
   }
 
+  // Reject control characters (\u0000-\u0020, tabs, newlines, etc.) or backslashes immediately
+  if (/[\\\u0000-\u0020]/.test(next)) {
+    return fallback;
+  }
+
   const trimmed = next.trim();
 
   // Must start with '/'
@@ -24,6 +29,10 @@ export function safeNext(next?: string | null, fallback: string = "/dashboard"):
   try {
     const parsed = new URL(trimmed, "http://codi.local");
     if (parsed.origin !== "http://codi.local") {
+      return fallback;
+    }
+    // Ensure pathname still starts with a single '/' and not protocol-relative
+    if (!parsed.pathname.startsWith("/") || parsed.pathname.startsWith("//")) {
       return fallback;
     }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;

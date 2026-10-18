@@ -1,5 +1,6 @@
+import type { PathChange } from "./learning-path-values";
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { courseLessons } from "./course-content";
 import { skills } from "./knowledge-map";
 import { assessmentSubmissions } from "./assessments";
@@ -18,6 +19,8 @@ export const lessonProgress = pgTable.withRLS("lesson_progress", {
   studiedAt: timestamp("studied_at", { withTimezone: true }),
   // Resume position for video.
   lastPositionSeconds: integer("last_position_seconds"),
+  // Per-material resume and rendered PDF pages. Reading/study is a learner attestation, not mastery evidence.
+  mediaProgress: jsonb("media_progress").$type<Record<string, { seconds?: number; pages?: number[]; pageCount?: number; lastPage?: number }>>().default({}).notNull(),
   firstStartedAt: timestamp("first_started_at", { withTimezone: true }),
   lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -65,6 +68,9 @@ export const personalizedLearningPaths = pgTable.withRLS("personalized_learning_
   aiRationale: text("ai_rationale"),
   // Regenerate only when the mastery vector moved enough to change this hash.
   masterySnapshotHash: text("mastery_snapshot_hash"),
+  updateSummary: jsonb("update_summary").$type<{ afterLessonId: string | null; changes: PathChange[]; message: string }>(),
+  highlightsSeenAt: timestamp("highlights_seen_at", { withTimezone: true }),
+  updateDismissedAt: timestamp("update_dismissed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   supersededAt: timestamp("superseded_at", { withTimezone: true }),
 }, (table) => [

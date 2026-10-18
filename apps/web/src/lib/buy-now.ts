@@ -86,6 +86,7 @@ export async function createBuyNowOrder(
     .select({
       id: orders.id,
       code: orders.code,
+      totalAmount: orders.totalAmount,
     })
     .from(orders)
     .innerJoin(orderItems, eq(orderItems.orderId, orders.id))
@@ -105,7 +106,7 @@ export async function createBuyNowOrder(
       courseId: targetCourse.id,
       courseTitle: targetCourse.title,
       courseSlug: targetCourse.slug,
-      price: targetCourse.price,
+      price: existingPending.totalAmount ?? targetCourse.price,
       isExisting: true,
     };
   }
@@ -147,14 +148,22 @@ export async function createBuyNowOrder(
       attempts++;
       const orderCode = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
 
-      // Check if order code already exists
-      const [existing] = await tx
+      // Check if order code already exists in orders OR studentTransactions
+      const [existingOrder] = await tx
         .select({ id: orders.id })
         .from(orders)
         .where(eq(orders.code, orderCode))
         .limit(1);
 
-      if (existing) continue;
+      if (existingOrder) continue;
+
+      const [existingStudentTx] = await tx
+        .select({ id: studentTransactions.id })
+        .from(studentTransactions)
+        .where(eq(studentTransactions.id, orderCode))
+        .limit(1);
+
+      if (existingStudentTx) continue;
 
       const [created] = await tx
         .insert(orders)
