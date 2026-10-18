@@ -59,6 +59,8 @@ import {
   restoreLesson,
   updateCourseInfo,
 } from "./actions";
+import { KnowledgeMapClient } from "./kmap/knowledge-map-client";
+import type { KnowledgeMapDataDto } from "./kmap/actions";
 
 interface CourseEditorProps {
   courseId: string;
@@ -69,6 +71,7 @@ interface CourseEditorProps {
     chapters: any[];
     entryTest: { id: number; count: number } | null;
     isLocked: boolean;
+    kmapData?: KnowledgeMapDataDto | null;
   };
 }
 
@@ -322,7 +325,13 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
           {[
             { id: "content", label: "Nội dung" },
             { id: "info", label: "Thông tin" },
-            { id: "kmap", label: "Bản đồ kiến thức" },
+            {
+              id: "kmap",
+              label: "Bản đồ kiến thức",
+              hasBadge:
+                ["stale", "failed", "ready"].includes(course.knowledgeMapStatus) &&
+                course.knowledgeMapStatus !== "confirmed",
+            },
             { id: "publish", label: "Xuất bản" },
           ].map((tab) => {
             const isSelected = activeTab === tab.id;
@@ -338,6 +347,12 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                 )}
               >
                 {tab.label}
+                {"hasBadge" in tab && tab.hasBadge && (
+                  <span
+                    className="size-2 rounded-full bg-warning inline-block"
+                    title="Cần xem lại bản đồ kiến thức"
+                  />
+                )}
               </Link>
             );
           })}
@@ -794,24 +809,28 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          TAB 3 & 4: Placeholders cho Task #116 & #117
+          TAB 3: BẢN ĐỒ KIẾN THỨC AI (S24 - Task #116)
           ───────────────────────────────────────────────────────────── */}
       {activeTab === "kmap" && (
-        <Card className="border border-dashed border-border/80">
-          <CardContent className="p-0">
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Sparkles className="size-5 text-primary" />
-                </EmptyMedia>
-                <EmptyTitle>Bản đồ kiến thức AI (Task #116)</EmptyTitle>
-                <EmptyDescription>
-                  Tính năng phân tích và review bản đồ kiến thức AI đang được liên kết trong chuỗi nhiệm vụ tiếp theo.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          </CardContent>
-        </Card>
+        data.kmapData ? (
+          <KnowledgeMapClient initialData={data.kmapData} courseId={courseId} />
+        ) : (
+          <Card className="border border-dashed border-border/80">
+            <CardContent className="p-0">
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Sparkles className="size-5 text-primary" />
+                  </EmptyMedia>
+                  <EmptyTitle>Đang tải bản đồ kiến thức...</EmptyTitle>
+                  <EmptyDescription>
+                    Đang thiết lập kết nối và trích xuất dữ liệu bản đồ kiến thức.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </CardContent>
+          </Card>
+        )
       )}
 
       {activeTab === "publish" && (

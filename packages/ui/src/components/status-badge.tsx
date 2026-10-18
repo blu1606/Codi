@@ -25,6 +25,12 @@ const statuses = {
     pending: { label: "Chờ chấm", tone: warning, Icon: Clock },
     graded: { label: "Đã chấm", tone: success, Icon: CircleCheck },
   },
+  kmapItem: {
+    suggested: { label: "Đề xuất", tone: warning, Icon: Clock },
+    accepted: { label: "Đã chấp nhận", tone: success, Icon: CircleCheck },
+    edited: { label: "Đã sửa", tone: "bg-info-soft text-info", Icon: FilePen },
+    declined: { label: "Đã bỏ", tone: neutral, Icon: XCircle },
+  },
 } as const;
 
 type StatusBadgeProps = { [K in keyof typeof statuses]: { kind: K; status: keyof (typeof statuses)[K]; className?: string } }[keyof typeof statuses];
