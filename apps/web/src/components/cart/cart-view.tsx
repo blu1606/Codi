@@ -208,20 +208,21 @@ export function CartView() {
 
   const executeCheckout = async (replaceOrderId?: number) => {
     setCheckoutLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/orders/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           voucherCode: currentVoucherCode || undefined,
-          replaceOrderId,
+          replaceOrderId: replaceOrderId ?? data?.pendingOrder?.id,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
         throw new Error(json.error || "Không thể tạo đơn hàng.");
       }
-      router.push(`/checkout?order=${json.orderId}` as any);
+      window.location.href = `/checkout?order=${json.orderId}`;
     } catch (err: any) {
       setError(err?.message || "Lỗi tạo đơn hàng.");
       setCheckoutLoading(false);
@@ -229,11 +230,7 @@ export function CartView() {
   };
 
   const handleStartCheckout = () => {
-    if (data?.pendingOrder) {
-      setShowReplaceModal(true);
-    } else {
-      executeCheckout();
-    }
+    executeCheckout(data?.pendingOrder?.id);
   };
 
   if (loading && !data) {
@@ -264,6 +261,13 @@ export function CartView() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTitle>Lỗi</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Pending order warning banner */}
       {pendingOrder && (
         <Alert variant="warning" className="mb-6">
@@ -524,53 +528,6 @@ export function CartView() {
           </div>
         </div>
       )}
-
-      {/* Modal when a pending order already exists */}
-      <Dialog open={showReplaceModal} onOpenChange={setShowReplaceModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Bạn còn một đơn hàng chưa thanh toán</DialogTitle>
-            <DialogDescription className="space-y-2 pt-2 text-foreground">
-              <p>
-                Đơn <strong>{pendingOrder?.code}</strong> ({formatVnd(pendingOrder?.totalAmount || 0)}) đang chờ thanh toán. Bạn muốn làm gì?
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Tạo đơn mới sẽ huỷ đơn cũ. Nếu bạn đã chuyển khoản cho đơn cũ, hãy chọn tiếp tục đơn cũ.
-              </p>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setShowReplaceModal(false)}>
-              Đóng
-            </Button>
-            {pendingOrder && (
-              <>
-                <Button
-                  variant="outline"
-                  disabled={cancellingOrder}
-                  onClick={() => handleCancelPendingOrder(pendingOrder.id, pendingOrder.code)}
-                >
-                  {cancellingOrder ? "Đang huỷ…" : "Huỷ đơn này"}
-                </Button>
-                <Link href={{ pathname: "/checkout", query: { order: pendingOrder.id } }}>
-                  <Button variant="secondary">Tiếp tục đơn cũ</Button>
-                </Link>
-              </>
-            )}
-            <Button
-              variant="default"
-              onClick={() => {
-                setShowReplaceModal(false);
-                if (pendingOrder) {
-                  executeCheckout(pendingOrder.id);
-                }
-              }}
-            >
-              Huỷ đơn cũ, tạo đơn mới
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

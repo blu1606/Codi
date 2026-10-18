@@ -67,6 +67,8 @@ export async function createOrderFromCart(
     retries--;
   }
 
+  const paymentDeadline = new Date(Date.now() + 30 * 60 * 1000); // 30 mins deadline
+
   const [order] = await db
     .insert(orders)
     .values({
@@ -79,6 +81,8 @@ export async function createOrderFromCart(
       currency: "VND",
       status: "pending",
       isBuyNow: false,
+      replacesOrderId: forceReplaceOrderId ?? undefined,
+      paymentDeadline,
     })
     .returning({ id: orders.id, code: orders.code, totalAmount: orders.totalAmount });
 
