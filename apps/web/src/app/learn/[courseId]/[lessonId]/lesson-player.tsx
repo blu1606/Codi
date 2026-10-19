@@ -256,6 +256,44 @@ export default function LessonPlayer({
   const missing = data.checklist.filter((item) => !item.done);
   const material =
     data.materials.find((item) => item.id === materialId) ?? data.materials[0];
+  const materialContent = (
+    <>
+      {data.materials.length > 1 && (
+        <div className="space-y-2">
+          <label htmlFor="lesson-material" className="text-sm font-medium">
+            Tài liệu bài học
+          </label>
+          <select
+            id="lesson-material"
+            className="min-h-11 w-full rounded-lg border bg-background px-3 text-sm"
+            value={material?.id}
+            onChange={(event) => setMaterialId(Number(event.target.value))}
+          >
+            {data.materials.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {material && (
+        <LessonMaterialView
+          key={material.id}
+          material={material}
+          progress={
+            data.media[String(material.id)] ??
+            (material.type === "video" &&
+            material.id ===
+              data.materials.find((item) => item.type === "video")?.id
+              ? { seconds: data.positionSeconds }
+              : undefined)
+          }
+          save={saveMedia}
+        />
+      )}
+    </>
+  );
   const lessons = (
     <LessonList
       path={path}
@@ -266,9 +304,9 @@ export default function LessonPlayer({
   const update = path.update?.afterLessonId === lessonId ? path.update : null;
 
   return (
-    <main className="mx-auto grid w-full max-w-[100rem] gap-6 p-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-0 lg:p-0">
+    <main className="grid w-full min-w-0 gap-6 p-4 lg:grid-cols-[18.5rem_minmax(0,1fr)] lg:gap-0 lg:p-0">
       <aside
-        className="hidden min-w-0 space-y-3 self-start border-r px-3 py-4 lg:sticky lg:top-16 lg:block lg:max-h-[calc(100svh-4rem)] lg:overflow-y-auto"
+        className="hidden min-w-0 space-y-2 self-start border-r px-3 py-2 lg:sticky lg:top-16 lg:block lg:max-h-[calc(100svh-4rem)] lg:overflow-y-auto"
         aria-label="Lộ trình bài học"
       >
         <Link
@@ -279,18 +317,25 @@ export default function LessonPlayer({
           Về lộ trình
         </Link>
         <h2 className="font-semibold">{path.course.title}</h2>
-        <progress
+        <div
+          role="progressbar"
           aria-label="Tiến độ khoá học"
-          max={100}
-          value={path.percent}
-          className="h-2 w-full accent-primary"
-        />
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={path.percent}
+          className="h-2 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className="h-full rounded-full bg-primary"
+            style={{ width: `${path.percent}%` }}
+          />
+        </div>
         <p className="text-sm text-muted-foreground">
           {path.done}/{path.total} bài
         </p>
         {lessons}
       </aside>
-      <div className="min-w-0 space-y-6 lg:p-6 lg:pt-3">
+      <div className="min-w-0 space-y-6 lg:px-6 lg:pb-6">
         <nav
           aria-label="Điều hướng bài học"
           className="flex flex-wrap items-center gap-2 border-b pb-3"
@@ -348,7 +393,7 @@ export default function LessonPlayer({
           <h1
             ref={heading}
             tabIndex={-1}
-            className="text-2xl font-semibold outline-none sm:text-3xl"
+            className="font-display text-xl font-semibold outline-none sm:text-2xl"
           >
             {data.lesson.title}
           </h1>
@@ -481,40 +526,7 @@ export default function LessonPlayer({
             </CardContent>
           </Card>
         )}
-        {data.materials.length > 1 && (
-          <div className="space-y-2">
-            <label htmlFor="lesson-material" className="text-sm font-medium">
-              Tài liệu bài học
-            </label>
-            <select
-              id="lesson-material"
-              className="min-h-11 w-full rounded-lg border bg-background px-3 text-sm"
-              value={material?.id}
-              onChange={(event) => setMaterialId(Number(event.target.value))}
-            >
-              {data.materials.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {material && (
-          <LessonMaterialView
-            key={material.id}
-            material={material}
-            progress={
-              data.media[String(material.id)] ??
-              (material.type === "video" &&
-              material.id ===
-                data.materials.find((item) => item.type === "video")?.id
-                ? { seconds: data.positionSeconds }
-                : undefined)
-            }
-            save={saveMedia}
-          />
-        )}
+        {!isCode && materialContent}
         {data.lesson.body && !isCode ? (
           <Card>
             <CardContent className="space-y-3 py-6">
@@ -566,15 +578,6 @@ export default function LessonPlayer({
           </div>
         )}
         {data.checklist
-          .filter((item) => item.key === "quiz" || item.key === "assignment")
-          .map((item) => (
-            <LessonAssessment
-              key={item.assessmentId}
-              endpoint={`${endpoint}/assessments/${item.assessmentId}`}
-              onChanged={() => send({ type: "open" })}
-            />
-          ))}
-        {data.checklist
           .filter((item) => item.key === "code")
           .map((item) =>
             item.tutorial ? (
@@ -591,6 +594,23 @@ export default function LessonPlayer({
               />
             ),
           )}
+        {isCode && material && (
+          <details className="rounded-lg border p-4">
+            <summary className="cursor-pointer text-sm font-medium">
+              Tài liệu tham khảo của bài học
+            </summary>
+            <div className="mt-4 space-y-4">{materialContent}</div>
+          </details>
+        )}
+        {data.checklist
+          .filter((item) => item.key === "quiz" || item.key === "assignment")
+          .map((item) => (
+            <LessonAssessment
+              key={item.assessmentId}
+              endpoint={`${endpoint}/assessments/${item.assessmentId}`}
+              onChanged={() => send({ type: "open" })}
+            />
+          ))}
         <Card id="checklist">
           <CardContent className="space-y-5 py-6">
             <h2 className="text-lg font-semibold">Để hoàn thành bài học</h2>
@@ -697,7 +717,7 @@ function LessonList({
       {path.rows.map((row, index) => (
         <li
           key={row.id}
-          className={cn("rounded-lg p-3", row.id === lessonId && "bg-accent")}
+          className={cn("rounded-lg px-3 py-2", row.id === lessonId && "bg-accent")}
         >
           <div className="flex items-start gap-2">
             {row.status === "done" ? (
@@ -715,7 +735,7 @@ function LessonList({
                 {index + 1}.
               </span>
             )}
-            <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="min-w-0 flex-1 space-y-1">
               <Link
                 href={
                   `/learn/${encodeURIComponent(path.course.id)}/${encodeURIComponent(row.id)}` as Route

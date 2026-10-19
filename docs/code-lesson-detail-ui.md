@@ -7,6 +7,8 @@ Chưa tạo PR; báo người dùng xem trước theo yêu cầu.
 ## Thay đổi
 
 - Sidebar danh sách liền, bài đang mở dùng `aria-current` và nền accent; trạng thái có icon/chữ cho trình đọc màn hình. Loại bài và thời lượng lấy từ nội dung đã xuất bản, không suy đoán từ tên bài.
+- Trang học dùng toàn bộ chiều rộng, sidebar 296px; phần hướng dẫn/yêu cầu nằm cạnh editor nền tối. Video và tài liệu bổ sung của bài code nằm trong mục tham khảo thu gọn phía dưới workspace.
+- Khóa `dev-practice-quiz-code` có hai bài riêng: **Quiz: Kiểu dữ liệu và chuỗi** rồi **Thực hành code: Tổng các số chẵn**. Bài code giữ URL cũ; mỗi bài có checklist riêng. Không gộp quiz vào workspace code.
 - Header hiển thị chương · loại bài · thời lượng. Link về lộ trình trên header chỉ dành cho mobile; desktop dùng link ở sidebar.
 - Tutorial giữ đúng các bước trong mockup: mục lục, thanh bước, nội dung markdown, Bước trước / Tiếp, editor có tên file/ngôn ngữ/số dòng/tô cú pháp, Console và phím tắt. Ở vùng nội dung hẹp, hai cột xếp dọc.
 - Server lưu `current`, `visited`, `drafts`, `runs` trong `coding_workspaces.tutorial_progress`, tách từng bước. Chuyển bước chờ lưu nháp; lỗi lưu giữ nguyên code và có Thử lại. Khôi phục cần xác nhận, chỉ ảnh hưởng bước được chọn.
@@ -19,7 +21,17 @@ Chưa tạo PR; báo người dùng xem trước theo yêu cầu.
 
 Migration `20261019102323_coding_tutorial_steps` chỉ thêm `coding_exercises.file_name`, `coding_exercises.tutorial_steps` (mặc định `[]`) và `coding_workspaces.tutorial_progress` (nullable). Challenge cũ giữ mặc định và cách chấm cũ.
 
-**Chưa áp dụng migration/seed lên Supabase dùng chung.** Để xem UI bằng dữ liệu thật sau khi duyệt thay đổi: nạp biến môi trường của DB dev, chạy migration bằng workflow của repo, rồi chạy `pnpm db:seed-mockup` để cập nhật nội dung tutorial. Seed bảo toàn tiến độ người học. Mở bài “Hướng dẫn: Viết và chạy JavaScript” trong khóa `course-js-001`.
+Đã áp dụng migration trên **DB phát triển** và cập nhật đúng tutorial 7 bước của `course-js-001` bằng `scripts/prepare-code-ui-preview.ts --apply`. Script kiểm tra danh sách migration đang chờ trước khi chạy và không thay enrollment, câu trả lời, lần nộp hay workspace cũ. Không chạy seed toàn bộ mockup.
+
+Đã tách bài trong khóa phát triển bằng `pnpm --filter web db:split-practice -- --apply` (hoặc chạy trực tiếp `tsx --env-file=.env scripts/split-practice-dev.ts --apply` tại `apps/web`). Không có `--apply` thì chạy trong transaction luôn rollback để xem trước và xác minh. Script giữ assessment ID cũ, chuyển quiz và liên kết câu hỏi sang bài mới; không tạo lại câu hỏi, lần làm hay đáp án. Lộ trình đang hoạt động chèn quiz trước code, không trùng vị trí. Bài gộp đã hoàn thành được giữ kết quả cho cả hai bài; tiến độ khóa được tính lại. Kiểm tra fingerprint toàn bộ các dòng attempt/answer/workspace trước và sau, đồng thời chạy lại để kiểm tra tính idempotent.
+
+Đây là script tách dữ liệu phát triển đã có, không thay đổi cấu trúc câu hỏi diagnostic hoặc reset bài kiểm tra đầu vào. Script seed thử nghiệm gộp quiz/code cũ ở worktree khác không còn phù hợp với cách tổ chức này; không chạy lại script đó trên dữ liệu đã tách.
+
+Các URL xem thử trên dev server cổng 3001:
+
+- Quiz: `/learn/dev-practice-quiz-code/c937bd55-1283-493e-bca0-31047cd80aa3`
+- Code: `/learn/dev-practice-quiz-code/eeb00ab1-10c0-4d69-a0fc-731c1788f101`
+- Tutorial theo ảnh: `/learn/course-js-001/bedaf193-5537-4de7-a390-f4b157b55307`
 
 Script kiểm thử dưới đây không cần áp dụng migration lên DB dùng chung: tạo bảng code tạm có cột mới, tạo fixture trong một transaction và luôn rollback. Không reset tài khoản/tiến độ đang dùng.
 
@@ -32,7 +44,7 @@ pnpm --filter web build
 node scripts/verify-coding-trace.mjs
 ```
 
-Kết quả ngày 19/10/2026: **913 tests / 68 files đạt**, typecheck web/db/ui/auth đạt, design-token audit 0 vi phạm, production build đạt. Trace của cả coding và tutorial có worker, QuickJS và WASM. Script DB rollback đạt với runner thật, gồm lưu/khôi phục nháp từng bước, gate lời giải, checklist, loại bài sidebar, lỗi cú pháp/runtime/timeout, sandbox unavailable và guard quyền/xuất bản/ghi danh. Không có migration hoặc seed được lưu vào DB dùng chung.
+Kết quả ngày 19/10/2026: **913 tests / 68 files đạt**, typecheck web/db/ui/auth đạt, design-token audit 0 vi phạm, production build của bản chỉnh bố cục và tách quiz đạt. Trace của cả coding và tutorial có worker, QuickJS và WASM. Script DB rollback đạt với runner thật, gồm lưu/khôi phục nháp từng bước, gate lời giải, checklist, loại bài sidebar, lỗi cú pháp/runtime/timeout, sandbox unavailable và guard quyền/xuất bản/ghi danh.
 
 ## Đối chiếu state
 
@@ -46,17 +58,20 @@ Kết quả ngày 19/10/2026: **913 tests / 68 files đạt**, typecheck web/db/
 | Tutorial done vs challenge submit | `lessonChecklist` đọc visited từ server | unit, DB rollback |
 | Bài khóa / ghi danh sai / bài nháp | `loadLearningLessonAccess` + assessment scope | API, DB rollback |
 
-## Kiểm tra giao diện còn cần thực hiện
+## Kiểm tra giao diện
 
-Phiên làm việc không có trình duyệt kết nối (`cua.getState()` không có browser; mở IAB trả “Browser is not available”). DOM tests không thay thế kiểm tra hình ảnh. Chưa xác nhận visual parity hoặc ảnh screenshot desktop/mobile light/dark.
+Đã kiểm tra bằng Chromium headless tại 1233×800 và 375×812, dùng tài khoản QA tạm riêng và xóa tài khoản đó sau khi xong. Tutorial chạy Console thật, chuyển bước và khôi phục code nháp đạt. Quiz được mở từ sidebar trên trang code, giữ lựa chọn sau reload, trả lời đủ 3 câu và chấm đạt; hai trang không hiển thị lẫn quiz/editor. Không có page error hoặc tràn ngang. Đã sửa lỗi hydration ở menu tài khoản/thông báo và độ rộng header mobile phát hiện trong lượt kiểm tra đầu.
+
+Ảnh được lưu ngoài repo tại `../.task-notes/`; sẽ đính kèm vào PR sau khi người dùng duyệt.
 
 | State | Mockup | Desktop light | Desktop dark | Mobile 375px |
 |---|---|---|---|---|
-| Bước 1, editor và Console trống | Ảnh người dùng / tutorialView | Chờ chụp | Chờ chụp | Chờ chụp |
+| Bước 1, editor và Console | Ảnh người dùng / tutorialView | `code-ui-tutorial-desktop-light.png` | `code-ui-tutorial-desktop-dark.png` | `code-ui-tutorial-mobile.png` |
 | Mục lục, bước giữa, code nháp | tutorialView | Chờ chụp | Chờ chụp | Chờ chụp |
 | Lỗi cú pháp/runtime/timeout, lỗi lưu + retry | tutorialView | Chờ chụp | Chờ chụp | Chờ chụp |
 | Lời giải bị che / đã hiện; bước cuối | tutorialView | Chờ chụp | Chờ chụp | Chờ chụp |
 | Loading / tải lỗi / sandbox unavailable | S11g | Chờ chụp | Chờ chụp | Chờ chụp |
-| Bài challenge cũ và sidebar mobile | S11 / S11g | Chờ chụp | Chờ chụp | Chờ chụp |
+| Bài challenge cũ | S11 / S11g | `code-ui-challenge-desktop.png` | Chờ chụp | Chờ chụp |
+| Quiz riêng | Yêu cầu người dùng | `code-ui-quiz-desktop.png` | Chờ chụp | Chờ chụp |
 
-Chưa đánh dấu screenshot/browser QA hoàn thành; chưa mở PR.
+Các state lỗi/edge trong bảng vẫn được kiểm thử bằng unit/DOM/DB; còn cần ảnh cho đầy đủ bảng parity trước khi mở PR. Chưa mở PR theo yêu cầu người dùng.

@@ -4,7 +4,11 @@ import type { ComponentProps } from "react";
 import { defaultRehypePlugins, Streamdown } from "streamdown";
 import { cn } from "@codi-1/ui/lib/utils";
 
-function ExternalLink({ node: _node, className, ...props }: ComponentProps<"a"> & { node?: unknown }) {
+function ExternalLink({
+  node: _node,
+  className,
+  ...props
+}: ComponentProps<"a"> & { node?: unknown }) {
   return (
     <a
       {...props}
@@ -21,16 +25,23 @@ function ExternalLink({ node: _node, className, ...props }: ComponentProps<"a"> 
 const components = { a: ExternalLink };
 const noLinkModal = { enabled: false };
 // Default pipeline minus rehype-raw: raw HTML nodes are never parsed into elements.
-const rehypePlugins = [defaultRehypePlugins.sanitize, defaultRehypePlugins.harden].filter(
-  (plugin) => plugin !== undefined,
-);
+const rehypePlugins = [
+  defaultRehypePlugins.sanitize,
+  defaultRehypePlugins.harden,
+].filter((plugin) => plugin !== undefined);
 
 /**
  * Lesson body authored by lecturers. Rendered as static markdown: raw HTML is
  * dropped (not sanitised-and-kept), links open in a new tab, and single line
  * breaks of plain-text bodies are preserved.
  */
-export default function LessonMarkdown({ children }: { children: string }) {
+export default function LessonMarkdown({
+  children,
+  className,
+}: {
+  children: string;
+  className?: string;
+}) {
   return (
     <Streamdown
       mode="static"
@@ -39,7 +50,10 @@ export default function LessonMarkdown({ children }: { children: string }) {
       parseIncompleteMarkdown={false}
       linkSafety={noLinkModal}
       components={components}
-      className="break-words leading-8 [&_li]:whitespace-pre-line [&_p]:whitespace-pre-line"
+      className={cn(
+        "break-words leading-8 [&_li]:whitespace-pre-line [&_p]:whitespace-pre-line",
+        className,
+      )}
     >
       {children}
     </Streamdown>

@@ -31,35 +31,9 @@ import {
 import { cn } from "@codi-1/ui/lib/utils";
 import { toast } from "sonner";
 import LessonMarkdown from "./lesson-markdown";
+import { highlightCode } from "./code-highlight";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 import type { TutorialCommand, TutorialView } from "@/lib/tutorial-contract";
-
-function highlight(code: string) {
-  return code
-    .split(
-      /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:const|let|var|function|return|if|else|for|while|throw|new|true|false|null|undefined)\b|\b\d+(?:\.\d+)?\b)/g,
-    )
-    .map((part, i) => (
-      <span
-        key={i}
-        className={
-          part.startsWith("//") || part.startsWith("/*")
-            ? "italic text-code-muted"
-            : /^["'`]/.test(part)
-              ? "text-code-string"
-              : /^\d/.test(part)
-                ? "text-code-number"
-                : /^(const|let|var|function|return|if|else|for|while|throw|new|true|false|null|undefined)$/.test(
-                      part,
-                    )
-                  ? "text-code-keyword"
-                  : undefined
-        }
-      >
-        {part}
-      </span>
-    ));
-}
 
 export default function LessonTutorial({
   endpoint,
@@ -281,13 +255,13 @@ export default function LessonTutorial({
     >
       {failure}
       <div className="grid min-w-0 items-start gap-4 @[42rem]/tutorial:grid-cols-[minmax(17rem,1fr)_minmax(0,1.4fr)]">
-        <Card className="min-w-0 shadow-none">
-          <CardContent className="space-y-5 p-4 @[48rem]/tutorial:p-5">
+        <Card className="min-w-0 gap-0 py-0 shadow-none @[42rem]/tutorial:sticky @[42rem]/tutorial:top-20">
+          <CardContent className="space-y-3 p-4">
             <div className="flex items-center justify-between gap-2">
               <Button
                 variant="ghost"
                 size="sm"
-                className="-ml-2"
+                className="-ml-2 min-h-9"
                 disabled={busy}
                 aria-expanded={toc}
                 aria-controls={`${id}-toc`}
@@ -357,7 +331,7 @@ export default function LessonTutorial({
                 <h2
                   ref={title}
                   tabIndex={-1}
-                  className="font-display text-2xl font-semibold outline-none"
+                  className="font-display text-xl font-semibold outline-none"
                 >
                   {data.title}
                 </h2>
@@ -385,7 +359,9 @@ export default function LessonTutorial({
                     </Button>
                   </div>
                 ) : (
-                  <LessonMarkdown>{data.body ?? ""}</LessonMarkdown>
+                  <LessonMarkdown className="text-base leading-relaxed">
+                    {data.body ?? ""}
+                  </LessonMarkdown>
                 )}
               </article>
             )}
@@ -482,7 +458,7 @@ export default function LessonTutorial({
                       aria-hidden="true"
                       className="pointer-events-none absolute inset-0 m-0 overflow-hidden p-3 font-mono text-sm leading-6 [tab-size:2]"
                     >
-                      {highlight(code)}
+                      {highlightCode(code)}
                       {"\n"}
                     </pre>
                     <textarea
