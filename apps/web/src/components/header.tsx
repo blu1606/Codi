@@ -41,7 +41,7 @@ export default function Header() {
       <div className="flex min-w-0 items-center gap-2 md:gap-8">
         <Button variant="ghost" size="icon" className="md:hidden" aria-label="Mở menu" onClick={() => setMobileOpen(true)}><Menu aria-hidden="true" /></Button>
         <Link href={getRoleHome(role)} data-codi-logo aria-label="Codi — Trang chính" className="flex min-h-11 shrink-0 items-center font-display text-xl font-semibold"><BrandLogo /></Link>
-        <div data-codi-intro-nav aria-busy={isPending || loading}>{nav(false)}</div>
+        <div data-codi-intro-nav className="hidden md:block" aria-busy={isPending || loading}>{nav(false)}</div>
       </div>
       <div data-codi-intro-account className="flex shrink-0 items-center gap-1 sm:gap-2">
         {role === ROLE.LEARNER && <CartNavButton />}

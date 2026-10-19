@@ -335,7 +335,8 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     showDiagnosticCard:
       e.pathSource === "default" &&
       e.pathStatus === "ready" &&
-      e.diagnosticStatus === "skipped",
+      e.diagnosticStatus === "skipped" &&
+      !e.diagnosticCardDismissedAt,
     pathId: path?.id ?? null,
     rationale: path?.aiRationale ?? null,
     updating: !!pending,

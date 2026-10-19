@@ -118,6 +118,7 @@ export default function UserMenu({ role = null }: { role?: RoleId | null }) {
           <DropdownMenuItem onClick={() => router.push(getRoleHome(role))}>
             {role === "ADMIN" ? "Bảng quản trị" : role === "LECTURER" ? "Khu vực giảng dạy" : "Bàn làm việc"}
           </DropdownMenuItem>
+          {role === "LEARNER" && <DropdownMenuItem onClick={() => router.push("/progress")}>Tiến độ & kết quả</DropdownMenuItem>}
           <DropdownMenuItem onClick={() => router.push("/profile")}>
             Hồ sơ cá nhân (Profile)
           </DropdownMenuItem>
