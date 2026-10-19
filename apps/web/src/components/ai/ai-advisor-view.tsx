@@ -27,13 +27,13 @@ import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert
 import {
   DOWN_VOTE_REASONS,
   INTAKE_QUESTIONS,
+  formatVnd,
   type AdvisorCourseCard,
   type AdvisorStructuredResponse,
   type DownVoteReason,
   type IntakeKey,
   type IntakeState,
 } from "@/lib/ai-advisor-contract";
-import { formatVnd } from "@/lib/ai-advisor-service";
 import type { CourseOwnershipDetail } from "@/lib/course-ownership";
 
 export type MessageRole =
@@ -81,9 +81,13 @@ interface AdvisorInitData {
 export function AiAdvisorView({
   initialTopic,
   initialPrompt,
+  initialAction,
+  initialCourseId,
 }: {
   initialTopic?: string;
   initialPrompt?: string;
+  initialAction?: string;
+  initialCourseId?: string;
 }) {
   const router = useRouter();
   const [initData, setInitData] = useState<AdvisorInitData | null>(null);
@@ -109,6 +113,7 @@ export function AiAdvisorView({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pendingActionHandledRef = useRef(false);
 
   // Sync intake to localStorage
   const updateIntake = (updater: (prev: IntakeState) => IntakeState) => {
@@ -132,7 +137,32 @@ export function AiAdvisorView({
           user: data.user ?? null,
           currentCourse: data.currentCourse ?? null,
         });
+
+        // Hydrate intake from backend savedIntake if local intake is empty
+        if (data.savedIntake) {
+          setIntake((prev) => {
+            const next = { ...prev };
+            if (!next.goal && data.savedIntake.goal) next.goal = data.savedIntake.goal;
+            if (!next.level && data.savedIntake.level) next.level = data.savedIntake.level;
+            if (!next.hoursPerWeek && data.savedIntake.hoursPerWeek) next.hoursPerWeek = data.savedIntake.hoursPerWeek;
+            try {
+              localStorage.setItem("codi_advisor_intake", JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+
         setLoadingContext(false);
+
+        // Resume guest intent action if learner just logged in
+        if (data.user && initialAction && initialCourseId && !pendingActionHandledRef.current) {
+          pendingActionHandledRef.current = true;
+          if (initialAction === "add-cart") {
+            void handleAddToCart(initialCourseId, "khoá học đã chọn");
+          } else if (initialAction === "enroll-free") {
+            void handleEnrollFree(initialCourseId, "khoá học đã chọn");
+          }
+        }
 
         if (initialPrompt && messages.length === 0) {
           setTimeout(() => {
@@ -186,7 +216,7 @@ export function AiAdvisorView({
     );
   };
 
-  const executeAIQuery = async (queryText: string) => {
+  const executeAIQuery = async (queryText: string, overrideIntake?: IntakeState) => {
     setBusy(true);
     const thinkingId = `msg-${Date.now()}`;
     const thinkingMessage: ChatMessage = {
@@ -199,13 +229,15 @@ export function AiAdvisorView({
 
     abortControllerRef.current = new AbortController();
 
+    const activeIntake = overrideIntake ?? intake;
+
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: queryText,
-          intake,
+          intake: activeIntake,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -316,14 +348,15 @@ export function AiAdvisorView({
   };
 
   const handleIntakeAnswer = (key: IntakeKey, answer: string) => {
-    updateIntake((prev) => {
-      const next = { ...prev };
-      if (key === "goal") next.goal = answer;
-      else if (key === "level") next.level = answer;
-      else if (key === "hours") next.hoursPerWeek = answer;
-      next.skipped = (next.skipped || []).filter((k) => k !== key);
-      return next;
-    });
+    const nextIntake: IntakeState = {
+      ...intake,
+      ...(key === "goal" ? { goal: answer } : {}),
+      ...(key === "level" ? { level: answer } : {}),
+      ...(key === "hours" ? { hoursPerWeek: answer } : {}),
+      skipped: (intake.skipped || []).filter((k) => k !== key),
+    };
+
+    updateIntake(() => nextIntake);
 
     // Replace the intake-question message with a user response bubble
     setMessages((prev) =>
@@ -338,39 +371,39 @@ export function AiAdvisorView({
       )
     );
 
-    // Check if remaining questions exist
+    // Check if remaining questions exist against the updated intake state
     const remainingMissing = INTAKE_QUESTIONS.filter((q) => {
-      if (q.key === key) return false;
-      const val = q.key === "goal" ? intake.goal : q.key === "level" ? intake.level : intake.hoursPerWeek;
-      return !val && !(intake.skipped || []).includes(q.key);
+      const val = q.key === "goal" ? nextIntake.goal : q.key === "level" ? nextIntake.level : nextIntake.hoursPerWeek;
+      return !val && !(nextIntake.skipped || []).includes(q.key);
     });
 
     if (remainingMissing.length === 0 && pendingPrompt) {
       const promptToRun = pendingPrompt;
       setPendingPrompt(null);
-      void executeAIQuery(promptToRun);
+      void executeAIQuery(promptToRun, nextIntake);
     }
   };
 
   const handleIntakeSkip = (key: IntakeKey) => {
-    updateIntake((prev) => ({
-      ...prev,
-      skipped: Array.from(new Set([...(prev.skipped || []), key])),
-    }));
+    const nextIntake: IntakeState = {
+      ...intake,
+      skipped: Array.from(new Set([...(intake.skipped || []), key])),
+    };
+
+    updateIntake(() => nextIntake);
 
     // Remove the question from messages
     setMessages((prev) => prev.filter((m) => !(m.role === "intake-question" && m.key === key)));
 
     const remainingMissing = INTAKE_QUESTIONS.filter((q) => {
-      if (q.key === key) return false;
-      const val = q.key === "goal" ? intake.goal : q.key === "level" ? intake.level : intake.hoursPerWeek;
-      return !val && !(intake.skipped || []).includes(q.key);
+      const val = q.key === "goal" ? nextIntake.goal : q.key === "level" ? nextIntake.level : nextIntake.hoursPerWeek;
+      return !val && !(nextIntake.skipped || []).includes(q.key);
     });
 
     if (remainingMissing.length === 0 && pendingPrompt) {
       const promptToRun = pendingPrompt;
       setPendingPrompt(null);
-      void executeAIQuery(promptToRun);
+      void executeAIQuery(promptToRun, nextIntake);
     }
   };
 
@@ -481,7 +514,7 @@ export function AiAdvisorView({
 
   const handleAddToCart = async (courseId: string, title: string) => {
     if (!initData?.user) {
-      router.push(`/login?returnUrl=/ai`);
+      router.push(`/login?callbackURL=${encodeURIComponent(`/ai?action=add-cart&courseId=${courseId}`)}`);
       return;
     }
 
@@ -517,7 +550,7 @@ export function AiAdvisorView({
 
   const handleEnrollFree = async (courseId: string, title: string) => {
     if (!initData?.user) {
-      router.push(`/login?returnUrl=/ai`);
+      router.push(`/login?callbackURL=${encodeURIComponent(`/ai?action=enroll-free&courseId=${courseId}`)}`);
       return;
     }
 
@@ -695,7 +728,7 @@ export function AiAdvisorView({
         {!user && messages.length === 0 && (
           <p className="text-sm text-muted-foreground -mt-3">
             Bạn đang dùng với tư cách khách.{" "}
-            <Link href="/login?returnUrl=/ai" className="text-primary font-medium underline">
+            <Link href="/login?callbackURL=/ai" className="text-primary font-medium underline">
               Đăng nhập
             </Link>{" "}
             để Codi gợi ý theo tiến độ học của bạn.

@@ -77,6 +77,7 @@ vi.mock("@/lib/ai-advisor-service", () => ({
     noMatch: false,
   })),
   logAdvisorInteraction: vi.fn(async () => 101),
+  syncLearnerIntakeGoalDraft: vi.fn(async () => {}),
 }));
 
 import { GET, POST } from "./route";

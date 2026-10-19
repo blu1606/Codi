@@ -9,12 +9,17 @@ import {
   lessonProgress,
   studentEnrollments,
 } from "@codi-1/db";
+import type { GoalDraft } from "@codi-1/db/schema/onboarding-values";
 import {
   INTAKE_QUESTIONS,
+  formatVnd,
+  levelLabel,
   type AdvisorCourseCard,
   type AdvisorStructuredResponse,
   type IntakeState,
 } from "./ai-advisor-contract";
+
+export { formatVnd, levelLabel };
 
 export interface AdvisorContextUser {
   id: string;
@@ -43,18 +48,7 @@ export interface LearnerProgressContext {
     totalLessons: number;
   } | null;
   ownedCourseIds: string[];
-}
-
-export function formatVnd(price: number): string {
-  if (price === 0) return "Miễn phí";
-  return `${price.toLocaleString("vi-VN")} ₫`;
-}
-
-export function levelLabel(level: string): string {
-  if (level === "Beginner" || level === "Cơ bản") return "Cơ bản";
-  if (level === "Intermediate" || level === "Trung cấp") return "Trung cấp";
-  if (level === "Advanced" || level === "Nâng cao") return "Nâng cao";
-  return level;
+  savedIntake?: Partial<IntakeState> | null;
 }
 
 export async function getLearnerProgressContext(
@@ -65,7 +59,7 @@ export async function getLearnerProgressContext(
     return { currentCourse: null, ownedCourseIds: [] };
   }
 
-  // Get active enrollments with progress
+  // Get active enrollments with progress and goals
   const enrollments = await db
     .select({
       enrollmentId: studentEnrollments.id,
@@ -74,6 +68,10 @@ export async function getLearnerProgressContext(
       lastActiveAt: studentEnrollments.lastActiveAt,
       courseTitle: courses.title,
       courseSlug: courses.slug,
+      learningGoal: studentEnrollments.learningGoal,
+      selfAssessedLevel: studentEnrollments.selfAssessedLevel,
+      weeklyGoalMinutes: studentEnrollments.weeklyGoalMinutes,
+      goalDraft: studentEnrollments.goalDraft,
     })
     .from(studentEnrollments)
     .innerJoin(courses, eq(courses.id, studentEnrollments.courseId))
@@ -91,6 +89,48 @@ export async function getLearnerProgressContext(
 
   const ownedCourseIds = enrollments.map((e) => e.courseId);
   const first = enrollments[0];
+
+  // Map existing goals to advisor intake labels if available
+  let savedIntake: Partial<IntakeState> | null = null;
+  const draft = first.goalDraft as { goal?: string; level?: string; hours?: number } | null;
+  const goalKey = draft?.goal ?? first.learningGoal;
+  const levelKey = draft?.level ?? first.selfAssessedLevel;
+  const hoursVal = draft?.hours ?? (first.weeklyGoalMinutes ? Math.round(first.weeklyGoalMinutes / 60) : null);
+
+  const goalText =
+    goalKey === "project"
+      ? "Làm được dự án"
+      : goalKey === "finish" || goalKey === "complete_course"
+        ? "Hoàn thành khoá học"
+        : goalKey === "interview"
+          ? "Chuẩn bị phỏng vấn"
+          : null;
+
+  const levelText =
+    levelKey === "new" || levelKey === "Beginner"
+      ? "Mới bắt đầu"
+      : levelKey === "basic" || levelKey === "Intermediate"
+        ? "Có kinh nghiệm cơ bản"
+        : levelKey === "solid" || levelKey === "Advanced"
+          ? "Trung cấp"
+          : null;
+
+  const hoursText =
+    hoursVal && hoursVal < 5
+      ? "< 5 giờ"
+      : hoursVal && hoursVal <= 10
+        ? "5-10 giờ"
+        : hoursVal && hoursVal > 10
+          ? "> 10 giờ"
+          : null;
+
+  if (goalText || levelText || hoursText) {
+    savedIntake = {
+      ...(goalText ? { goal: goalText } : {}),
+      ...(levelText ? { level: levelText } : {}),
+      ...(hoursText ? { hoursPerWeek: hoursText } : {}),
+    };
+  }
 
   // Count done lessons and total lessons for the first active course
   const [totalRow] = await db
@@ -123,7 +163,74 @@ export async function getLearnerProgressContext(
       totalLessons: totalRow?.count ?? 0,
     },
     ownedCourseIds,
+    savedIntake,
   };
+}
+
+export async function syncLearnerIntakeGoalDraft(
+  db: Database,
+  userId: string,
+  intake: IntakeState
+): Promise<void> {
+  const goal =
+    intake.goal === "Làm được dự án"
+      ? "project"
+      : intake.goal === "Hoàn thành khoá học"
+        ? "finish"
+        : intake.goal === "Chuẩn bị phỏng vấn"
+          ? "interview"
+          : undefined;
+
+  const level =
+    intake.level === "Mới bắt đầu"
+      ? "new"
+      : intake.level === "Có kinh nghiệm cơ bản"
+        ? "basic"
+        : intake.level === "Trung cấp"
+          ? "solid"
+          : undefined;
+
+  const hours =
+    intake.hoursPerWeek === "< 5 giờ"
+      ? 2
+      : intake.hoursPerWeek === "5-10 giờ"
+        ? 5
+        : intake.hoursPerWeek === "> 10 giờ"
+          ? 10
+          : undefined;
+
+  if (!goal && !level && !hours) return;
+
+  // Find active enrollments where goal is not yet finalized
+  const pendingEnrollments = await db
+    .select({
+      id: studentEnrollments.id,
+      goalDraft: studentEnrollments.goalDraft,
+      goalSetAt: studentEnrollments.goalSetAt,
+    })
+    .from(studentEnrollments)
+    .where(
+      and(
+        eq(studentEnrollments.userId, userId),
+        eq(studentEnrollments.status, "active")
+      )
+    );
+
+  for (const enr of pendingEnrollments) {
+    if (!enr.goalSetAt) {
+      const existingDraft = (enr.goalDraft as GoalDraft | null) || {};
+      const updatedDraft: GoalDraft = {
+        ...existingDraft,
+        ...(goal ? { goal } : {}),
+        ...(level ? { level } : {}),
+        ...(hours ? { hours } : {}),
+      };
+      await db
+        .update(studentEnrollments)
+        .set({ goalDraft: updatedDraft })
+        .where(eq(studentEnrollments.id, enr.id));
+    }
+  }
 }
 
 export async function getPublishedCatalog(db: Database): Promise<AdvisorCourseItem[]> {
@@ -242,22 +349,24 @@ export function buildAdvisorAnswer(params: {
   });
 
   // Scenario 1: User explicitly asks for something not in catalogue
-  if (
-    /blockchain|web3|solidity|rust|swift|flutter/i.test(promptLower) &&
-    !catalog.some((c) =>
-      c.title.toLowerCase().includes(promptLower) ||
-      c.description.toLowerCase().includes(promptLower)
-    )
-  ) {
-    const alternative = sortedList.slice(0, 2);
-    return {
-      text: "Codi chưa có khoá cho mục tiêu này. Bạn có thể tham khảo các khoá nền tảng lập trình gần nhất dưới đây:",
-      courses: alternative.map((c, idx) => toCard(c, undefined, idx === 0)),
-      table: null,
-      order: [],
-      followups: ["Mới bắt đầu học lập trình nên học gì?", "So sánh các khoá cơ bản"],
-      noMatch: true,
-    };
+  const subjectMatch = promptLower.match(/blockchain|web3|solidity|rust|swift|flutter/i);
+  if (subjectMatch) {
+    const subject = subjectMatch[0].toLowerCase();
+    const hasSubjectInCatalog = catalog.some((c) =>
+      c.title.toLowerCase().includes(subject) ||
+      c.description.toLowerCase().includes(subject)
+    );
+    if (!hasSubjectInCatalog) {
+      const alternative = sortedList.slice(0, 2);
+      return {
+        text: "Codi chưa có khoá cho mục tiêu này. Bạn có thể tham khảo các khoá nền tảng lập trình gần nhất dưới đây:",
+        courses: alternative.map((c, idx) => toCard(c, undefined, idx === 0)),
+        table: null,
+        order: [],
+        followups: ["Mới bắt đầu học lập trình nên học gì?", "So sánh các khoá cơ bản"],
+        noMatch: true,
+      };
+    }
   }
 
   // Scenario 2: Comparison table

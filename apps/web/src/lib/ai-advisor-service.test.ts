@@ -156,4 +156,17 @@ describe("ai-advisor-service business logic", () => {
     expect(res.text).toContain("Codi chưa có khoá cho mục tiêu này");
     expect(res.courses.length).toBeGreaterThan(0);
   });
+
+  it("matches requested subject rather than requiring the whole query string in course title", () => {
+    const res = buildAdvisorAnswer({
+      prompt: "Codi có khoá học Flutter cho người mới không?",
+      catalog: mockCatalog,
+      intake: { skipped: [] },
+      ownedCourseIds: [],
+    });
+
+    expect(res.noMatch).toBe(true);
+    expect(res.text).toContain("Codi chưa có khoá cho mục tiêu này");
+    expect(res.courses.length).toBe(2);
+  });
 });

@@ -7,6 +7,7 @@ import {
   getLearnerProgressContext,
   getPublishedCatalog,
   logAdvisorInteraction,
+  syncLearnerIntakeGoalDraft,
 } from "@/lib/ai-advisor-service";
 import { intakeStateSchema, type IntakeState } from "@/lib/ai-advisor-contract";
 
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
       user: session?.user ? { id: session.user.id, name: session.user.name } : null,
       currentCourse: progressContext.currentCourse,
       catalog,
+      savedIntake: progressContext.savedIntake ?? null,
     });
   } catch (error) {
     console.error("Failed to initialize advisor context", error);
@@ -102,6 +104,15 @@ export async function POST(req: Request) {
     });
 
     const latencyMs = Date.now() - startedAt;
+
+    // Connect intake persistence to profile and onboarding for signed-in learners
+    if (userId && (intake.goal || intake.level || intake.hoursPerWeek)) {
+      try {
+        await syncLearnerIntakeGoalDraft(db, userId, intake);
+      } catch (syncErr) {
+        console.warn("Failed to sync intake to goal draft", syncErr);
+      }
+    }
 
     // Log to ai_interaction_logs (guests have userId = null)
     const logId = await logAdvisorInteraction(db, {

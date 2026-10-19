@@ -24,22 +24,53 @@ export async function POST(req: Request) {
 
     const { logId, vote, reason } = parsed.data;
 
-    // If logId exists and user is authenticated or it's recent log, update the interaction log metadata
+    // If logId exists, verify ownership and requestType, then append feedback without clobbering diagnostics
     if (logId) {
       const [existing] = await db
-        .select({ id: aiInteractionLogs.id, userId: aiInteractionLogs.userId })
+        .select({
+          id: aiInteractionLogs.id,
+          userId: aiInteractionLogs.userId,
+          requestType: aiInteractionLogs.requestType,
+          errorMessage: aiInteractionLogs.errorMessage,
+          createdAt: aiInteractionLogs.createdAt,
+        })
         .from(aiInteractionLogs)
         .where(eq(aiInteractionLogs.id, logId));
 
-      if (existing) {
-        // Can optionally append feedback/reason to error_message or a metadata note
-        await db
-          .update(aiInteractionLogs)
-          .set({
-            errorMessage: reason ? `[Feedback: ${vote} - ${reason}]` : `[Feedback: ${vote}]`,
-          })
-          .where(eq(aiInteractionLogs.id, logId));
+      if (!existing) {
+        return NextResponse.json({ error: "Không tìm thấy tương tác AI." }, { status: 404 });
       }
+
+      // Must be an advisor interaction
+      if (existing.requestType !== "ask_advisor") {
+        return NextResponse.json({ error: "Không được phép gửi phản hồi cho tương tác này." }, { status: 403 });
+      }
+
+      // Check ownership:
+      // If logged-in interaction, feedback must come from the same user
+      if (existing.userId !== null && existing.userId !== userId) {
+        return NextResponse.json({ error: "Bạn không có quyền đánh giá tương tác này." }, { status: 403 });
+      }
+
+      // If guest interaction (existing.userId === null), require feedback within 24h
+      if (existing.userId === null) {
+        const ageMs = Date.now() - new Date(existing.createdAt).getTime();
+        if (ageMs > 24 * 60 * 60 * 1000) {
+          return NextResponse.json({ error: "Phiên tương tác khách đã hết hạn đánh giá." }, { status: 400 });
+        }
+      }
+
+      const feedbackTag = reason ? `[Feedback: ${vote} - ${reason}]` : `[Feedback: ${vote}]`;
+      const updatedErrorMessage = existing.errorMessage
+        ? `${existing.errorMessage} | ${feedbackTag}`
+        : feedbackTag;
+
+      await db
+        .update(aiInteractionLogs)
+        .set({
+          errorMessage: updatedErrorMessage,
+        })
+        .where(eq(aiInteractionLogs.id, logId));
     }
 
     return NextResponse.json({ success: true, vote, reason });

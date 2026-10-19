@@ -91,3 +91,15 @@ export const advisorFeedbackCommand = z.object({
 });
 
 export type AdvisorFeedbackCommand = z.infer<typeof advisorFeedbackCommand>;
+
+export function formatVnd(price: number): string {
+  if (price === 0) return "Miễn phí";
+  return `${price.toLocaleString("vi-VN")} ₫`;
+}
+
+export function levelLabel(level: string): string {
+  if (level === "Beginner" || level === "Cơ bản") return "Cơ bản";
+  if (level === "Intermediate" || level === "Trung cấp") return "Trung cấp";
+  if (level === "Advanced" || level === "Nâng cao") return "Nâng cao";
+  return level;
+}
