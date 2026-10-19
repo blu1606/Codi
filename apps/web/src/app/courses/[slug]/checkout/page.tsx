@@ -203,7 +203,19 @@ export default function CheckoutPage({ params, searchParams }: CheckoutPageProps
           </Card>
 
           <div className="mt-6 flex justify-end items-center gap-4">
-            <Button variant="outline" render={<Link href={`/courses/${slug}`} />} nativeButton={false}>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (transactionId) {
+                  await fetch("/api/orders/cancel", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ orderCode: transactionId }),
+                  }).catch(() => {});
+                }
+                router.push(`/courses/${encodeURIComponent(slug)}`);
+              }}
+            >
               Hủy giao dịch
             </Button>
           </div>

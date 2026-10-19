@@ -53,7 +53,7 @@ export default function Header() {
     {error && <div role="status" className="mx-auto flex max-w-[1200px] items-center gap-2 px-4 pb-2 text-xs text-destructive">Không thể tải menu theo vai trò.<Button variant="link" size="sm" onClick={retry}>Thử lại</Button></div>}
     <Sheet open={mobileOpen} onOpenChange={setMobileOpen} title="Menu Codi">
       {nav(true)}
-      {role === ROLE.LEARNER && <Link className="mt-2 flex min-h-11 items-center gap-2 rounded-md px-3 text-sm hover:bg-accent" href={{ pathname: "/cart" }} onClick={() => setMobileOpen(false)}><ShoppingCart aria-hidden="true" className="size-4" />Giỏ hàng</Link>}
+      {role === ROLE.LEARNER && <div onClick={() => setMobileOpen(false)}><CartNavButton mobile /></div>}
     </Sheet>
   </header>;
 }

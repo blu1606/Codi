@@ -5,9 +5,20 @@ import { courses } from "@codi-1/db/schema/courses";
 import { studentCart, studentEnrollments } from "@codi-1/db/schema/student-profile";
 
 const mocks = vi.hoisted(() => ({
-  getSession: vi.fn(), headers: vi.fn(), requireRole: vi.fn(),
-  select: vi.fn(), from: vi.fn(), where: vi.fn(), limit: vi.fn(),
-  insert: vi.fn(), values: vi.fn(), onConflictDoNothing: vi.fn(), returning: vi.fn(),
+  getSession: vi.fn(),
+  headers: vi.fn(),
+  requireRole: vi.fn(),
+  select: vi.fn(),
+  from: vi.fn(),
+  where: vi.fn(),
+  limit: vi.fn(),
+  insert: vi.fn(),
+  values: vi.fn(),
+  onConflictDoNothing: vi.fn(),
+  returning: vi.fn(),
+  delete: vi.fn(),
+  getCartSummary: vi.fn(),
+  removeFromCart: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({ headers: mocks.headers }));
@@ -18,16 +29,36 @@ vi.mock("@codi-1/auth", () => ({
 }));
 vi.mock("@/services", () => ({
   auth: { api: { getSession: mocks.getSession } },
-  db: { select: mocks.select, insert: mocks.insert },
+  db: { select: mocks.select, insert: mocks.insert, delete: mocks.delete },
+}));
+vi.mock("@/lib/cart-service", () => ({
+  getCartSummary: mocks.getCartSummary,
+  removeFromCart: mocks.removeFromCart,
 }));
 
 import { ForbiddenError, ROLE } from "@codi-1/auth";
 import { db } from "@/services";
-import { GET, POST } from "./route";
+import { DELETE, GET, POST } from "./route";
 
-function request(body: unknown = { courseId: "course-1" }) {
+function postRequest(body: unknown = { courseId: "course-1" }) {
   return new NextRequest("http://localhost/api/student/cart", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function getRequest(query: string = "") {
+  return new NextRequest(`http://localhost/api/student/cart${query}`, {
+    method: "GET",
+  });
+}
+
+function deleteRequest(body: unknown = { courseId: "course-1" }) {
+  return new NextRequest("http://localhost/api/student/cart", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 
@@ -44,11 +75,50 @@ beforeEach(() => {
   mocks.values.mockReturnValue({ onConflictDoNothing: mocks.onConflictDoNothing });
   mocks.onConflictDoNothing.mockReturnValue({ returning: mocks.returning });
   mocks.returning.mockResolvedValue([{ courseId: "course-1" }]);
+  mocks.delete.mockReturnValue({ where: mocks.where });
+  mocks.getCartSummary.mockResolvedValue({
+    items: [],
+    subtotal: 0,
+    discount: 0,
+    total: 0,
+    voucher: null,
+    removedOwnedTitles: [],
+    pendingOrder: null,
+  });
+  mocks.removeFromCart.mockResolvedValue({ success: true, courseTitle: "Course 1" });
+});
+
+describe("GET /api/student/cart", () => {
+  it("returns cart summary for authenticated learner", async () => {
+    const res = await GET(getRequest("?voucher=WELCOME20"));
+    expect(res.status).toBe(200);
+    expect(mocks.getSession).toHaveBeenCalled();
+    expect(mocks.requireRole).toHaveBeenCalledWith(db, "learner-1", ROLE.LEARNER);
+    expect(mocks.getCartSummary).toHaveBeenCalledWith(db, "learner-1", "WELCOME20");
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    mocks.getSession.mockResolvedValue(null);
+    const res = await GET(getRequest());
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 when user is not a learner", async () => {
+    mocks.requireRole.mockRejectedValue(new ForbiddenError("Not a learner"));
+    const res = await GET(getRequest());
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 500 when service throws unexpected error", async () => {
+    mocks.getCartSummary.mockRejectedValue(new Error("DB error"));
+    const res = await GET(getRequest());
+    expect(res.status).toBe(500);
+  });
 });
 
 describe("POST /api/student/cart core scenarios", () => {
   it("adds a course for the authenticated learner using the trimmed course ID", async () => {
-    const response = await POST(request({ courseId: "  course-1  ", userId: "another-user" }));
+    const response = await POST(postRequest({ courseId: "  course-1  ", userId: "another-user" }));
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ courseId: "course-1", added: true });
     expect(mocks.getSession).toHaveBeenCalledWith({ headers: await mocks.headers.mock.results[0].value });
@@ -71,7 +141,7 @@ describe("POST /api/student/cart core scenarios", () => {
 
   it("rejects an unauthenticated request before database access", async () => {
     mocks.getSession.mockResolvedValue(null);
-    expect((await POST(request())).status).toBe(401);
+    expect((await POST(postRequest())).status).toBe(401);
     expect(mocks.requireRole).not.toHaveBeenCalled();
     expect(mocks.select).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
@@ -79,20 +149,20 @@ describe("POST /api/student/cart core scenarios", () => {
 
   it("returns 404 for a missing course without inserting", async () => {
     mocks.limit.mockReset().mockResolvedValue([]);
-    expect((await POST(request())).status).toBe(404);
+    expect((await POST(postRequest())).status).toBe(404);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it("treats an existing cart item as an idempotent success", async () => {
     mocks.returning.mockResolvedValue([]);
-    const response = await POST(request());
+    const response = await POST(postRequest());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ courseId: "course-1", added: false });
   });
 
   it("rejects a course the learner already owns", async () => {
     mocks.limit.mockReset().mockResolvedValueOnce([{ id: "course-1" }]).mockResolvedValueOnce([{ courseId: "course-1" }]);
-    expect((await POST(request())).status).toBe(409);
+    expect((await POST(postRequest())).status).toBe(409);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 });
@@ -100,26 +170,36 @@ describe("POST /api/student/cart core scenarios", () => {
 describe("POST /api/student/cart validation and failures", () => {
   it("returns 403 when learner authorization fails", async () => {
     mocks.requireRole.mockRejectedValue(new ForbiddenError("Missing learner role"));
-    expect((await POST(request())).status).toBe(403);
+    expect((await POST(postRequest())).status).toBe(403);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it("returns 400 for malformed JSON", async () => {
-    const invalidRequest = new NextRequest("http://localhost/api/student/cart", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" });
+    const invalidRequest = new NextRequest("http://localhost/api/student/cart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
     expect((await POST(invalidRequest)).status).toBe(400);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
-  it.each([null, [], {}, { courseId: 1 }, { courseId: " " }, { courseId: "x".repeat(201) }])("returns 400 for invalid input %j", async (body) => {
-    expect((await POST(request(body))).status).toBe(400);
-    expect(mocks.insert).not.toHaveBeenCalled();
-  });
+  it.each([null, [], {}, { courseId: 1 }, { courseId: " " }, { courseId: "x".repeat(201) }])(
+    "returns 400 for invalid input %j",
+    async (body) => {
+      expect((await POST(postRequest(body))).status).toBe(400);
+      expect(mocks.insert).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects a simple text/plain cross-origin request before database access", async () => {
-    const response = await POST(new NextRequest("http://localhost/api/student/cart", {
-      method: "POST", headers: { "Content-Type": "text/plain", Origin: "https://other.example" },
-      body: JSON.stringify({ courseId: "course-1" }),
-    }));
+    const response = await POST(
+      new NextRequest("http://localhost/api/student/cart", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain", Origin: "https://other.example" },
+        body: JSON.stringify({ courseId: "course-1" }),
+      }),
+    );
     expect(response.status).toBe(415);
     expect(mocks.select).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
@@ -127,7 +207,7 @@ describe("POST /api/student/cart validation and failures", () => {
 
   it("returns a generic 500 without exposing database exception details", async () => {
     mocks.returning.mockRejectedValue(new Error("private database connection details"));
-    const response = await POST(request());
+    const response = await POST(postRequest());
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error).toEqual(expect.any(String));
@@ -135,28 +215,80 @@ describe("POST /api/student/cart validation and failures", () => {
   });
 });
 
-describe("GET /api/student/cart", () => {
-  it("returns count 0 and empty items for unauthenticated visitors", async () => {
+describe("DELETE /api/student/cart", () => {
+  it("removes a course for authenticated learner", async () => {
+    const res = await DELETE(deleteRequest({ courseId: "course-1" }));
+    expect(res.status).toBe(200);
+    expect(mocks.removeFromCart).toHaveBeenCalledWith(db, "learner-1", "course-1");
+  });
+
+  it("returns 401 when unauthenticated", async () => {
     mocks.getSession.mockResolvedValue(null);
-    const res = await GET();
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ count: 0, items: [] });
+    const res = await DELETE(deleteRequest({ courseId: "course-1" }));
+    expect(res.status).toBe(401);
   });
 
-  it("returns user cart items and count when authenticated", async () => {
-    mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
-    mocks.where.mockResolvedValueOnce([{ courseId: "c-1" }, { courseId: "c-2" }]);
-    const res = await GET();
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ count: 2, items: ["c-1", "c-2"] });
+  it("returns 403 when user is not a learner", async () => {
+    mocks.requireRole.mockRejectedValue(new ForbiddenError("Not a learner"));
+    const res = await DELETE(deleteRequest({ courseId: "course-1" }));
+    expect(res.status).toBe(403);
   });
 
-  it("safely handles db errors and returns count 0", async () => {
-    mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
-    mocks.where.mockRejectedValueOnce(new Error("db down"));
-    const res = await GET();
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ count: 0, items: [] });
+  it("returns 415 for non-json content-type", async () => {
+    const req = new NextRequest("http://localhost/api/student/cart", {
+      method: "DELETE",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ courseId: "course-1" }),
+    });
+    const res = await DELETE(req);
+    expect(res.status).toBe(415);
+  });
+
+  it("returns 400 for malformed JSON", async () => {
+    const req = new NextRequest("http://localhost/api/student/cart", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
+    const res = await DELETE(req);
+    expect(res.status).toBe(400);
+  });
+
+  it.each([null, [], {}, { courseId: 1 }, { courseId: " " }])(
+    "returns 400 for invalid courseId %j",
+    async (body) => {
+      const res = await DELETE(deleteRequest(body));
+      expect(res.status).toBe(400);
+    },
+  );
+
+  it("returns 500 when removeFromCart throws", async () => {
+    mocks.removeFromCart.mockRejectedValue(new Error("DB error"));
+    const res = await DELETE(deleteRequest({ courseId: "course-1" }));
+    expect(res.status).toBe(500);
   });
 });
 
+describe("GET /api/student/cart", () => {
+  it("returns user cart items and count when authenticated", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
+    mocks.getCartSummary.mockResolvedValueOnce({
+      items: [
+        { id: "c-1", title: "C1", price: 100000 },
+        { id: "c-2", title: "C2", price: 200000 },
+      ],
+      subtotal: 300000,
+      discount: 0,
+      total: 300000,
+      voucher: null,
+      removedOwnedTitles: [],
+      pendingOrder: null,
+    });
+    const res = await GET(getRequest());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(2);
+    expect(body.itemIds).toEqual(["c-1", "c-2"]);
+    expect(body.total).toBe(300000);
+  });
+});
