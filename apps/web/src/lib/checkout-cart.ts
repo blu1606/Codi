@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { orderEvents, orderItems, orders, studentCart, vouchers } from "@codi-1/db";
 import { studentTransactions } from "@codi-1/db/schema/student-profile";
@@ -189,8 +189,18 @@ export async function createOrderFromCart(
       status: "pending",
     });
 
-    // 8. Point 2: Clear cart in same atomic transaction
-    await tx.delete(studentCart).where(eq(studentCart.userId, userId));
+    // 8. Delete only the courses that were placed in this order
+    const orderedCourseIds = summary.items.map((it) => it.id);
+    if (orderedCourseIds.length > 0) {
+      await tx
+        .delete(studentCart)
+        .where(
+          and(
+            eq(studentCart.userId, userId),
+            inArray(studentCart.courseId, orderedCourseIds),
+          ),
+        );
+    }
 
     return {
       orderId: order.id,

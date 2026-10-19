@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 
-export default function CartNavButton() {
+export default function CartNavButton({ mobile }: { mobile?: boolean } = {}) {
   const { data: session } = authClient.useSession();
   const [count, setCount] = useState(0);
 

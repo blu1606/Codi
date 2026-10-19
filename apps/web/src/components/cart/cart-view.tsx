@@ -228,7 +228,7 @@ export function CartView() {
         throw new Error(json.error || "Không thể tạo đơn hàng.");
       }
       setShowReplaceModal(false);
-      window.location.href = `/checkout?order=${json.orderId}`;
+      window.location.href = `/checkout?order=${encodeURIComponent(json.orderCode || json.orderId)}`;
     } catch (err: any) {
       setError(err?.message || "Lỗi tạo đơn hàng.");
       setCheckoutLoading(false);
@@ -305,7 +305,7 @@ export function CartView() {
               >
                 {cancellingOrder ? "Đang huỷ…" : "Huỷ đơn này"}
               </Button>
-              <Link href={{ pathname: "/checkout", query: { order: pendingOrder.id } }}>
+              <Link href={{ pathname: "/checkout", query: { order: pendingOrder.code } }}>
                 <Button size="sm" className="whitespace-nowrap">Tiếp tục thanh toán</Button>
               </Link>
             </div>
@@ -560,7 +560,7 @@ export function CartView() {
               Đóng
             </Button>
             {data?.pendingOrder && (
-              <Link href={{ pathname: "/checkout", query: { order: data.pendingOrder.id } }}>
+              <Link href={{ pathname: "/checkout", query: { order: data.pendingOrder.code } }}>
                 <Button variant="secondary" size="sm">
                   Tiếp tục đơn cũ
                 </Button>

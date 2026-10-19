@@ -42,6 +42,17 @@ describe("validateVoucher unit tests", () => {
     }
   });
 
+  it("rejects voucher that has not started yet (future startsAt)", () => {
+    const futureDate = new Date("2026-11-01T00:00:00Z");
+    const voucher = makeVoucher({ startsAt: futureDate });
+    const result = validateVoucher(voucher, 600000, new Date("2026-10-19T00:00:00Z"));
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.error).toContain("Mã giảm giá chỉ có hiệu lực từ");
+      expect(result.error).toContain("01/11/2026");
+    }
+  });
+
   it("rejects expired voucher with formatted date", () => {
     const pastDate = new Date("2026-08-15T00:00:00Z");
     const voucher = makeVoucher({ expiresAt: pastDate });

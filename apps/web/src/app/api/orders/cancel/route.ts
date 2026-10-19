@@ -26,51 +26,78 @@ export async function POST(req: Request) {
       );
     }
 
-    // Cancel in orders table
-    if (orderId) {
-      await db
-        .update(orders)
-        .set({
-          status: "cancelled",
-          failReason: "Người mua đã huỷ",
-          cancelledAt: new Date(),
-        })
-        .where(
-          and(
-            eq(orders.id, Number(orderId)),
-            eq(orders.userId, session.user.id),
-            eq(orders.status, "pending"),
-          ),
-        );
-    }
+    const cancelled = await db.transaction(async (tx) => {
+      let orderCancelledCount = 0;
 
-    if (orderCode) {
-      await db
-        .update(orders)
-        .set({
-          status: "cancelled",
-          failReason: "Người mua đã huỷ",
-          cancelledAt: new Date(),
-        })
-        .where(
-          and(
-            eq(orders.code, String(orderCode)),
-            eq(orders.userId, session.user.id),
-            eq(orders.status, "pending"),
-          ),
-        );
+      if (orderId) {
+        const res = await tx
+          .update(orders)
+          .set({
+            status: "cancelled",
+            failReason: "Người mua đã huỷ",
+            cancelledAt: new Date(),
+          })
+          .where(
+            and(
+              eq(orders.id, Number(orderId)),
+              eq(orders.userId, session.user.id),
+              eq(orders.status, "pending"),
+            ),
+          )
+          .returning({ id: orders.id, code: orders.code });
+        orderCancelledCount += res.length;
+        if (res[0]?.code) {
+          await tx
+            .update(studentTransactions)
+            .set({ status: "cancelled" })
+            .where(
+              and(
+                eq(studentTransactions.id, res[0].code),
+                eq(studentTransactions.userId, session.user.id),
+                eq(studentTransactions.status, "pending"),
+              ),
+            );
+        }
+      } else if (orderCode) {
+        const res = await tx
+          .update(orders)
+          .set({
+            status: "cancelled",
+            failReason: "Người mua đã huỷ",
+            cancelledAt: new Date(),
+          })
+          .where(
+            and(
+              eq(orders.code, String(orderCode)),
+              eq(orders.userId, session.user.id),
+              eq(orders.status, "pending"),
+            ),
+          )
+          .returning({ id: orders.id });
+        orderCancelledCount += res.length;
 
-      // Also cancel in studentTransactions if matched
-      await db
-        .update(studentTransactions)
-        .set({ status: "cancelled" })
-        .where(
-          and(
-            eq(studentTransactions.id, String(orderCode)),
-            eq(studentTransactions.userId, session.user.id),
-            eq(studentTransactions.status, "pending"),
-          ),
-        );
+        const txRes = await tx
+          .update(studentTransactions)
+          .set({ status: "cancelled" })
+          .where(
+            and(
+              eq(studentTransactions.id, String(orderCode)),
+              eq(studentTransactions.userId, session.user.id),
+              eq(studentTransactions.status, "pending"),
+            ),
+          )
+          .returning({ id: studentTransactions.id });
+        orderCancelledCount += txRes.length;
+      }
+
+      return orderCancelledCount > 0;
+    });
+
+    if (!cancelled) {
+      return NextResponse.json(
+        { error: "Đơn hàng không tồn tại, đã hoàn tất thanh toán hoặc đã được huỷ trước đó." },
+        { status: 404 },
+      );
     }
 
     return NextResponse.json({ success: true, message: "Đã hủy đơn hàng thành công" });

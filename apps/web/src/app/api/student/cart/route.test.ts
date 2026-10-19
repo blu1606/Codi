@@ -270,15 +270,6 @@ describe("DELETE /api/student/cart", () => {
 });
 
 describe("GET /api/student/cart", () => {
-  it("returns count 0 and empty items for unauthenticated visitors", async () => {
-    mocks.getSession.mockResolvedValue(null);
-    const res = await GET(getRequest());
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.count).toBe(0);
-    expect(body.items).toEqual([]);
-  });
-
   it("returns user cart items and count when authenticated", async () => {
     mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
     mocks.getCartSummary.mockResolvedValueOnce({

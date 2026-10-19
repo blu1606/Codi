@@ -35,6 +35,15 @@ export function validateVoucher(
   if (!voucher.isActive) {
     return { valid: false, error: "Mã này đã ngừng áp dụng." };
   }
+  if (voucher.startsAt && new Date(voucher.startsAt) > now) {
+    const startFormatted = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(new Date(voucher.startsAt));
+    return { valid: false, error: `Mã giảm giá chỉ có hiệu lực từ ${startFormatted}.` };
+  }
   if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
     const dateFormatted = new Intl.DateTimeFormat("vi-VN", {
       timeZone: "Asia/Ho_Chi_Minh",
@@ -147,13 +156,18 @@ export async function getCartSummary(
     })
     .from(courses)
     .leftJoin(user, eq(courses.instructorId, user.id))
-    .where(inArray(courses.id, courseIds));
+    .where(
+      and(
+        inArray(courses.id, courseIds),
+        eq(courses.status, "published"),
+      ),
+    );
 
   const items: CartCourse[] = [];
   for (const c of courseDetails) {
     if (ownedCourseIds.has(c.id)) {
       removedOwnedTitles.push(c.title);
-    } else if (remainingCourseIds.includes(c.id)) {
+    } else if (remainingCourseIds.includes(c.id) && c.price > 0) {
       items.push({
         id: c.id,
         title: c.title,

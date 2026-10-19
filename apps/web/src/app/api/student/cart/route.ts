@@ -11,17 +11,7 @@ export async function GET(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) {
-      return NextResponse.json({
-        items: [],
-        itemIds: [],
-        count: 0,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-        voucher: null,
-        removedOwnedTitles: [],
-        pendingOrder: null,
-      });
+      return NextResponse.json({ error: "Vui lòng đăng nhập" }, { status: 401 });
     }
     const userId = session.user.id;
     await requireRole(db, userId, ROLE.LEARNER);
