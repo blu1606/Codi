@@ -96,10 +96,13 @@ it("enrolls only a sufficiently funded authenticated incoming transfer and settl
         values: (value: unknown) => {
           if (value && typeof value === "object" && "orderId" in value) {
             insertEvent(value);
-            return {};
+            return { returning: vi.fn().mockResolvedValue([{ id: 1 }]) };
+          }
+          if (value && typeof value === "object" && "title" in value) {
+            return { returning: vi.fn().mockResolvedValue([{ id: 1, ...value }]) };
           }
           enroll(value);
-          return { onConflictDoNothing: vi.fn() };
+          return { onConflictDoNothing: vi.fn(), returning: vi.fn().mockResolvedValue([{ id: 1 }]) };
         },
       }),
     }),
@@ -323,7 +326,7 @@ it("enrolls all order_items and increments voucher usedCount atomically upon suc
           if (value && typeof value === "object" && "courseId" in value && !("orderId" in value)) {
             enrolledCourses.push(value.courseId);
           }
-          return { onConflictDoNothing: vi.fn() };
+          return { onConflictDoNothing: vi.fn(), returning: vi.fn().mockResolvedValue([{ id: 1 }]) };
         },
       }),
     }),

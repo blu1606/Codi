@@ -2,9 +2,10 @@ import { timingSafeEqual } from "node:crypto";
 import { getSepayConfig } from "@/lib/sepay-config";
 import { NextResponse } from "next/server";
 import { db } from "@/services";
-import { orders, orderEvents, orderItems, vouchers } from "@codi-1/db";
+import { orders, orderEvents, orderItems, vouchers, payments } from "@codi-1/db";
 import { studentTransactions, studentEnrollments } from "@codi-1/db/schema/student-profile";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { createNotificationService } from "@/lib/notification-service";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 function verifyApiKey(authHeader: string | null, secret: string): boolean {
   if (!authHeader) return false;
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     }
 
     const txId = match[0].toUpperCase();
+    const providerTxCode = data.id != null ? String(data.id) : (data.referenceCode != null ? String(data.referenceCode) : null);
 
     // Find the transaction in DB
     const [tx] = await db.select().from(studentTransactions).where(eq(studentTransactions.id, txId)).limit(1);
@@ -70,75 +72,188 @@ export async function POST(req: Request) {
 
     // Process payment atomically within transaction
     const processResult = await db.transaction(async (txDB) => {
+      // Idempotency check on provider transactionCode if available
+      if (providerTxCode) {
+        const [existingPayment] = await txDB
+          .select({ id: payments.id })
+          .from(payments)
+          .where(eq(payments.transactionCode, providerTxCode))
+          .limit(1);
+
+        if (existingPayment) {
+          return { alreadyProcessed: true };
+        }
+      }
+
       // 1. Check if there is an associated order in the `orders` table
       const [existingOrder] = await txDB
-        .select({ id: orders.id, status: orders.status, voucherId: orders.voucherId })
+        .select({
+          id: orders.id,
+          code: orders.code,
+          userId: orders.userId,
+          status: orders.status,
+          failReason: orders.failReason,
+          totalAmount: orders.totalAmount,
+          voucherId: orders.voucherId,
+        })
         .from(orders)
         .where(eq(orders.code, txId))
         .limit(1);
 
-      // If an order exists for this code, but it is not pending (e.g. cancelled/expired/refunded),
-      // do NOT settle as paid and do NOT grant enrollment. Mark transaction as failed/needs-reconciliation.
-      if (existingOrder && existingOrder.status !== "pending") {
-        await txDB
-          .update(studentTransactions)
-          .set({ status: "failed" })
-          .where(and(eq(studentTransactions.id, txId), eq(studentTransactions.status, "pending")));
+      let isLateHonoured = false;
 
-        return { orderNotPending: true, orderStatus: existingOrder.status };
+      // Handle non-pending order
+      if (existingOrder && existingOrder.status !== "pending") {
+        // D2 late payment after expiry: if failed with failReason='expired'
+        if (existingOrder.status === "failed" && existingOrder.failReason === "expired") {
+          // Check if learner already owns every course in the order
+          const items = await txDB
+            .select({ courseId: orderItems.courseId })
+            .from(orderItems)
+            .where(eq(orderItems.orderId, existingOrder.id));
+
+          const itemCourseIds = items.map((it) => it.courseId);
+          let allAlreadyOwned = false;
+
+          if (itemCourseIds.length > 0) {
+            const owned = await txDB
+              .select({ courseId: studentEnrollments.courseId })
+              .from(studentEnrollments)
+              .where(
+                and(
+                  eq(studentEnrollments.userId, tx.userId),
+                  inArray(studentEnrollments.courseId, itemCourseIds),
+                ),
+              );
+
+            if (owned.length === itemCourseIds.length) {
+              allAlreadyOwned = true;
+            }
+          }
+
+          if (allAlreadyOwned) {
+            // Already owned via newer order -> keep failed, needs reconciliation for refund
+            await txDB
+              .update(orders)
+              .set({ needsReconciliation: true })
+              .where(eq(orders.id, existingOrder.id));
+
+            await txDB.insert(orderEvents).values({
+              orderId: existingOrder.id,
+              label: "Thanh toán muộn cho các khoá đã sở hữu (Cần đối soát hoàn tiền)",
+              actorId: tx.userId,
+            });
+
+            if (providerTxCode) {
+              await txDB.insert(payments).values({
+                orderId: existingOrder.id,
+                transactionCode: providerTxCode,
+                method: "bank_transfer",
+                amount: amountReceived,
+                transferContent: content,
+                status: "failed",
+                failureReason: "Khoá học đã được sở hữu, cần đối soát",
+                providerResponse: JSON.stringify(data),
+              });
+            }
+
+            return { orderNotPending: true, orderStatus: "failed_already_owned" };
+          }
+
+          // Auto-honour: failed -> paid
+          isLateHonoured = true;
+        } else {
+          // Other non-pending states (cancelled, refunded, or failed not expired)
+          await txDB
+            .update(studentTransactions)
+            .set({ status: "failed" })
+            .where(and(eq(studentTransactions.id, txId), eq(studentTransactions.status, "pending")));
+
+          if (providerTxCode) {
+            await txDB.insert(payments).values({
+              orderId: existingOrder.id,
+              transactionCode: providerTxCode,
+              method: "bank_transfer",
+              amount: amountReceived,
+              transferContent: content,
+              status: "failed",
+              failureReason: `Order is not pending (status: ${existingOrder.status})`,
+              providerResponse: JSON.stringify(data),
+            });
+          }
+
+          return { orderNotPending: true, orderStatus: existingOrder.status };
+        }
       }
 
-      // 2. Atomically update transaction status if still pending
+      // 2. Atomically update transaction status if pending or late-honoured
       const updatedTx = await txDB
         .update(studentTransactions)
         .set({ status: "paid" })
         .where(
           and(
             eq(studentTransactions.id, txId),
-            eq(studentTransactions.status, "pending")
-          )
+            or(
+              eq(studentTransactions.status, "pending"),
+              sql`${isLateHonoured} AND ${studentTransactions.status} = 'failed'`,
+            ),
+          ),
         )
         .returning({ id: studentTransactions.id });
 
-      // If already processed by a concurrent webhook request, exit early
-      if (updatedTx.length === 0) {
+      // If already processed by a concurrent webhook request and not late honoured
+      if (updatedTx.length === 0 && !isLateHonoured) {
         return { alreadyProcessed: true };
       }
 
       let courseIdsToEnroll: string[] = [tx.courseId];
 
-      // 3. Atomically settle orders table if a pending order matches txId
-      if (existingOrder && existingOrder.status === "pending") {
+      // 3. Atomically settle orders table
+      if (existingOrder && (existingOrder.status === "pending" || isLateHonoured)) {
+        const isOverpaid = amountReceived > existingOrder.totalAmount;
+        const targetStatus = isLateHonoured ? "failed" : "pending";
+
         const updatedOrders = await txDB
           .update(orders)
           .set({
             status: "paid",
             receivedAmount: amountReceived,
+            needsReconciliation: isOverpaid ? true : existingOrder.status === "failed" ? false : undefined,
             paidAt: new Date(),
             updatedAt: new Date(),
           })
-          .where(and(eq(orders.code, txId), eq(orders.status, "pending")))
+          .where(and(eq(orders.code, txId), eq(orders.status, targetStatus)))
           .returning({ id: orders.id, totalAmount: orders.totalAmount, voucherId: orders.voucherId });
 
         const matchedOrder = updatedOrders[0];
         if (matchedOrder) {
           await txDB.insert(orderEvents).values({
             orderId: matchedOrder.id,
-            label: "Đã thanh toán thành công",
+            label: isLateHonoured ? "Thanh toán muộn được chấp nhận" : "Đã nhận tiền",
             actorId: tx.userId,
           });
 
-          // Fetch all courses in order_items (fixes Blocking Point 1)
-          const items = await txDB
-            .select({ courseId: orderItems.courseId })
+          if (isOverpaid) {
+            await txDB.insert(orderEvents).values({
+              orderId: matchedOrder.id,
+              label: `Chuyển thừa ${amountReceived - existingOrder.totalAmount} ₫ (Cần đối soát)`,
+              actorId: tx.userId,
+            });
+          }
+
+          // Fetch all courses in order_items with their order item ID
+          const itemsResult = await txDB
+            .select({ id: orderItems.id, courseId: orderItems.courseId })
             .from(orderItems)
             .where(eq(orderItems.orderId, matchedOrder.id));
+
+          const items = Array.isArray(itemsResult) ? itemsResult : [];
 
           if (items.length > 0) {
             courseIdsToEnroll = items.map((it) => it.courseId);
           }
 
-          // Atomically increment voucher used_count if a voucher was applied (fixes Blocking Point 2)
+          // Atomically increment voucher used_count if a voucher was applied
           if (matchedOrder.voucherId) {
             const voucherRes = await txDB
               .update(vouchers)
@@ -157,7 +272,6 @@ export async function POST(req: Request) {
               .returning({ id: vouchers.id });
 
             if (voucherRes.length === 0) {
-              // Usage limit was reached concurrently - mark order for reconciliation
               await txDB
                 .update(orders)
                 .set({ needsReconciliation: true })
@@ -170,21 +284,63 @@ export async function POST(req: Request) {
               });
             }
           }
+
+          // Record payment entry in payments table
+          if (providerTxCode) {
+            await txDB.insert(payments).values({
+              orderId: matchedOrder.id,
+              transactionCode: providerTxCode,
+              method: "bank_transfer",
+              amount: amountReceived,
+              transferContent: content,
+              status: "success",
+              paidAt: new Date(),
+              providerResponse: JSON.stringify(data),
+            });
+          }
+
+          // Send in-app notification
+          try {
+            await createNotificationService(txDB).notify(
+              tx.userId,
+              "Thanh toán thành công",
+              `Đơn ${txId} đã được xác nhận. Khoá học đã sẵn sàng.`,
+              `/checkout/success?order=${matchedOrder.id}`,
+            );
+          } catch (notifErr) {
+            console.error("Failed to send payment notification:", notifErr);
+          }
+
+          // Enroll with order_item_id
+          const itemMap = new Map<string, number>();
+          for (const item of items) {
+            itemMap.set(item.courseId, item.id);
+          }
+
+          for (const cId of courseIdsToEnroll) {
+            await txDB
+              .insert(studentEnrollments)
+              .values({
+                userId: tx.userId,
+                courseId: cId,
+                orderItemId: itemMap.get(cId),
+              })
+              .onConflictDoNothing();
+          }
         } else {
-          // Order was concurrently modified or not pending, stop enrollment
           return { orderNotPending: true };
         }
-      }
-
-      // 4. Grant access to all courses in the order, avoiding duplicates
-      for (const cId of courseIdsToEnroll) {
-        await txDB
-          .insert(studentEnrollments)
-          .values({
-            userId: tx.userId,
-            courseId: cId,
-          })
-          .onConflictDoNothing();
+      } else {
+        // Fallback for legacy transactions without orders table entry
+        for (const cId of courseIdsToEnroll) {
+          await txDB
+            .insert(studentEnrollments)
+            .values({
+              userId: tx.userId,
+              courseId: cId,
+            })
+            .onConflictDoNothing();
+        }
       }
 
       return { success: true };
@@ -210,3 +366,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

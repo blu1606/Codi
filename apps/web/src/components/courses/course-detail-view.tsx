@@ -392,9 +392,8 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       try {
         sessionStorage.removeItem("codi_pending_course_intent");
       } catch {}
-      // Direct to course checkout page with order param
-      const targetSlug = result.courseSlug || slug;
-      const targetUrl = `/courses/${encodeURIComponent(targetSlug)}/checkout?order=${encodeURIComponent(result.orderCode)}`;
+      // Direct to checkout page with order param
+      const targetUrl = `/checkout?order=${encodeURIComponent(result.orderCode || result.orderId)}`;
       window.location.href = targetUrl;
     } catch (err: unknown) {
       const msg =

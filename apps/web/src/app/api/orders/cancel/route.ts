@@ -2,8 +2,8 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { auth, db } from "@/services";
-import { orders } from "@codi-1/db";
-import { studentTransactions } from "@codi-1/db/schema/student-profile";
+import { orderItems, orders } from "@codi-1/db";
+import { studentCart, studentTransactions } from "@codi-1/db/schema/student-profile";
 
 export async function POST(req: Request) {
   try {
@@ -45,18 +45,36 @@ export async function POST(req: Request) {
             ),
           )
           .returning({ id: orders.id, code: orders.code });
-        orderCancelledCount += res.length;
-        if (res[0]?.code) {
-          await tx
-            .update(studentTransactions)
-            .set({ status: "cancelled" })
-            .where(
-              and(
-                eq(studentTransactions.id, res[0].code),
-                eq(studentTransactions.userId, session.user.id),
-                eq(studentTransactions.status, "pending"),
-              ),
-            );
+        if (res.length > 0) {
+          orderCancelledCount += res.length;
+          const targetOrderId = res[0].id;
+          const items = await tx
+            .select({ courseId: orderItems.courseId })
+            .from(orderItems)
+            .where(eq(orderItems.orderId, targetOrderId));
+
+          for (const item of items) {
+            await tx
+              .insert(studentCart)
+              .values({
+                userId: session.user.id,
+                courseId: item.courseId,
+              })
+              .onConflictDoNothing();
+          }
+
+          if (res[0]?.code) {
+            await tx
+              .update(studentTransactions)
+              .set({ status: "cancelled" })
+              .where(
+                and(
+                  eq(studentTransactions.id, res[0].code),
+                  eq(studentTransactions.userId, session.user.id),
+                  eq(studentTransactions.status, "pending"),
+                ),
+              );
+          }
         }
       } else if (orderCode) {
         const res = await tx
@@ -73,8 +91,26 @@ export async function POST(req: Request) {
               eq(orders.status, "pending"),
             ),
           )
-          .returning({ id: orders.id });
-        orderCancelledCount += res.length;
+          .returning({ id: orders.id, code: orders.code });
+
+        if (res.length > 0) {
+          orderCancelledCount += res.length;
+          const targetOrderId = res[0].id;
+          const items = await tx
+            .select({ courseId: orderItems.courseId })
+            .from(orderItems)
+            .where(eq(orderItems.orderId, targetOrderId));
+
+          for (const item of items) {
+            await tx
+              .insert(studentCart)
+              .values({
+                userId: session.user.id,
+                courseId: item.courseId,
+              })
+              .onConflictDoNothing();
+          }
+        }
 
         const txRes = await tx
           .update(studentTransactions)
