@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canPostMessageToConversation,
   canResolveConversation,
   formatDate,
   formatRelativeTime,
@@ -27,6 +28,26 @@ describe("QA & Reviews Pure Domain Service Tests", () => {
       const res = validateReplyText(longText);
       expect(res.isValid).toBe(false);
       expect(res.error).toContain("5000 ký tự");
+    });
+  });
+
+  describe("canPostMessageToConversation (STATE-MACHINES.md §14.2)", () => {
+    it("rejects messages when conversation is resolved", () => {
+      const res = canPostMessageToConversation("resolved");
+      expect(res.canPost).toBe(false);
+      expect(res.error).toContain("đã được giải quyết");
+    });
+
+    it("rejects messages when status is empty, null or undefined", () => {
+      expect(canPostMessageToConversation(null).canPost).toBe(false);
+      expect(canPostMessageToConversation(undefined).canPost).toBe(false);
+      expect(canPostMessageToConversation("closed").canPost).toBe(false);
+    });
+
+    it("allows messages when status is open", () => {
+      const res = canPostMessageToConversation("open");
+      expect(res.canPost).toBe(true);
+      expect(res.error).toBeUndefined();
     });
   });
 

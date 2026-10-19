@@ -53,6 +53,24 @@ export function canResolveConversation(messages: Array<{ isLecturer: boolean }>)
 }
 
 /**
+ * STATE-MACHINES.md §14.2:
+ * Conversations only accept new messages when status is "open".
+ * When "resolved", no further messages can be posted until reopened.
+ */
+export function canPostMessageToConversation(status: string | null | undefined): {
+  canPost: boolean;
+  error?: string;
+} {
+  if (status !== "open") {
+    return {
+      canPost: false,
+      error: "Cuộc hội thoại đã được giải quyết. Vui lòng mở lại cuộc hội thoại để tiếp tục trao đổi.",
+    };
+  }
+  return { canPost: true };
+}
+
+/**
  * Validate course review reply text (non-empty per §15).
  */
 export function validateReviewReply(text: string | null | undefined): {

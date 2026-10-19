@@ -13,9 +13,13 @@ import {
   user as userTable,
 } from "@codi-1/db";
 import { db } from "@/services";
-import { verifyLecturerSession } from "@/lib/lecturer-auth";
+import {
+  verifyLecturerOrAdminSession,
+  verifyLecturerSession,
+} from "@/lib/lecturer-auth";
 import { createNotificationService } from "@/lib/notification-service";
 import {
+  canPostMessageToConversation,
   canResolveConversation,
   validateReplyText,
 } from "@/lib/qa-reviews-service";
@@ -443,7 +447,7 @@ export async function replyToPrivateConversation(input: {
   conversationId: number;
   text: string;
 }): Promise<{ success: boolean; error?: string }> {
-  const user = await verifyLecturerSession();
+  const user = await verifyLecturerOrAdminSession();
 
   const validation = validateReplyText(input.text);
   if (!validation.isValid) {
@@ -453,6 +457,7 @@ export async function replyToPrivateConversation(input: {
   const [conv] = await db
     .select({
       id: courseConversations.id,
+      status: courseConversations.status,
       courseId: courseConversations.courseId,
       lessonId: courseConversations.lessonId,
       learnerId: courseConversations.learnerId,
@@ -475,7 +480,16 @@ export async function replyToPrivateConversation(input: {
     };
   }
 
-  // Thêm tin nhắn của giảng viên
+  // STATE-MACHINES §14.2: Chặn tin nhắn mới khi cuộc hội thoại đã ở trạng thái resolved
+  const postCheck = canPostMessageToConversation(conv.status);
+  if (!postCheck.canPost) {
+    return {
+      success: false,
+      error: postCheck.error || "Cuộc hội thoại đã được giải quyết. Vui lòng mở lại cuộc hội thoại trước khi gửi tin nhắn mới.",
+    };
+  }
+
+  // Thêm tin nhắn của giảng viên / quản trị viên
   await db.insert(conversationMessages).values({
     conversationId: conv.id,
     authorId: user.id,
@@ -511,12 +525,13 @@ export async function replyToPrivateConversation(input: {
 
 /**
  * Đánh dấu cuộc hội thoại đã giải quyết (Decision D8 / D9 & STATE-MACHINES.md §14.2).
+ * Cho phép Giảng viên của khoá học hoặc Quản trị viên (Admin).
  * Ràng buộc guard: Phải có ít nhất 1 câu trả lời từ giảng viên mới được resolve.
  */
 export async function resolveConversation(input: {
   conversationId: number;
 }): Promise<{ success: boolean; error?: string }> {
-  const user = await verifyLecturerSession();
+  const user = await verifyLecturerOrAdminSession();
 
   const [conv] = await db
     .select({
@@ -538,6 +553,14 @@ export async function resolveConversation(input: {
     return {
       success: false,
       error: "Bạn không có quyền cập nhật cuộc hội thoại này.",
+    };
+  }
+
+  // STATE-MACHINES §14.2: open -> resolved
+  if (conv.status !== "open") {
+    return {
+      success: false,
+      error: "Cuộc hội thoại không ở trạng thái mở.",
     };
   }
 
@@ -569,11 +592,12 @@ export async function resolveConversation(input: {
 
 /**
  * Mở lại cuộc hội thoại đã giải quyết (Decision D8 / D9 & STATE-MACHINES.md §14.2).
+ * Cho phép Giảng viên của khoá học hoặc Quản trị viên (Admin).
  */
 export async function reopenConversation(input: {
   conversationId: number;
 }): Promise<{ success: boolean; error?: string }> {
-  const user = await verifyLecturerSession();
+  const user = await verifyLecturerOrAdminSession();
 
   const [conv] = await db
     .select({
@@ -595,6 +619,14 @@ export async function reopenConversation(input: {
     return {
       success: false,
       error: "Bạn không có quyền cập nhật cuộc hội thoại này.",
+    };
+  }
+
+  // STATE-MACHINES §14.2: resolved -> open
+  if (conv.status !== "resolved") {
+    return {
+      success: false,
+      error: "Chỉ có thể mở lại cuộc hội thoại đã giải quyết.",
     };
   }
 

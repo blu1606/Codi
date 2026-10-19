@@ -736,51 +736,61 @@ export function QuestionsInboxClient({
                   </div>
                 </div>
 
-                {/* Reply Form & Resolve / Reopen Controls */}
-                <form onSubmit={handleSendPrivateReply} className="space-y-3 pt-2 border-t border-border">
-                  <Label htmlFor="private-reply-input" className="text-sm font-semibold">
-                    Trả lời {selectedConversation.learnerName}
-                  </Label>
-
-                  {replyError && (
-                    <Alert variant="destructive" className="py-2 text-xs">
-                      <AlertCircle className="size-4 shrink-0" />
-                      <span>{replyError}</span>
-                    </Alert>
-                  )}
-
-                  <Textarea
-                    id="private-reply-input"
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Nhập câu trả lời riêng cho học viên..."
-                    rows={4}
-                    className="text-sm leading-relaxed"
-                  />
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="gap-2 shadow-xs"
-                    >
-                      <Send className="size-3.5" />
-                      {isSubmitting ? "Đang gửi..." : "Gửi trả lời"}
-                    </Button>
-
-                    {selectedConversation.status === "resolved" ? (
+                {/* Reply Form & Resolve / Reopen Controls (STATE-MACHINES §14.2) */}
+                {selectedConversation.status === "resolved" ? (
+                  <div className="pt-4 border-t border-border space-y-3">
+                    <div className="p-4 rounded-lg bg-muted/40 border border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                        <CheckCircle2 className="size-4 text-success shrink-0" />
+                        <span>
+                          Cuộc hội thoại này đã được đánh dấu giải quyết. Không thể gửi thêm tin nhắn trừ khi mở lại.
+                        </span>
+                      </div>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={handleReopenConversation}
                         disabled={isSubmitting}
-                        className="gap-1.5 text-xs"
+                        className="gap-1.5 text-xs shrink-0"
                       >
                         <RotateCcw className="size-3.5" />
                         Mở lại cuộc hội thoại
                       </Button>
-                    ) : (
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSendPrivateReply} className="space-y-3 pt-2 border-t border-border">
+                    <Label htmlFor="private-reply-input" className="text-sm font-semibold">
+                      Trả lời {selectedConversation.learnerName}
+                    </Label>
+
+                    {replyError && (
+                      <Alert variant="destructive" className="py-2 text-xs">
+                        <AlertCircle className="size-4 shrink-0" />
+                        <span>{replyError}</span>
+                      </Alert>
+                    )}
+
+                    <Textarea
+                      id="private-reply-input"
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="Nhập câu trả lời riêng cho học viên..."
+                      rows={4}
+                      className="text-sm leading-relaxed"
+                    />
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                      <Button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="gap-2 shadow-xs"
+                      >
+                        <Send className="size-3.5" />
+                        {isSubmitting ? "Đang gửi..." : "Gửi trả lời"}
+                      </Button>
+
                       <Button
                         type="button"
                         variant="secondary"
@@ -792,9 +802,9 @@ export function QuestionsInboxClient({
                         <CheckCircle2 className="size-3.5 text-success" />
                         Đánh dấu đã giải quyết
                       </Button>
-                    )}
-                  </div>
-                </form>
+                    </div>
+                  </form>
+                )}
               </CardContent>
             </Card>
           )}
