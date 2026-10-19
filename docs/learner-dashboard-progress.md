@@ -75,3 +75,12 @@ The header hides its desktop-navigation wrapper below `md`; its empty flex gap o
 Screenshots contain explicit QA data, not production user records. Browser QA checks both learner screens at 375px for page-level overflow; the results table has its own accessible horizontal scroll region.
 
 Validation on 2026-10-19: 903 Vitest tests across 67 files passed; the affected component/API/contract checks were rerun after final changes (31 tests). Typecheck, production build and standards audit (0 violations) passed. Database rollback verification and the complete browser verification passed; QA records were cleaned up.
+
+### Profile heatmap follow-up
+
+The user reported that empty activity cells disappeared in dark mode. `bg-muted` and the card surface both resolve to the same dark color. Empty in-year cells and their legend now use `dark:bg-border`, keeping the light palette and activity intensity levels. Browser QA confirmed all 362 empty dates in a three-active-day fixture have visible dimensions, contrast with the card and match the legend in both themes; no browser errors. Standards audit: 0 violations. Only the temporary QA account was removed afterward.
+
+| State | Before reference | Implementation |
+| --- | --- | --- |
+| Profile heatmap, light | User-supplied screenshot | [Light](ui-review/issue-102/profile-heatmap-light.png) |
+| Profile heatmap, dark | User-supplied screenshot | [Dark](ui-review/issue-102/profile-heatmap-dark.png) |

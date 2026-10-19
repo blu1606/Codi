@@ -311,7 +311,7 @@ export default function StudentProfileOverview() {
                                 <span
                                   key={`${wi}-${di}`}
                                   title={`${cell.count === 0 ? "No contributions" : `${cell.count} contribution${cell.count === 1 ? "" : "s"}`} on ${dateText}`}
-                                  className={`aspect-square w-full max-w-3 rounded-[3px] ${cell.inYear ? ["bg-muted", "bg-[#9be9a8]", "bg-[#40c463]", "bg-[#30a14e]", "bg-[#216e39]"][Math.min(4, cell.count)] : "bg-transparent"}`}
+                                  className={`aspect-square w-full max-w-3 rounded-[3px] ${cell.inYear ? ["bg-muted dark:bg-border", "bg-[#9be9a8]", "bg-[#40c463]", "bg-[#30a14e]", "bg-[#216e39]"][Math.min(4, cell.count)] : "bg-transparent"}`}
                                 />
                               );
                             })
@@ -322,7 +322,7 @@ export default function StudentProfileOverview() {
                     <div className="mt-3 flex justify-end text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         Less{" "}
-                        <i className="size-3 rounded-[3px] bg-muted" />
+                        <i className="size-3 rounded-[3px] bg-muted dark:bg-border" />
                         <i className="size-3 rounded-[3px] bg-[#9be9a8]" />
                         <i className="size-3 rounded-[3px] bg-[#40c463]" />
                         <i className="size-3 rounded-[3px] bg-[#30a14e]" />
