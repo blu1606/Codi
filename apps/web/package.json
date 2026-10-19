@@ -21,6 +21,7 @@
     "db:seed-coding": "tsx --env-file=.env scripts/seed-coding-dev.ts",
     "db:seed-mockup": "tsx --env-file=.env scripts/seed-mockup.ts",
     "test:coding:db": "tsx --env-file=.env scripts/verify-coding.ts",
+    "test:tutorial:db": "tsx --env-file=.env scripts/verify-tutorial.ts",
     "test:assessments:r2": "tsx --env-file=.env scripts/verify-assignment-r2.ts",
     "storage:assignments:sweep": "tsx --env-file=.env scripts/sweep-assignment-files.ts"
   },

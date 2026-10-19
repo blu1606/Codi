@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ONBOARDING_GOALS, ONBOARDING_LEVELS, WEEKLY_HOURS } from "@codi-1/db/schema/onboarding-values";
 import { canonical } from "../src/lib/coding-contract";
+import type { TutorialStep } from "@codi-1/db/schema/coding-tutorial";
 
 // Pure mapping for seed-mockup.ts: the mockup snapshot schema (validated at the boundary) and the
 // rules that turn prototype values into database values. No database access in this module.
@@ -27,6 +28,7 @@ export type MockupQuestion = z.infer<typeof quizQuestion>;
 const codeTest = z.object({ id, name: z.string().min(1), call: z.string().min(1), expected: z.unknown(), hidden: z.boolean().optional() });
 const challengeCode = z.object({
   kind: z.literal("challenge"),
+  fileName: z.string().optional(),
   language: z.string().min(1),
   instructions: z.array(z.string()),
   starter: z.string(),
@@ -37,8 +39,9 @@ const challengeCode = z.object({
 });
 const tutorialCode = z.object({
   kind: z.literal("tutorial"),
+  fileName: z.string().optional(),
   language: z.string().min(1),
-  steps: z.array(z.object({ title: z.string(), body: z.string(), starter: z.string(), tests: z.array(codeTest).optional(), isSolution: z.boolean().optional() })).min(1),
+  steps: z.array(z.object({ title: z.string(), body: z.string(), starter: z.string(), tests: z.array(codeTest).max(100).optional(), isSolution: z.boolean().optional() })).min(1).max(100),
 });
 const mockupCode = z.discriminatedUnion("kind", [challengeCode, tutorialCode]);
 export type MockupCode = z.infer<typeof mockupCode>;
@@ -275,6 +278,8 @@ export function spreadTimestamps(start: Date, end: Date, n: number) {
 }
 
 export type SeedCodingExercise = {
+  fileName: string | null;
+  tutorialSteps: TutorialStep[];
   title: string;
   instructions: string;
   language: string;
@@ -284,12 +289,13 @@ export type SeedCodingExercise = {
   hints: string[];
   tests: { mockupId: string; name: string; input: string; expectedOutput: string; isSample: boolean }[];
 };
-// A tutorial has no schema of its own (plan decision): its walkthrough becomes the instructions,
-// the starters of the graded steps become one starter file and every step test stays visible.
+// Preserve tutorial steps, starter files and solution gates independently of challenges.
 export function codingExerciseFromMockup(lessonTitle: string, code: MockupCode): SeedCodingExercise {
   const toTest = (t: z.infer<typeof codeTest>, isSample: boolean) => ({ mockupId: t.id, name: t.name, input: t.call, expectedOutput: canonical(t.expected ?? null), isSample });
   if (code.kind === "challenge") {
     return {
+      fileName: code.fileName ?? null,
+      tutorialSteps: [],
       title: `Bài tập code: ${lessonTitle}`,
       instructions: code.instructions.map((step, i) => `${i + 1}. ${step}`).join("\n"),
       language: code.language,
@@ -303,10 +309,12 @@ export function codingExerciseFromMockup(lessonTitle: string, code: MockupCode):
   const steps = code.steps.filter((s) => !s.isSolution);
   const graded = steps.filter((s) => s.tests?.length);
   return {
+    fileName: code.fileName ?? "main.js",
+    tutorialSteps: code.steps.map((s) => ({ ...s, tests: s.tests?.map((t) => ({ name: t.name, input: t.call, expectedOutput: canonical(t.expected ?? null) })) })),
     title: `Hướng dẫn code: ${lessonTitle}`,
-    instructions: steps.map((s, i) => `### ${i + 1}. ${s.title}\n\n${s.body}\n\n\`\`\`${code.language}\n${s.starter}\n\`\`\``).join("\n\n"),
+    instructions: "Đi hết các bước hướng dẫn để hoàn thành bài học.",
     language: code.language,
-    starterCode: (graded.length ? graded : steps.slice(-1)).map((s) => s.starter).join("\n\n"),
+    starterCode: code.steps[0]!.starter,
     solutionCode: code.steps.find((s) => s.isSolution)?.starter ?? null,
     solutionVerifiedAt: null,
     hints: [],
