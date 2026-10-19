@@ -22,6 +22,7 @@
     "db:seed-course-outcomes": "pnpm --filter @codi-1/db db:seed-course-outcomes",
     "db:seed-course-covers": "pnpm --filter @codi-1/db db:seed-course-covers",
     "db:seed-accounts": "pnpm --filter web db:seed-accounts",
+    "db:seed-mockup": "pnpm --filter web db:seed-mockup",
     "db:start": "pnpm --filter @codi-1/db db:start",
     "db:watch": "pnpm --filter @codi-1/db db:watch",
     "db:stop": "pnpm --filter @codi-1/db db:stop",
