@@ -204,10 +204,117 @@ describe("learner workspace states", () => {
   });
 });
 describe("study tracker", () => {
+  it.each(["blur", "unmount"])(
+    "does not acquire after %s while preparation is delayed",
+    async (event) => {
+      vi.spyOn(document, "hasFocus").mockReturnValue(true);
+      let finish!: (value: Response) => void;
+      const fetcher = vi.fn(
+        (_url: string, _options: { body: string }) =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      await mount(
+        createElement(StudyActivityTracker, {
+          courseId: "owned",
+          lessonId: "lesson",
+        }),
+      );
+      await act(async () => {
+        if (event === "unmount") {
+          root!.unmount();
+          root = undefined;
+        } else {
+          vi.mocked(document.hasFocus).mockReturnValue(false);
+          window.dispatchEvent(new Event("blur"));
+        }
+        // A late snapshot may already describe B's owner. A must not use it.
+        finish(response({ recorded: false, owner: trackerId }));
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetcher.mock.calls[0]![1].body).action).toBe("prepare");
+    },
+  );
+  it("reconciles a new focus immediately after an obsolete preparation finishes", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    let finish!: (value: Response) => void;
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockImplementation(async () =>
+        response({ recorded: true, owner: trackerId }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    await mount(
+      createElement(StudyActivityTracker, {
+        courseId: "owned",
+        lessonId: "lesson",
+      }),
+    );
+    await act(async () => {
+      vi.mocked(document.hasFocus).mockReturnValue(false);
+      window.dispatchEvent(new Event("blur"));
+      vi.mocked(document.hasFocus).mockReturnValue(true);
+      window.dispatchEvent(new Event("focus"));
+      finish(response({ recorded: false, owner: trackerId }));
+    });
+    const bodies = fetcher.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(bodies.map((body) => body.action)).toEqual([
+      "prepare",
+      "prepare",
+      "start",
+    ]);
+    expect(bodies[2]).toMatchObject({
+      trackerId: bodies[1].trackerId,
+      expectedOwner: trackerId,
+    });
+    expect(bodies[1].trackerId).not.toBe(bodies[0].trackerId);
+  });
+  it("retries a rejected initial acquisition on the next tick without a retry loop", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    let starts = 0;
+    const fetcher = vi.fn(async (_url, options) => {
+      const { action } = JSON.parse(options.body);
+      return response({
+        owner: trackerId,
+        recorded: action !== "start" || ++starts > 1,
+      });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await mount(
+      createElement(StudyActivityTracker, {
+        courseId: "owned",
+        lessonId: "lesson",
+      }),
+    );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(
+      fetcher.mock.calls.map((call) => JSON.parse(call[1].body).action),
+    ).toEqual(["prepare", "start", "prepare", "start", "heartbeat"]);
+  });
   it("only reacquires after a focus transition, even when renewals are ignored", async () => {
     vi.useFakeTimers();
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
-    const fetcher = vi.fn().mockResolvedValue(response({ recorded: false }));
+    const fetcher = vi.fn(async (_url, options) =>
+      response({
+        owner: null,
+        recorded: JSON.parse(options.body).action !== "heartbeat",
+      }),
+    );
     vi.stubGlobal("fetch", fetcher);
     await mount(
       createElement(StudyActivityTracker, {
@@ -222,6 +329,7 @@ describe("study tracker", () => {
     });
     const before = fetcher.mock.calls.map((call) => JSON.parse(call[1].body));
     expect(before.map((body) => body.action)).toEqual([
+      "prepare",
       "start",
       "heartbeat",
       "heartbeat",
@@ -245,6 +353,7 @@ describe("study tracker", () => {
     let finish!: (value: Response) => void;
     const fetcher = vi
       .fn()
+      .mockResolvedValueOnce(response({ owner: null }))
       .mockResolvedValueOnce(response({ recorded: true }))
       .mockImplementationOnce(
         () =>
@@ -252,7 +361,9 @@ describe("study tracker", () => {
             finish = resolve;
           }),
       )
-      .mockResolvedValue(response({ recorded: true }));
+      .mockImplementation(async () =>
+        response({ recorded: true, owner: null }),
+      );
     vi.stubGlobal("fetch", fetcher);
     await mount(
       createElement(StudyActivityTracker, {
@@ -271,18 +382,20 @@ describe("study tracker", () => {
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
     await act(async () => {
       finish(response({ recorded: false }));
     });
     const bodies = fetcher.mock.calls.map((call) => JSON.parse(call[1].body));
     expect(bodies.map((body) => body.action)).toEqual([
+      "prepare",
       "start",
       "heartbeat",
+      "prepare",
       "start",
     ]);
-    expect(bodies[1].trackerId).toBe(bodies[0].trackerId);
-    expect(bodies[2].trackerId).not.toBe(bodies[0].trackerId);
+    expect(bodies[2].trackerId).toBe(bodies[0].trackerId);
+    expect(bodies[4].trackerId).not.toBe(bodies[0].trackerId);
   });
   it("immediately resumes focus after a pending stop succeeds", async () => {
     vi.useFakeTimers();
@@ -290,6 +403,7 @@ describe("study tracker", () => {
     let finishStop!: (value: Response) => void;
     const fetcher = vi
       .fn()
+      .mockResolvedValueOnce(response({ owner: null }))
       .mockResolvedValueOnce(response({ recorded: true }))
       .mockImplementationOnce(
         () =>
@@ -297,7 +411,9 @@ describe("study tracker", () => {
             finishStop = resolve;
           }),
       )
-      .mockResolvedValue(response({ recorded: true }));
+      .mockImplementation(async () =>
+        response({ recorded: true, owner: null }),
+      );
     vi.stubGlobal("fetch", fetcher);
     await mount(
       createElement(StudyActivityTracker, {
@@ -313,20 +429,21 @@ describe("study tracker", () => {
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
     await act(async () => {
       finishStop(response({ recorded: true }));
     });
     // No interval advance: the focused clock resumes in the stop's finally block.
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(5);
     expect(
       fetcher.mock.calls.map((call) => JSON.parse(call[1].body).action),
-    ).toEqual(["start", "stop", "start"]);
+    ).toEqual(["prepare", "start", "stop", "prepare", "start"]);
     const ids = fetcher.mock.calls.map(
       (call) => JSON.parse(call[1].body).trackerId,
     );
     expect(ids[0]).toBe(ids[1]);
-    expect(ids[2]).not.toBe(ids[0]);
+    expect(ids[2]).toBe(ids[0]);
+    expect(ids[4]).not.toBe(ids[0]);
     expect(ids[0]).toMatch(/^[0-9a-f-]{36}$/);
   });
   it("serializes an in-flight start with blur and never submits browser durations", async () => {
@@ -336,13 +453,14 @@ describe("study tracker", () => {
     let finish!: (value: Response) => void;
     const fetcher = vi
       .fn()
+      .mockResolvedValueOnce(response({ owner: null }))
       .mockImplementationOnce(
         () =>
           new Promise<Response>((resolve) => {
             finish = resolve;
           }),
       )
-      .mockResolvedValue(response({ recorded: true }));
+      .mockImplementation(async () => response({ recorded: true }));
     vi.stubGlobal("fetch", fetcher);
     await mount(
       createElement(StudyActivityTracker, {
@@ -350,21 +468,22 @@ describe("study tracker", () => {
         lessonId: "lesson",
       }),
     );
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(2);
     vi.mocked(document.hasFocus).mockReturnValue(false);
     await act(async () => {
       window.dispatchEvent(new Event("blur"));
       finish(response({ recorded: true }));
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
     expect(fetcher.mock.calls.map((call) => JSON.parse(call[1].body))).toEqual([
-      { action: "start", trackerId },
+      { action: "prepare", trackerId },
+      { action: "start", trackerId, expectedOwner: null },
       { action: "stop", trackerId },
     ]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(90000);
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(3);
   });
   it("stops after unmount while a start is pending, without retry loops on a failed stop", async () => {
     vi.spyOn(crypto, "randomUUID").mockReturnValue(trackerId);
@@ -372,6 +491,7 @@ describe("study tracker", () => {
     let finish!: (value: Response) => void;
     const fetcher = vi
       .fn()
+      .mockResolvedValueOnce(response({ owner: null }))
       .mockImplementationOnce(
         () =>
           new Promise<Response>((resolve) => {
@@ -391,8 +511,8 @@ describe("study tracker", () => {
       root = undefined;
       finish(response({ recorded: true }));
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(fetcher.mock.calls[2][1].body)).toEqual({
       action: "stop",
       trackerId,
     });
@@ -404,6 +524,7 @@ describe("study tracker", () => {
       let finishStop!: (value: Response) => void;
       const fetcher = vi
         .fn()
+        .mockResolvedValueOnce(response({ owner: null }))
         .mockResolvedValueOnce(response({ recorded: true }))
         .mockImplementationOnce(
           () =>
@@ -411,7 +532,9 @@ describe("study tracker", () => {
               finishStop = resolve;
             }),
         )
-        .mockResolvedValue(response({ recorded: true }));
+        .mockImplementation(async () =>
+          response({ recorded: true, owner: null }),
+        );
       vi.stubGlobal("fetch", fetcher);
       await mount(
         createElement(StudyActivityTracker, {
@@ -437,7 +560,7 @@ describe("study tracker", () => {
         }
         finishStop(response({ recorded: true }));
       });
-      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(fetcher).toHaveBeenCalledTimes(3);
     },
   );
 });

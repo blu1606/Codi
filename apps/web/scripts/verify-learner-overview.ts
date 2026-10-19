@@ -101,6 +101,23 @@ async function main() {
       let now = new Date("2026-10-19T03:00:00Z");
       const service = createLearnerOverviewService(database, () => now);
       const clock = createStudyActivityService(database, () => now);
+      const startClock = async (lessonId: string, trackerId: string) => {
+        const snapshot = await clock.heartbeat(
+          learner,
+          f.courseId,
+          lessonId,
+          "prepare",
+          trackerId,
+        );
+        return clock.heartbeat(
+          learner,
+          f.courseId,
+          lessonId,
+          "start",
+          trackerId,
+          snapshot.owner,
+        );
+      };
       const trackerA = randomUUID();
       step = "access, empty and ownership";
       assert.deepEqual((await service.get(empty)).courses, []);
@@ -304,7 +321,7 @@ async function main() {
         before,
       );
       step = "server clock, overlapping tabs, stop, timeout and day split";
-      await clock.heartbeat(learner, f.courseId, f.lessonId, "start", trackerA);
+      await startClock(f.lessonId, trackerA);
       now = new Date(now.getTime() + 30000);
       await clock.heartbeat(
         learner,
@@ -333,7 +350,7 @@ async function main() {
       now = new Date(now.getTime() + 10000);
       await clock.heartbeat(learner, f.courseId, f.lessonId, "stop", trackerA);
       now = new Date(now.getTime() + 30000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, "start", trackerA);
+      await startClock(f.lessonId, trackerA);
       now = new Date(now.getTime() + 60000);
       await clock.heartbeat(
         learner,
@@ -368,15 +385,9 @@ async function main() {
             ),
           );
         const start = now.getTime();
-        await clock.heartbeat(
-          learner,
-          f.courseId,
-          f.lessonId,
-          "start",
-          trackerA,
-        );
+        await startClock(f.lessonId, trackerA);
         now = new Date(start + 10000);
-        await clock.heartbeat(learner, f.courseId, lessonB, "start", trackerB);
+        await startClock(lessonB, trackerB);
         const [owned] = await tx
           .select()
           .from(studentStudyClocks)
@@ -433,7 +444,7 @@ async function main() {
           .from(studentStudyClocks)
           .where(eq(studentStudyClocks.userId, learner));
         assert.equal(stopped!.lastSeenAt, null);
-        assert.equal(stopped!.trackerId, null);
+        assert.equal(stopped!.trackerId, trackerB);
       }
       for (const lessonB of [f.lessonIds[1]!, f.lessonId]) {
         step = `delayed active heartbeat before server processing (${lessonB === f.lessonId ? "same" : "different"} lesson)`;
@@ -462,13 +473,7 @@ async function main() {
           )[0]!;
         const beforeDay = await readDay();
         const start = now.getTime();
-        await clock.heartbeat(
-          learner,
-          f.courseId,
-          f.lessonId,
-          "start",
-          trackerA,
-        );
+        await startClock(f.lessonId, trackerA);
         let release!: () => void;
         const held = new Promise<void>((resolve) => {
           release = resolve;
@@ -484,7 +489,7 @@ async function main() {
           ),
         );
         now = new Date(start + 31000);
-        await clock.heartbeat(learner, f.courseId, lessonB, "start", trackerB);
+        await startClock(lessonB, trackerB);
         const owned = await readClock();
         now = new Date(start + 32000);
         release();

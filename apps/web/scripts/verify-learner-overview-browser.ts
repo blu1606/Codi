@@ -403,9 +403,22 @@ async function main() {
         trackerId: string,
         action: StudyActivityAction,
       ) => {
+        let expectedOwner: string | null | undefined;
+        if (action === "start") {
+          const prepared = await page.request.post(url, {
+            headers: { origin },
+            data: { action: "prepare", trackerId },
+          });
+          assert.equal(prepared.status(), 200);
+          expectedOwner = (await prepared.json()).owner;
+        }
         const r = await page.request.post(url, {
           headers: { origin },
-          data: { trackerId, action },
+          data: {
+            trackerId,
+            action,
+            ...(action === "start" ? { expectedOwner } : {}),
+          },
         });
         assert.equal(r.status(), 200);
         return r.json();

@@ -14,12 +14,21 @@ export class LearnerOverviewError extends Error {
     super(message);
   }
 }
-export const studyHeartbeat = z
-  .object({
-    action: z.enum(["start", "heartbeat", "stop"]),
-    trackerId: z.uuid(),
-  })
-  .strict();
+export const studyHeartbeat = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("start"),
+      trackerId: z.uuid(),
+      expectedOwner: z.uuid().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.enum(["prepare", "heartbeat", "stop"]),
+      trackerId: z.uuid(),
+    })
+    .strict(),
+]);
 export type StudyActivityAction = z.infer<typeof studyHeartbeat>["action"];
 export const overviewCommand = z.discriminatedUnion("type", [
   z

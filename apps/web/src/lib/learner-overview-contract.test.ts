@@ -68,6 +68,7 @@ describe("study accounting", () => {
       studyHeartbeat.safeParse({
         action: "start",
         trackerId: "19a88269-9c03-4c26-921d-bcecd007906b",
+        expectedOwner: null,
         seconds: 3600,
       }).success,
     ).toBe(false);

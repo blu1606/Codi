@@ -9,7 +9,7 @@ Implements [#102](https://github.com/blu1606/Codi/issues/102), under epic #94: m
 | No enrollments | Catalog/AI links, no fabricated course recommendations | Component test, browser empty states |
 | Continue learning | Owned, non-suspended courses; published lessons; existing `selectPath`, prerequisite guards and completion rules | Rollback DB verification, browser continue target |
 | Weekly goal and streak | Onboarding weekly minutes, Vietnam calendar week (Monday–Sunday); activity dates deduplicated; yesterday's streak remains until the day is missed | Contract tests, DB verification |
-| Study time | One server clock per learner, owned by a unique focus session; explicit start acquires ownership, 30s heartbeat renews only its own clock while visible/focused; gaps over 45s discarded; split at Vietnam midnight | Contract/tracker tests, ownership regressions for same/different-lesson tabs, DB stop/expiry checks, authenticated browser requests |
+| Study time | One server clock per learner, owned by a unique focus session; prepare reads the ownership token, start acquires only if it is unchanged, 30s heartbeat renews only its own active clock while visible/focused; gaps over 45s discarded; split at Vietnam midnight | Contract/tracker tests, ownership regressions for same/different-lesson tabs, DB stop/expiry checks, authenticated browser requests |
 | Mastery badges | Existing five-level BKT presentation; no evidence means level 0 | DB verification, escaped/text-labelled UI |
 | Diagnostic card | Default/ready/skipped only; durable enrollment-scoped dismiss and version-checked undo; real onboarding retake command | API/component/DB tests, browser CTA and reload |
 | Change goal | Dialog explains rearranging unfinished lessons; existing onboarding `goal-edit` command preserves grades/completed lessons | Browser confirmation/navigation; existing onboarding tests |
@@ -26,7 +26,11 @@ Study-time tracking starts with this change. Historical lesson duration estimate
 
 `20261019121656_learner_study_activity` adds `student_study_days` and `student_study_clocks`, with RLS, foreign keys, per-user/day uniqueness and bounded daily seconds. It does not rewrite course, progress, grade or enrollment rows. Apply using the normal migration deployment workflow; never `db:push`.
 
-`20261019133900_study_tracker_ownership` adds nullable UUID `student_study_clocks.tracker_id`. Apply both migrations before deploying. Existing clocks with no owner can be claimed by an explicit start; stale heartbeats and stops cannot change them. Updated clients send `{action: "start" | "heartbeat" | "stop", trackerId}`; old open clients must reload because the previous `{active, trackerId}` payload is rejected with HTTP 400. Tracker IDs identify focus sessions scoped to the authenticated user, not authentication credentials. This follow-up requires no additional migration.
+`20261019133900_study_tracker_ownership` adds nullable UUID `student_study_clocks.tracker_id`. Apply both migrations before deploying. Tracker IDs identify focus sessions scoped to the authenticated user, not authentication credentials. This follow-up requires no additional migration.
+
+Acquisition uses a two-step compare-and-set protocol. `{action: "prepare", trackerId}` reads `{recorded: false, owner: UUID | null}` without changing the clock or crediting time. While the same focus session is still desired, the client sends `{action: "start", trackerId, expectedOwner: owner}`. Under the per-learner transaction lock, start only succeeds if the stored owner still matches that snapshot. After stop, `last_seen_at` is null but `tracker_id` retains the last owner's token, so an older acquisition cannot become valid again after a newer session stops. Legacy clocks with null tokens can still be acquired using an explicit null snapshot. Heartbeat and stop require the matching user/course/lesson/tracker and an active clock.
+
+Heartbeat/stop payloads remain `{action: "heartbeat" | "stop", trackerId}`. Old open clients must reload: `{active, trackerId}` and starts without `expectedOwner` return HTTP 400. A rejected start is retried on the next event/tick while still focused; an ignored heartbeat never becomes an acquisition, preserving the earlier delayed-heartbeat fix. No browser timestamps or durations authorize ownership or credit.
 
 ## Reproduce validation
 
@@ -37,6 +41,8 @@ node node_modules/vitest/vitest.mjs run
 node node_modules/typescript/bin/tsc --noEmit -p apps/web/tsconfig.json
 node node_modules/tsx/dist/cli.mjs scripts/check-design-standards.ts
 ```
+
+The initial-acquisition regression holds A's actual start before service processing, blurs A, accepts B's start through a second real tracker, then releases A's start and queued stop. It checks B's ownership and credited seconds over three real timer ticks for both same/different lessons. Further regressions cover delayed preparation across blur/unmount/refocus, rejected-start retry without a loop, stopped-owner fencing, and the existing heartbeat/stop races. These are local component/service regressions; they do not constitute new independent browser/DB acceptance.
 
 From `apps/web`, with a development `.env` and the migration applied:
 

@@ -29,13 +29,40 @@ export default function StudyActivityTracker({
       pending = true;
       let succeeded = false;
       try {
+        let expectedOwner: string | null | undefined;
+        if (action === "start") {
+          const preparation = await fetch(endpoint, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "prepare", trackerId }),
+            keepalive: true,
+          });
+          if (!preparation.ok) return;
+          const { owner } = await preparation.json();
+          if (owner !== null && typeof owner !== "string") return;
+          expectedOwner = owner;
+          // A delayed preparation must never authorize a focus session that ended
+          // while it was in flight. Reconcile a newer desired session in finally.
+          if (desired !== trackerId) {
+            succeeded = true;
+            return;
+          }
+        }
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action, trackerId }),
+          body: JSON.stringify({
+            action,
+            trackerId,
+            ...(action === "start" ? { expectedOwner } : {}),
+          }),
           keepalive: true,
         });
         if (response.ok) {
+          const { recorded } = await response.json();
+          // Retry a rejected acquisition on the next tick while still focused.
+          // If focus ended, reconcile its queued stop (which the server can ignore).
+          if (action === "start" && !recorded && desired === trackerId) return;
           // An ignored renewal still belongs to this session: never turn its next
           // timer tick into an acquisition that steals ownership back.
           started = action === "stop" ? null : trackerId;

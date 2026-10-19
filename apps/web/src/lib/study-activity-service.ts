@@ -21,6 +21,7 @@ export function createStudyActivityService(
       lessonId: string,
       action: StudyActivityAction,
       trackerId: string,
+      expectedOwner?: string | null,
     ) {
       return db.transaction(async (tx) => {
         // All metrics stay behind exactly the same access guard as the player.
@@ -33,11 +34,20 @@ export function createStudyActivityService(
           .select()
           .from(studentStudyClocks)
           .where(eq(studentStudyClocks.userId, userId));
-        // Only an explicit focus acquisition can transfer ownership. Both renewals
-        // and stops from obsolete focus sessions must leave the current clock intact.
+        // Preparation only reads a fencing token; it never changes ownership or time.
+        if (action === "prepare")
+          return { recorded: false, owner: previous?.trackerId ?? null };
+        // Compare under the same lock as the write. An initial start sent before a
+        // newer acquisition cannot overwrite it, even if that owner has since stopped.
+        if (
+          action === "start" &&
+          expectedOwner !== (previous?.trackerId ?? null)
+        )
+          return { recorded: false };
         if (
           action !== "start" &&
-          (previous?.trackerId !== trackerId ||
+          (!previous?.lastSeenAt ||
+            previous.trackerId !== trackerId ||
             previous.courseId !== courseId ||
             previous.lessonId !== lessonId)
         )
@@ -58,7 +68,9 @@ export function createStudyActivityService(
         const values = {
           courseId,
           lessonId,
-          trackerId: active ? trackerId : null,
+          // Retain the last owner's token after stop to prevent null -> owner ->
+          // null (ABA) from making a delayed initial start valid again.
+          trackerId,
           lastSeenAt: active ? now : null,
         };
         await tx

@@ -96,6 +96,12 @@ describe("learner overview HTTP boundaries", () => {
     expect(
       (await heartbeat(write({ active: true, trackerId }), ctx)).status,
     ).toBe(400);
+    for (const body of [
+      { action: "start", trackerId },
+      { action: "start", trackerId, expectedOwner: "invalid" },
+      { action: "heartbeat", trackerId, expectedOwner: null },
+    ])
+      expect((await heartbeat(write(body), ctx)).status).toBe(400);
     expect(
       (await heartbeat(write({ action: "resume", trackerId }), ctx)).status,
     ).toBe(400);
@@ -122,12 +128,20 @@ describe("learner overview HTTP boundaries", () => {
       lessonId,
       "stop",
       trackerId,
+      undefined,
     );
   });
-  it.each(["start", "heartbeat", "stop"])(
+  it.each(["prepare", "start", "heartbeat", "stop"])(
     "forwards explicit %s intent",
     async (action) => {
-      const response = await heartbeat(write({ action, trackerId }), ctx);
+      const response = await heartbeat(
+        write({
+          action,
+          trackerId,
+          ...(action === "start" ? { expectedOwner: null } : {}),
+        }),
+        ctx,
+      );
       expect(response.status).toBe(200);
       expect(mocks.heartbeat).toHaveBeenCalledWith(
         "viewer",
@@ -135,6 +149,7 @@ describe("learner overview HTTP boundaries", () => {
         lessonId,
         action,
         trackerId,
+        action === "start" ? null : undefined,
       );
     },
   );

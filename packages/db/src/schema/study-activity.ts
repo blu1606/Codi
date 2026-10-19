@@ -41,7 +41,7 @@ export const studentStudyClocks = pgTable.withRLS("student_study_clocks", {
     .notNull()
     .references(() => courseLessons.id, { onDelete: "cascade" }),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
-  // Nullable for existing clocks and after stop; an opaque client instance ID,
-  // scoped to the authenticated user, prevents obsolete tabs from stopping it.
+  // Nullable for legacy clocks. Retained after stop as an acquisition fencing
+  // token; lastSeenAt determines whether this focus session is still active.
   trackerId: uuid("tracker_id"),
 });
