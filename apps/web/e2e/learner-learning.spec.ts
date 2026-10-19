@@ -19,24 +19,36 @@ async function openCurrentLesson(page: Page, coursePath: string) {
 
 const codeEditor = (page: Page) => page.getByRole("textbox", { name: "Code bài làm" });
 
+/** Waits for the server to acknowledge this exact draft, including during cleanup. */
+async function saveDraft(page: Page, code: string) {
+  const editor = codeEditor(page);
+  await expect(editor).toBeEditable();
+  if ((await editor.inputValue()) === code) return;
+  const [saved] = await Promise.all([
+    page.waitForResponse((response) => {
+      if (response.request().method() !== "POST" || !new URL(response.url()).pathname.endsWith("/coding")) return false;
+      const command = response.request().postDataJSON();
+      return command?.type === "draft" && command.code === code;
+    }),
+    editor.fill(code),
+  ]);
+  expect(saved.ok(), `draft save returned HTTP ${saved.status()}`).toBe(true);
+  expect((await saved.json()).code, "server acknowledged the edited draft").toBe(code);
+  await expect(editor).toHaveValue(code);
+  await expect(page.getByText("Đã lưu nháp")).toBeVisible();
+}
+
 /** Replaces the coding draft, runs `fn`, then restores the learner's original draft. */
 async function withDraft(page: Page, code: string, fn: () => Promise<void>) {
   const editor = codeEditor(page);
-  // The exercise loads the saved draft asynchronously, and in `next dev` the mount effect can load it twice; an
-  // edit made before the last load finishes is overwritten (see the run report). Wait until loading is quiet.
   await expect(page.getByText(/^Đã nộp \d+ lần$/)).toBeVisible();
-  await page.waitForLoadState("networkidle");
   await expect(editor).toBeEditable();
   const original = await editor.inputValue();
   try {
-    await editor.fill(code);
-    await expect(editor).toHaveValue(code);
-    await expect(page.getByText("Đã lưu nháp")).toBeVisible();
-    await expect(editor).toHaveValue(code);
+    await saveDraft(page, code);
     await fn();
   } finally {
-    await editor.fill(original);
-    await expect(page.getByText("Đã lưu nháp")).toBeVisible();
+    await saveDraft(page, original);
   }
 }
 

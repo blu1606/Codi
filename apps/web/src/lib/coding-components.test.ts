@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement } from "react";
+import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LessonCoding from "../components/lesson-coding";
@@ -56,14 +56,22 @@ const response = (data: unknown, status = 200) =>
     status,
     headers: { "Content-Type": "application/json" },
   });
-async function mount(fetcher: ReturnType<typeof vi.fn>, onChanged = vi.fn()) {
+async function mount(
+  fetcher: ReturnType<typeof vi.fn>,
+  onChanged = vi.fn(),
+  strict = false,
+) {
   vi.stubGlobal("fetch", fetcher);
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
+    const component = createElement(LessonCoding, {
+      endpoint: "/api/code",
+      onChanged,
+    });
     root!.render(
-      createElement(LessonCoding, { endpoint: "/api/code", onChanged }),
+      strict ? createElement(StrictMode, null, component) : component,
     );
   });
 }
@@ -85,6 +93,35 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 describe("coding workspace", () => {
+  it("ignores a stale initial load after the learner starts editing", async () => {
+    const stale = Promise.withResolvers<Response>();
+    const current = Promise.withResolvers<Response>();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(response(blank))
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(current.promise);
+    await mount(fetcher, vi.fn(), true);
+    await act(async () => {
+      current.resolve(response(blank));
+    });
+
+    const editor = document.querySelector("textarea")!;
+    const edited = "function inc(n) { return n + 1; }";
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )!.set!.call(editor, edited);
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(document.body.textContent).toContain("Đang lưu nháp");
+
+    await act(async () => {
+      stale.resolve(response(blank));
+    });
+    expect(editor.value).toBe(edited);
+  });
   it("restores the server draft, instructions and sample tests", async () => {
     await mount(
       vi.fn().mockResolvedValue(response({ ...blank, code: "saved draft" })),

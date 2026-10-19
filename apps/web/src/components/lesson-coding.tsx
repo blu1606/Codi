@@ -99,30 +99,33 @@ export default function LessonCoding({
     },
     [endpoint],
   );
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setError(null);
     try {
-      const response = await fetch(endpoint, { cache: "no-store" });
+      const response = await fetch(endpoint, { cache: "no-store", signal });
       const next = await response.json();
       if (!response.ok)
         throw new Error(next.error ?? "Không thể tải bài tập code.");
-      if (live.current) {
+      if (live.current && !signal?.aborted) {
         setData(next);
         setCode(next.code);
         value.current = next.code;
         persisted.current = next.code;
       }
     } catch (e) {
-      if (live.current)
+      if (live.current && !signal?.aborted)
         setError(
           e instanceof Error ? e.message : "Không thể tải bài tập code.",
         );
     }
   }, [endpoint]);
   useEffect(() => {
+    const controller = new AbortController();
     live.current = true;
-    void load();
+    void load(controller.signal);
     return () => {
+      // A late load from a previous effect must never replace the learner's edits.
+      controller.abort();
       live.current = false;
       if (timer.current) clearTimeout(timer.current);
       if (value.current !== persisted.current)
@@ -241,7 +244,7 @@ export default function LessonCoding({
             <Alert variant="destructive">
               <AlertDescription>
                 {error}{" "}
-                <Button variant="outline" onClick={load}>
+                <Button variant="outline" onClick={() => void load()}>
                   Thử lại
                 </Button>
               </AlertDescription>
