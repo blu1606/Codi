@@ -109,12 +109,13 @@ export default async function LecturerDashboardPage() {
               <MessageCircle className="size-4 text-primary" />
             </div>
             <div className="text-3xl font-bold tracking-tight">{counts.questions}</div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Hỏi đáp học viên</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground">
-                Sắp ra mắt
-              </span>
-            </div>
+            <Link
+              href={"/dashboard/lecturer/questions" as any}
+              className="flex items-center justify-between text-xs font-medium text-primary hover:underline transition-colors pt-1"
+            >
+              <span>Mở hộp thư hỏi đáp</span>
+              <ArrowRight className="size-3" />
+            </Link>
           </CardContent>
         </Card>
 
@@ -125,12 +126,13 @@ export default async function LecturerDashboardPage() {
               <Star className="size-4 text-primary" />
             </div>
             <div className="text-3xl font-bold tracking-tight">{counts.reviews}</div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Phản hồi học viên</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground">
-                Sắp ra mắt
-              </span>
-            </div>
+            <Link
+              href={"/dashboard/lecturer/reviews" as any}
+              className="flex items-center justify-between text-xs font-medium text-primary hover:underline transition-colors pt-1"
+            >
+              <span>Xem đánh giá</span>
+              <ArrowRight className="size-3" />
+            </Link>
           </CardContent>
         </Card>
       </div>
