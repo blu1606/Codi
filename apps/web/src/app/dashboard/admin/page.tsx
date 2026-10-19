@@ -7,7 +7,7 @@ import Dashboard, { type DashboardNavItem } from "../dashboard";
 
 const NAV_ITEMS: DashboardNavItem[] = [
   { label: "Quản lý tài khoản người dùng", href: "/dashboard/admin/users" },
-  { label: "Duyệt yêu cầu xuất bản khoá học", disabled: true },
+  { label: "Duyệt yêu cầu xuất bản khoá học", href: "/dashboard/admin/publication" },
   { label: "Đơn hàng & giao dịch", disabled: true },
   { label: "Voucher", disabled: true },
 ];

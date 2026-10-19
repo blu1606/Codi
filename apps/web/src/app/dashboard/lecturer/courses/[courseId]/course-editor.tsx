@@ -61,6 +61,8 @@ import {
 } from "./actions";
 import { KnowledgeMapClient } from "./kmap/knowledge-map-client";
 import type { KnowledgeMapDataDto } from "./kmap/actions";
+import { PublishTabClient } from "./publish/publish-tab-client";
+import type { PublicationDataDto } from "./publish/actions";
 
 interface CourseEditorProps {
   courseId: string;
@@ -72,6 +74,7 @@ interface CourseEditorProps {
     entryTest: { id: number; count: number } | null;
     isLocked: boolean;
     kmapData?: KnowledgeMapDataDto | null;
+    publicationData?: PublicationDataDto | null;
   };
 }
 
@@ -99,6 +102,9 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   const [infoSummary, setInfoSummary] = useState(course.description || "");
   const [infoCategory, setInfoCategory] = useState(course.category || CATEGORIES[0]);
   const [infoLevel, setInfoLevel] = useState(course.level || "Beginner");
+  const [infoPrice, setInfoPrice] = useState(
+    course.price !== undefined && course.price !== null ? String(course.price) : "0"
+  );
   const [infoOutcomes, setInfoOutcomes] = useState((details.learningOutcomes || []).join("\n"));
   const [infoRequirements, setInfoRequirements] = useState((details.requirements || []).join("\n"));
   const [infoErrors, setInfoErrors] = useState<Record<string, string>>({});
@@ -121,6 +127,11 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     if (infoTitle.trim().length < 5) errors.title = "Tên khoá học cần ít nhất 5 ký tự.";
     if (infoSummary.trim().length < 20) errors.summary = "Mô tả cần ít nhất 20 ký tự.";
 
+    const parsedPrice = Number(infoPrice.replace(/[^\d]/g, ""));
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      errors.price = "Giá đề xuất phải là số nguyên không âm.";
+    }
+
     if (Object.keys(errors).length > 0) {
       setInfoErrors(errors);
       return;
@@ -133,6 +144,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
         summary: infoSummary,
         category: infoCategory,
         level: infoLevel,
+        proposedPrice: parsedPrice,
         learningOutcomes: infoOutcomes.split("\n").map((s: string) => s.trim()).filter(Boolean),
         requirements: infoRequirements.split("\n").map((s: string) => s.trim()).filter(Boolean),
       });
@@ -745,6 +757,34 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-foreground">
+                  Giá đề xuất (VND)
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="10000"
+                  value={infoPrice}
+                  disabled={isLocked || isSavingInfo}
+                  placeholder="Nhập 0 cho khoá học miễn phí"
+                  onChange={(e) => {
+                    setInfoPrice(e.target.value);
+                    setIsInfoDirty(true);
+                  }}
+                  className="max-w-[280px]"
+                />
+                <span className="text-xs text-muted-foreground">
+                  Quản trị viên sẽ kiểm tra và xác nhận giá bán cuối cùng khi duyệt xuất bản. Nhập 0 cho khoá học miễn phí.
+                </span>
+                {infoErrors.price && (
+                  <p className="text-xs text-destructive flex items-center gap-1 font-medium">
+                    <AlertCircle className="size-3.5" />
+                    {infoErrors.price}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-foreground">
                   Học viên sẽ học được gì? (Mỗi dòng một ý)
                 </label>
                 <Textarea
@@ -834,21 +874,25 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
       )}
 
       {activeTab === "publish" && (
-        <Card className="border border-dashed border-border/80">
-          <CardContent className="p-0">
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <CheckCircle2 className="size-5 text-success" />
-                </EmptyMedia>
-                <EmptyTitle>Xuất bản khoá học (Task #117)</EmptyTitle>
-                <EmptyDescription>
-                  Quy trình kiểm tra điều kiện xuất bản và hàng đợi phê duyệt Admin thuộc Task #117.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          </CardContent>
-        </Card>
+        data.publicationData ? (
+          <PublishTabClient courseId={courseId} data={data.publicationData} />
+        ) : (
+          <Card className="border border-dashed border-border/80">
+            <CardContent className="p-0">
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <CheckCircle2 className="size-5 text-primary animate-pulse" />
+                  </EmptyMedia>
+                  <EmptyTitle>Đang tải thông tin xuất bản...</EmptyTitle>
+                  <EmptyDescription>
+                    Đang kiểm tra các điều kiện xuất bản và lịch sử kiểm duyệt.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </CardContent>
+          </Card>
+        )
       )}
     </div>
   );
