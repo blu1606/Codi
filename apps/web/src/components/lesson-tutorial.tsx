@@ -168,7 +168,11 @@ export default function LessonTutorial({
       if (!current.current.gated && value.current !== persisted.current)
         await saveDraft(current.current.current, value.current);
       const wasDone = current.current.done;
-      const next = (await send(command)) as TutorialView;
+      // A retry can outlive edits made after a failed Run. Resolve its code now,
+      // after pending draft saves, so the run cannot overwrite the latest draft.
+      const next = (await send(
+        command.type === "run" ? { ...command, code: value.current } : command,
+      )) as TutorialView;
       if (!live.current) return;
       apply(next);
       if (command.type === "step") {

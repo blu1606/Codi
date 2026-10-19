@@ -93,6 +93,105 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 describe("tutorial workspace", () => {
+  it.each(["before autosave", "while autosave is pending"])(
+    "retries a failed Run with the latest editor code %s",
+    async (timing) => {
+      vi.useFakeTimers();
+      const s = server();
+      const oldCode = 'console.log("old");';
+      const newCode = 'console.log("new draft");';
+      let failRun = true;
+      let holdDraft = timing === "while autosave is pending";
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const fetcher = vi.fn(async (url, options?: RequestInit) => {
+        const command = options?.body
+          ? (JSON.parse(options.body as string) as TutorialCommand)
+          : null;
+        if (command?.type === "run" && failRun) {
+          failRun = false;
+          return Response.json(
+            { error: "Run transport failed" },
+            { status: 503 },
+          );
+        }
+        if (
+          command?.type === "draft" &&
+          command.code === newCode &&
+          holdDraft
+        ) {
+          holdDraft = false;
+          await held;
+        }
+        return s.fetcher(url, options);
+      });
+      const commands = () =>
+        fetcher.mock.calls
+          .filter((call) => call[1]?.body)
+          .map(
+            (call) => JSON.parse(call[1]!.body as string) as TutorialCommand,
+          );
+      try {
+        await mount(fetcher);
+        await typeCode(oldCode);
+        await act(async () =>
+          document
+            .querySelector("textarea")!
+            .dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: "Enter",
+                ctrlKey: true,
+                bubbles: true,
+              }),
+            ),
+        );
+        expect(document.body.textContent).toContain("Run transport failed");
+        expect(commands().at(-1)).toEqual({
+          type: "run",
+          step: 0,
+          code: oldCode,
+        });
+        const retryStart = commands().length;
+        await typeCode(newCode);
+        if (timing === "while autosave is pending") {
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(650);
+          });
+          expect(commands().at(-1)).toEqual({
+            type: "draft",
+            step: 0,
+            code: newCode,
+          });
+        }
+        await click("Thử lại");
+        await act(async () => release());
+        const retried = commands().slice(retryStart);
+        expect(retried.filter((command) => command.type === "run")).toEqual([
+          { type: "run", step: 0, code: newCode },
+        ]);
+        expect(
+          retried.filter((command) => command.type === "draft"),
+        ).toContainEqual({ type: "draft", step: 0, code: newCode });
+        expect(s.view().code).toBe(newCode);
+        expect(document.querySelector("textarea")?.value).toBe(newCode);
+        // The cancelled debounce must not write an older snapshot afterward.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1000);
+        });
+        expect(s.view().code).toBe(newCode);
+        await act(async () => {
+          root!.unmount();
+          root = undefined;
+        });
+        await mount(fetcher);
+        expect(document.querySelector("textarea")?.value).toBe(newCode);
+      } finally {
+        release();
+      }
+    },
+  );
   it("renders the guide, filename, line numbers and Console; disables the first Previous action", async () => {
     await mount(server().fetcher);
     expect(document.body.textContent).toContain("Bước 1/3");

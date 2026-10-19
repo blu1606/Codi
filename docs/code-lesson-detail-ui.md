@@ -75,3 +75,13 @@ Kết quả ngày 19/10/2026: **913 tests / 68 files đạt**, typecheck web/db/
 | Quiz riêng | Yêu cầu người dùng | `code-ui-quiz-desktop.png` | Chờ chụp | Chờ chụp |
 
 Các state lỗi/edge trong bảng đã được kiểm thử bằng unit/DOM/DB; ảnh chi tiết của những state này vẫn cần bổ sung trong review. Không đánh dấu đầy đủ bằng chứng hình ảnh cho các mục còn ghi “Chờ chụp”.
+
+## Sửa lỗi Retry trong review PR #142
+
+Run giờ lấy code hiện tại của editor ngay trước khi gửi lệnh, sau khi chờ lưu nháp. Callback Thử lại không thể gửi lại snapshot code cũ rồi ghi đè bản nháp mới.
+
+Hai regression test chạy component thật với transport có kiểm soát và `tutorialTransition`/`tutorialView` thật: Run(old) thất bại → sửa new → Thử lại trước debounce 650 ms hoặc trong khi autosave đang pending. Cả hai test thất bại trên bản cũ; sau sửa, lệnh Run, draft trả về, editor và lần mở lại component đều giữ new.
+
+Kiểm chứng ngày 19/10/2026: 915 tests / 68 files đạt với coverage (`--maxWorkers=1`); typecheck toàn monorepo, design-token audit (0 vi phạm) và script kiểm tra PostgreSQL/QuickJS thật đều đạt; fixture và bảng tạm được rollback. Lượt coverage đầu với hai worker gặp timeout ở test coding-runner có sẵn, lượt đầy đủ chạy tuần tự sau đó đạt.
+
+Browser regression ở bản sửa này chưa chạy: browser inventory trống và thử mở IAB trả `Browser is not available: iab`. Bằng chứng DOM/DB này không thay cho xác minh browser hoặc phê duyệt UI độc lập.
