@@ -2,6 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ limit: vi.fn(), values: vi.fn(), getSession: vi.fn(), transaction: vi.fn() }));
 vi.mock("@/services", () => ({
  db: {
+   execute: vi.fn().mockResolvedValue(undefined),
    select: () => {
      const queryObj: any = {
        where: () => ({ limit: mocks.limit }),
@@ -12,7 +13,7 @@ vi.mock("@/services", () => ({
      return queryObj;
    },
    insert: () => ({ values: mocks.values }),
-   transaction: mocks.transaction
+   transaction: (fn: any) => mocks.transaction((tx: any) => fn({ execute: vi.fn().mockResolvedValue(undefined), ...tx }))
  },
  auth: { api: { getSession: mocks.getSession } }
 }));
@@ -603,5 +604,143 @@ it("D3: flags order with needsReconciliation when overpaid", async () => {
     }),
   );
   expect(eventLabels.some((l) => l.includes("Chuyển thừa"))).toBe(true);
+});
+
+it("P1: acquires pg_advisory_xact_lock to serialize concurrent transfers", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI12345",
+      amount: 125000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "db-id",
+    },
+  ]);
+  const executedSql: string[] = [];
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      execute: (stmt: any) => {
+        executedSql.push(stmt?.queryChunks ? JSON.stringify(stmt.queryChunks) : "sql");
+        return Promise.resolve();
+      },
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: vi.fn().mockResolvedValue([
+              {
+                id: "order-123",
+                status: "pending",
+                totalAmount: 125000,
+                receivedAmount: 0,
+              },
+            ]),
+          }),
+        }),
+      }),
+      update: () => ({
+        set: () => ({
+          where: () => ({
+            returning: vi.fn().mockImplementation(() => [{ id: "order-123", totalAmount: 125000 }]),
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: () => ({
+          onConflictDoNothing: vi.fn(),
+          returning: vi.fn().mockReturnValue([{ id: 1 }]),
+        }),
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI12345",
+      transferAmount: 125000,
+    }),
+  );
+  expect(res.status).toBe(200);
+  expect(executedSql.length).toBeGreaterThan(0);
+  expect(executedSql[0]).toContain("pg_advisory_xact_lock");
+});
+
+it("P2: flags order with needsReconciliation when partial transfer arrives after order expired", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI99994",
+      amount: 500000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "course-1",
+    },
+  ]);
+
+  const updateOrderMock = vi.fn();
+  const eventLabels: string[] = [];
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: () => ({
+        from: () => ({
+          where: vi.fn().mockImplementation(() => ({
+            limit: vi.fn().mockResolvedValue([
+              {
+                id: 994,
+                status: "failed",
+                failReason: "expired",
+                totalAmount: 500000,
+                receivedAmount: 0,
+                voucherId: null,
+              },
+            ]),
+            then: (resolve: any) => resolve([]), // courseIds not owned
+          })),
+        }),
+      }),
+      update: () => ({
+        set: (val: any) => {
+          updateOrderMock(val);
+          return {
+            where: () => ({
+              returning: vi.fn().mockReturnValue([]),
+            }),
+          };
+        },
+      }),
+      insert: () => ({
+        values: (val: any) => {
+          if (val && typeof val === "object" && "label" in val) {
+            eventLabels.push(val.label);
+          }
+          return { onConflictDoNothing: vi.fn(), returning: vi.fn().mockResolvedValue([{ id: 1 }]) };
+        },
+      }),
+    }),
+  );
+
+  // Transfer 200,000 VND for expired order of 500,000 VND
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI99994",
+      transferAmount: 200000,
+    }),
+  );
+
+  expect(res.status).toBe(200);
+  const data = await res.json();
+  expect(data).toMatchObject({ underpaid: true, receivedAmount: 200000, targetTotal: 500000 });
+  expect(updateOrderMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      receivedAmount: 200000,
+      needsReconciliation: true,
+    }),
+  );
+  expect(eventLabels.some((l) => l.includes("Thanh toán thiếu sau khi hết hạn"))).toBe(true);
 });
 

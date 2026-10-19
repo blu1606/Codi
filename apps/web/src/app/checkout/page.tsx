@@ -390,7 +390,7 @@ export default function CheckoutPage({
     );
   }
 
-  if (error || !order || !bank) {
+  if (error || !order || (order.status === "pending" && !bank)) {
     const isPaymentUnavailable = error?.includes("không khả dụng") || error?.includes("cấu hình");
     const isCreateError = error?.includes("tạo đơn");
     return (
@@ -563,6 +563,11 @@ export default function CheckoutPage({
         {orderSummaryCard}
       </div>
     );
+  }
+
+  // Pending view requires bank details
+  if (!bank) {
+    return null;
   }
 
   // Countdown display

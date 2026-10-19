@@ -68,25 +68,98 @@ describe("Order API Routes", () => {
       expect(res.status).toBe(401);
     });
 
-    it("returns 503 when payment gateway configuration is missing", async () => {
+    it("returns 503 when payment gateway configuration is missing for a pending order", async () => {
       vi.stubEnv("SEPAY_WEBHOOK_SECRET", "");
+      mocks.limit.mockResolvedValueOnce([
+        {
+          id: 10,
+          code: "CODI12345",
+          userId: "user-123",
+          status: "pending",
+          totalAmount: 500000,
+          receivedAmount: 0,
+          paymentDeadline: new Date(Date.now() + 30 * 60000),
+        },
+      ]);
       const req = new Request("http://localhost/api/orders/CODI12345");
       const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
       expect(res.status).toBe(503);
     });
 
-    it("returns 503 when bank account number is missing", async () => {
+    it("returns 503 when bank account number is missing for a pending order", async () => {
       vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "");
+      mocks.limit.mockResolvedValueOnce([
+        {
+          id: 10,
+          code: "CODI12345",
+          userId: "user-123",
+          status: "pending",
+          totalAmount: 500000,
+          receivedAmount: 0,
+          paymentDeadline: new Date(Date.now() + 30 * 60000),
+        },
+      ]);
       const req = new Request("http://localhost/api/orders/CODI12345");
       const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
       expect(res.status).toBe(503);
     });
 
-    it("returns 503 when bank code is invalid", async () => {
+    it("returns 503 when bank code is invalid for a pending order", async () => {
       vi.stubEnv("SEPAY_BANK_CODE", "INVALID_BANK_CODE");
+      mocks.limit.mockResolvedValueOnce([
+        {
+          id: 10,
+          code: "CODI12345",
+          userId: "user-123",
+          status: "pending",
+          totalAmount: 500000,
+          receivedAmount: 0,
+          paymentDeadline: new Date(Date.now() + 30 * 60000),
+        },
+      ]);
       const req = new Request("http://localhost/api/orders/CODI12345");
       const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
       expect(res.status).toBe(503);
+    });
+
+    it("allows reading paid order even when payment gateway config is missing", async () => {
+      vi.stubEnv("SEPAY_WEBHOOK_SECRET", "");
+      mocks.limit
+        .mockResolvedValueOnce([
+          {
+            id: 10,
+            code: "CODI12345",
+            userId: "user-123",
+            voucherId: null,
+            subtotal: 500000,
+            discountAmount: 0,
+            totalAmount: 500000,
+            receivedAmount: 500000,
+            status: "paid",
+            failReason: null,
+            isBuyNow: false,
+            paymentDeadline: null,
+            createdAt: new Date(),
+            paidAt: new Date(),
+            cancelledAt: null,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 1,
+            courseId: "course-1",
+            courseTitle: "Fullstack Next.js",
+            unitPrice: 500000,
+            courseSlug: "fullstack-nextjs",
+          },
+        ]);
+
+      const req = new Request("http://localhost/api/orders/CODI12345");
+      const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.order.status).toBe("paid");
+      expect(data.bank).toBeNull();
     });
 
     it("returns 404 when order not found", async () => {

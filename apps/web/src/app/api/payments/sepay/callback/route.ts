@@ -66,6 +66,9 @@ export async function POST(req: Request) {
 
     // Process payment atomically within transaction
     const processResult = await db.transaction(async (txDB) => {
+      // Serialize concurrent transfers for this transaction/order code
+      await txDB.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${txId}))`);
+
       // Idempotency check on provider transactionCode if available
       if (providerTxCode) {
         const [existingPayment] = await txDB
@@ -155,7 +158,7 @@ export async function POST(req: Request) {
             return { orderNotPending: true, orderStatus: "failed_already_owned" };
           }
 
-          // Auto-honour: failed -> paid
+          // Auto-honour candidate: failed (expired) order
           isLateHonoured = true;
         } else {
           // Other non-pending states (cancelled, refunded, or failed not expired)
@@ -202,19 +205,24 @@ export async function POST(req: Request) {
       }
 
       if (isUnderpaid) {
-        // Accumulate receivedAmount, keep order and transaction pending (D3)
+        // Accumulate receivedAmount
         if (existingOrder) {
+          const isExpiredOrder = existingOrder.status === "failed";
           await txDB
             .update(orders)
             .set({
               receivedAmount: newAccumulated,
+              // If partial transfer arrived after expiry, order remains failed and needs manual reconciliation
+              needsReconciliation: isExpiredOrder ? true : undefined,
               updatedAt: new Date(),
             })
             .where(eq(orders.id, existingOrder.id));
 
           await txDB.insert(orderEvents).values({
             orderId: existingOrder.id,
-            label: `Đã nhận một phần: ${amountReceived.toLocaleString("vi-VN")} ₫ (Tổng nhận: ${newAccumulated.toLocaleString("vi-VN")} ₫ / Cần: ${targetTotal.toLocaleString("vi-VN")} ₫)`,
+            label: isExpiredOrder
+              ? `Thanh toán thiếu sau khi hết hạn: nhận thêm ${amountReceived.toLocaleString("vi-VN")} ₫ (Tổng nhận: ${newAccumulated.toLocaleString("vi-VN")} ₫ / Cần: ${targetTotal.toLocaleString("vi-VN")} ₫, cần đối soát)`
+              : `Đã nhận một phần: ${amountReceived.toLocaleString("vi-VN")} ₫ (Tổng nhận: ${newAccumulated.toLocaleString("vi-VN")} ₫ / Cần: ${targetTotal.toLocaleString("vi-VN")} ₫)`,
             actorId: tx.userId,
           });
         }
@@ -371,6 +379,15 @@ export async function POST(req: Request) {
 
     if (processResult.alreadyProcessed) {
       return NextResponse.json({ success: true, message: "Already processed" });
+    }
+
+    if (processResult.underpaid) {
+      return NextResponse.json({
+        success: true,
+        underpaid: true,
+        receivedAmount: processResult.receivedAmount,
+        targetTotal: processResult.targetTotal,
+      });
     }
 
     if (processResult.orderNotPending) {

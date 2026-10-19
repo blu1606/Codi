@@ -24,15 +24,6 @@ export async function GET(
       return NextResponse.json({ error: "Thiếu mã đơn hàng" }, { status: 400 });
     }
 
-    // Sepay config for receiver info — fail closed if configuration is missing or invalid
-    const config = getSepayConfig();
-    if (!config) {
-      return NextResponse.json(
-        { error: "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán." },
-        { status: 503 },
-      );
-    }
-
     const trimmed = decodeURIComponent(rawId).trim();
     const isNumeric = /^\d+$/.test(trimmed);
 
@@ -88,6 +79,15 @@ export async function GET(
       order.failReason = "expired";
     }
 
+    // Sepay config for receiver info — fail closed if configuration is missing for pending orders
+    const config = getSepayConfig();
+    if (order.status === "pending" && !config) {
+      return NextResponse.json(
+        { error: "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán." },
+        { status: 503 },
+      );
+    }
+
     // Fetch items with course metadata (slug, title, lecturerId)
     const items = await db
       .select({
@@ -112,11 +112,13 @@ export async function GET(
       if (v) voucherCode = v.code;
     }
 
-    const bank = {
-      bank: config.receiver.bankCode,
-      accountNumber: config.receiver.accountNumber,
-      accountName: "CONG TY CODI EDU",
-    };
+    const bank = config
+      ? {
+          bank: config.receiver.bankCode,
+          accountNumber: config.receiver.accountNumber,
+          accountName: "CONG TY CODI EDU",
+        }
+      : null;
 
     return NextResponse.json({
       order: {

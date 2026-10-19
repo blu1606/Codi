@@ -3,6 +3,7 @@ import type { Database } from "@codi-1/db";
 import { orderEvents, orderItems, orders, studentCart, vouchers } from "@codi-1/db";
 import { studentEnrollments, studentTransactions } from "@codi-1/db/schema/student-profile";
 import { getCartSummary } from "./cart-service";
+import { getSepayConfig } from "./sepay-config";
 
 function generateOrderCode(): string {
   const num = 10000 + Math.floor(Math.random() * 90000);
@@ -52,6 +53,11 @@ export async function createOrderFromCart(
         summary.voucherError || "Mã giảm giá không hợp lệ hoặc đã hết hạn",
       );
     }
+  }
+
+  // Guard against missing payment gateway config for orders with total > 0
+  if (summary.total > 0 && !getSepayConfig()) {
+    throw new CheckoutError(503, "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.");
   }
 
   return await db.transaction(async (tx) => {
