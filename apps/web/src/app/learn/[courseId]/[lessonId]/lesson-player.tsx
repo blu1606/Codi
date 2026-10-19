@@ -26,6 +26,7 @@ import { Sheet } from "@codi-1/ui/components/sheet";
 import { cn } from "@codi-1/ui/lib/utils";
 import { toast } from "sonner";
 import LessonMaterialView from "@/components/lesson-material-view";
+import LessonMarkdown from "@/components/lesson-markdown";
 import LessonAssessment from "@/components/lesson-assessment";
 import LessonCoding from "@/components/lesson-coding";
 import {
@@ -515,9 +516,7 @@ export default function LessonPlayer({
                 <BookOpen className="size-5" />
                 {material ? "Tóm tắt bài học (bài đọc)" : "Nội dung bài học"}
               </h2>
-              <div className="whitespace-pre-wrap break-words leading-8">
-                {data.lesson.body}
-              </div>
+              <LessonMarkdown>{data.lesson.body}</LessonMarkdown>
             </CardContent>
           </Card>
         ) : (
