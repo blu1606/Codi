@@ -2,7 +2,7 @@
 
 Issue: https://github.com/blu1606/Codi/issues/141, sub-issue của #94; liên quan #138, #98, #100.
 Nhánh từ `develop`: `fix/code-lesson-detail-ui`. Worktree: `../Codi-code-detail-ui`.
-Chưa tạo PR; báo người dùng xem trước theo yêu cầu.
+Người dùng đã xem và đồng ý mở PR vào `develop`, liên kết #141, ngày 19/10/2026.
 
 ## Thay đổi
 
@@ -62,7 +62,7 @@ Kết quả ngày 19/10/2026: **913 tests / 68 files đạt**, typecheck web/db/
 
 Đã kiểm tra bằng Chromium headless tại 1233×800 và 375×812, dùng tài khoản QA tạm riêng và xóa tài khoản đó sau khi xong. Tutorial chạy Console thật, chuyển bước và khôi phục code nháp đạt. Quiz được mở từ sidebar trên trang code, giữ lựa chọn sau reload, trả lời đủ 3 câu và chấm đạt; hai trang không hiển thị lẫn quiz/editor. Không có page error hoặc tràn ngang. Đã sửa lỗi hydration ở menu tài khoản/thông báo và độ rộng header mobile phát hiện trong lượt kiểm tra đầu.
 
-Ảnh được lưu ngoài repo tại `../.task-notes/`; sẽ đính kèm vào PR sau khi người dùng duyệt.
+Ảnh đối chiếu được lưu tại [`screenshots/issue-141/`](screenshots/issue-141/) và nhúng trong bảng ảnh của PR. Ảnh mockup được chụp từ route `/learn/course-js-001/lesson-js-p01` của prototype; ảnh triển khai dùng dữ liệu QA riêng, không có thông tin tài khoản thật.
 
 | State | Mockup | Desktop light | Desktop dark | Mobile 375px |
 |---|---|---|---|---|
@@ -74,4 +74,4 @@ Kết quả ngày 19/10/2026: **913 tests / 68 files đạt**, typecheck web/db/
 | Bài challenge cũ | S11 / S11g | `code-ui-challenge-desktop.png` | Chờ chụp | Chờ chụp |
 | Quiz riêng | Yêu cầu người dùng | `code-ui-quiz-desktop.png` | Chờ chụp | Chờ chụp |
 
-Các state lỗi/edge trong bảng vẫn được kiểm thử bằng unit/DOM/DB; còn cần ảnh cho đầy đủ bảng parity trước khi mở PR. Chưa mở PR theo yêu cầu người dùng.
+Các state lỗi/edge trong bảng đã được kiểm thử bằng unit/DOM/DB; ảnh chi tiết của những state này vẫn cần bổ sung trong review. Không đánh dấu đầy đủ bằng chứng hình ảnh cho các mục còn ghi “Chờ chụp”.
