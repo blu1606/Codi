@@ -86,6 +86,7 @@ export const assessmentSubmissions = pgTable.withRLS("assessment_submissions", {
   mode: submissionMode("mode"),
   // Text answer, or the submitted code for coding exercises.
   answerText: text("answer_text"),
+  codingRun: jsonb("coding_run").$type<{ phase: "done" | "syntax" | "runtime" | "timeout"; logs: string[]; durationMs: number; line: number | null; solutionViewed?: boolean; solutionEligible?: boolean; sampleDurationMs?: number }>(),
   fileUrl: text("file_url"),
   fileName: text("file_name"),
   linkUrl: text("link_url"),

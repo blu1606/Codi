@@ -27,6 +27,7 @@ import { cn } from "@codi-1/ui/lib/utils";
 import { toast } from "sonner";
 import LessonMaterialView from "@/components/lesson-material-view";
 import LessonAssessment from "@/components/lesson-assessment";
+import LessonCoding from "@/components/lesson-coding";
 import {
   LESSON_PATH_LABELS,
   type CoursePathView,
@@ -560,6 +561,9 @@ export default function LessonPlayer({
         )}
         {data.checklist.filter((item) => item.key === "quiz" || item.key === "assignment").map((item) => (
           <LessonAssessment key={item.assessmentId} endpoint={`${endpoint}/assessments/${item.assessmentId}`} onChanged={() => send({ type: "open" })} />
+        ))}
+        {data.checklist.filter((item) => item.key === "code").map((item) => (
+          <LessonCoding key={item.assessmentId} endpoint={`${endpoint}/assessments/${item.assessmentId}/coding`} onChanged={() => send({ type: "open" })} />
         ))}
         <Card id="checklist">
           <CardContent className="space-y-5 py-6">
