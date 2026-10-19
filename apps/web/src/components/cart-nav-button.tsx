@@ -36,6 +36,26 @@ export default function CartNavButton({ mobile }: { mobile?: boolean } = {}) {
   const userRole = (session.user as { role?: string }).role;
   if (userRole === "lecturer" || userRole === "admin") return null;
 
+  if (mobile) {
+    return (
+      <Link
+        href={"/cart" as any}
+        aria-label={`Giỏ hàng, ${count} khoá học`}
+        className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <ShoppingCart className="h-4 w-4" />
+          <span>Giỏ hàng</span>
+        </div>
+        {count > 0 && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">
+            {count}
+          </span>
+        )}
+      </Link>
+    );
+  }
+
   return (
     <Link
       href={"/cart" as any}

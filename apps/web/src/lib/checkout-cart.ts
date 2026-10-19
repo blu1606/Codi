@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { orderEvents, orderItems, orders, studentCart, vouchers } from "@codi-1/db";
-import { studentTransactions } from "@codi-1/db/schema/student-profile";
+import { studentEnrollments, studentTransactions } from "@codi-1/db/schema/student-profile";
 import { getCartSummary } from "./cart-service";
 
 function generateOrderCode(): string {
@@ -44,7 +44,7 @@ export async function createOrderFromCart(
     throw new CheckoutError(400, "Giỏ hàng của bạn đang trống");
   }
 
-  // 2. Point 5: If voucher was provided but invalid/expired/exhausted, abort with 409
+  // 2. If voucher was provided but invalid/expired/exhausted, abort with 409
   if (normalizedVoucherCode) {
     if (!summary.voucher) {
       throw new CheckoutError(
@@ -55,59 +55,96 @@ export async function createOrderFromCart(
   }
 
   return await db.transaction(async (tx) => {
-    // 3. Point 3: Guard against concurrent or existing pending order
+    // Acquire PostgreSQL transaction-level advisory lock per user to prevent concurrent checkout race condition
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`);
+
+    // 3. Guard against concurrent or existing pending order
     const [existingPending] = await tx
-      .select({ id: orders.id, code: orders.code })
+      .select({ id: orders.id, code: orders.code, paymentDeadline: orders.paymentDeadline })
       .from(orders)
       .where(and(eq(orders.userId, userId), eq(orders.status, "pending")))
       .orderBy(desc(orders.createdAt))
       .limit(1);
 
     if (existingPending) {
-      // Must explicitly provide matching replaceOrderId to replace
-      if (!forceReplaceOrderId || forceReplaceOrderId !== existingPending.id) {
-        throw new CheckoutError(
-          409,
-          `Bạn đang có đơn hàng ${existingPending.code} chờ thanh toán. Vui lòng hoàn tất hoặc huỷ đơn cũ trước khi đặt đơn mới.`,
-          "PENDING_ORDER_EXISTS",
-        );
+      const isExpired =
+        existingPending.paymentDeadline &&
+        new Date(existingPending.paymentDeadline) <= new Date();
+
+      if (isExpired) {
+        // Automatically mark expired pending order as failed
+        await tx
+          .update(orders)
+          .set({
+            status: "failed",
+            failReason: "expired",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(orders.id, existingPending.id),
+              eq(orders.userId, userId),
+              eq(orders.status, "pending"),
+            ),
+          );
+
+        await tx
+          .update(studentTransactions)
+          .set({ status: "failed" })
+          .where(
+            and(
+              eq(studentTransactions.id, existingPending.code),
+              eq(studentTransactions.userId, userId),
+              eq(studentTransactions.status, "pending"),
+            ),
+          );
+      } else {
+        // Must explicitly provide matching replaceOrderId to replace
+        if (!forceReplaceOrderId || forceReplaceOrderId !== existingPending.id) {
+          throw new CheckoutError(
+            409,
+            `Bạn đang có đơn hàng ${existingPending.code} chờ thanh toán. Vui lòng hoàn tất hoặc huỷ đơn cũ trước khi đặt đơn mới.`,
+            "PENDING_ORDER_EXISTS",
+          );
+        }
+
+        // Cancel pending order safely in atomic UPDATE
+        const updated = await tx
+          .update(orders)
+          .set({
+            status: "cancelled",
+            failReason: "Huỷ để tạo đơn mới",
+            cancelledAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(orders.id, existingPending.id),
+              eq(orders.userId, userId),
+              eq(orders.status, "pending"),
+            ),
+          )
+          .returning({ id: orders.id });
+
+        if (updated.length === 0) {
+          throw new CheckoutError(
+            409,
+            "Đơn hàng cũ đã thay đổi trạng thái hoặc đã được thanh toán.",
+          );
+        }
+
+        // Also cancel in legacy studentTransactions if exists
+        await tx
+          .update(studentTransactions)
+          .set({ status: "cancelled" })
+          .where(
+            and(
+              eq(studentTransactions.id, existingPending.code),
+              eq(studentTransactions.userId, userId),
+              eq(studentTransactions.status, "pending"),
+            ),
+          );
       }
-
-      // Point 4: Cancel pending order safely in atomic UPDATE
-      const updated = await tx
-        .update(orders)
-        .set({
-          status: "cancelled",
-          failReason: "Huỷ để tạo đơn mới",
-          cancelledAt: new Date(),
-        })
-        .where(
-          and(
-            eq(orders.id, existingPending.id),
-            eq(orders.userId, userId),
-            eq(orders.status, "pending"),
-          ),
-        )
-        .returning({ id: orders.id });
-
-      if (updated.length === 0) {
-        throw new CheckoutError(
-          409,
-          "Đơn hàng cũ đã thay đổi trạng thái hoặc đã được thanh toán.",
-        );
-      }
-
-      // Also cancel in legacy studentTransactions if exists
-      await tx
-        .update(studentTransactions)
-        .set({ status: "cancelled" })
-        .where(
-          and(
-            eq(studentTransactions.id, existingPending.code),
-            eq(studentTransactions.userId, userId),
-            eq(studentTransactions.status, "pending"),
-          ),
-        );
     }
 
     // 4. Find voucherId if voucher applied
@@ -142,9 +179,11 @@ export async function createOrderFromCart(
       retries--;
     }
 
-    const paymentDeadline = new Date(Date.now() + 30 * 60 * 1000); // 30 mins deadline
+    const isZeroVndOrder = summary.total <= 0;
+    const now = new Date();
+    const paymentDeadline = new Date(now.getTime() + 30 * 60 * 1000); // 30 mins deadline
 
-    // 6. Point 1: Set paymentDeadline NOT NULL
+    // 6. Insert order
     const [order] = await tx
       .insert(orders)
       .values({
@@ -153,10 +192,11 @@ export async function createOrderFromCart(
         voucherId,
         subtotal: summary.subtotal,
         discountAmount: summary.discount,
-        totalAmount: summary.total,
+        totalAmount: isZeroVndOrder ? 0 : summary.total,
         receivedAmount: 0,
         currency: "VND",
-        status: "pending",
+        status: isZeroVndOrder ? "paid" : "pending",
+        paidAt: isZeroVndOrder ? now : null,
         isBuyNow: false,
         replacesOrderId: forceReplaceOrderId ?? undefined,
         paymentDeadline,
@@ -166,11 +206,15 @@ export async function createOrderFromCart(
     // Timeline event
     await tx.insert(orderEvents).values({
       orderId: order.id,
-      label: forceReplaceOrderId ? "Đã tạo đơn mới (thay đơn cũ)" : "Đã tạo đơn",
+      label: isZeroVndOrder
+        ? "Đã thanh toán (Miễn phí qua mã giảm giá)"
+        : forceReplaceOrderId
+          ? "Đã tạo đơn mới (thay đơn cũ)"
+          : "Đã tạo đơn",
       actorId: userId,
     });
 
-    // 7. Point 1: Insert order items with correct column names (courseTitle, unitPrice)
+    // 7. Insert order items
     for (const item of summary.items) {
       await tx.insert(orderItems).values({
         orderId: order.id,
@@ -180,14 +224,59 @@ export async function createOrderFromCart(
       });
     }
 
-    // Insert studentTransactions for payment matching compatibility
-    await tx.insert(studentTransactions).values({
-      id: order.code,
-      userId,
-      courseId: summary.items[0].id,
-      amount: order.totalAmount,
-      status: "pending",
-    });
+    if (isZeroVndOrder) {
+      // Direct fulfillment for 0 VND order: enroll immediately and increment voucher usedCount
+      for (const item of summary.items) {
+        await tx
+          .insert(studentEnrollments)
+          .values({
+            userId,
+            courseId: item.id,
+          })
+          .onConflictDoNothing();
+      }
+
+      if (voucherId) {
+        const voucherRes = await tx
+          .update(vouchers)
+          .set({
+            usedCount: sql`${vouchers.usedCount} + 1`,
+          })
+          .where(
+            and(
+              eq(vouchers.id, voucherId),
+              or(
+                isNull(vouchers.usageLimit),
+                sql`${vouchers.usedCount} < ${vouchers.usageLimit}`,
+              ),
+            ),
+          )
+          .returning({ id: vouchers.id });
+
+        if (voucherRes.length === 0) {
+          // Concurrently exhausted
+          await tx
+            .update(orders)
+            .set({ needsReconciliation: true })
+            .where(eq(orders.id, order.id));
+
+          await tx.insert(orderEvents).values({
+            orderId: order.id,
+            label: "Mã giảm giá vượt hạn mức sử dụng khi hoàn tất đơn 0 ₫ (Cần đối soát)",
+            actorId: userId,
+          });
+        }
+      }
+    } else {
+      // Insert studentTransactions for payment matching compatibility
+      await tx.insert(studentTransactions).values({
+        id: order.code,
+        userId,
+        courseId: summary.items[0].id,
+        amount: order.totalAmount,
+        status: "pending",
+      });
+    }
 
     // 8. Delete only the courses that were placed in this order
     const orderedCourseIds = summary.items.map((it) => it.id);

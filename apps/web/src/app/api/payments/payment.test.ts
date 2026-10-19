@@ -271,3 +271,78 @@ it("ignores callback if transaction is already processed concurrently", async ()
   });
   expect(enroll).not.toHaveBeenCalled();
 });
+
+it("enrolls all order_items and increments voucher usedCount atomically upon successful payment", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI55555",
+      amount: 800000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "course-1",
+    },
+  ]);
+
+  const enrolledCourses: string[] = [];
+  const updatedVouchers: any[] = [];
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      select: () => ({
+        from: () => ({
+          where: vi.fn().mockImplementation(() => ({
+            // If selecting order
+            limit: vi.fn().mockResolvedValue([{ id: 555, status: "pending", voucherId: 77 }]),
+            // If selecting orderItems (no limit)
+            then: (resolve: any) =>
+              resolve([
+                { courseId: "course-1" },
+                { courseId: "course-2" },
+                { courseId: "course-3" },
+              ]),
+          })),
+        }),
+      }),
+      update: () => ({
+        set: (value: any) => ({
+          where: vi.fn().mockImplementation(() => {
+            if ("usedCount" in value) {
+              updatedVouchers.push(value);
+              return {
+                returning: vi.fn().mockResolvedValue([{ id: 77 }]),
+              };
+            }
+            return {
+              returning: vi.fn().mockResolvedValue([{ id: 555, totalAmount: 800000, voucherId: 77 }]),
+            };
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: (value: any) => {
+          if (value && typeof value === "object" && "courseId" in value && !("orderId" in value)) {
+            enrolledCourses.push(value.courseId);
+          }
+          return { onConflictDoNothing: vi.fn() };
+        },
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI55555",
+      transferAmount: 800000,
+    }),
+  );
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ success: true });
+  // All 3 courses enrolled
+  expect(enrolledCourses).toEqual(["course-1", "course-2", "course-3"]);
+  // Voucher usedCount incremented
+  expect(updatedVouchers.length).toBe(1);
+});
+

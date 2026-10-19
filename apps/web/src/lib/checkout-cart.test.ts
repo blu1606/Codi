@@ -75,11 +75,12 @@ describe("createOrderFromCart unit tests", () => {
     });
 
     const mockTx = {
+      execute: vi.fn().mockResolvedValue([]),
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
             orderBy: vi.fn().mockReturnValue({
-              limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999" }]),
+              limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", paymentDeadline: new Date(Date.now() + 100000) }]),
             }),
           }),
         }),
@@ -132,13 +133,14 @@ describe("createOrderFromCart unit tests", () => {
     const insertedTransactions: any[] = [];
 
     const mockTx = {
+      execute: vi.fn().mockResolvedValue([]),
       select: vi.fn()
         // 1. existing pending check
         .mockReturnValueOnce({
           from: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
               orderBy: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{ id: 101, code: "CODI10101" }]),
+                limit: vi.fn().mockResolvedValue([{ id: 101, code: "CODI10101", paymentDeadline: new Date(Date.now() + 100000) }]),
               }),
             }),
           }),
@@ -222,6 +224,9 @@ describe("createOrderFromCart unit tests", () => {
     expect(result.totalAmount).toBe(800000);
     expect(result.orderCode).toMatch(/^CODI\d{5}$/);
 
+    // Verify advisory lock was called
+    expect(mockTx.execute).toHaveBeenCalled();
+
     // Verify Point 1: orders.paymentDeadline is NOT NULL
     expect(insertedOrderValues.length).toBe(1);
     expect(insertedOrderValues[0].paymentDeadline).toBeInstanceOf(Date);
@@ -273,6 +278,7 @@ describe("createOrderFromCart unit tests", () => {
 
     const insertedOrderItems: any[] = [];
     const mockTx = {
+      execute: vi.fn().mockResolvedValue([]),
       select: vi.fn()
         // 1. existing pending check (none)
         .mockReturnValueOnce({
@@ -357,5 +363,233 @@ describe("createOrderFromCart unit tests", () => {
     expect(insertedOrderItems[0].unitPrice).toBe(600000);
     expect(insertedOrderItems[1].courseTitle).toBe("Course 2");
     expect(insertedOrderItems[1].unitPrice).toBe(400000);
+  });
+
+  it("auto-fulfills 0 VND order directly as paid, enrollees courses, increments voucher usedCount, and skips transaction record", async () => {
+    vi.spyOn(cartService, "getCartSummary").mockResolvedValueOnce({
+      items: [
+        {
+          ...dummyCourse,
+          id: "c100",
+          title: "100% Free Course With Voucher",
+          price: 500000,
+        },
+      ],
+      subtotal: 500000,
+      discount: 500000,
+      total: 0,
+      voucher: {
+        code: "FREE100",
+        type: "percent",
+        value: 100,
+        discount: 500000,
+      },
+      voucherError: null,
+      removedOwnedTitles: [],
+      pendingOrder: null,
+    });
+
+    const insertedOrderValues: any[] = [];
+    const insertedEnrollments: any[] = [];
+    const updatedVoucherValues: any[] = [];
+
+    const mockTx = {
+      execute: vi.fn().mockResolvedValue([]),
+      select: vi.fn()
+        // 1. existing pending check (none)
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([]),
+              }),
+            }),
+          }),
+        })
+        // 2. voucher id lookup
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([{ id: 88 }]),
+            }),
+          }),
+        })
+        // 3. unique code check (orders)
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        })
+        // 4. unique code check (studentTransactions)
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
+      insert: vi.fn()
+        // 1. orders
+        .mockReturnValueOnce({
+          values: vi.fn().mockImplementation((val) => {
+            insertedOrderValues.push(val);
+            return {
+              returning: vi.fn().mockResolvedValue([
+                { id: 400, code: val.code, totalAmount: val.totalAmount },
+              ]),
+            };
+          }),
+        })
+        // 2. orderEvents
+        .mockReturnValueOnce({
+          values: vi.fn().mockResolvedValue([]),
+        })
+        // 3. orderItems
+        .mockReturnValueOnce({
+          values: vi.fn().mockResolvedValue([]),
+        })
+        // 4. studentEnrollments
+        .mockReturnValueOnce({
+          values: vi.fn().mockImplementation((val) => {
+            insertedEnrollments.push(val);
+            return {
+              onConflictDoNothing: vi.fn().mockResolvedValue([]),
+            };
+          }),
+        }),
+      update: vi.fn()
+        // 1. update vouchers usedCount
+        .mockReturnValueOnce({
+          set: vi.fn().mockImplementation((val) => {
+            updatedVoucherValues.push(val);
+            return {
+              where: vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([{ id: 88 }]),
+              }),
+            };
+          }),
+        }),
+      delete: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      }),
+    };
+
+    const mockDb = {
+      transaction: vi.fn().mockImplementation(async (cb) => cb(mockTx)),
+    } as any;
+
+    const result = await createOrderFromCart(mockDb, "user-free", "FREE100");
+
+    expect(result.orderId).toBe(400);
+    expect(result.totalAmount).toBe(0);
+    expect(insertedOrderValues[0].status).toBe("paid");
+    expect(insertedOrderValues[0].paidAt).toBeInstanceOf(Date);
+    expect(insertedEnrollments).toEqual([{ userId: "user-free", courseId: "c100" }]);
+    expect(updatedVoucherValues.length).toBe(1);
+    expect(mockTx.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("automatically marks expired pending orders as failed and permits new order creation without 409", async () => {
+    vi.spyOn(cartService, "getCartSummary").mockResolvedValueOnce({
+      items: [dummyCourse],
+      subtotal: 500000,
+      discount: 0,
+      total: 500000,
+      voucher: null,
+      voucherError: null,
+      removedOwnedTitles: [],
+      pendingOrder: null,
+    });
+
+    const updatedOrders: any[] = [];
+    const mockTx = {
+      execute: vi.fn().mockResolvedValue([]),
+      select: vi.fn()
+        // 1. existing pending check (expired deadline!)
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([
+                  {
+                    id: 999,
+                    code: "CODI99999",
+                    paymentDeadline: new Date(Date.now() - 10000), // in the past!
+                  },
+                ]),
+              }),
+            }),
+          }),
+        })
+        // 2. unique code check (orders)
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        })
+        // 3. unique code check (studentTransactions)
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
+      update: vi.fn()
+        // 1. auto-fail expired orders
+        .mockReturnValueOnce({
+          set: vi.fn().mockImplementation((val) => {
+            updatedOrders.push(val);
+            return {
+              where: vi.fn().mockResolvedValue([]),
+            };
+          }),
+        })
+        // 2. auto-fail expired studentTransactions
+        .mockReturnValueOnce({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      insert: vi.fn()
+        // 1. orders
+        .mockReturnValueOnce({
+          values: vi.fn().mockImplementation((val) => ({
+            returning: vi.fn().mockResolvedValue([
+              { id: 500, code: val.code, totalAmount: val.totalAmount },
+            ]),
+          })),
+        })
+        // 2. orderEvents
+        .mockReturnValueOnce({
+          values: vi.fn().mockResolvedValue([]),
+        })
+        // 3. orderItems
+        .mockReturnValueOnce({
+          values: vi.fn().mockResolvedValue([]),
+        })
+        // 4. studentTransactions
+        .mockReturnValueOnce({
+          values: vi.fn().mockResolvedValue([]),
+        }),
+      delete: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      }),
+    };
+
+    const mockDb = {
+      transaction: vi.fn().mockImplementation(async (cb) => cb(mockTx)),
+    } as any;
+
+    const result = await createOrderFromCart(mockDb, "user-expired");
+    expect(result.orderId).toBe(500);
+    expect(updatedOrders[0]).toMatchObject({
+      status: "failed",
+      failReason: "expired",
+    });
   });
 });

@@ -2,9 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import { getSepayConfig } from "@/lib/sepay-config";
 import { NextResponse } from "next/server";
 import { db } from "@/services";
-import { orders, orderEvents } from "@codi-1/db";
+import { orders, orderEvents, orderItems, vouchers } from "@codi-1/db";
 import { studentTransactions, studentEnrollments } from "@codi-1/db/schema/student-profile";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 function verifyApiKey(authHeader: string | null, secret: string): boolean {
   if (!authHeader) return false;
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     const processResult = await db.transaction(async (txDB) => {
       // 1. Check if there is an associated order in the `orders` table
       const [existingOrder] = await txDB
-        .select({ id: orders.id, status: orders.status })
+        .select({ id: orders.id, status: orders.status, voucherId: orders.voucherId })
         .from(orders)
         .where(eq(orders.code, txId))
         .limit(1);
@@ -105,6 +105,8 @@ export async function POST(req: Request) {
         return { alreadyProcessed: true };
       }
 
+      let courseIdsToEnroll: string[] = [tx.courseId];
+
       // 3. Atomically settle orders table if a pending order matches txId
       if (existingOrder && existingOrder.status === "pending") {
         const updatedOrders = await txDB
@@ -116,7 +118,7 @@ export async function POST(req: Request) {
             updatedAt: new Date(),
           })
           .where(and(eq(orders.code, txId), eq(orders.status, "pending")))
-          .returning({ id: orders.id, totalAmount: orders.totalAmount });
+          .returning({ id: orders.id, totalAmount: orders.totalAmount, voucherId: orders.voucherId });
 
         const matchedOrder = updatedOrders[0];
         if (matchedOrder) {
@@ -125,20 +127,65 @@ export async function POST(req: Request) {
             label: "Đã thanh toán thành công",
             actorId: tx.userId,
           });
+
+          // Fetch all courses in order_items (fixes Blocking Point 1)
+          const items = await txDB
+            .select({ courseId: orderItems.courseId })
+            .from(orderItems)
+            .where(eq(orderItems.orderId, matchedOrder.id));
+
+          if (items.length > 0) {
+            courseIdsToEnroll = items.map((it) => it.courseId);
+          }
+
+          // Atomically increment voucher used_count if a voucher was applied (fixes Blocking Point 2)
+          if (matchedOrder.voucherId) {
+            const voucherRes = await txDB
+              .update(vouchers)
+              .set({
+                usedCount: sql`${vouchers.usedCount} + 1`,
+              })
+              .where(
+                and(
+                  eq(vouchers.id, matchedOrder.voucherId),
+                  or(
+                    isNull(vouchers.usageLimit),
+                    sql`${vouchers.usedCount} < ${vouchers.usageLimit}`,
+                  ),
+                ),
+              )
+              .returning({ id: vouchers.id });
+
+            if (voucherRes.length === 0) {
+              // Usage limit was reached concurrently - mark order for reconciliation
+              await txDB
+                .update(orders)
+                .set({ needsReconciliation: true })
+                .where(eq(orders.id, matchedOrder.id));
+
+              await txDB.insert(orderEvents).values({
+                orderId: matchedOrder.id,
+                label: "Mã giảm giá vượt hạn mức sử dụng khi thanh toán (Cần đối soát)",
+                actorId: tx.userId,
+              });
+            }
+          }
         } else {
           // Order was concurrently modified or not pending, stop enrollment
           return { orderNotPending: true };
         }
       }
 
-      // 4. Grant access to the course, avoiding duplicates
-      await txDB
-        .insert(studentEnrollments)
-        .values({
-          userId: tx.userId,
-          courseId: tx.courseId,
-        })
-        .onConflictDoNothing();
+      // 4. Grant access to all courses in the order, avoiding duplicates
+      for (const cId of courseIdsToEnroll) {
+        await txDB
+          .insert(studentEnrollments)
+          .values({
+            userId: tx.userId,
+            courseId: cId,
+          })
+          .onConflictDoNothing();
+      }
 
       return { success: true };
     });
