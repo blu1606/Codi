@@ -45,10 +45,19 @@ import { POST as manualCheck } from "./[id]/manual-check/route";
 import { POST as newCode } from "./[id]/new-code/route";
 import { POST as cancelOrder } from "./cancel/route";
 
+import { afterEach } from "vitest";
+
 describe("Order API Routes", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "test-secret");
+    vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "12345678");
+    vi.stubEnv("SEPAY_BANK_CODE", "VCB");
     mocks.getSession.mockResolvedValue({ user: { id: "user-123" } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe("GET /api/orders/[id]", () => {
@@ -57,6 +66,27 @@ describe("Order API Routes", () => {
       const req = new Request("http://localhost/api/orders/CODI12345");
       const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
       expect(res.status).toBe(401);
+    });
+
+    it("returns 503 when payment gateway configuration is missing", async () => {
+      vi.stubEnv("SEPAY_WEBHOOK_SECRET", "");
+      const req = new Request("http://localhost/api/orders/CODI12345");
+      const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
+      expect(res.status).toBe(503);
+    });
+
+    it("returns 503 when bank account number is missing", async () => {
+      vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "");
+      const req = new Request("http://localhost/api/orders/CODI12345");
+      const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
+      expect(res.status).toBe(503);
+    });
+
+    it("returns 503 when bank code is invalid", async () => {
+      vi.stubEnv("SEPAY_BANK_CODE", "INVALID_BANK_CODE");
+      const req = new Request("http://localhost/api/orders/CODI12345");
+      const res = await getOrder(req, { params: Promise.resolve({ id: "CODI12345" }) });
+      expect(res.status).toBe(503);
     });
 
     it("returns 404 when order not found", async () => {
@@ -218,6 +248,78 @@ describe("Order API Routes", () => {
       expect(res.status).toBe(201);
       const data = await res.json();
       expect(data.orderCode).toBe("CODI77777");
+    });
+
+    it("auto-expires pending order if payment deadline has passed and generates replacement", async () => {
+      const pastDeadline = new Date(Date.now() - 5 * 60000);
+      const insertMock = vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ id: 12, code: "CODI88888" }]),
+        }),
+      });
+      const updateMock = vi.fn();
+
+      mocks.transaction.mockImplementation(async (fn) =>
+        fn({
+          select: () => ({
+            from: () => ({
+              where: vi.fn().mockImplementation(() => {
+                const limitFn = vi.fn()
+                  .mockResolvedValueOnce([
+                    {
+                      id: 10,
+                      code: "CODI12345",
+                      userId: "user-123",
+                      voucherId: null,
+                      subtotal: 500000,
+                      discountAmount: 0,
+                      totalAmount: 500000,
+                      receivedAmount: 100000, // partially paid!
+                      status: "pending",
+                      paymentDeadline: pastDeadline,
+                      failReason: null,
+                      isBuyNow: false,
+                    },
+                  ])
+                  .mockResolvedValueOnce([]); // uniqueness check
+
+                return {
+                  limit: limitFn,
+                  then: (resolve: any) =>
+                    Promise.resolve([
+                      {
+                        courseId: "c1",
+                        courseTitle: "TypeScript Basic",
+                        unitPrice: 500000,
+                      },
+                    ]).then(resolve),
+                };
+              }),
+            }),
+          }),
+          update: () => ({
+            set: (val: any) => {
+              updateMock(val);
+              return { where: vi.fn().mockResolvedValue([]) };
+            },
+          }),
+          insert: insertMock,
+        }),
+      );
+
+      const req = new Request("http://localhost/api/orders/CODI12345/new-code", { method: "POST" });
+      const res = await newCode(req, { params: Promise.resolve({ id: "CODI12345" }) });
+      expect(res.status).toBe(201);
+      const data = await res.json();
+      expect(data.orderCode).toBe("CODI88888");
+      // Underpaid expired order marked for reconciliation
+      expect(updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "failed",
+          failReason: "expired",
+          needsReconciliation: true,
+        }),
+      );
     });
   });
 

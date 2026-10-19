@@ -158,15 +158,29 @@ export default function CheckoutPage({
         body: JSON.stringify({}),
       })
         .then(async (res) => {
-          const json = await res.json();
+          const json = await res.json().catch(() => ({}));
           if (res.ok && json.orderCode) {
             router.replace(`/checkout?order=${encodeURIComponent(json.orderCode)}`);
-          } else {
-            router.replace("/cart");
+            return;
           }
+
+          // If there is an existing pending order conflict, resolve it directly
+          if (res.status === 409 && json.code === "PENDING_ORDER_EXISTS") {
+            const match = json.error?.match(/CODI\d{5}/i);
+            if (match) {
+              router.replace(`/checkout?order=${encodeURIComponent(match[0].toUpperCase())}`);
+              return;
+            }
+          }
+
+          // Otherwise render typed creation error / payments unavailable state with retry/support
+          const errorMsg = json.error || "Không thể tạo đơn hàng. Vui lòng thử lại sau.";
+          setError(errorMsg);
+          setLoading(false);
         })
-        .catch(() => {
-          router.replace("/cart");
+        .catch((err) => {
+          setError(err?.message || "Lỗi kết nối khi tạo đơn hàng.");
+          setLoading(false);
         });
       return;
     }
@@ -192,8 +206,31 @@ export default function CheckoutPage({
         setShowSlowNotice(true);
       }
 
-      // Check if expired
+      // Check if expired: notify server via manual-check to persist expiry in DB
       if (left <= 0) {
+        try {
+          const expireRes = await fetch(`/api/orders/${encodeURIComponent(order.code)}/manual-check`, {
+            method: "POST",
+          });
+          if (expireRes.ok) {
+            const expireData = await expireRes.json();
+            if (expireData.status) {
+              setOrder((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: expireData.status,
+                      failReason: expireData.failReason || "expired",
+                      receivedAmount: typeof expireData.receivedAmount === "number" ? expireData.receivedAmount : prev.receivedAmount,
+                    }
+                  : null,
+              );
+              return;
+            }
+          }
+        } catch {
+          // Fallback if offline
+        }
         setOrder((prev) => (prev ? { ...prev, status: "failed", failReason: "expired" } : null));
         return;
       }
@@ -204,28 +241,32 @@ export default function CheckoutPage({
           const checkRes = await fetch(`/api/orders/${encodeURIComponent(order.code)}/manual-check`, {
             method: "POST",
           });
-          const checkData = await checkRes.json();
-          setLastCheckedAt(new Date().toLocaleTimeString("vi-VN"));
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            if (checkData && checkData.status) {
+              setLastCheckedAt(new Date().toLocaleTimeString("vi-VN"));
 
-          if (checkData.status === "paid") {
-            router.push(`/checkout/success?order=${order.id}`);
-            return;
-          }
+              if (checkData.status === "paid") {
+                router.push(`/checkout/success?order=${order.id}`);
+                return;
+              }
 
-          if (checkData.status !== order.status || checkData.receivedAmount !== order.receivedAmount) {
-            setOrder((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    status: checkData.status,
-                    failReason: checkData.failReason,
-                    receivedAmount: checkData.receivedAmount,
-                  }
-                : null,
-            );
+              if (checkData.status !== order.status || checkData.receivedAmount !== order.receivedAmount) {
+                setOrder((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        status: checkData.status,
+                        failReason: checkData.failReason,
+                        receivedAmount: typeof checkData.receivedAmount === "number" ? checkData.receivedAmount : prev.receivedAmount,
+                      }
+                    : null,
+                );
+              }
+            }
           }
         } catch {
-          // Ignore polling errors
+          // Ignore transient polling network errors, keep polling available
         }
       }
     }, 1000);
@@ -260,7 +301,17 @@ export default function CheckoutPage({
       const res = await fetch(`/api/orders/${encodeURIComponent(order.code)}/manual-check`, {
         method: "POST",
       });
+      if (!res.ok) {
+        toast.error("Không thể kiểm tra giao dịch vào lúc này. Vui lòng thử lại sau.");
+        return;
+      }
+
       const data = await res.json();
+      if (!data || !data.status) {
+        toast.error("Không nhận được phản hồi trạng thái hợp lệ.");
+        return;
+      }
+
       setManualCheckedAt(new Date().toLocaleTimeString("vi-VN"));
       setLastCheckedAt(new Date().toLocaleTimeString("vi-VN"));
 
@@ -276,13 +327,12 @@ export default function CheckoutPage({
                 ...prev,
                 status: data.status,
                 failReason: data.failReason,
-                receivedAmount: data.receivedAmount,
+                receivedAmount: typeof data.receivedAmount === "number" ? data.receivedAmount : prev.receivedAmount,
               }
             : null,
         );
       }
     } catch {
-      toast.error("Không thể kiểm tra vào lúc này. Vui lòng thử lại sau.");
     } finally {
       setManualChecking(false);
     }

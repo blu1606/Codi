@@ -40,10 +40,30 @@ function makePostRequest(body: unknown, contentType: string = "application/json"
   });
 }
 
+import { afterEach } from "vitest";
+
 describe("POST /api/orders/checkout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "test-secret");
+    vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "12345678");
+    vi.stubEnv("SEPAY_BANK_CODE", "VCB");
     mocks.headers.mockResolvedValue(new Headers());
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns 503 when payment gateway configuration is missing", async () => {
+    mocks.getSession.mockResolvedValueOnce({ user: { id: "u-1" } });
+    mocks.requireRole.mockResolvedValueOnce(undefined);
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "");
+
+    const res = await POST(makePostRequest({}));
+    expect(res.status).toBe(503);
+    const data = await res.json();
+    expect(data.error).toBe("Thanh toán tạm thời chưa khả dụng.");
   });
 
   it("returns 401 when user is not authenticated", async () => {

@@ -53,11 +53,13 @@ export async function POST(
 
     // Check expiry
     if (order.status === "pending" && order.paymentDeadline && new Date(order.paymentDeadline) <= new Date()) {
+      const isUnderpaid = order.receivedAmount > 0;
       await db
         .update(orders)
         .set({
           status: "failed",
           failReason: "expired",
+          needsReconciliation: isUnderpaid ? true : undefined,
           updatedAt: new Date(),
         })
         .where(and(eq(orders.id, order.id), eq(orders.status, "pending")));

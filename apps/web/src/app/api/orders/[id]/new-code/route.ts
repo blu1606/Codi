@@ -42,9 +42,11 @@ export async function POST(
           subtotal: orders.subtotal,
           discountAmount: orders.discountAmount,
           totalAmount: orders.totalAmount,
+          receivedAmount: orders.receivedAmount,
           status: orders.status,
           failReason: orders.failReason,
           isBuyNow: orders.isBuyNow,
+          paymentDeadline: orders.paymentDeadline,
         })
         .from(orders)
         .where(
@@ -57,6 +59,23 @@ export async function POST(
 
       if (!oldOrder) {
         return NextResponse.json({ error: "Không tìm thấy đơn hàng" }, { status: 404 });
+      }
+
+      // Check if old order has crossed payment deadline while still pending
+      if (oldOrder.status === "pending" && oldOrder.paymentDeadline && new Date(oldOrder.paymentDeadline) <= new Date()) {
+        const isUnderpaid = oldOrder.receivedAmount > 0;
+        await tx
+          .update(orders)
+          .set({
+            status: "failed",
+            failReason: "expired",
+            needsReconciliation: isUnderpaid ? true : undefined,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(orders.id, oldOrder.id), eq(orders.status, "pending")));
+
+        oldOrder.status = "failed";
+        oldOrder.failReason = "expired";
       }
 
       // Old order must be failed (or expired)

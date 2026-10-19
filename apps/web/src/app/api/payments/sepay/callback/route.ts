@@ -64,12 +64,6 @@ export async function POST(req: Request) {
 
     const amountReceived = data.transferAmount || data.amountIn || 0;
 
-    // Check if the transferred amount is equal or greater than the required amount
-    if (amountReceived < tx.amount) {
-      console.log(`Insufficient amount for ${txId}. Expected ${tx.amount}, got ${amountReceived}`);
-      return NextResponse.json({ success: true, message: "Insufficient amount" });
-    }
-
     // Process payment atomically within transaction
     const processResult = await db.transaction(async (txDB) => {
       // Idempotency check on provider transactionCode if available
@@ -94,6 +88,7 @@ export async function POST(req: Request) {
           status: orders.status,
           failReason: orders.failReason,
           totalAmount: orders.totalAmount,
+          receivedAmount: orders.receivedAmount,
           voucherId: orders.voucherId,
         })
         .from(orders)
@@ -186,6 +181,48 @@ export async function POST(req: Request) {
         }
       }
 
+      // Calculate accumulated amount
+      const priorReceived = existingOrder ? existingOrder.receivedAmount : 0;
+      const newAccumulated = priorReceived + amountReceived;
+      const targetTotal = existingOrder ? existingOrder.totalAmount : tx.amount;
+      const isUnderpaid = newAccumulated < targetTotal;
+
+      // Record this transfer in payments table
+      if (providerTxCode && existingOrder) {
+        await txDB.insert(payments).values({
+          orderId: existingOrder.id,
+          transactionCode: providerTxCode,
+          method: "bank_transfer",
+          amount: amountReceived,
+          transferContent: content,
+          status: isUnderpaid ? "pending" : "success",
+          paidAt: new Date(),
+          providerResponse: JSON.stringify(data),
+        });
+      }
+
+      if (isUnderpaid) {
+        // Accumulate receivedAmount, keep order and transaction pending (D3)
+        if (existingOrder) {
+          await txDB
+            .update(orders)
+            .set({
+              receivedAmount: newAccumulated,
+              updatedAt: new Date(),
+            })
+            .where(eq(orders.id, existingOrder.id));
+
+          await txDB.insert(orderEvents).values({
+            orderId: existingOrder.id,
+            label: `Đã nhận một phần: ${amountReceived.toLocaleString("vi-VN")} ₫ (Tổng nhận: ${newAccumulated.toLocaleString("vi-VN")} ₫ / Cần: ${targetTotal.toLocaleString("vi-VN")} ₫)`,
+            actorId: tx.userId,
+          });
+        }
+
+        return { underpaid: true, receivedAmount: newAccumulated, targetTotal };
+      }
+
+      // Full or excess amount reached: settle order
       // 2. Atomically update transaction status if pending or late-honoured
       const updatedTx = await txDB
         .update(studentTransactions)
@@ -210,14 +247,14 @@ export async function POST(req: Request) {
 
       // 3. Atomically settle orders table
       if (existingOrder && (existingOrder.status === "pending" || isLateHonoured)) {
-        const isOverpaid = amountReceived > existingOrder.totalAmount;
+        const isOverpaid = newAccumulated > existingOrder.totalAmount;
         const targetStatus = isLateHonoured ? "failed" : "pending";
 
         const updatedOrders = await txDB
           .update(orders)
           .set({
             status: "paid",
-            receivedAmount: amountReceived,
+            receivedAmount: newAccumulated,
             needsReconciliation: isOverpaid ? true : existingOrder.status === "failed" ? false : undefined,
             paidAt: new Date(),
             updatedAt: new Date(),
@@ -236,7 +273,7 @@ export async function POST(req: Request) {
           if (isOverpaid) {
             await txDB.insert(orderEvents).values({
               orderId: matchedOrder.id,
-              label: `Chuyển thừa ${amountReceived - existingOrder.totalAmount} ₫ (Cần đối soát)`,
+              label: `Chuyển thừa ${newAccumulated - existingOrder.totalAmount} ₫ (Cần đối soát)`,
               actorId: tx.userId,
             });
           }
@@ -283,20 +320,6 @@ export async function POST(req: Request) {
                 actorId: tx.userId,
               });
             }
-          }
-
-          // Record payment entry in payments table
-          if (providerTxCode) {
-            await txDB.insert(payments).values({
-              orderId: matchedOrder.id,
-              transactionCode: providerTxCode,
-              method: "bank_transfer",
-              amount: amountReceived,
-              transferContent: content,
-              status: "success",
-              paidAt: new Date(),
-              providerResponse: JSON.stringify(data),
-            });
           }
 
           // Send in-app notification

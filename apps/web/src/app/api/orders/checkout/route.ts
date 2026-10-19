@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
 import { createOrderFromCart } from "@/lib/checkout-cart";
+import { getSepayConfig } from "@/lib/sepay-config";
 import { auth, db } from "@/services";
 
 export async function POST(request: Request) {
@@ -12,6 +13,11 @@ export async function POST(request: Request) {
     }
     const userId = session.user.id;
     await requireRole(db, userId, ROLE.LEARNER);
+
+    const config = getSepayConfig();
+    if (!config) {
+      return NextResponse.json({ error: "Thanh toán tạm thời chưa khả dụng." }, { status: 503 });
+    }
 
     if (request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
       return NextResponse.json({ error: "Yêu cầu Content-Type application/json" }, { status: 415 });

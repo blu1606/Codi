@@ -24,6 +24,15 @@ export async function GET(
       return NextResponse.json({ error: "Thiếu mã đơn hàng" }, { status: 400 });
     }
 
+    // Sepay config for receiver info — fail closed if configuration is missing or invalid
+    const config = getSepayConfig();
+    if (!config) {
+      return NextResponse.json(
+        { error: "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán." },
+        { status: 503 },
+      );
+    }
+
     const trimmed = decodeURIComponent(rawId).trim();
     const isNumeric = /^\d+$/.test(trimmed);
 
@@ -64,11 +73,13 @@ export async function GET(
 
     // Auto-expire check: if status is pending and paymentDeadline has passed, mark as failed
     if (order.status === "pending" && order.paymentDeadline && new Date(order.paymentDeadline) <= new Date()) {
+      const isUnderpaid = order.receivedAmount > 0;
       await db
         .update(orders)
         .set({
           status: "failed",
           failReason: "expired",
+          needsReconciliation: isUnderpaid ? true : undefined,
           updatedAt: new Date(),
         })
         .where(and(eq(orders.id, order.id), eq(orders.status, "pending")));
@@ -101,11 +112,9 @@ export async function GET(
       if (v) voucherCode = v.code;
     }
 
-    // Sepay config for receiver info
-    const config = getSepayConfig();
     const bank = {
-      bank: config?.receiver.bankCode || "Vietcombank",
-      accountNumber: config?.receiver.accountNumber || "1029384756",
+      bank: config.receiver.bankCode,
+      accountNumber: config.receiver.accountNumber,
       accountName: "CONG TY CODI EDU",
     };
 
