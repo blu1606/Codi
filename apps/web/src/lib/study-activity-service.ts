@@ -5,7 +5,10 @@ import {
   studentStudyDays,
 } from "@codi-1/db/schema/study-activity";
 import { loadLearningLessonAccess } from "./learning-path-service";
-import { studyCredits } from "./learner-overview-contract";
+import {
+  studyCredits,
+  type StudyActivityAction,
+} from "./learner-overview-contract";
 
 export function createStudyActivityService(
   db: Database,
@@ -16,7 +19,7 @@ export function createStudyActivityService(
       userId: string,
       courseId: string,
       lessonId: string,
-      active: boolean,
+      action: StudyActivityAction,
       trackerId: string,
     ) {
       return db.transaction(async (tx) => {
@@ -30,15 +33,16 @@ export function createStudyActivityService(
           .select()
           .from(studentStudyClocks)
           .where(eq(studentStudyClocks.userId, userId));
-        // A new focused tracker takes ownership, even on the same lesson. A delayed
-        // stop from the previous tab/effect must neither credit nor clear its clock.
+        // Only an explicit focus acquisition can transfer ownership. Both renewals
+        // and stops from obsolete focus sessions must leave the current clock intact.
         if (
-          !active &&
+          action !== "start" &&
           (previous?.trackerId !== trackerId ||
             previous.courseId !== courseId ||
             previous.lessonId !== lessonId)
         )
           return { recorded: false };
+        const active = action !== "stop";
         const credits = studyCredits(previous?.lastSeenAt ?? null, now);
         for (const credit of credits) {
           await tx

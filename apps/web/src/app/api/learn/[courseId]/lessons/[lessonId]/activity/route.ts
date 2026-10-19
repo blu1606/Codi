@@ -15,7 +15,7 @@ export async function POST(
       throw new LearnerOverviewError("Yêu cầu không hợp lệ.", 403);
     const userId = await learningViewer(request);
     const { courseId, lessonId } = await context.params;
-    const { active, trackerId } = studyHeartbeat.parse(
+    const { action, trackerId } = studyHeartbeat.parse(
       await request.json().catch(() => null),
     );
     return NextResponse.json(
@@ -23,7 +23,7 @@ export async function POST(
         userId,
         courseId,
         lessonId,
-        active,
+        action,
         trackerId,
       ),
       { headers: privateHeaders },

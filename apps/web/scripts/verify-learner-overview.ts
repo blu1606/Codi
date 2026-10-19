@@ -106,11 +106,13 @@ async function main() {
       assert.deepEqual((await service.get(empty)).courses, []);
       assert.equal((await service.get(learner)).courses.length, 2);
       await assert.rejects(
-        () => clock.heartbeat(empty, f.courseId, f.lessonId, true, trackerA),
+        () =>
+          clock.heartbeat(empty, f.courseId, f.lessonId, "heartbeat", trackerA),
         /chưa có quyền/,
       );
       await assert.rejects(
-        () => clock.heartbeat(other, f.courseId, f.lessonId, true, trackerA),
+        () =>
+          clock.heartbeat(other, f.courseId, f.lessonId, "heartbeat", trackerA),
         /thiết lập/,
       );
       await tx.update(user).set({ banned: true }).where(eq(user.id, learner));
@@ -302,10 +304,22 @@ async function main() {
         before,
       );
       step = "server clock, overlapping tabs, stop, timeout and day split";
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, "start", trackerA);
       now = new Date(now.getTime() + 30000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
+      await clock.heartbeat(
+        learner,
+        f.courseId,
+        f.lessonId,
+        "heartbeat",
+        trackerA,
+      );
+      await clock.heartbeat(
+        learner,
+        f.courseId,
+        f.lessonId,
+        "heartbeat",
+        trackerA,
+      );
       let [day] = await tx
         .select()
         .from(studentStudyDays)
@@ -317,11 +331,17 @@ async function main() {
         );
       assert.equal(day!.seconds, 3630);
       now = new Date(now.getTime() + 10000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, false, trackerA);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, "stop", trackerA);
       now = new Date(now.getTime() + 30000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, "start", trackerA);
       now = new Date(now.getTime() + 60000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
+      await clock.heartbeat(
+        learner,
+        f.courseId,
+        f.lessonId,
+        "heartbeat",
+        trackerA,
+      );
       [day] = await tx
         .select()
         .from(studentStudyDays)
@@ -348,9 +368,15 @@ async function main() {
             ),
           );
         const start = now.getTime();
-        await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
+        await clock.heartbeat(
+          learner,
+          f.courseId,
+          f.lessonId,
+          "start",
+          trackerA,
+        );
         now = new Date(start + 10000);
-        await clock.heartbeat(learner, f.courseId, lessonB, true, trackerB);
+        await clock.heartbeat(learner, f.courseId, lessonB, "start", trackerB);
         const [owned] = await tx
           .select()
           .from(studentStudyClocks)
@@ -361,7 +387,7 @@ async function main() {
             learner,
             f.courseId,
             f.lessonId,
-            false,
+            "stop",
             trackerA,
           ),
           { recorded: false },
@@ -376,7 +402,13 @@ async function main() {
           "Delayed A stop must not change B's clock",
         );
         now = new Date(start + 40000);
-        await clock.heartbeat(learner, f.courseId, lessonB, true, trackerB);
+        await clock.heartbeat(
+          learner,
+          f.courseId,
+          lessonB,
+          "heartbeat",
+          trackerB,
+        );
         const [afterDay] = await tx
           .select()
           .from(studentStudyDays)
@@ -393,7 +425,7 @@ async function main() {
         );
         now = new Date(start + 45000);
         assert.deepEqual(
-          await clock.heartbeat(learner, f.courseId, lessonB, false, trackerB),
+          await clock.heartbeat(learner, f.courseId, lessonB, "stop", trackerB),
           { recorded: true },
         );
         const [stopped] = await tx
@@ -402,6 +434,86 @@ async function main() {
           .where(eq(studentStudyClocks.userId, learner));
         assert.equal(stopped!.lastSeenAt, null);
         assert.equal(stopped!.trackerId, null);
+      }
+      for (const lessonB of [f.lessonIds[1]!, f.lessonId]) {
+        step = `delayed active heartbeat before server processing (${lessonB === f.lessonId ? "same" : "different"} lesson)`;
+        const trackerB = randomUUID();
+        await tx
+          .delete(studentStudyClocks)
+          .where(eq(studentStudyClocks.userId, learner));
+        const readDay = async () =>
+          (
+            await tx
+              .select()
+              .from(studentStudyDays)
+              .where(
+                and(
+                  eq(studentStudyDays.userId, learner),
+                  eq(studentStudyDays.date, "2026-10-19"),
+                ),
+              )
+          )[0]!;
+        const readClock = async () =>
+          (
+            await tx
+              .select()
+              .from(studentStudyClocks)
+              .where(eq(studentStudyClocks.userId, learner))
+          )[0]!;
+        const beforeDay = await readDay();
+        const start = now.getTime();
+        await clock.heartbeat(
+          learner,
+          f.courseId,
+          f.lessonId,
+          "start",
+          trackerA,
+        );
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        // Hold transport BEFORE invoking the real service, not its response.
+        const delayed = held.then(() =>
+          clock.heartbeat(
+            learner,
+            f.courseId,
+            f.lessonId,
+            "heartbeat",
+            trackerA,
+          ),
+        );
+        now = new Date(start + 31000);
+        await clock.heartbeat(learner, f.courseId, lessonB, "start", trackerB);
+        const owned = await readClock();
+        now = new Date(start + 32000);
+        release();
+        assert.deepEqual(await delayed, { recorded: false });
+        now = new Date(start + 33000);
+        assert.deepEqual(
+          await clock.heartbeat(
+            learner,
+            f.courseId,
+            f.lessonId,
+            "stop",
+            trackerA,
+          ),
+          { recorded: false },
+        );
+        assert.deepEqual(await readClock(), owned);
+        now = new Date(start + 61000);
+        await clock.heartbeat(
+          learner,
+          f.courseId,
+          lessonB,
+          "heartbeat",
+          trackerB,
+        );
+        assert.equal(
+          (await readDay()).seconds - beforeDay.seconds,
+          61,
+          "B retains its full interval after A's delayed heartbeat and queued stop",
+        );
       }
       console.log(
         "Learner overview DB checks passed: ownership/roles, empty/hidden/suspended courses, completion, latest grades, run exclusion, scoped feedback/mastery, durable dismiss/undo, no progress mutation, weekly/streak and deduplicated active study time. All fixture rows roll back.",

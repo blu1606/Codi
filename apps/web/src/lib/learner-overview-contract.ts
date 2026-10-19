@@ -16,10 +16,11 @@ export class LearnerOverviewError extends Error {
 }
 export const studyHeartbeat = z
   .object({
-    active: z.boolean(),
+    action: z.enum(["start", "heartbeat", "stop"]),
     trackerId: z.uuid(),
   })
   .strict();
+export type StudyActivityAction = z.infer<typeof studyHeartbeat>["action"];
 export const overviewCommand = z.discriminatedUnion("type", [
   z
     .object({

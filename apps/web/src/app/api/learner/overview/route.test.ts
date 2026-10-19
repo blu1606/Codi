@@ -62,7 +62,7 @@ describe("learner overview HTTP boundaries", () => {
     mocks.session.mockResolvedValue(null);
     expect((await GET(read())).status).toBe(401);
     expect((await POST(write({}))).status).toBe(401);
-    expect((await heartbeat(write({ active: true }), ctx)).status).toBe(401);
+    expect((await heartbeat(write({ action: "start" }), ctx)).status).toBe(401);
     expect(mocks.heartbeat).not.toHaveBeenCalled();
   });
   it.each([[], ["ADMIN"], ["LECTURER"]])(
@@ -70,7 +70,9 @@ describe("learner overview HTTP boundaries", () => {
     async (...roles) => {
       mocks.roles.mockResolvedValue(roles);
       expect((await GET(read())).status).toBe(403);
-      expect((await heartbeat(write({ active: true }), ctx)).status).toBe(403);
+      expect((await heartbeat(write({ action: "start" }), ctx)).status).toBe(
+        403,
+      );
     },
   );
   it.each([null, "https://attacker.test"])(
@@ -84,7 +86,7 @@ describe("learner overview HTTP boundaries", () => {
         ).status,
       ).toBe(403);
       expect(
-        (await heartbeat(write({ active: true }, source), ctx)).status,
+        (await heartbeat(write({ action: "start" }, source), ctx)).status,
       ).toBe(403);
       expect(mocks.execute).not.toHaveBeenCalled();
       expect(mocks.heartbeat).not.toHaveBeenCalled();
@@ -92,26 +94,50 @@ describe("learner overview HTTP boundaries", () => {
   );
   it("validates heartbeat payloads before touching the database", async () => {
     expect(
-      (await heartbeat(write({ active: true, trackerId, seconds: 3600 }), ctx))
-        .status,
+      (await heartbeat(write({ active: true, trackerId }), ctx)).status,
     ).toBe(400);
-    expect((await heartbeat(write({ active: false }), ctx)).status).toBe(400);
     expect(
-      (await heartbeat(write({ active: true, trackerId: "invalid" }), ctx))
+      (await heartbeat(write({ action: "resume", trackerId }), ctx)).status,
+    ).toBe(400);
+    expect(
+      (
+        await heartbeat(
+          write({ action: "start", trackerId, seconds: 3600 }),
+          ctx,
+        )
+      ).status,
+    ).toBe(400);
+    expect((await heartbeat(write({ action: "stop" }), ctx)).status).toBe(400);
+    expect(
+      (await heartbeat(write({ action: "start", trackerId: "invalid" }), ctx))
         .status,
     ).toBe(400);
     expect(mocks.heartbeat).not.toHaveBeenCalled();
     expect(
-      (await heartbeat(write({ active: false, trackerId }), ctx)).status,
+      (await heartbeat(write({ action: "stop", trackerId }), ctx)).status,
     ).toBe(200);
     expect(mocks.heartbeat).toHaveBeenCalledWith(
       "viewer",
       "owned",
       lessonId,
-      false,
+      "stop",
       trackerId,
     );
   });
+  it.each(["start", "heartbeat", "stop"])(
+    "forwards explicit %s intent",
+    async (action) => {
+      const response = await heartbeat(write({ action, trackerId }), ctx);
+      expect(response.status).toBe(200);
+      expect(mocks.heartbeat).toHaveBeenCalledWith(
+        "viewer",
+        "owned",
+        lessonId,
+        action,
+        trackerId,
+      );
+    },
+  );
   it("rejects forged dismiss commands", async () => {
     expect(
       (

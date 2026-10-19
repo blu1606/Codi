@@ -66,7 +66,7 @@ describe("study accounting", () => {
   it("rejects browser-supplied durations, forged user IDs and malformed undo tokens", () => {
     expect(
       studyHeartbeat.safeParse({
-        active: true,
+        action: "start",
         trackerId: "19a88269-9c03-4c26-921d-bcecd007906b",
         seconds: 3600,
       }).success,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { StudyActivityAction } from "../src/lib/learner-overview-contract";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -279,10 +280,10 @@ async function main() {
     });
     const endpoint = `${origin}/api/learn/${ownedId}/lessons/${f.lessonIds[1]}/activity`;
     const heartbeats = await Promise.all(
-      [true, true].map((active) =>
+      ["heartbeat", "heartbeat"].map((action) =>
         page.request.post(endpoint, {
           headers: { origin },
-          data: { active, trackerId: trackerA },
+          data: { action, trackerId: trackerA },
         }),
       ),
     );
@@ -302,7 +303,7 @@ async function main() {
     );
     await page.request.post(endpoint, {
       headers: { origin },
-      data: { active: false, trackerId: trackerA },
+      data: { action: "stop", trackerId: trackerA },
     });
     stage = "dashboard populated and durable dismissal";
     await page.goto(`${origin}/dashboard`);
@@ -397,16 +398,20 @@ async function main() {
     for (const lessonB of [f.lessonIds[1]!, f.lessonId]) {
       const trackerB = randomUUID();
       const endpointB = `${origin}/api/learn/${ownedId}/lessons/${lessonB}/activity`;
-      const send = async (url: string, trackerId: string, active: boolean) => {
+      const send = async (
+        url: string,
+        trackerId: string,
+        action: StudyActivityAction,
+      ) => {
         const r = await page.request.post(url, {
           headers: { origin },
-          data: { trackerId, active },
+          data: { trackerId, action },
         });
         assert.equal(r.status(), 200);
         return r.json();
       };
-      await send(endpoint, trackerA, true);
-      await send(endpointB, trackerB, true);
+      await send(endpoint, trackerA, "start");
+      await send(endpointB, trackerB, "start");
       // Move only this QA clock back, so the real HTTP service must retain and
       // credit B's interval after A's obsolete stop, without a 30-second sleep.
       await db
@@ -417,7 +422,7 @@ async function main() {
         .select()
         .from(studentStudyClocks)
         .where(eq(studentStudyClocks.userId, userId));
-      assert.deepEqual(await send(endpoint, trackerA, false), {
+      assert.deepEqual(await send(endpoint, trackerA, "stop"), {
         recorded: false,
       });
       const [afterStop] = await db
@@ -425,15 +430,17 @@ async function main() {
         .from(studentStudyClocks)
         .where(eq(studentStudyClocks.userId, userId));
       assert.deepEqual(afterStop, owned);
-      await send(endpointB, trackerB, true);
-      await send(endpointB, trackerB, false);
+      await send(endpointB, trackerB, "heartbeat");
+      await send(endpointB, trackerB, "stop");
     }
     stage = "real lesson tracker focus while stop response is held";
-    const isActivity = (r: any, active: boolean) =>
+    const isActivity = (r: any, action: StudyActivityAction) =>
       r.url() === endpoint &&
       r.request().method() === "POST" &&
-      r.request().postDataJSON()?.active === active;
-    const initialStart = page.waitForResponse((r: any) => isActivity(r, true));
+      r.request().postDataJSON()?.action === action;
+    const initialStart = page.waitForResponse((r: any) =>
+      isActivity(r, "start"),
+    );
     void initialStart.catch(() => {});
     await page.goto(`${origin}/learn/${ownedId}/${f.lessonIds[1]}`);
     await page.bringToFront();
@@ -448,7 +455,7 @@ async function main() {
     });
     let heldOnce = false;
     const holdStop = async (route: any) => {
-      if (route.request().postDataJSON().active || heldOnce)
+      if (route.request().postDataJSON().action !== "stop" || heldOnce)
         return route.continue();
       heldOnce = true;
       const result = await route.fetch();
@@ -481,7 +488,7 @@ async function main() {
       ]);
       await page.bringToFront();
       assert.equal(await page.evaluate(() => document.hasFocus()), true);
-      const resumed = page.waitForResponse((r: any) => isActivity(r, true), {
+      const resumed = page.waitForResponse((r: any) => isActivity(r, "start"), {
         timeout: 5000,
       });
       releaseStop();
@@ -509,7 +516,7 @@ async function main() {
       await lessonCdp.detach();
     }
     stage = "lesson tracker unmount";
-    const lessonStop = page.waitForResponse((r: any) => isActivity(r, false));
+    const lessonStop = page.waitForResponse((r: any) => isActivity(r, "stop"));
     void lessonStop.catch(() => {});
     // Use client navigation so React actually unmounts the tracker.
     await page

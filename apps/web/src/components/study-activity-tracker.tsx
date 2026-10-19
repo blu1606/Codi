@@ -1,6 +1,9 @@
 "use client";
 import { useEffect } from "react";
-import { STUDY_HEARTBEAT_MS } from "@/lib/learner-overview-contract";
+import {
+  STUDY_HEARTBEAT_MS,
+  type StudyActivityAction,
+} from "@/lib/learner-overview-contract";
 
 export default function StudyActivityTracker({
   courseId,
@@ -11,25 +14,31 @@ export default function StudyActivityTracker({
 }) {
   useEffect(() => {
     const endpoint = `/api/learn/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/activity`;
-    const trackerId = crypto.randomUUID();
     let pending = false,
-      started = false,
-      ended = false,
-      desired = false;
-    const ping = async (active: boolean) => {
-      desired = active;
-      if (pending || (!active && !started)) return;
+      ended = false;
+    let started: string | null = null,
+      desired: string | null = null;
+    const ping = async () => {
+      const trackerId = desired ?? started;
+      if (pending || !trackerId) return;
+      const action: StudyActivityAction = !desired
+        ? "stop"
+        : started === desired
+          ? "heartbeat"
+          : "start";
       pending = true;
       let succeeded = false;
       try {
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ active, trackerId }),
+          body: JSON.stringify({ action, trackerId }),
           keepalive: true,
         });
         if (response.ok) {
-          started = active;
+          // An ignored renewal still belongs to this session: never turn its next
+          // timer tick into an acquisition that steals ownership back.
+          started = action === "stop" ? null : trackerId;
           succeeded = true;
         }
       } catch {
@@ -38,14 +47,17 @@ export default function StudyActivityTracker({
         pending = false;
         // Reconcile either focus transition after a successful pending request.
         // Failed requests wait for the next event/tick instead of retrying forever.
-        const next = desired && !ended;
-        if (succeeded && started !== next) void ping(next);
+        if (succeeded && started !== desired) void ping();
       }
     };
     const visible = () =>
       document.visibilityState === "visible" && document.hasFocus();
     const changed = () => {
-      if (!ended) void ping(visible());
+      if (ended) return;
+      // Each focus acquisition has its own identity, even if a prior request is
+      // still pending. Repeated focus/visibility events only renew that session.
+      desired = visible() ? (desired ?? crypto.randomUUID()) : null;
+      void ping();
     };
     changed();
     const timer = setInterval(changed, STUDY_HEARTBEAT_MS);
@@ -58,8 +70,8 @@ export default function StudyActivityTracker({
       window.removeEventListener("focus", changed);
       window.removeEventListener("blur", changed);
       ended = true;
-      desired = false;
-      void ping(false);
+      desired = null;
+      void ping();
     };
   }, [courseId, lessonId]);
   return null;
