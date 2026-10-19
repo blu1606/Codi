@@ -15,14 +15,19 @@
     "test:learning-path:db": "tsx --env-file=.env scripts/verify-learning-path.ts",
     "db:seed-learning-path": "tsx --env-file=.env scripts/seed-learning-path-dev.ts",
     "db:seed-lesson-player": "tsx --env-file=.env scripts/seed-lesson-player-dev.ts",
-    "test:lesson-player:db": "tsx --env-file=.env scripts/verify-lesson-player.ts"
+    "test:lesson-player:db": "tsx --env-file=.env scripts/verify-lesson-player.ts",
+    "test:assessments:db": "tsx --env-file=.env scripts/verify-assessments.ts",
+    "db:seed-assessments": "tsx --env-file=.env scripts/seed-assessments-dev.ts",
+    "test:assessments:r2": "tsx --env-file=.env scripts/verify-assignment-r2.ts",
+    "storage:assignments:sweep": "tsx --env-file=.env scripts/sweep-assignment-files.ts"
   },
   "dependencies": {
     "@ai-sdk/devtools": "^1.0.15",
     "@ai-sdk/google": "^4.0.64",
     "@ai-sdk/openai": "^4.0.0",
     "@ai-sdk/react": "^4.0.96",
-    "@aws-sdk/client-s3": "^3.1136.0",
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1136.0",
     "@codi-1/auth": "workspace:*",
     "@codi-1/db": "workspace:*",
     "@codi-1/ui": "workspace:*",
