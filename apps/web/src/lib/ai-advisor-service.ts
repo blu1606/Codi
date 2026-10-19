@@ -1,0 +1,378 @@
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import type { Database } from "@codi-1/db";
+import {
+  aiInteractionLogs,
+  courseChapters,
+  courseDetails,
+  courseLessons,
+  courses,
+  lessonProgress,
+  studentEnrollments,
+} from "@codi-1/db";
+import {
+  INTAKE_QUESTIONS,
+  type AdvisorCourseCard,
+  type AdvisorStructuredResponse,
+  type IntakeState,
+} from "./ai-advisor-contract";
+
+export interface AdvisorContextUser {
+  id: string;
+  name?: string | null;
+}
+
+export interface AdvisorCourseItem {
+  id: string;
+  slug: string;
+  title: string;
+  level: string;
+  price: number;
+  rating: number | null;
+  lessonCount: number;
+  enrollmentCount: number;
+  coverImageUrl: string | null;
+  description: string;
+}
+
+export interface LearnerProgressContext {
+  currentCourse: {
+    id: string;
+    slug: string;
+    title: string;
+    doneLessons: number;
+    totalLessons: number;
+  } | null;
+  ownedCourseIds: string[];
+}
+
+export function formatVnd(price: number): string {
+  if (price === 0) return "Miễn phí";
+  return `${price.toLocaleString("vi-VN")} ₫`;
+}
+
+export function levelLabel(level: string): string {
+  if (level === "Beginner" || level === "Cơ bản") return "Cơ bản";
+  if (level === "Intermediate" || level === "Trung cấp") return "Trung cấp";
+  if (level === "Advanced" || level === "Nâng cao") return "Nâng cao";
+  return level;
+}
+
+export async function getLearnerProgressContext(
+  db: Database,
+  userId: string | null
+): Promise<LearnerProgressContext> {
+  if (!userId) {
+    return { currentCourse: null, ownedCourseIds: [] };
+  }
+
+  // Get active enrollments with progress
+  const enrollments = await db
+    .select({
+      enrollmentId: studentEnrollments.id,
+      courseId: studentEnrollments.courseId,
+      progress: studentEnrollments.progress,
+      lastActiveAt: studentEnrollments.lastActiveAt,
+      courseTitle: courses.title,
+      courseSlug: courses.slug,
+    })
+    .from(studentEnrollments)
+    .innerJoin(courses, eq(courses.id, studentEnrollments.courseId))
+    .where(
+      and(
+        eq(studentEnrollments.userId, userId),
+        eq(courses.status, "published")
+      )
+    )
+    .orderBy(desc(studentEnrollments.lastActiveAt), desc(studentEnrollments.enrolledAt));
+
+  if (!enrollments.length) {
+    return { currentCourse: null, ownedCourseIds: [] };
+  }
+
+  const ownedCourseIds = enrollments.map((e) => e.courseId);
+  const first = enrollments[0];
+
+  // Count done lessons and total lessons for the first active course
+  const [totalRow] = await db
+    .select({ count: count(courseLessons.id) })
+    .from(courseLessons)
+    .innerJoin(courseChapters, eq(courseChapters.id, courseLessons.chapterId))
+    .where(
+      and(
+        eq(courseChapters.courseId, first.courseId),
+        eq(courseLessons.isPublished, true)
+      )
+    );
+
+  const [doneRow] = await db
+    .select({ count: count(lessonProgress.id) })
+    .from(lessonProgress)
+    .where(
+      and(
+        eq(lessonProgress.enrollmentId, first.enrollmentId),
+        eq(lessonProgress.status, "completed")
+      )
+    );
+
+  return {
+    currentCourse: {
+      id: first.courseId,
+      slug: first.courseSlug,
+      title: first.courseTitle,
+      doneLessons: doneRow?.count ?? 0,
+      totalLessons: totalRow?.count ?? 0,
+    },
+    ownedCourseIds,
+  };
+}
+
+export async function getPublishedCatalog(db: Database): Promise<AdvisorCourseItem[]> {
+  const lessonCountSubquery = db
+    .select({
+      courseId: courseChapters.courseId,
+      lessonCount: count(courseLessons.id).as("lesson_count"),
+    })
+    .from(courseLessons)
+    .innerJoin(courseChapters, eq(courseChapters.id, courseLessons.chapterId))
+    .where(eq(courseLessons.isPublished, true))
+    .groupBy(courseChapters.courseId)
+    .as("lesson_counts");
+
+  const enrollmentCountSubquery = db
+    .select({
+      courseId: studentEnrollments.courseId,
+      enrollmentCount: count(studentEnrollments.id).as("enrollment_count"),
+    })
+    .from(studentEnrollments)
+    .groupBy(studentEnrollments.courseId)
+    .as("enrollment_counts");
+
+  const rows = await db
+    .select({
+      id: courses.id,
+      slug: courses.slug,
+      title: courses.title,
+      level: courses.level,
+      price: courses.price,
+      rating: courses.rating,
+      description: courses.description,
+      coverImageUrl: courseDetails.coverImageUrl,
+      lessonCount: sql<number>`COALESCE(${lessonCountSubquery.lessonCount}, 0)`,
+      enrollmentCount: sql<number>`COALESCE(${enrollmentCountSubquery.enrollmentCount}, 0)`,
+    })
+    .from(courses)
+    .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))
+    .leftJoin(lessonCountSubquery, eq(lessonCountSubquery.courseId, courses.id))
+    .leftJoin(enrollmentCountSubquery, eq(enrollmentCountSubquery.courseId, courses.id))
+    .where(eq(courses.status, "published"))
+    .orderBy(asc(courses.title));
+
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    title: r.title,
+    level: r.level,
+    price: Number(r.price),
+    rating: r.rating !== null ? Number(r.rating) : null,
+    lessonCount: Number(r.lessonCount),
+    enrollmentCount: Number(r.enrollmentCount),
+    coverImageUrl: r.coverImageUrl,
+    description: r.description ?? "",
+  }));
+}
+
+/**
+ * Pure generator mirroring the contract and reference logic from docs/mockup/js/ai-advisor.js
+ */
+export function buildAdvisorAnswer(params: {
+  prompt: string;
+  catalog: AdvisorCourseItem[];
+  intake: IntakeState;
+  ownedCourseIds: string[];
+}): AdvisorStructuredResponse {
+  const { prompt, catalog, intake, ownedCourseIds } = params;
+  const owned = new Set(ownedCourseIds);
+  const promptLower = prompt.toLowerCase();
+
+  const beginner =
+    !intake.level ||
+    intake.level === "Mới bắt đầu" ||
+    /mới bắt đầu|người mới/i.test(prompt);
+
+  const rank: Record<string, number> = {
+    Beginner: 0,
+    "Cơ bản": 0,
+    Intermediate: 1,
+    "Trung cấp": 1,
+    Advanced: 2,
+    "Nâng cao": 2,
+  };
+
+  const sortedList = [...catalog].sort((a, b) => {
+    // 1. Unowned courses first
+    const aOwned = owned.has(a.id) ? 1 : 0;
+    const bOwned = owned.has(b.id) ? 1 : 0;
+    if (aOwned !== bOwned) return aOwned - bOwned;
+
+    // 2. Level rank
+    const aRank = rank[a.level] ?? 1;
+    const bRank = rank[b.level] ?? 1;
+    if (aRank !== bRank) {
+      return beginner ? aRank - bRank : bRank - aRank;
+    }
+
+    // 3. Rating
+    return (b.rating ?? 0) - (a.rating ?? 0);
+  });
+
+  const toCard = (c: AdvisorCourseItem, reason?: string, isBestMatch?: boolean): AdvisorCourseCard => ({
+    id: c.id,
+    slug: c.slug,
+    title: c.title,
+    level: levelLabel(c.level),
+    lessonCount: c.lessonCount,
+    price: c.price,
+    rating: c.rating,
+    learnersCount: c.enrollmentCount,
+    coverImageUrl: c.coverImageUrl,
+    reason:
+      reason ??
+      `${levelLabel(c.level)} · ${c.rating ? c.rating + "★ · " : ""}${c.enrollmentCount.toLocaleString("vi-VN")} học viên`,
+    isBestMatch,
+  });
+
+  // Scenario 1: User explicitly asks for something not in catalogue
+  if (
+    /blockchain|web3|solidity|rust|swift|flutter/i.test(promptLower) &&
+    !catalog.some((c) =>
+      c.title.toLowerCase().includes(promptLower) ||
+      c.description.toLowerCase().includes(promptLower)
+    )
+  ) {
+    const alternative = sortedList.slice(0, 2);
+    return {
+      text: "Codi chưa có khoá cho mục tiêu này. Bạn có thể tham khảo các khoá nền tảng lập trình gần nhất dưới đây:",
+      courses: alternative.map((c, idx) => toCard(c, undefined, idx === 0)),
+      table: null,
+      order: [],
+      followups: ["Mới bắt đầu học lập trình nên học gì?", "So sánh các khoá cơ bản"],
+      noMatch: true,
+    };
+  }
+
+  // Scenario 2: Comparison table
+  if (/so sánh/i.test(prompt)) {
+    const pick = sortedList.slice(0, 3);
+    const headers = ["Khoá học", "Trình độ", "Số bài", "Học phí", "Phù hợp khi"];
+    const rows = pick.map((c) => [
+      c.title,
+      levelLabel(c.level),
+      String(c.lessonCount),
+      formatVnd(c.price),
+      (rank[c.level] ?? 0) === 0 ? "Bạn mới bắt đầu" : "Bạn đã nắm nền tảng",
+    ]);
+
+    return {
+      text: "Đây là bảng so sánh các khoá phù hợp nhất với bạn. Cột cuối là gợi ý của Codi.",
+      table: { headers, rows },
+      courses: pick.map((c, idx) => toCard(c, undefined, idx === 0)),
+      order: [],
+      followups: ["Nên học theo thứ tự nào?", "Khoá nào hợp với 5 giờ/tuần?"],
+      noMatch: false,
+    };
+  }
+
+  // Scenario 3: Order / Roadmap
+  if (/thứ tự|lộ trình|tiếp theo|nên học gì tiếp/i.test(prompt)) {
+    const unownedOrder = sortedList
+      .filter((c) => !owned.has(c.id))
+      .sort((a, b) => (rank[a.level] ?? 0) - (rank[b.level] ?? 0))
+      .slice(0, 3);
+
+    const orderCards = unownedOrder.map((c, i) => ({
+      id: c.id,
+      slug: c.slug,
+      title: c.title,
+      reason: i === 0 ? "nền tảng, học trước" : "dựa trên khoá trước",
+    }));
+
+    return {
+      text: `Lộ trình gợi ý${intake.hoursPerWeek ? ` với ${intake.hoursPerWeek}/tuần` : ""}: học lần lượt, khoá sau dựa trên kiến thức khoá trước.`,
+      courses: unownedOrder.map((c, idx) =>
+        toCard(
+          c,
+          idx === 0 ? "Nền tảng, nên học trước" : "Nâng cao, học tiếp theo",
+          idx === 0
+        )
+      ),
+      table: null,
+      order: orderCards,
+      followups: ["So sánh các khoá này", "Mình bị chậm tiến độ, nên làm gì?"],
+      noMatch: false,
+    };
+  }
+
+  // Scenario 4: Falling behind / Pace
+  if (/chậm tiến độ/i.test(prompt)) {
+    return {
+      text: "Một vài cách lấy lại nhịp:\n- Đặt mục tiêu tuần nhỏ hơn ở **Bàn làm việc**\n- Học 15 phút mỗi ngày thay vì dồn cuối tuần\n- Dùng **Tìm điểm bắt đầu của tôi** để bỏ qua phần đã biết",
+      courses: [],
+      table: null,
+      order: [],
+      followups: ["Nên học gì tiếp?", "Tìm khoá cho mục tiêu"],
+      noMatch: false,
+    };
+  }
+
+  // Scenario 5: Default recommendations
+  const pick = sortedList.slice(0, 3);
+  const contextSummary =
+    [intake.goal, intake.level, intake.hoursPerWeek ? `${intake.hoursPerWeek}/tuần` : null]
+      .filter(Boolean)
+      .join(", ") || "câu hỏi của bạn";
+
+  return {
+    text: `Dựa trên ${contextSummary}, đây là các khoá phù hợp:`,
+    courses: pick.map((c, idx) => toCard(c, undefined, idx === 0)),
+    table: null,
+    order: [],
+    followups: ["So sánh các khoá này", "Nên học theo thứ tự nào?"],
+    noMatch: false,
+  };
+}
+
+/**
+ * Log advisor conversation to ai_interaction_logs table
+ */
+export async function logAdvisorInteraction(
+  db: Database,
+  params: {
+    userId: string | null;
+    userPrompt: string;
+    aiResponse: string;
+    latencyMs: number;
+    isSuccess: boolean;
+    errorMessage?: string | null;
+  }
+): Promise<number | null> {
+  try {
+    const [inserted] = await db
+      .insert(aiInteractionLogs)
+      .values({
+        userId: params.userId,
+        requestType: "ask_advisor",
+        model: "codi-advisor-v1",
+        userPrompt: params.userPrompt,
+        aiResponse: params.aiResponse,
+        latencyMs: params.latencyMs,
+        isSuccess: params.isSuccess,
+        errorMessage: params.errorMessage ?? null,
+      })
+      .returning({ id: aiInteractionLogs.id });
+
+    return inserted?.id ?? null;
+  } catch (error) {
+    console.error("Failed to log advisor interaction", error);
+    return null;
+  }
+}
