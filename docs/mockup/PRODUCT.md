@@ -3,7 +3,7 @@
 > UX research synthesis for the downstream design/prototyping agent (OpenDesign).
 > Scope: every use case of Guest, Registered User, Learner, Lecturer, Admin (+ AI Service as supporting actor).
 > Sources: this repository (source of truth for what exists), the SWP391 use case model (`../UC-by-actor-plantuml/*.puml`), and Mobbin research (web references, inspected visually by research sub-agents).
-> Date: 2026-10-11 · **Revised 2026-10-12** after the prototype UX audit (`report_uiux_audit.md`) and a second Mobbin pass — changes are summarised in `product-updated-12-10.md`. UI language: Vietnamese. Quoted Vietnamese strings are verbatim from the current app unless marked *(proposed)*.
+> Date: 2026-10-11 · **Revised 2026-10-12** after the prototype UX audit (`report_uiux_audit.md`) and a second Mobbin pass — changes are summarised in `product-updated-12-10.md`. **Revised 2026-10-19:** GitHub-based skill profile ("Hồ sơ năng lực", Flow L14, S04c/S04d, decisions 57–64) after a third Mobbin pass. UI language: Vietnamese. Quoted Vietnamese strings are verbatim from the current app unless marked *(proposed)*.
 
 ---
 
@@ -61,6 +61,7 @@ Today the product has a working storefront (catalog, course detail, account, Vie
 - Diagnostic entry test is authored by the Lecturer as a course quiz flagged as entry test.
 - **Course price is owned by Admin**, not Lecturer. Publication completeness check: price, description, ≥1 lesson. Admin manual review is a separate step.
 - Knowledge map is extracted once per content change (not per learner).
+- **GitHub account linking exists at the auth layer:** Better Auth has an optional `github` social provider and account linking trusts `github`, so a learner who signed in with email can link GitHub without a new account. No GitHub data is read beyond sign-in today.
 
 ---
 
@@ -89,6 +90,9 @@ Entry (home / catalog / AI advisor / shared link)
 → Cart → Checkout (VietQR) → Awaiting payment → Payment confirmed
    ├─ expired / underpaid / cancelled → recover (new QR / contact / back to cart)
 → "Bạn đã sở hữu khóa học" success → Course onboarding
+→ [Optional, any time before or during onboarding] Connect GitHub → Codi reads public repos
+   → "Hồ sơ năng lực" (technologies, knowledge areas, estimated level) → learner corrects it
+   → used only as a capped starting estimate for course concepts (Flow L14)
 → Set learning goal → Start fork:
    ├─ "Học từ bài 1" (default course order, lessons unlocked immediately)
    │     └─ later: "Làm bài kiểm tra đầu vào" card on course home → diagnostic → path
@@ -150,6 +154,7 @@ Admin dashboard (KPIs + "Cần xử lý" counts)
 
 ### Flow A3: Account settings *(exists, refine)*
 Left nav sections (existing "Tài khoản" with "Thông tin tài khoản", "Mật khẩu & Bảo mật"); edit-in-place fields with Save/Cancel only when dirty; changing email re-verifies the new address via OTP (existing); "Đăng xuất" reachable.
+**"Tài khoản liên kết"** *(new section, proposed)*: one GitHub row. Not linked → "Kết nối GitHub" (opens the S04d consent dialog). Linked → "Đã kết nối @{login} · phân tích {thời gian}" + overflow menu "Xem hồ sơ năng lực" · "Phân tích lại" · "Xoá hồ sơ năng lực" · "Ngắt kết nối GitHub". If GitHub is the account's only sign-in method, "Ngắt kết nối GitHub" is disabled with "Đặt mật khẩu trước khi ngắt kết nối" + link to "Mật khẩu & Bảo mật"; "Xoá hồ sơ năng lực" stays available.
 
 ### Flow L3: Cart → Checkout → Payment *(UC Add Course to Cart, Apply Voucher, Purchase Course, Confirm Payment)*
 **Trigger:** "Thêm vào giỏ" anywhere; header cart icon with count *(proposed)*; "Đến giỏ hàng"; or **"Mua ngay"** on course detail, which skips steps 1–2 and opens checkout with that single course (voucher field available on checkout). A guest pressing "Mua ngay" goes through the gated sign-in (Flow L2) and lands on that checkout.
@@ -175,13 +180,14 @@ Left nav sections (existing "Tài khoản" with "Thông tin tài khoản", "Mậ
 **Trigger:** "Bắt đầu học" after purchase; or first open of an owned course that has no path yet.
 **Steps:**
 1. Goal (one decision per screen, top progress bar, 2–3 steps): goal ("Làm được dự án", "Hoàn thành khóa học", "Chuẩn bị phỏng vấn"… — exact options = Q6), self-assessed level, weekly time commitment (tiered cards). Each step also has a quiet "Bỏ qua" link (defaults applied, editable later via "Chỉnh mục tiêu").
+   **Self-assessed level + GitHub (Flow L14):** if the learner's skill profile is ready, the level step shows a suggestion card above the options — "Theo GitHub của bạn: **Cơ bản** · độ tin cậy Trung bình" + one evidence line ("Dùng React trong 3 repo") + "Dùng gợi ý"; the learner may still pick any level. If GitHub is not connected, a quiet link "Kết nối GitHub để Codi gợi ý trình độ" opens S04d and returns to this step. While analysis runs the card shows "Đang phân tích GitHub…" and the learner can continue without waiting.
 2. **Start fork** (resolves Q7 — the diagnostic is no longer a gate): two cards, each stating its consequence —
    - **"Học từ bài 1"** — "Học theo thứ tự mặc định của giảng viên. Bạn có thể làm bài kiểm tra đầu vào bất cứ lúc nào để Codi cá nhân hoá lộ trình." → course home in default order, all prerequisite-satisfied lessons open.
-   - **"Tìm điểm bắt đầu của tôi"** (marked "Khuyến nghị") — "~10 phút, giúp bỏ qua phần bạn đã biết." → diagnostic.
+   - **"Tìm điểm bắt đầu của tôi"** (marked "Khuyến nghị") — "~10 phút, giúp bỏ qua phần bạn đã biết." → diagnostic. When a GitHub starting estimate exists for this course, the card adds "Codi đã có ước tính ban đầu từ GitHub cho {n} khái niệm — bài kiểm tra giúp xác nhận."
    Choosing "Học từ bài 1" shows a one-line inline note (not a blocking dialog) of what is lost: no skippable lessons, no personalised order yet.
 3. Diagnostic intro: purpose ("giúp Codi xếp lộ trình phù hợp"), number of questions, estimated time, "không tính điểm", no timer, and "Để sau" (returns to course home in default order).
 3. Questions: "Câu 3/12" counter + segmented progress, single question per screen, Back/Next, **"Tôi chưa biết"** action (recorded as distinct from wrong).
-4. Result: right / wrong / "chưa biết" counts; per-concept mastery using the existing 5-stop mastery scale with text labels; strengths and gaps.
+4. Result: right / wrong / "chưa biết" counts; per-concept mastery using the existing 5-stop mastery scale with text labels; strengths and gaps. Concepts the test did not cover but that carry a GitHub starting estimate show the label "ước tính từ GitHub" (decision 61).
 5. Path generation in progress: explicit state ("Codi đang xếp lộ trình cho bạn…"), not a blank spinner.
 6. Personal path (Flow L5 screen).
 **Decision points:** Start fork (above). Leave mid-test → resume from the same question. Learners who chose "Học từ bài 1" see a persistent, dismissible-per-session card on course home and learner home: "Cá nhân hoá lộ trình — làm bài kiểm tra đầu vào (~10 phút)". Taking it later generates the path from the current position; completed lessons stay completed.
@@ -271,6 +277,25 @@ Trigger: course completion screen shows an inline 5-star row (and a persistent "
 **Steps:** The course's layered concept graph (same layout as the lecturer's, read-only). Each node shows the concept name, a mastery colour **and** text label (Chưa học / Đang học / Thành thạo), and a marker on the concept of the current recommended lesson. Selecting a node highlights its prerequisite path and opens a panel: mastery, lessons teaching it (with status) and "Học bài này" (respecting prerequisite locks).
 **States:** map not confirmed yet by the lecturer (tab hidden); diagnostic skipped (all nodes "Chưa học" until lessons are completed).
 
+### Flow L14: GitHub skill profile — "Hồ sơ năng lực" *(added 2026-10-19; new UCs proposed: Link GitHub Account, Generate Skill Profile — AI Service supporting)*
+**Purpose:** let a learner with real code on GitHub get a sensible starting point without proving everything again, while keeping measured evidence (diagnostic, quizzes, exercises) the only thing that decides mastery.
+**Trigger:** `/profile` tab "Hồ sơ năng lực"; Settings → "Tài khoản liên kết"; the onboarding level step link (Flow L4); the learner-home card "Kết nối GitHub để Codi hiểu bạn nhanh hơn" (shown once per learner until connected or dismissed).
+**Steps:**
+1. **Consent (S04d)** — Codi's own dialog before GitHub's screen, stating exactly what is read: "Hồ sơ GitHub công khai", "Danh sách repo công khai (bỏ qua repo fork)", "File cấu hình như `package.json`, `requirements.txt`, `pom.xml` và README"; and what is not: "Không đọc repo riêng tư · Không ghi gì lên GitHub · Không chia sẻ với giảng viên". Footer: "Bạn có thể xoá hồ sơ hoặc ngắt kết nối bất cứ lúc nào." Primary "Kết nối GitHub", secondary "Để sau". A learner who already signed in with GitHub skips the OAuth step and only confirms.
+2. **GitHub authorize** (GitHub's screen, minimum public scope) → back to the page that started the flow.
+3. **Analysing** — a step checklist, not a spinner: *Đọc hồ sơ → Đọc repo (7/12) → Nhận diện công nghệ → Tạo hồ sơ năng lực*, with "Thường mất dưới 1 phút. Bạn có thể rời trang — Codi sẽ báo khi xong." Completion raises a notification (S40) "Hồ sơ năng lực đã sẵn sàng".
+4. **Review the profile (S04c)** — summary, technologies, knowledge areas, analysed repos (see S04c). Every item shows its evidence; the learner may change a level, hide an item ("Không đúng") or exclude a repo ("Không phải code của tôi" — e.g. group or tutorial projects). Exclusions trigger a quick re-run of the summary without re-reading GitHub.
+5. **Use in courses** — when a learner opens onboarding or a course without measured evidence, Codi maps the profile onto that course's accepted concepts and sets a **capped starting estimate** per matching concept (decision 60). The profile page lists which owned courses were affected ("React cơ bản — ước tính ban đầu cho 4/11 khái niệm").
+**Decision points:** connect now vs "Để sau"; accept or correct each item; exclude repos; re-analyse (at most once per 24 h, button shows the next available time); delete profile vs unlink GitHub (Settings).
+**Exit:** profile ready and corrected; or not connected (everything else in Codi works unchanged).
+**Failure / recovery:**
+- No public non-fork repos, or too little code → state "Chưa đủ dữ liệu để ước tính" with what was found ("2 repo, chủ yếu là fork") and the alternatives: "Làm bài kiểm tra đầu vào" in any owned course, or "Phân tích lại" after pushing code. No invented profile.
+- Analysis failed / AI unavailable → "Chưa tạo được hồ sơ năng lực" + "Thử lại"; onboarding continues without a suggestion.
+- GitHub access revoked from GitHub's side → "Kết nối GitHub đã hết hiệu lực" + "Kết nối lại"; the last profile stays visible with its date until the learner deletes it.
+- GitHub rate limit → "GitHub đang giới hạn lượt đọc — Codi sẽ tự thử lại sau {phút}"; the step checklist shows where it paused.
+- Profile older than 90 days → quiet "Hồ sơ phân tích {n} tháng trước · Phân tích lại".
+- Delete profile / unlink → consequence dialog (S04c): the profile and all GitHub starting estimates are removed; concepts still without measured evidence return to the course default; diagnostic results, quiz/exercise scores, mastery already measured and completed lessons are unchanged.
+
 ### Flow T1: Create & author a course *(UC Create Course, Create/Update/Delete Course Content)*
 **Trigger:** Lecturer home "Tạo khóa học".
 **Steps:** 1) Minimal form: title, short description, category, level → created as **Bản nháp**. 2) Course editor with tabs (Thông tin · Nội dung · Bản đồ kiến thức · Xuất bản). 3) Curriculum tree: chapters → lessons, drag handles, "Thêm nội dung" menu (Chương, Bài học, Quiz, Bài tập), inline rename. 4) Lesson editor: materials (video upload, PDF/slides upload, reading text) with upload progress/error states. 5) Quiz builder: question cards, options, explicit Đúng/Sai marking, inline validation ("Cần ít nhất một đáp án đúng"); quiz settings panel with passing grade and **"Dùng làm bài kiểm tra đầu vào"** toggle. 6) **Coding exercise builder** *(UC Create Course Content)*: instructions, language, starter code editor, reference solution, test cases (input, expected output, visible/hidden to learner), "Chạy thử với lời giải" to verify every test passes before saving; validation "Cần ít nhất một bài kiểm thử".
@@ -318,7 +343,18 @@ Legend: **E** exists (refine), **N** new.
 
 **S04 Auth pages (E)** — Register, OTP verify, login, forgot, check email, reset, success. Key states: OTP wrong / expired / resend countdown; neutral "check email".
 
-**S04b Settings `/settings`, Profile `/profile` (E)** — Keep; profile course list links to S12.
+**S04b Settings `/settings`, Profile `/profile` (E)** — Keep; profile course list links to S12. Settings gains the "Tài khoản liên kết" section (Flow A3); Profile gains the "Hồ sơ năng lực" tab (S04c).
+
+**S04c Skill profile — tab "Hồ sơ năng lực" on `/profile` (N, Flow L14)** — Purpose: show what Codi infers from the learner's public GitHub, with evidence, and let the learner correct it. Private to the learner. Required info:
+- *Header:* GitHub avatar + "@{login}" (links out), "Phân tích lúc {ngày giờ} · {n} repo", primary "Phân tích lại" (disabled with next time during cooldown), overflow "Xoá hồ sơ năng lực".
+- *Tóm tắt:* estimated overall level using the onboarding self-assessed vocabulary (**Mới bắt đầu / Cơ bản / Vững**) + confidence chip (**Thấp / Trung bình / Cao**) + 2–3 sentence AI summary; a fixed note "Ước tính từ repo công khai — không phải điểm và không thay bài kiểm tra."
+- *Công nghệ:* grouped Ngôn ngữ · Framework & thư viện · Công cụ & hạ tầng; each row = name, usage level as a 3-step bar with text (**Đã thử / Dùng thường xuyên / Dùng sâu**), confidence, "{n} repo"; sorted by level; row expands to evidence (repo link, file or signal such as "`next` trong package.json", "có thư mục test", "có CI"); row actions "Sửa mức" and "Không đúng" (hides it, undo toast). Learner-edited rows carry "Bạn đã sửa".
+- *Mảng kiến thức:* chips (REST API, Xác thực, Cơ sở dữ liệu, Kiểm thử, CI/CD…) each with an evidence popover and "Không đúng".
+- *Repo đã phân tích:* list with language dot, last push, "Đã dùng" / "Bỏ qua: fork" / "Bỏ qua: trống" / "Bạn đã loại"; toggle "Không phải code của tôi".
+- *Dùng trong khoá học:* owned courses with "ước tính ban đầu cho {x}/{y} khái niệm" → links to S10; empty "Chưa áp dụng cho khoá nào".
+States: not connected (explainer of what is read + "Kết nối GitHub"), consent open (S04d), analysing (step checklist, leave-safe), ready, ready with learner edits, insufficient data, failed, connection expired, rate-limited (paused step), stale (> 90 days), re-analysing (old profile stays visible with a top progress line), deleting (confirm dialog listing what is removed and what stays). Exit: S10 of an affected course, Settings.
+
+**S04d Connect GitHub consent dialog (N, Flow L14)** — Purpose: informed consent before OAuth. Required: Codi + GitHub logos, "Codi sẽ đọc" list, "Codi sẽ không" list, delete/unlink note. Primary "Kết nối GitHub", secondary "Để sau". States: default, redirecting ("Đang mở GitHub…"), cancelled on GitHub (back with neutral note "Bạn chưa kết nối GitHub"), GitHub account already linked to another Codi account (error + "Dùng tài khoản GitHub khác").
 
 ### Learner — commerce
 **S05 Cart `/cart` (N)** — Purpose: review before paying. Required: items, prices, voucher, total. Primary: "Thanh toán". Secondary: remove, apply voucher, continue browsing. States: empty, items, voucher applied, voucher invalid, item already owned (auto-removed notice), pending order exists (resume banner).
@@ -356,7 +392,7 @@ Legend: **E** exists (refine), **N** new.
 
 **S11g Coding exercise (N, UC Submit Coding Exercise)** — instructions / editor / output panes; Run with Ctrl/⌘+Enter keycap; format code; test results list with Input · Expected · Received on failure. States: idle, running, runtime error, timeout, some tests failed, all passed, sandbox unavailable.
 
-**S12 Learner home `/dashboard` (E → rebuilt)** — Continue card, weekly goal tracker with study streak, skill badges row, stat tiles, "Cá nhân hoá lộ trình" card(s), my courses, empty state.
+**S12 Learner home `/dashboard` (E → rebuilt)** — Continue card, weekly goal tracker with study streak, skill badges row, stat tiles, "Cá nhân hoá lộ trình" card(s), one-time dismissible "Kết nối GitHub để Codi hiểu bạn nhanh hơn" card (Flow L14; hidden once connected or dismissed), my courses, empty state.
 
 **S13 Progress & results (N)** — tabs, per-course accordion, inline scores/grades/feedback, mastery. Links to S13b.
 
@@ -401,7 +437,7 @@ Legend: **E** exists (refine), **N** new.
 **S35 Vouchers list + form (N)**.
 
 ### Global
-**S40 Notifications (E bell → real)** — events: payment confirmed, assignment graded, question answered, publication approved/rejected, path updated (Q17: which events).
+**S40 Notifications (E bell → real)** — events: payment confirmed, assignment graded, question answered, publication approved/rejected, path updated, skill profile ready / failed (Flow L14) (Q17: which events).
 **S41 Role-aware header (E, changed)** — Learner: Khoá học, Học tập của tôi, AI; Lecturer: Giảng dạy; Admin: Quản trị. *(proposed; exact labels Q18)*
 
 ---
@@ -435,6 +471,8 @@ Legend: **E** exists (refine), **N** new.
 25. **AI answers are UI, not just prose**: course cards, comparison tables, code blocks, line references and timestamp links are interactive and lead to real actions.
 26. **AI → human hand-off is one click and keeps context**.
 27. **Graphs**: knowledge graphs use a layered left-to-right layout; selecting a node highlights its prerequisite path; zoom/fit/minimap; a list view is always available as the accessible equivalent.
+28. **Inferred ≠ measured**: anything estimated from GitHub carries the label "ước tính từ GitHub" wherever it appears (S04c, S09c, C4, knowledge map, path reasons) and is replaced by measured evidence as soon as a diagnostic answer, quiz or exercise covers that concept. Usage levels (Đã thử / Dùng thường xuyên / Dùng sâu) never reuse the 5-stop mastery scale, so the two cannot be confused.
+29. **The learner owns the profile**: every inferred item shows its evidence, can be corrected or hidden, and learner edits win over re-analysis; consent precedes any reading; delete and unlink each state exactly what is removed and what is kept.
 
 ---
 
@@ -751,6 +789,33 @@ Legend: **E** exists (refine), **N** new.
 **Decision:** ADAPT (zoom + path highlight together has no reference); REJECT free-form/3D clusters.
 **Evidence:** [Unity — prerequisite tree](https://mobbin.com/screens/d38cb5ea-aa49-49a6-b21d-27ab515bfe8a) · [Brilliant — prerequisite chain](https://mobbin.com/screens/34856cb4-4cb0-4248-ab60-d1d4bf64b665) · [Codecademy — builds toward](https://mobbin.com/screens/d5c43b15-4d4b-4c10-9eaf-33d1e9533e44) · [Twingate — layered graph + zoom](https://mobbin.com/screens/e936e96e-ccc9-45a6-8e1f-18e78d308cac)
 
+### Revision 2026-10-19 — GitHub skill profile patterns
+
+### Pattern: Own consent dialog before the provider's OAuth screen
+**Finding:** GitHub's authorize screen only lists scopes in GitHub's words ("Verify your GitHub identity", "Email addresses (read)"). Gemini adds its own "Connect GitHub?" dialog that says in plain language what will be read and how the data is used, with "No thanks" next to "Connect".
+**Decision:** ADOPT the product-side dialog (S04d) with explicit "Codi sẽ đọc / Codi sẽ không" lists; GitHub's screen stays as the second step.
+**Evidence:** [Google Gemini — Connect GitHub?](https://mobbin.com/screens/a594b59f-afd6-4ac1-8537-925c7d7a9106) · [Laravel Cloud — GitHub authorize](https://mobbin.com/screens/080902ea-69ea-45d6-a840-f3a6a3fdbf03) · [fal — GitHub authorize](https://mobbin.com/screens/faf59377-ea96-4279-82b2-cafa51825735)
+
+### Pattern: Linked-account row with "Connected as" and an overflow menu
+**Finding:** Laravel Cloud shows "Connected as @login" with a menu (Manage · Reauthorize · Disconnect); Codecademy and Greptile show an empty state with a single connect button per provider.
+**Decision:** ADAPT — one GitHub row with analysis time and menu (view profile, re-analyse, delete profile, unlink); the empty state explains the benefit, not only the provider.
+**Evidence:** [Laravel Cloud — connected accounts](https://mobbin.com/screens/ec08f97b-89fa-4bfa-a6b1-100c4bb488ed) · [Codecademy — linked accounts](https://mobbin.com/screens/c17daae4-32b7-4697-b493-ef41d3995481) · [Greptile — no accounts linked](https://mobbin.com/screens/76a8efb5-1976-43c6-a78e-c78b176fd4fc)
+
+### Pattern: Multi-step AI progress checklist, safe to leave
+**Finding:** AirOps shows a progress bar over named steps (done / running / pending) and says "Feel free to navigate away"; Gamma numbers the steps and offers Cancel.
+**Decision:** ADOPT named steps + leave-safe copy + completion notification; ADAPT a repo counter inside the reading step ("Đọc repo 7/12").
+**Evidence:** [AirOps — exploring prompts](https://mobbin.com/screens/eb7dfcde-15f6-4a4d-a133-0d10ab331a9f) · [Gamma — import steps](https://mobbin.com/screens/523d6c4f-ac58-44f7-9d7a-a9881cba40f7) · [Kajabi — creation wizard progress](https://mobbin.com/screens/2e01c0b8-2b25-491e-a7d1-992341cc9269)
+
+### Pattern: Strengths as sorted bars with recommendations
+**Finding:** Uxcel's "Knowledge summary" lists strengths and gaps as labelled horizontal bars and follows them with course recommendations; SchoolAI groups by level with a written AI insight beside it.
+**Decision:** ADAPT — sorted 3-step usage bars with text labels and an expandable evidence row; written AI summary at the top. REJECT XP-style "Level 3 · 945 XP to level up" bars (conflicts with the no-XP rule) and personality-style sliders against an average.
+**Evidence:** [Uxcel — knowledge summary](https://mobbin.com/screens/daffeb6d-766e-4521-9ab6-92f2359e2c70) · INSPIRATION [SchoolAI — levels + AI insights](https://mobbin.com/screens/7e71261b-469e-4bb4-bf36-68ff9d4aa7a9) · REJECT [Unity Learn — XP skill levels](https://mobbin.com/screens/90e21642-8418-4035-a9d7-336a1fff4eb3) · REJECT [Workable — trait sliders](https://mobbin.com/screens/71ee65d1-7086-4490-93ae-b4ad79f79524)
+
+### Pattern: Repository list with language dot and last update
+**Finding:** GitHub's own repository list pairs each repo with a language dot, stars and "Updated …", and labels forks ("Forked from …").
+**Decision:** ADOPT for "Repo đã phân tích", adding Codi's status ("Đã dùng" / "Bỏ qua: fork" / "Bạn đã loại"). Contribution heatmaps are not reused (they measure activity, not skill).
+**Evidence:** [GitHub — repositories tab](https://mobbin.com/screens/65b35d04-1e77-46b8-ac98-f18445810460) · INSPIRATION [GitHub — profile overview](https://mobbin.com/screens/8882d530-6a31-447c-93ef-2226d7bfef95)
+
 ---
 
 ## 9. Visual / Interaction Reference Board
@@ -853,6 +918,11 @@ Reference board, not a cloning brief. Keep Codi's own visual system (§2.4).
 | S11a Tutor voice | [MasterClass Class TA](https://mobbin.com/screens/cca209b4-b227-4c53-9837-a4e3ca064afb) | Socratic + lesson ref | Adopt |
 | S11a Chips | [Ferndesk chip](https://mobbin.com/screens/5eb452b6-b4f1-4594-ad7e-9a9ca9abd734) | removable context | Adopt |
 | S11a / S17 Stop | [Perplexity thinking](https://mobbin.com/screens/2460ef6c-5f63-45c8-8f73-8e95f3d904b7) | thinking + stop | Adopt |
+| S04d Consent | [Gemini Connect GitHub](https://mobbin.com/screens/a594b59f-afd6-4ac1-8537-925c7d7a9106) | plain-language read list before OAuth | Adopt |
+| A3 Linked accounts | [Laravel Cloud connected accounts](https://mobbin.com/screens/ec08f97b-89fa-4bfa-a6b1-100c4bb488ed) | "Connected as" + menu | Adapt |
+| S04c Analysing | [AirOps progress steps](https://mobbin.com/screens/eb7dfcde-15f6-4a4d-a133-0d10ab331a9f) | named steps, leave-safe copy | Adopt |
+| S04c Technologies | [Uxcel knowledge summary](https://mobbin.com/screens/daffeb6d-766e-4521-9ab6-92f2359e2c70) | sorted labelled bars | Adapt |
+| S04c Repo list | [GitHub repositories](https://mobbin.com/screens/65b35d04-1e77-46b8-ac98-f18445810460) | language dot, updated, fork label | Adopt |
 
 ---
 
@@ -926,6 +996,17 @@ Intentional unless an Open Question below overrides them.
 55. **Guests may use `/ai`**; personalisation (owned courses, progress, saved profile) only after sign-in. Intake answers are saved to the profile and reused by onboarding.
 56. **"Hỏi giảng viên"** from the AI tutor opens a **private message conversation** with the course lecturer, pre-filled with the AI context; multi-message, resolvable, reopenable; lecturer handles it in the Q&A inbox. (Maps to UC Post Course Question / Answer Course Question — a thread rather than a single answer.)
 
+*Added 2026-10-19 — GitHub skill profile:*
+
+57. Learners can link GitHub and get a **"Hồ sơ năng lực"** tab on `/profile`: technologies, knowledge areas and an estimated overall level, each backed by evidence from public repos.
+58. **Public repos only**, read-only, minimum GitHub scope; forks and empty repos are skipped automatically. Private repos are out of scope.
+59. Consent is shown in Codi's own dialog (S04d) before GitHub's screen. Connecting is always optional; nothing in Codi requires it.
+60. The profile is used **only to adjust the starting estimate (prior)** of matching concepts in a course. The estimate is capped: on its own it can raise a concept to at most "Đang học" — never "Thành thạo", never makes a lesson "có thể bỏ qua", never earns a skill badge, never counts toward any score. The diagnostic still runs and always takes precedence.
+61. GitHub estimates apply only to concepts with **no measured evidence yet**, are labelled "ước tính từ GitHub" everywhere, and are replaced by measured evidence as soon as it exists. Re-analysis, deletion and unlinking change only those still-unmeasured concepts.
+62. The learner can correct the profile (change level, hide item, exclude repo); learner edits win over later re-analysis. Re-analysis is limited to once per 24 h.
+63. The profile is **private to the learner** — lecturers and admins do not see it; lecturer analytics never use it.
+64. Deleting the profile and unlinking GitHub are separate actions in Settings; both remove the profile and its estimates but never measured results. A GitHub-only account must set a password before unlinking.
+
 
 ---
 
@@ -952,6 +1033,8 @@ Intentional unless an Open Question below overrides them.
 - **A6** One entry test per course.
 - **A7** Assignment submission (not grade) satisfies lesson completion.
 - **A8** Pending orders older than a threshold are shown to admins as "needs attention".
+- **A9** Dependencies, README and repo structure of up to ~15 recent non-fork repos are enough signal for a starting estimate; deep code analysis is not needed for a capped prior.
+- **A10** The overall level reuses the onboarding self-assessed values (Mới bắt đầu / Cơ bản / Vững) so a suggestion maps 1:1 onto that step.
 
 ### Open questions (need a human decision)
 - **Q1** Price is required for the lecturer's completeness check but owned by Admin. Options: (a) lecturer proposes a price, admin confirms; (b) move the price check to admin approval; (c) admin sets price before the lecturer can submit. *Recommendation: (a).*
@@ -990,6 +1073,9 @@ Intentional unless an Open Question below overrides them.
 - **Q29** Automatic content checks before admin review (copyright / sensitive keywords) — wanted, and is it advisory or blocking?
 - **Q30** When a lecturer edits a past grade, is the learner notified and is the old grade kept in history?
 - **Q31** Homepage secondary CTA "Cách Codi xếp lộ trình cho bạn" (audit) — explainer page, section, or video?
+- **Q35** Should the `/ai` advisor's "Codi đang hiểu về bạn" row also read the skill profile (e.g. "Công nghệ: React, Node · từ GitHub")? Currently not included.
+- **Q36** Exact cap for the GitHub prior per concept (decision 60 fixes the UX ceiling "Đang học"; the numeric BKT bound is an engineering choice to confirm).
+- **Q37** The UC model needs the new use cases "Link GitHub Account" and "Generate Skill Profile" (AI Service supporting) — who updates `UC-by-actor-plantuml`?
 
 ---
 
@@ -1007,3 +1093,4 @@ Intentional unless an Open Question below overrides them.
 - Changing the existing account/auth flows beyond the refinements listed.
 - Saving multi-course roadmaps from the `/ai` advisor (decision 54); the advisor itself is in scope (Flow L13).
 - General learner ↔ lecturer direct messaging outside a course lesson (conversations exist only as lesson-linked escalations, decision 56).
+- For the GitHub skill profile: private repos, GitLab/Bitbucket/LinkedIn/CV sources, code-quality scoring, plagiarism or AI-code detection, a public or shareable profile, and showing the profile to lecturers or admins (decisions 58, 63).
