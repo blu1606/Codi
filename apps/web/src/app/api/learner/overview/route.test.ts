@@ -27,6 +27,7 @@ import { GET, POST } from "./route";
 import { POST as heartbeat } from "../../learn/[courseId]/lessons/[lessonId]/activity/route";
 const origin = "https://codi.test";
 const lessonId = "c937bd55-1283-493e-bca0-31047cd80aa3";
+const trackerId = "19a88269-9c03-4c26-921d-bcecd007906b";
 const ctx = { params: Promise.resolve({ courseId: "owned", lessonId }) };
 const read = () =>
   new NextRequest(`${origin}/api/learner/overview?userId=victim`);
@@ -91,15 +92,24 @@ describe("learner overview HTTP boundaries", () => {
   );
   it("validates heartbeat payloads before touching the database", async () => {
     expect(
-      (await heartbeat(write({ active: true, seconds: 3600 }), ctx)).status,
+      (await heartbeat(write({ active: true, trackerId, seconds: 3600 }), ctx))
+        .status,
+    ).toBe(400);
+    expect((await heartbeat(write({ active: false }), ctx)).status).toBe(400);
+    expect(
+      (await heartbeat(write({ active: true, trackerId: "invalid" }), ctx))
+        .status,
     ).toBe(400);
     expect(mocks.heartbeat).not.toHaveBeenCalled();
-    expect((await heartbeat(write({ active: false }), ctx)).status).toBe(200);
+    expect(
+      (await heartbeat(write({ active: false, trackerId }), ctx)).status,
+    ).toBe(200);
     expect(mocks.heartbeat).toHaveBeenCalledWith(
       "viewer",
       "owned",
       lessonId,
       false,
+      trackerId,
     );
   });
   it("rejects forged dismiss commands", async () => {

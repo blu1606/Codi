@@ -11,7 +11,10 @@ import {
 } from "@codi-1/db/schema/learning";
 import { skills } from "@codi-1/db/schema/knowledge-map";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
-import { studentStudyDays } from "@codi-1/db/schema/study-activity";
+import {
+  studentStudyDays,
+  studentStudyClocks,
+} from "@codi-1/db/schema/study-activity";
 import { createOnboardingService } from "../src/lib/onboarding-service";
 import { createLearnerOverviewService } from "../src/lib/learner-overview-service";
 import { createStudyActivityService } from "../src/lib/study-activity-service";
@@ -38,23 +41,19 @@ async function main() {
         learner = `overview-${suffix}`,
         other = `overview-other-${suffix}`,
         empty = `overview-empty-${suffix}`;
-      await tx
-        .insert(user)
-        .values(
-          [learner, other, empty].map((id) => ({
-            id,
-            name: "Overview QA",
-            email: `${id}@example.invalid`,
-          })),
-        );
-      await tx
-        .insert(userRoles)
-        .values(
-          [learner, other, empty].map((userId) => ({
-            userId,
-            roleId: "LEARNER",
-          })),
-        );
+      await tx.insert(user).values(
+        [learner, other, empty].map((id) => ({
+          id,
+          name: "Overview QA",
+          email: `${id}@example.invalid`,
+        })),
+      );
+      await tx.insert(userRoles).values(
+        [learner, other, empty].map((userId) => ({
+          userId,
+          roleId: "LEARNER",
+        })),
+      );
       const f = await seedAssessmentFixture(tx, `overview-course-${suffix}`, [
         learner,
         other,
@@ -102,15 +101,16 @@ async function main() {
       let now = new Date("2026-10-19T03:00:00Z");
       const service = createLearnerOverviewService(database, () => now);
       const clock = createStudyActivityService(database, () => now);
+      const trackerA = randomUUID();
       step = "access, empty and ownership";
       assert.deepEqual((await service.get(empty)).courses, []);
       assert.equal((await service.get(learner)).courses.length, 2);
       await assert.rejects(
-        () => clock.heartbeat(empty, f.courseId, f.lessonId, true),
+        () => clock.heartbeat(empty, f.courseId, f.lessonId, true, trackerA),
         /chưa có quyền/,
       );
       await assert.rejects(
-        () => clock.heartbeat(other, f.courseId, f.lessonId, true),
+        () => clock.heartbeat(other, f.courseId, f.lessonId, true, trackerA),
         /thiết lập/,
       );
       await tx.update(user).set({ banned: true }).where(eq(user.id, learner));
@@ -126,39 +126,35 @@ async function main() {
       await tx.update(user).set({ banned: false }).where(eq(user.id, learner));
       step =
         "completion, latest attempt, submit-only coding and scoped grading";
-      await tx
-        .insert(lessonProgress)
-        .values([
-          {
-            enrollmentId: enrollment.id,
-            lessonId: f.lessonId,
-            status: "completed",
-            completedAt: now,
-            studiedAt: new Date("2026-10-18T03:00:00Z"),
-          },
-          ...complete.lessonIds.map((lessonId) => ({
-            enrollmentId: completed.id,
-            lessonId,
-            status: "completed" as const,
-            completedAt: now,
-            studiedAt: now,
-          })),
-        ]);
+      await tx.insert(lessonProgress).values([
+        {
+          enrollmentId: enrollment.id,
+          lessonId: f.lessonId,
+          status: "completed",
+          completedAt: now,
+          studiedAt: new Date("2026-10-18T03:00:00Z"),
+        },
+        ...complete.lessonIds.map((lessonId) => ({
+          enrollmentId: completed.id,
+          lessonId,
+          status: "completed" as const,
+          completedAt: now,
+          studiedAt: now,
+        })),
+      ]);
       const concepts = await tx
         .select()
         .from(skills)
         .where(eq(skills.courseId, f.courseId));
-      await tx
-        .insert(enrollmentSkillMastery)
-        .values(
-          concepts.map((s, i) => ({
-            enrollmentId: enrollment.id,
-            skillId: s.id,
-            pMastery: i ? 0.7 : 0.99,
-            evidenceCount: i ? 0 : 1,
-            correctCount: i ? 0 : 1,
-          })),
-        );
+      await tx.insert(enrollmentSkillMastery).values(
+        concepts.map((s, i) => ({
+          enrollmentId: enrollment.id,
+          skillId: s.id,
+          pMastery: i ? 0.7 : 0.99,
+          evidenceCount: i ? 0 : 1,
+          correctCount: i ? 0 : 1,
+        })),
+      );
       const submitted = {
         enrollmentId: enrollment.id,
         status: "graded" as const,
@@ -306,10 +302,10 @@ async function main() {
         before,
       );
       step = "server clock, overlapping tabs, stop, timeout and day split";
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
       now = new Date(now.getTime() + 30000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
       let [day] = await tx
         .select()
         .from(studentStudyDays)
@@ -321,11 +317,11 @@ async function main() {
         );
       assert.equal(day!.seconds, 3630);
       now = new Date(now.getTime() + 10000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, false);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, false, trackerA);
       now = new Date(now.getTime() + 30000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
       now = new Date(now.getTime() + 60000);
-      await clock.heartbeat(learner, f.courseId, f.lessonId, true);
+      await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
       [day] = await tx
         .select()
         .from(studentStudyDays)
@@ -336,6 +332,77 @@ async function main() {
           ),
         );
       assert.equal(day!.seconds, 3640);
+      for (const lessonB of [f.lessonIds[1]!, f.lessonId]) {
+        step = `obsolete stop after ownership transfer (${lessonB === f.lessonId ? "same" : "different"} lesson)`;
+        const trackerB = randomUUID();
+        await tx
+          .delete(studentStudyClocks)
+          .where(eq(studentStudyClocks.userId, learner));
+        const [beforeDay] = await tx
+          .select()
+          .from(studentStudyDays)
+          .where(
+            and(
+              eq(studentStudyDays.userId, learner),
+              eq(studentStudyDays.date, "2026-10-19"),
+            ),
+          );
+        const start = now.getTime();
+        await clock.heartbeat(learner, f.courseId, f.lessonId, true, trackerA);
+        now = new Date(start + 10000);
+        await clock.heartbeat(learner, f.courseId, lessonB, true, trackerB);
+        const [owned] = await tx
+          .select()
+          .from(studentStudyClocks)
+          .where(eq(studentStudyClocks.userId, learner));
+        now = new Date(start + 11000);
+        assert.deepEqual(
+          await clock.heartbeat(
+            learner,
+            f.courseId,
+            f.lessonId,
+            false,
+            trackerA,
+          ),
+          { recorded: false },
+        );
+        const [afterStop] = await tx
+          .select()
+          .from(studentStudyClocks)
+          .where(eq(studentStudyClocks.userId, learner));
+        assert.deepEqual(
+          afterStop,
+          owned,
+          "Delayed A stop must not change B's clock",
+        );
+        now = new Date(start + 40000);
+        await clock.heartbeat(learner, f.courseId, lessonB, true, trackerB);
+        const [afterDay] = await tx
+          .select()
+          .from(studentStudyDays)
+          .where(
+            and(
+              eq(studentStudyDays.userId, learner),
+              eq(studentStudyDays.date, "2026-10-19"),
+            ),
+          );
+        assert.equal(
+          afterDay!.seconds - beforeDay!.seconds,
+          40,
+          "B retains all 30 seconds after takeover without double counting",
+        );
+        now = new Date(start + 45000);
+        assert.deepEqual(
+          await clock.heartbeat(learner, f.courseId, lessonB, false, trackerB),
+          { recorded: true },
+        );
+        const [stopped] = await tx
+          .select()
+          .from(studentStudyClocks)
+          .where(eq(studentStudyClocks.userId, learner));
+        assert.equal(stopped!.lastSeenAt, null);
+        assert.equal(stopped!.trackerId, null);
+      }
       console.log(
         "Learner overview DB checks passed: ownership/roles, empty/hidden/suspended courses, completion, latest grades, run exclusion, scoped feedback/mastery, durable dismiss/undo, no progress mutation, weekly/streak and deduplicated active study time. All fixture rows roll back.",
       );

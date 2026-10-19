@@ -14,7 +14,12 @@ export class LearnerOverviewError extends Error {
     super(message);
   }
 }
-export const studyHeartbeat = z.object({ active: z.boolean() }).strict();
+export const studyHeartbeat = z
+  .object({
+    active: z.boolean(),
+    trackerId: z.uuid(),
+  })
+  .strict();
 export const overviewCommand = z.discriminatedUnion("type", [
   z
     .object({

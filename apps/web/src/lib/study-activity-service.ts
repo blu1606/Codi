@@ -17,6 +17,7 @@ export function createStudyActivityService(
       courseId: string,
       lessonId: string,
       active: boolean,
+      trackerId: string,
     ) {
       return db.transaction(async (tx) => {
         // All metrics stay behind exactly the same access guard as the player.
@@ -29,6 +30,15 @@ export function createStudyActivityService(
           .select()
           .from(studentStudyClocks)
           .where(eq(studentStudyClocks.userId, userId));
+        // A new focused tracker takes ownership, even on the same lesson. A delayed
+        // stop from the previous tab/effect must neither credit nor clear its clock.
+        if (
+          !active &&
+          (previous?.trackerId !== trackerId ||
+            previous.courseId !== courseId ||
+            previous.lessonId !== lessonId)
+        )
+          return { recorded: false };
         const credits = studyCredits(previous?.lastSeenAt ?? null, now);
         for (const credit of credits) {
           await tx
@@ -41,7 +51,12 @@ export function createStudyActivityService(
               },
             });
         }
-        const values = { courseId, lessonId, lastSeenAt: active ? now : null };
+        const values = {
+          courseId,
+          lessonId,
+          trackerId: active ? trackerId : null,
+          lastSeenAt: active ? now : null,
+        };
         await tx
           .insert(studentStudyClocks)
           .values({ userId, ...values })

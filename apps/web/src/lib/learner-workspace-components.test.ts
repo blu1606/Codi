@@ -11,6 +11,7 @@ import type {
   LearnerOverview,
 } from "./learner-overview-contract";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+const trackerId = "19a88269-9c03-4c26-921d-bcecd007906b";
 const mocks = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
@@ -203,8 +204,53 @@ describe("learner workspace states", () => {
   });
 });
 describe("study tracker", () => {
+  it("immediately resumes focus after a pending stop succeeds", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    let finishStop!: (value: Response) => void;
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response({ recorded: true }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finishStop = resolve;
+          }),
+      )
+      .mockResolvedValue(response({ recorded: true }));
+    vi.stubGlobal("fetch", fetcher);
+    await mount(
+      createElement(StudyActivityTracker, {
+        courseId: "owned",
+        lessonId: "lesson",
+      }),
+    );
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+    await act(async () => {
+      window.dispatchEvent(new Event("blur"));
+    });
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      finishStop(response({ recorded: true }));
+    });
+    // No interval advance: the focused clock resumes in the stop's finally block.
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(
+      fetcher.mock.calls.map((call) => JSON.parse(call[1].body).active),
+    ).toEqual([true, false, true]);
+    const ids = fetcher.mock.calls.map(
+      (call) => JSON.parse(call[1].body).trackerId,
+    );
+    expect(new Set(ids).size).toBe(1);
+    expect(ids[0]).toMatch(/^[0-9a-f-]{36}$/);
+  });
   it("serializes an in-flight start with blur and never submits browser durations", async () => {
     vi.useFakeTimers();
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(trackerId);
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
     let finish!: (value: Response) => void;
     const fetcher = vi
@@ -231,8 +277,8 @@ describe("study tracker", () => {
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls.map((call) => JSON.parse(call[1].body))).toEqual([
-      { active: true },
-      { active: false },
+      { active: true, trackerId },
+      { active: false, trackerId },
     ]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(90000);
@@ -240,6 +286,7 @@ describe("study tracker", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it("stops after unmount while a start is pending, without retry loops on a failed stop", async () => {
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(trackerId);
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
     let finish!: (value: Response) => void;
     const fetcher = vi
@@ -266,6 +313,50 @@ describe("study tracker", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
       active: false,
+      trackerId,
     });
   });
+  it.each(["blur", "unmount"])(
+    "never restarts after %s during a pending stop",
+    async (event) => {
+      vi.spyOn(document, "hasFocus").mockReturnValue(true);
+      let finishStop!: (value: Response) => void;
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(response({ recorded: true }))
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finishStop = resolve;
+            }),
+        )
+        .mockResolvedValue(response({ recorded: true }));
+      vi.stubGlobal("fetch", fetcher);
+      await mount(
+        createElement(StudyActivityTracker, {
+          courseId: "owned",
+          lessonId: "lesson",
+        }),
+      );
+      vi.mocked(document.hasFocus).mockReturnValue(false);
+      await act(async () => {
+        window.dispatchEvent(new Event("blur"));
+      });
+      vi.mocked(document.hasFocus).mockReturnValue(true);
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      await act(async () => {
+        if (event === "unmount") {
+          root!.unmount();
+          root = undefined;
+        } else {
+          vi.mocked(document.hasFocus).mockReturnValue(false);
+          window.dispatchEvent(new Event("blur"));
+        }
+        finishStop(response({ recorded: true }));
+      });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    },
+  );
 });

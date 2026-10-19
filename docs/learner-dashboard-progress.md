@@ -9,7 +9,7 @@ Implements [#102](https://github.com/blu1606/Codi/issues/102), under epic #94: m
 | No enrollments | Catalog/AI links, no fabricated course recommendations | Component test, browser empty states |
 | Continue learning | Owned, non-suspended courses; published lessons; existing `selectPath`, prerequisite guards and completion rules | Rollback DB verification, browser continue target |
 | Weekly goal and streak | Onboarding weekly minutes, Vietnam calendar week (Monday–Sunday); activity dates deduplicated; yesterday's streak remains until the day is missed | Contract tests, DB verification |
-| Study time | One server clock per learner, 30s heartbeat while the lesson document is visible/focused; gaps over 45s discarded; split at Vietnam midnight | Contract/tracker tests, DB stop/expiry checks, concurrent browser API requests |
+| Study time | One server clock per learner, owned by a unique mounted tracker; 30s heartbeat while visible/focused; gaps over 45s discarded; split at Vietnam midnight | Contract/tracker tests, ownership regressions for same/different-lesson tabs, DB stop/expiry checks, authenticated browser requests |
 | Mastery badges | Existing five-level BKT presentation; no evidence means level 0 | DB verification, escaped/text-labelled UI |
 | Diagnostic card | Default/ready/skipped only; durable enrollment-scoped dismiss and version-checked undo; real onboarding retake command | API/component/DB tests, browser CTA and reload |
 | Change goal | Dialog explains rearranging unfinished lessons; existing onboarding `goal-edit` command preserves grades/completed lessons | Browser confirmation/navigation; existing onboarding tests |
@@ -25,6 +25,8 @@ Study-time tracking starts with this change. Historical lesson duration estimate
 ## Migration
 
 `20261019121656_learner_study_activity` adds `student_study_days` and `student_study_clocks`, with RLS, foreign keys, per-user/day uniqueness and bounded daily seconds. It does not rewrite course, progress, grade or enrollment rows. Apply using the normal migration deployment workflow; never `db:push`.
+
+`20261019133900_study_tracker_ownership` adds nullable UUID `student_study_clocks.tracker_id`. Apply both migrations before deploying. Existing clocks with no owner can be claimed by a new heartbeat; stale stops cannot clear them. Updated clients send `{active, trackerId}`; old open clients must reload because requests without an instance ID are rejected. Tracker IDs are correlation IDs scoped to the authenticated user, not authentication credentials.
 
 ## Reproduce validation
 
@@ -74,7 +76,20 @@ The header hides its desktop-navigation wrapper below `md`; its empty flex gap o
 
 Screenshots contain explicit QA data, not production user records. Browser QA checks both learner screens at 375px for page-level overflow; the results table has its own accessible horizontal scroll region.
 
-Validation on 2026-10-19: 903 Vitest tests across 67 files passed; the affected component/API/contract checks were rerun after final changes (31 tests). Typecheck, production build and standards audit (0 violations) passed. Database rollback verification and the complete browser verification passed; QA records were cleaned up.
+Validation on 2026-10-19 after review fixes: 912 Vitest tests across 68 files passed with repository-configured coverage thresholds. Typecheck, production build and standards audit (0 violations) passed. Database rollback verification includes obsolete stops between same-lesson and different-lesson trackers; all fixture rows are rolled back.
+
+The authenticated Chromium verification also passed, including held-stop focus resumption, owner stop on client navigation, goal save/reopen and heatmap in both themes; all QA users/courses were cleaned up. Screenshots disable animations to capture settled theme colors.
+
+### PR #144 accounting race regressions
+
+- Pending stop → focus → successful stop completion immediately sends a new start. The client reconciles either direction only after success, preventing retry loops on network failures; blur/unmount still win over a queued focus. The new component regression failed against the previous implementation (two requests instead of three) and passes after correction.
+- At t=0 A starts, t=10 B takes ownership, t=11 A's delayed stop is ignored, t=40 B heartbeats. Both service tests and rollback DB tests assert that A cannot modify B's clock or credit another interval, and the total remains 40 seconds. Cases cover different lessons and two trackers on the same lesson. The owner's stop still credits the final interval and clears ownership.
+- The authenticated browser verification disables Playwright's always-focused emulation for the lesson/background tabs, holds the actual stop response, switches tabs back and verifies a resumed start within five seconds, before the next 30-second tick. It also exercises stale stops over HTTP, dashboard/progress/results, goal save/reopen, heatmap light/dark and learner mobile layouts. This is author QA; independent reviewer UI acceptance is still required.
+
+| Additional review state | Implementation |
+| --- | --- |
+| Saved weekly goal | [Dashboard](ui-review/issue-102/dashboard-goal-saved.png) |
+| Reopened goal retains choices | [Onboarding](ui-review/issue-102/onboarding-goal-reopened.png) |
 
 ### Profile heatmap follow-up
 

@@ -11,6 +11,7 @@ export default function StudyActivityTracker({
 }) {
   useEffect(() => {
     const endpoint = `/api/learn/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/activity`;
+    const trackerId = crypto.randomUUID();
     let pending = false,
       started = false,
       ended = false,
@@ -19,20 +20,26 @@ export default function StudyActivityTracker({
       desired = active;
       if (pending || (!active && !started)) return;
       pending = true;
+      let succeeded = false;
       try {
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ active }),
+          body: JSON.stringify({ active, trackerId }),
           keepalive: true,
         });
-        if (response.ok) started = active;
+        if (response.ok) {
+          started = active;
+          succeeded = true;
+        }
       } catch {
         /* Metrics never interrupt the lesson. No duration is guessed offline. */
       } finally {
         pending = false;
-        // A blur/unmount while a start request is in flight must still stop it.
-        if (active && started && (!desired || ended)) void ping(false);
+        // Reconcile either focus transition after a successful pending request.
+        // Failed requests wait for the next event/tick instead of retrying forever.
+        const next = desired && !ended;
+        if (succeeded && started !== next) void ping(next);
       }
     };
     const visible = () =>

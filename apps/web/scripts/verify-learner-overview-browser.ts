@@ -97,6 +97,7 @@ async function main() {
       await page.screenshot({
         path: resolve(out, `${name}.png`),
         fullPage: true,
+        animations: "disabled",
       });
     };
     const overflow = async () => {
@@ -268,16 +269,21 @@ async function main() {
       return f;
     });
     stage = "parallel study heartbeats";
+    const trackerA = randomUUID();
     await db.insert(studentStudyClocks).values({
       userId,
       courseId: ownedId,
       lessonId: f.lessonIds[1]!,
       lastSeenAt: new Date(Date.now() - 30000),
+      trackerId: trackerA,
     });
     const endpoint = `${origin}/api/learn/${ownedId}/lessons/${f.lessonIds[1]}/activity`;
     const heartbeats = await Promise.all(
       [true, true].map((active) =>
-        page.request.post(endpoint, { headers: { origin }, data: { active } }),
+        page.request.post(endpoint, {
+          headers: { origin },
+          data: { active, trackerId: trackerA },
+        }),
       ),
     );
     assert.ok(heartbeats.every((r: any) => r.status() === 200));
@@ -296,7 +302,7 @@ async function main() {
     );
     await page.request.post(endpoint, {
       headers: { origin },
-      data: { active: false },
+      data: { active: false, trackerId: trackerA },
     });
     stage = "dashboard populated and durable dismissal";
     await page.goto(`${origin}/dashboard`);
@@ -387,6 +393,139 @@ async function main() {
     await page.unroute("**/api/learner/overview");
     await page.getByRole("button", { name: "Thử lại", exact: true }).click();
     await page.getByText("90 phút / 300 phút", { exact: false }).waitFor();
+    stage = "delayed obsolete stops through authenticated HTTP";
+    for (const lessonB of [f.lessonIds[1]!, f.lessonId]) {
+      const trackerB = randomUUID();
+      const endpointB = `${origin}/api/learn/${ownedId}/lessons/${lessonB}/activity`;
+      const send = async (url: string, trackerId: string, active: boolean) => {
+        const r = await page.request.post(url, {
+          headers: { origin },
+          data: { trackerId, active },
+        });
+        assert.equal(r.status(), 200);
+        return r.json();
+      };
+      await send(endpoint, trackerA, true);
+      await send(endpointB, trackerB, true);
+      // Move only this QA clock back, so the real HTTP service must retain and
+      // credit B's interval after A's obsolete stop, without a 30-second sleep.
+      await db
+        .update(studentStudyClocks)
+        .set({ lastSeenAt: new Date(Date.now() - 30000) })
+        .where(eq(studentStudyClocks.userId, userId));
+      const [owned] = await db
+        .select()
+        .from(studentStudyClocks)
+        .where(eq(studentStudyClocks.userId, userId));
+      assert.deepEqual(await send(endpoint, trackerA, false), {
+        recorded: false,
+      });
+      const [afterStop] = await db
+        .select()
+        .from(studentStudyClocks)
+        .where(eq(studentStudyClocks.userId, userId));
+      assert.deepEqual(afterStop, owned);
+      await send(endpointB, trackerB, true);
+      await send(endpointB, trackerB, false);
+    }
+    stage = "real lesson tracker focus while stop response is held";
+    const isActivity = (r: any, active: boolean) =>
+      r.url() === endpoint &&
+      r.request().method() === "POST" &&
+      r.request().postDataJSON()?.active === active;
+    const initialStart = page.waitForResponse((r: any) => isActivity(r, true));
+    void initialStart.catch(() => {});
+    await page.goto(`${origin}/learn/${ownedId}/${f.lessonIds[1]}`);
+    await page.bringToFront();
+    assert.equal((await initialStart).status(), 200);
+    console.log("Study QA: actual lesson start accepted.");
+    let releaseStop!: () => void, stopProcessed!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseStop = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      stopProcessed = resolve;
+    });
+    let heldOnce = false;
+    const holdStop = async (route: any) => {
+      if (route.request().postDataJSON().active || heldOnce)
+        return route.continue();
+      heldOnce = true;
+      const result = await route.fetch();
+      assert.equal(result.status(), 200);
+      stopProcessed();
+      await release;
+      await route.fulfill({ response: result });
+    };
+    await page.route(endpoint, holdStop);
+    // Playwright enables always-focused emulation by default. Disable it so
+    // Chromium emits real focus/blur events when switching between these tabs.
+    const lessonCdp = await context.newCDPSession(page);
+    await lessonCdp.send("Emulation.setFocusEmulationEnabled", {
+      enabled: false,
+    });
+    const background = await context.newPage();
+    await (
+      await context.newCDPSession(background)
+    ).send("Emulation.setFocusEmulationEnabled", { enabled: false });
+    try {
+      await background.bringToFront();
+      await Promise.race([
+        held,
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Lesson did not stop on blur")),
+            10000,
+          ),
+        ),
+      ]);
+      await page.bringToFront();
+      assert.equal(await page.evaluate(() => document.hasFocus()), true);
+      const resumed = page.waitForResponse((r: any) => isActivity(r, true), {
+        timeout: 5000,
+      });
+      releaseStop();
+      const resumedResponse = await resumed;
+      assert.equal(resumedResponse.status(), 200);
+      const [resumedClock] = await db
+        .select()
+        .from(studentStudyClocks)
+        .where(eq(studentStudyClocks.userId, userId));
+      assert.equal(
+        resumedClock!.trackerId,
+        resumedResponse.request().postDataJSON().trackerId,
+      );
+      assert.ok(
+        resumedClock!.lastSeenAt,
+        "Focus resumes immediately, before the next heartbeat tick",
+      );
+      console.log(
+        "Study QA: held stop completed, focused lesson immediately resumed.",
+      );
+    } finally {
+      releaseStop();
+      await page.unroute(endpoint, holdStop);
+      await background.close();
+      await lessonCdp.detach();
+    }
+    stage = "lesson tracker unmount";
+    const lessonStop = page.waitForResponse((r: any) => isActivity(r, false));
+    void lessonStop.catch(() => {});
+    // Use client navigation so React actually unmounts the tracker.
+    await page
+      .getByRole("link", { name: "Về lộ trình", exact: true })
+      .first()
+      .click();
+    assert.equal((await lessonStop).status(), 200);
+    console.log("Study QA: lesson unmount stopped the owning tracker.");
+    await page.goto(`${origin}/dashboard`);
+    // Restore only this QA account's fixture duration for the goal UI assertions.
+    await db
+      .update(studentStudyDays)
+      .set({ seconds: 5400 })
+      .where(eq(studentStudyDays.userId, userId));
+    await page.reload();
+    await page.getByText("90 phút / 300 phút", { exact: false }).waitFor();
     stage = "goal editing and continue link";
     const continueLink = page.getByRole("link", {
       name: "Học tiếp",
@@ -405,9 +544,106 @@ async function main() {
       .getByRole("button", { name: "Chỉnh mục tiêu", exact: true })
       .click();
     await page.waitForURL(`**/learn/${ownedId}/onboarding`);
+    // These controlled radios update after the server saves the choice.
+    // check() requires a synchronous change, so click and await persisted UI state.
+    const chooseGoal = async (label: string) => {
+      await page.getByRole("radio", { name: label, exact: true }).click();
+      await page.waitForFunction(
+        (label: string) =>
+          [...document.querySelectorAll("label")].some(
+            (el) =>
+              el.textContent?.trim() === label &&
+              el.querySelector("input")?.checked,
+          ),
+        label,
+      );
+    };
+    await chooseGoal("Hoàn thành khóa học");
+    await page.getByRole("button", { name: "Tiếp tục", exact: true }).click();
+    await chooseGoal("Đã biết cơ bản");
+    await page.getByRole("button", { name: "Tiếp tục", exact: true }).click();
+    await chooseGoal("10 giờ mỗi tuần");
+    await page
+      .getByRole("button", { name: "Lưu và xếp lại lộ trình", exact: true })
+      .click();
+    await page
+      .getByText("Đã lưu mục tiêu. Codi đang xếp lại lộ trình.", {
+        exact: true,
+      })
+      .waitFor();
+    await page.goto(`${origin}/dashboard`);
+    await page.getByText("90 phút / 600 phút", { exact: false }).waitFor();
+    await screenshot("dashboard-goal-saved");
+    await page
+      .getByRole("button", { name: "Chỉnh mục tiêu", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Chỉnh mục tiêu", exact: true })
+      .click();
+    await page.waitForURL(`**/learn/${ownedId}/onboarding`);
+    assert.equal(
+      await page
+        .getByRole("radio", { name: "Hoàn thành khóa học", exact: true })
+        .isChecked(),
+      true,
+    );
+    await page.getByRole("button", { name: "Tiếp tục", exact: true }).click();
+    assert.equal(
+      await page
+        .getByRole("radio", { name: "Đã biết cơ bản", exact: true })
+        .isChecked(),
+      true,
+    );
+    await page.getByRole("button", { name: "Tiếp tục", exact: true }).click();
+    assert.equal(
+      await page
+        .getByRole("radio", { name: "10 giờ mỗi tuần", exact: true })
+        .isChecked(),
+      true,
+    );
+    await screenshot("onboarding-goal-reopened");
+    await page
+      .getByRole("button", { name: "Huỷ chỉnh sửa", exact: true })
+      .click();
+    stage = "authenticated profile heatmap light/dark";
+    await page.goto(`${origin}/profile`);
+    const heatmap = page
+      .locator('[data-slot="card"]')
+      .filter({ has: page.getByText(/contributions in \d{4}/) });
+    await heatmap.waitFor();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((theme: string) => {
+        localStorage.setItem("theme", theme);
+        document.documentElement.classList.toggle("dark", theme === "dark");
+      }, theme);
+      const colors = await heatmap.evaluate((el: HTMLElement) => {
+        const empty = [
+          ...el.querySelectorAll<HTMLElement>("span[title]"),
+        ].filter((cell) => cell.classList.contains("bg-muted"));
+        return {
+          count: empty.length,
+          visible: empty.every(
+            (cell) =>
+              cell.getBoundingClientRect().width > 0 &&
+              cell.getBoundingClientRect().height > 0,
+          ),
+          fill: getComputedStyle(empty[0]!).backgroundColor,
+          background: getComputedStyle(el).backgroundColor,
+          legend: getComputedStyle(el.querySelector("i")!).backgroundColor,
+        };
+      });
+      assert.ok(colors.count > 300 && colors.visible);
+      assert.notEqual(colors.fill, colors.background);
+      assert.equal(colors.fill, colors.legend);
+      await heatmap.screenshot({
+        path: resolve(out, `profile-heatmap-${theme}.png`),
+        animations: "disabled",
+      });
+    }
     assert.equal(errors.length, 0, errors.join("; "));
     console.log(
-      "Browser QA passed: empty/populated dashboards, latest grades and feedback, active/done tabs, diagnostic CTA/durable dismiss, goal editing, retry, light/dark and 375px layouts with no page overflow or browser errors.",
+      "Browser QA passed: delayed stop/focus resumes immediately, obsolete stops preserve same/different-lesson clocks via real HTTP, authenticated dashboard/progress/results, goal save/reopen, heatmap light/dark, empty/loading/retry, diagnostic CTA/durable dismiss and 375px layouts without browser errors or page overflow.",
     );
   } catch (error) {
     console.error(
