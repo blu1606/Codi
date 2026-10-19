@@ -24,7 +24,7 @@ export class BuyNowError extends Error {
 export async function createBuyNowOrder(
   db: Database,
   userId: string,
-  courseIdOrSlug: string,
+  courseIdOrSlug: string
 ): Promise<BuyNowResult> {
   // 1. Role Guard
   await requireRole(db, userId, ROLE.LEARNER);
@@ -39,7 +39,9 @@ export async function createBuyNowOrder(
       status: courses.status,
     })
     .from(courses)
-    .where(eq(courses.id, courseIdOrSlug))
+    .where(
+      eq(courses.id, courseIdOrSlug)
+    )
     .limit(1);
 
   let targetCourse = course;
@@ -72,12 +74,7 @@ export async function createBuyNowOrder(
   const [enrollment] = await db
     .select({ id: studentEnrollments.id })
     .from(studentEnrollments)
-    .where(
-      and(
-        eq(studentEnrollments.userId, userId),
-        eq(studentEnrollments.courseId, targetCourse.id),
-      ),
-    )
+    .where(and(eq(studentEnrollments.userId, userId), eq(studentEnrollments.courseId, targetCourse.id)))
     .limit(1);
 
   if (enrollment) {
@@ -97,8 +94,8 @@ export async function createBuyNowOrder(
       and(
         eq(orders.userId, userId),
         eq(orders.status, "pending"),
-        eq(orderItems.courseId, targetCourse.id),
-      ),
+        eq(orderItems.courseId, targetCourse.id)
+      )
     )
     .limit(1);
 
@@ -122,8 +119,8 @@ export async function createBuyNowOrder(
       and(
         eq(studentTransactions.userId, userId),
         eq(studentTransactions.status, "pending"),
-        eq(studentTransactions.courseId, targetCourse.id),
-      ),
+        eq(studentTransactions.courseId, targetCourse.id)
+      )
     )
     .limit(1);
 
@@ -139,83 +136,94 @@ export async function createBuyNowOrder(
     };
   }
 
-  // 5. Create new Buy Now single-course order (D14 / D4: isBuyNow=true, voucherId=null, cart untouched)
+  // 5. Create new Buy Now single-course order (D4: is_buy_now=true, voucherId=null, cart untouched)
   const paymentDeadline = new Date(Date.now() + 30 * 60 * 1000); // 30 mins
 
-  let newOrder: { id: number; code: string } | null = null;
-  let attempts = 0;
+  // Atomically generate code and create order + items + events + transaction
+  return await db.transaction(async (tx) => {
+    let newOrder: { id: number; code: string } | null = null;
+    let attempts = 0;
 
-  while (attempts < 5) {
-    attempts++;
-    const orderCode = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
+    while (attempts < 5) {
+      attempts++;
+      const orderCode = `CODI${Math.floor(10000 + Math.random() * 90000)}`;
 
-    const [existingOrder] = await db
-      .select({ id: orders.id })
-      .from(orders)
-      .where(eq(orders.code, orderCode))
-      .limit(1);
+      // Check if order code already exists in orders OR studentTransactions
+      const [existingOrder] = await tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.code, orderCode))
+        .limit(1);
 
-    if (existingOrder) continue;
+      if (existingOrder) continue;
 
-    const [existingStudentTx] = await db
-      .select({ id: studentTransactions.id })
-      .from(studentTransactions)
-      .where(eq(studentTransactions.id, orderCode))
-      .limit(1);
+      const [existingStudentTx] = await tx
+        .select({ id: studentTransactions.id })
+        .from(studentTransactions)
+        .where(eq(studentTransactions.id, orderCode))
+        .limit(1);
 
-    if (existingStudentTx) continue;
+      if (existingStudentTx) continue;
 
-    const [created] = await db
-      .insert(orders)
-      .values({
-        code: orderCode,
-        userId,
-        voucherId: null, // D14: no voucher
-        subtotal: targetCourse.price,
-        discountAmount: 0,
-        totalAmount: targetCourse.price,
-        receivedAmount: 0,
-        currency: "VND",
-        status: "pending",
-        isBuyNow: true, // D14: is_buy_now = true
-        paymentDeadline,
-      })
-      .returning({ id: orders.id, code: orders.code });
+      const [created] = await tx
+        .insert(orders)
+        .values({
+          code: orderCode,
+          userId,
+          voucherId: null, // D4: no voucher
+          subtotal: targetCourse.price,
+          discountAmount: 0,
+          totalAmount: targetCourse.price,
+          receivedAmount: 0,
+          currency: "VND",
+          status: "pending",
+          isBuyNow: true, // D4: is_buy_now = true
+          paymentDeadline,
+        })
+        .returning({ id: orders.id, code: orders.code });
 
-    if (created) {
-      newOrder = created;
-      break;
+      if (created) {
+        newOrder = created;
+        break;
+      }
     }
-  }
 
-  if (!newOrder) {
-    throw new BuyNowError(500, "Không thể tạo mã đơn hàng duy nhất. Vui lòng thử lại.");
-  }
+    if (!newOrder) {
+      throw new BuyNowError(500, "Không thể tạo mã đơn hàng duy nhất. Vui lòng thử lại.");
+    }
 
-  // Insert order item
-  await db.insert(orderItems).values({
-    orderId: newOrder.id,
-    courseId: targetCourse.id,
-    courseTitle: targetCourse.title,
-    unitPrice: targetCourse.price,
+    // Insert order item
+    await tx.insert(orderItems).values({
+      orderId: newOrder.id,
+      courseId: targetCourse.id,
+      courseTitle: targetCourse.title,
+      unitPrice: targetCourse.price,
+    });
+
+    // Insert timeline event
+    await tx.insert(orderEvents).values({
+      orderId: newOrder.id,
+      label: "Đã tạo đơn",
+      actorId: userId,
+    });
+
+    // Also record in studentTransactions for payment polling compatibility
+    await tx.insert(studentTransactions).values({
+      id: newOrder.code,
+      userId,
+      courseId: targetCourse.id,
+      amount: targetCourse.price,
+      status: "pending",
+    });
+
+    return {
+      orderId: newOrder.id,
+      orderCode: newOrder.code,
+      courseId: targetCourse.id,
+      courseTitle: targetCourse.title,
+      courseSlug: targetCourse.slug,
+      price: targetCourse.price,
+      isExisting: false,
+    };
   });
-
-  // Also record in studentTransactions for payment polling compatibility
-  await db.insert(studentTransactions).values({
-    id: newOrder.code,
-    userId,
-    courseId: targetCourse.id,
-    amount: targetCourse.price,
-    status: "pending",
-  });
-
-  return {
-    orderId: newOrder.id,
-    orderCode: newOrder.code,
-    courseId: targetCourse.id,
-    courseTitle: targetCourse.title,
-    courseSlug: targetCourse.slug,
-    price: targetCourse.price,
-    isExisting: false,
-  };
 }

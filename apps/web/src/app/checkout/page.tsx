@@ -1,60 +1,53 @@
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
+import { and, eq } from "drizzle-orm";
 import { courses, orders, orderItems } from "@codi-1/db";
-import { studentTransactions } from "@codi-1/db/schema/student-profile";
-import { db } from "@/services";
+import { auth, db } from "@/services";
 
 export default async function CheckoutRedirectPage({
   searchParams,
 }: {
   searchParams: Promise<{ order?: string }>;
 }) {
-  const { order: orderParam } = await searchParams;
-  if (!orderParam || typeof orderParam !== "string") {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  const { order: orderCode } = await searchParams;
+  if (!orderCode || typeof orderCode !== "string") {
     redirect("/courses");
   }
 
-  const trimmed = orderParam.trim();
-  const orderIdNum = Number(trimmed);
+  const trimmedCode = orderCode.trim();
 
-  // 1. If numeric orderId, query orders by id
-  if (!Number.isNaN(orderIdNum) && orderIdNum > 0) {
-    const [rowById] = await db
-      .select({ slug: courses.slug, code: orders.code })
-      .from(orders)
-      .innerJoin(orderItems, eq(orderItems.orderId, orders.id))
-      .innerJoin(courses, eq(courses.id, orderItems.courseId))
-      .where(eq(orders.id, orderIdNum))
-      .limit(1);
-
-    if (rowById?.slug) {
-      redirect(`/courses/${rowById.slug}/checkout?order=${encodeURIComponent(rowById.code)}`);
-    }
+  if (!session?.user) {
+    redirect(`/login?next=${encodeURIComponent(`/checkout?order=${trimmedCode}`)}`);
   }
 
-  // 2. Query orders by order code (e.g. CODI12345)
-  const [rowByCode] = await db
-    .select({ slug: courses.slug, code: orders.code })
+  // Find course slug from order scoped to the current user
+  const [row] = await db
+    .select({ slug: courses.slug })
     .from(orders)
     .innerJoin(orderItems, eq(orderItems.orderId, orders.id))
     .innerJoin(courses, eq(courses.id, orderItems.courseId))
-    .where(eq(orders.code, trimmed))
+    .where(and(eq(orders.code, trimmedCode), eq(orders.userId, session.user.id)))
     .limit(1);
 
-  if (rowByCode?.slug) {
-    redirect(`/courses/${rowByCode.slug}/checkout?order=${encodeURIComponent(rowByCode.code)}`);
+  if (row?.slug) {
+    redirect(`/courses/${row.slug}/checkout?order=${encodeURIComponent(trimmedCode)}`);
   }
 
-  // 3. Fallback to legacy studentTransactions
+  // Fallback to legacy studentTransactions scoped to the current user
+  const { studentTransactions } = await import("@codi-1/db/schema/student-profile");
   const [txRow] = await db
-    .select({ slug: courses.slug, id: studentTransactions.id })
+    .select({ slug: courses.slug })
     .from(studentTransactions)
     .innerJoin(courses, eq(courses.id, studentTransactions.courseId))
-    .where(eq(studentTransactions.id, trimmed))
+    .where(and(eq(studentTransactions.id, trimmedCode), eq(studentTransactions.userId, session.user.id)))
     .limit(1);
 
   if (txRow?.slug) {
-    redirect(`/courses/${txRow.slug}/checkout?order=${encodeURIComponent(txRow.id)}`);
+    redirect(`/courses/${txRow.slug}/checkout?order=${encodeURIComponent(trimmedCode)}`);
   }
 
   // Fallback to courses catalog if order not found

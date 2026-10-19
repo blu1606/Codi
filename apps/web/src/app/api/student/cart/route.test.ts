@@ -268,3 +268,36 @@ describe("DELETE /api/student/cart", () => {
     expect(res.status).toBe(500);
   });
 });
+
+describe("GET /api/student/cart", () => {
+  it("returns count 0 and empty items for unauthenticated visitors", async () => {
+    mocks.getSession.mockResolvedValue(null);
+    const res = await GET(getRequest());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(0);
+    expect(body.items).toEqual([]);
+  });
+
+  it("returns user cart items and count when authenticated", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
+    mocks.getCartSummary.mockResolvedValueOnce({
+      items: [
+        { id: "c-1", title: "C1", price: 100000 },
+        { id: "c-2", title: "C2", price: 200000 },
+      ],
+      subtotal: 300000,
+      discount: 0,
+      total: 300000,
+      voucher: null,
+      removedOwnedTitles: [],
+      pendingOrder: null,
+    });
+    const res = await GET(getRequest());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(2);
+    expect(body.itemIds).toEqual(["c-1", "c-2"]);
+    expect(body.total).toBe(300000);
+  });
+});

@@ -1,6 +1,8 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
+import { studentCart } from "@codi-1/db/schema/student-profile";
 import { addCourseToCart } from "@/lib/add-course-to-cart";
 import { getCartSummary, removeFromCart } from "@/lib/cart-service";
 import { auth, db } from "@/services";
@@ -9,7 +11,17 @@ export async function GET(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user) {
-      return NextResponse.json({ error: "Vui lòng đăng nhập" }, { status: 401 });
+      return NextResponse.json({
+        items: [],
+        itemIds: [],
+        count: 0,
+        subtotal: 0,
+        discount: 0,
+        total: 0,
+        voucher: null,
+        removedOwnedTitles: [],
+        pendingOrder: null,
+      });
     }
     const userId = session.user.id;
     await requireRole(db, userId, ROLE.LEARNER);
@@ -18,7 +30,14 @@ export async function GET(request: Request) {
     const voucherCode = searchParams.get("voucher") || undefined;
 
     const summary = await getCartSummary(db, userId, voucherCode);
-    return NextResponse.json(summary, { status: 200 });
+    return NextResponse.json(
+      {
+        ...summary,
+        count: summary.items.length,
+        itemIds: summary.items.map((it) => it.id),
+      },
+      { status: 200 },
+    );
   } catch (error) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: "Chỉ học viên mới có thể xem giỏ hàng" }, { status: 403 });
