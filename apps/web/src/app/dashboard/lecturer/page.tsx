@@ -13,7 +13,7 @@ import {
 
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
-import { buttonVariants } from "@codi-1/ui/components/button";
+import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
 import {
   Empty,
@@ -26,6 +26,7 @@ import {
 import { StatusBadge } from "@codi-1/ui/components/status-badge";
 import { cn } from "@codi-1/ui/lib/utils";
 import { auth, db } from "@/services";
+import { COURSE_LEVEL_LABELS, type CourseLevel } from "@/lib/course-constants";
 import { getLecturerCourses, getLecturerDashboardStats } from "./actions";
 
 export default async function LecturerDashboardPage() {
@@ -68,66 +69,69 @@ export default async function LecturerDashboardPage() {
           </AlertTitle>
           <AlertDescription className="mt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span>Lý do từ chối: {rejectedCourseAlert.rejectReason}</span>
-            <Link
-              href={`/dashboard/lecturer/courses/${rejectedCourseAlert.id}`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0 gap-1.5")}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              className="shrink-0 gap-1.5 cursor-not-allowed opacity-70"
+              title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
             >
               Sửa và gửi lại
               <ArrowRight className="size-3.5" />
-            </Link>
+            </Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {/* 3 Thẻ việc cần làm chính (Link tới hàng đợi có bộ lọc) */}
+      {/* 3 Thẻ việc cần làm chính */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link href="/dashboard/lecturer/grading" className="group">
-          <Card className="h-full border border-border/80 transition-all hover:border-primary/50 hover:shadow-sm">
-            <CardContent className="p-5 flex flex-col justify-between h-full space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Bài chờ chấm</span>
-                <ClipboardCheck className="size-4 text-primary" />
-              </div>
-              <div className="text-3xl font-bold tracking-tight">{counts.grading}</div>
-              <div className="flex items-center text-xs font-medium text-primary group-hover:underline">
-                Mở hàng chờ chấm
-                <ArrowRight className="size-3 ml-1 transition-transform group-hover:translate-x-0.5" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+        <Card className="h-full border border-border/80">
+          <CardContent className="p-5 flex flex-col justify-between h-full space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Bài chờ chấm</span>
+              <ClipboardCheck className="size-4 text-primary" />
+            </div>
+            <div className="text-3xl font-bold tracking-tight">{counts.grading}</div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Hàng chờ chấm</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground">
+                Sắp ra mắt
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-        <Link href="/dashboard/lecturer/questions?status=unanswered" className="group">
-          <Card className="h-full border border-border/80 transition-all hover:border-primary/50 hover:shadow-sm">
-            <CardContent className="p-5 flex flex-col justify-between h-full space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Câu hỏi chưa trả lời</span>
-                <MessageCircle className="size-4 text-primary" />
-              </div>
-              <div className="text-3xl font-bold tracking-tight">{counts.questions}</div>
-              <div className="flex items-center text-xs font-medium text-primary group-hover:underline">
-                Trả lời học viên
-                <ArrowRight className="size-3 ml-1 transition-transform group-hover:translate-x-0.5" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+        <Card className="h-full border border-border/80">
+          <CardContent className="p-5 flex flex-col justify-between h-full space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Câu hỏi chưa trả lời</span>
+              <MessageCircle className="size-4 text-primary" />
+            </div>
+            <div className="text-3xl font-bold tracking-tight">{counts.questions}</div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Hỏi đáp học viên</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground">
+                Sắp ra mắt
+              </span>
+            </div>
+          </CardContent>
+        </Card>
 
-        <Link href="/dashboard/lecturer/reviews?filter=unreplied" className="group">
-          <Card className="h-full border border-border/80 transition-all hover:border-primary/50 hover:shadow-sm">
-            <CardContent className="p-5 flex flex-col justify-between h-full space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Đánh giá chưa phản hồi</span>
-                <Star className="size-4 text-primary" />
-              </div>
-              <div className="text-3xl font-bold tracking-tight">{counts.reviews}</div>
-              <div className="flex items-center text-xs font-medium text-primary group-hover:underline">
-                Phản hồi đánh giá
-                <ArrowRight className="size-3 ml-1 transition-transform group-hover:translate-x-0.5" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+        <Card className="h-full border border-border/80">
+          <CardContent className="p-5 flex flex-col justify-between h-full space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Đánh giá chưa phản hồi</span>
+              <Star className="size-4 text-primary" />
+            </div>
+            <div className="text-3xl font-bold tracking-tight">{counts.reviews}</div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Phản hồi học viên</span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground">
+                Sắp ra mắt
+              </span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 4 Thẻ phân loại khoá học theo trạng thái */}
@@ -231,12 +235,9 @@ export default async function LecturerDashboardPage() {
                 <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      <Link
-                        href={`/dashboard/lecturer/courses/${c.id}`}
-                        className="font-semibold text-foreground hover:text-primary transition-colors text-base"
-                      >
+                      <span className="font-semibold text-foreground text-base">
                         {c.title}
-                      </Link>
+                      </span>
                       <StatusBadge kind="course" status={c.status} />
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -246,7 +247,7 @@ export default async function LecturerDashboardPage() {
                       <span>•</span>
                       <span>{c.learnersCount} học viên</span>
                       <span>•</span>
-                      <span>Trình độ: {c.level}</span>
+                      <span>Trình độ: {COURSE_LEVEL_LABELS[c.level as CourseLevel] || c.level}</span>
                     </div>
 
                     {c.status === "rejected" && c.rejectReason && (
@@ -264,20 +265,26 @@ export default async function LecturerDashboardPage() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     {c.status === "rejected" ? (
-                      <Link
-                        href={`/dashboard/lecturer/courses/${c.id}`}
-                        className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1")}
+                      <Button
+                        variant="default"
+                        size="sm"
+                        disabled
+                        className="gap-1 cursor-not-allowed opacity-70"
+                        title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
                       >
                         Sửa và gửi lại
-                      </Link>
+                      </Button>
                     ) : (
-                      <Link
-                        href={`/dashboard/lecturer/courses/${c.id}`}
-                        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1")}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                        className="gap-1 cursor-not-allowed opacity-70"
+                        title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
                       >
                         Mở
                         <ArrowRight className="size-3.5" />
-                      </Link>
+                      </Button>
                     )}
                   </div>
                 </CardContent>

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { ArrowRight, BookOpen, Plus } from "lucide-react";
 
 import { getActiveRoles, ROLE } from "@codi-1/auth";
-import { buttonVariants } from "@codi-1/ui/components/button";
+import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
 import {
   Empty,
@@ -17,7 +17,12 @@ import { StatusBadge } from "@codi-1/ui/components/status-badge";
 import { cn } from "@codi-1/ui/lib/utils";
 import { auth, db } from "@/services";
 import {
+  COURSE_LEVEL_LABELS,
+  COURSE_STATUSES,
+  type CourseLevel,
   type CourseStatusType,
+} from "@/lib/course-constants";
+import {
   getLecturerCourses,
   getLecturerDashboardStats,
 } from "../actions";
@@ -34,17 +39,23 @@ export default async function LecturerCoursesPage({ searchParams }: CoursesPageP
   if (!active.includes(ROLE.LECTURER)) redirect("/dashboard");
 
   const resolvedParams = await searchParams;
-  const currentStatus = (resolvedParams.status || "all") as CourseStatusType | "all";
+  const rawStatus = resolvedParams.status;
+  const currentStatus: CourseStatusType | "all" =
+    rawStatus && COURSE_STATUSES.includes(rawStatus as CourseStatusType)
+      ? (rawStatus as CourseStatusType)
+      : "all";
 
   const { counts } = await getLecturerDashboardStats();
-  const allCourses = await getLecturerCourses("all");
-  const filteredCourses =
-    currentStatus === "all"
-      ? allCourses
-      : allCourses.filter((c) => c.status === currentStatus);
+  const filteredCourses = await getLecturerCourses(currentStatus);
+  const totalCount =
+    counts.byStatus.draft +
+    counts.byStatus.pending +
+    counts.byStatus.rejected +
+    counts.byStatus.published +
+    counts.byStatus.hidden;
 
   const tabs: Array<{ status: CourseStatusType | "all"; label: string; count: number }> = [
-    { status: "all", label: "Tất cả", count: allCourses.length },
+    { status: "all", label: "Tất cả", count: totalCount },
     { status: "draft", label: "Bản nháp", count: counts.byStatus.draft },
     { status: "pending", label: "Chờ duyệt", count: counts.byStatus.pending },
     { status: "rejected", label: "Bị từ chối", count: counts.byStatus.rejected },
@@ -121,7 +132,7 @@ export default async function LecturerCoursesPage({ searchParams }: CoursesPageP
                 <EmptyDescription>
                   {currentStatus === "all"
                     ? "Bạn chưa có khoá học nào. Hãy bấm 'Tạo khóa học' để bắt đầu."
-                    : `Hiện tại bạn không có khoá học nào ở trạng thái "${tabs.find((t) => t.status === currentStatus)?.label}".`}
+                    : `Hiện tại bạn không có khoá học nào ở trạng thái "${tabs.find((t) => t.status === currentStatus)?.label || "này"}".`}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -134,12 +145,9 @@ export default async function LecturerCoursesPage({ searchParams }: CoursesPageP
               <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <Link
-                      href={`/dashboard/lecturer/courses/${c.id}`}
-                      className="font-semibold text-foreground hover:text-primary transition-colors text-base"
-                    >
+                    <span className="font-semibold text-foreground text-base">
                       {c.title}
-                    </Link>
+                    </span>
                     <StatusBadge kind="course" status={c.status} />
                   </div>
                   <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -151,7 +159,7 @@ export default async function LecturerCoursesPage({ searchParams }: CoursesPageP
                     <span>•</span>
                     <span>Danh mục: {c.category}</span>
                     <span>•</span>
-                    <span>Trình độ: {c.level}</span>
+                    <span>Trình độ: {COURSE_LEVEL_LABELS[c.level as CourseLevel] || c.level}</span>
                   </div>
 
                   {c.status === "rejected" && c.rejectReason && (
@@ -169,20 +177,26 @@ export default async function LecturerCoursesPage({ searchParams }: CoursesPageP
 
                 <div className="flex items-center gap-2 shrink-0">
                   {c.status === "rejected" ? (
-                    <Link
-                      href={`/dashboard/lecturer/courses/${c.id}`}
-                      className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1")}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled
+                      className="gap-1 cursor-not-allowed opacity-70"
+                      title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
                     >
                       Sửa và gửi lại
-                    </Link>
+                    </Button>
                   ) : (
-                    <Link
-                      href={`/dashboard/lecturer/courses/${c.id}`}
-                      className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1")}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      className="gap-1 cursor-not-allowed opacity-70"
+                      title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
                     >
                       Mở
                       <ArrowRight className="size-3.5" />
-                    </Link>
+                    </Button>
                   )}
                 </div>
               </CardContent>

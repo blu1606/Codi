@@ -1,10 +1,9 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-import { requireRole, ROLE } from "@codi-1/auth";
 import {
   aiContentDrafts,
   aiDraftStatus,
@@ -21,9 +20,13 @@ import {
   courseStatus,
   studentEnrollments,
 } from "@codi-1/db";
-import { auth, db } from "@/services";
+import { db } from "@/services";
+import { verifyLecturerSession } from "@/lib/lecturer-auth";
+import { COURSE_STATUSES, type CourseStatusType } from "@/lib/course-constants";
+import { createCourseSchema, type CreateCourseInput } from "@/lib/course-schema";
+import { generateUniqueCourseSlug } from "@/lib/course-slug";
 
-export type CourseStatusType = "draft" | "pending" | "rejected" | "published" | "hidden";
+export type { CourseStatusType, CreateCourseInput };
 
 export interface LecturerCounts {
   grading: number;
@@ -55,29 +58,10 @@ export interface LecturerCourseItem {
   updatedAt: string;
 }
 
-export interface CreateCourseInput {
-  title: string;
-  summary: string;
-  category: string;
-  level: string;
-}
-
 export interface CreateCourseResult {
   success: boolean;
   courseId?: string;
   errors?: Record<string, string>;
-}
-
-/**
- * Xác thực phiên đăng nhập và đảm bảo người dùng có quyền LECTURER.
- */
-export async function verifyLecturerSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    throw new Error("Unauthorized");
-  }
-  await requireRole(db, session.user.id, ROLE.LECTURER);
-  return session.user;
 }
 
 /**
@@ -210,6 +194,11 @@ export async function getLecturerCourses(
 ): Promise<LecturerCourseItem[]> {
   const user = await verifyLecturerSession();
 
+  const isFiltered =
+    Boolean(filterStatus) &&
+    filterStatus !== "all" &&
+    COURSE_STATUSES.includes(filterStatus as CourseStatusType);
+
   let query = db
     .select({
       id: courses.id,
@@ -225,8 +214,8 @@ export async function getLecturerCourses(
     })
     .from(courses)
     .where(
-      filterStatus && filterStatus !== "all"
-        ? and(eq(courses.instructorId, user.id), eq(courses.status, filterStatus))
+      isFiltered
+        ? and(eq(courses.instructorId, user.id), eq(courses.status, filterStatus as CourseStatusType))
         : eq(courses.instructorId, user.id)
     )
     .orderBy(desc(courses.createdAt));
@@ -321,84 +310,70 @@ export async function getLecturerCourses(
 }
 
 /**
- * Hàm hỗ trợ tạo slug chuẩn SEO không dấu từ tiêu đề.
- */
-export function generateSlug(title: string): string {
-  return title
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/**
  * Tạo một khoá học tối giản mới ở trạng thái Bản nháp (draft).
  */
 export async function createCourseDraft(
-  input: CreateCourseInput
+  input: unknown
 ): Promise<CreateCourseResult> {
   const user = await verifyLecturerSession();
 
-  const errors: Record<string, string> = {};
-
-  const title = input.title?.trim() || "";
-  const summary = input.summary?.trim() || "";
-  const category = input.category?.trim() || "";
-  const level = input.level?.trim() || "";
-
-  if (title.length < 5) {
-    errors.title = "Tên khoá học cần ít nhất 5 ký tự.";
-  }
-  if (summary.length < 20) {
-    errors.summary = "Mô tả cần ít nhất 20 ký tự.";
-  }
-  if (!category) {
-    errors.category = "Chọn một danh mục.";
-  }
-  if (!level) {
-    errors.level = "Chọn trình độ.";
-  }
-
-  if (Object.keys(errors).length > 0) {
+  const parseResult = createCourseSchema.safeParse(input);
+  if (!parseResult.success) {
+    const fieldErrors = parseResult.error.flatten().fieldErrors;
+    const errors: Record<string, string> = {};
+    for (const [k, v] of Object.entries(fieldErrors)) {
+      if (v && v.length > 0) {
+        errors[k] = v[0];
+      }
+    }
     return { success: false, errors };
   }
 
-  const courseId = `course-${Date.now().toString(36)}`;
-  const slugBase = generateSlug(title);
-  const slug = `${slugBase}-${courseId.slice(-4)}`;
+  const { title, summary, category, level } = parseResult.data;
+  const courseId = `course-${randomUUID()}`;
 
-  await db.transaction(async (tx) => {
-    // 1. Thêm khoá học vào bảng courses
-    await tx.insert(courses).values({
-      id: courseId,
-      slug,
-      title,
-      description: summary,
-      category,
-      level,
-      duration: "0 giờ",
-      price: 0,
-      instructorId: user.id,
-      status: "draft",
-      knowledgeMapStatus: "empty",
-    });
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const slug = generateUniqueCourseSlug(title);
+    try {
+      await db.transaction(async (tx) => {
+        // 1. Thêm khoá học vào bảng courses
+        await tx.insert(courses).values({
+          id: courseId,
+          slug,
+          title,
+          description: summary,
+          category,
+          level,
+          duration: "0 giờ",
+          price: 0,
+          instructorId: user.id,
+          status: "draft",
+          knowledgeMapStatus: "empty",
+        });
 
-    // 2. Khởi tạo bản ghi course_details
-    await tx.insert(courseDetails).values({
-      courseId,
-      learningOutcomes: [],
-      requirements: [],
-    });
-  });
+        // 2. Khởi tạo bản ghi course_details
+        await tx.insert(courseDetails).values({
+          courseId,
+          learningOutcomes: [],
+          requirements: [],
+        });
+      });
 
-  revalidatePath("/dashboard/lecturer");
-  revalidatePath("/dashboard/lecturer/courses");
+      revalidatePath("/dashboard/lecturer");
+      revalidatePath("/dashboard/lecturer/courses");
 
-  return { success: true, courseId };
+      return { success: true, courseId };
+    } catch (err: any) {
+      lastError = err;
+      if (err?.code === "23505" || err?.message?.includes("unique")) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error("Không thể tạo slug duy nhất cho khoá học.");
 }
 
 /**
@@ -431,27 +406,24 @@ export async function decideAiCourseDraft(
 ): Promise<{ success: boolean }> {
   const user = await verifyLecturerSession();
 
-  const [draft] = await db
-    .select()
-    .from(aiContentDrafts)
-    .where(
-      and(
-        eq(aiContentDrafts.id, draftId),
-        eq(aiContentDrafts.lecturerId, user.id)
-      )
-    );
-
-  if (!draft) {
-    throw new Error("Bản nháp AI không tồn tại hoặc không thuộc quyền quản lý của bạn.");
-  }
-
-  await db
+  const updated = await db
     .update(aiContentDrafts)
     .set({
       status: decision,
       decidedAt: new Date(),
     })
-    .where(eq(aiContentDrafts.id, draftId));
+    .where(
+      and(
+        eq(aiContentDrafts.id, draftId),
+        eq(aiContentDrafts.lecturerId, user.id),
+        eq(aiContentDrafts.status, "pending")
+      )
+    )
+    .returning({ id: aiContentDrafts.id });
+
+  if (updated.length === 0) {
+    throw new Error("Bản nháp AI không tồn tại, đã được xử lý hoặc không thuộc quyền quản lý của bạn.");
+  }
 
   return { success: true };
 }

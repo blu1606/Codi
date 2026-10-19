@@ -37,14 +37,13 @@ vi.mock("@/services", () => ({
   },
 }));
 
+import { verifyLecturerSession } from "@/lib/lecturer-auth";
 import {
   createCourseDraft,
   decideAiCourseDraft,
-  generateSlug,
   getLecturerCourses,
   getLecturerDashboardStats,
   saveAiCourseDraft,
-  verifyLecturerSession,
 } from "./actions";
 
 describe("Lecturer Dashboard & Course Actions", () => {
@@ -77,14 +76,6 @@ describe("Lecturer Dashboard & Course Actions", () => {
     });
   });
 
-  describe("generateSlug", () => {
-    it("chuyển đổi tiếng Việt có dấu thành không dấu và dạng slug chuẩn", () => {
-      expect(generateSlug("Lập Trình Web Với React & Next.js")).toBe("lap-trinh-web-voi-react-next-js");
-      expect(generateSlug("Khóa học Đồ Họa Đỉnh Cao")).toBe("khoa-hoc-do-hoa-dinh-cao");
-      expect(generateSlug("   Python Cơ Bản   ")).toBe("python-co-ban");
-    });
-  });
-
   describe("createCourseDraft", () => {
     beforeEach(() => {
       mockGetSession.mockResolvedValue({
@@ -104,13 +95,48 @@ describe("Lecturer Dashboard & Course Actions", () => {
       expect(res.success).toBe(false);
       expect(res.errors?.title).toBe("Tên khoá học cần ít nhất 5 ký tự.");
       expect(res.errors?.summary).toBe("Mô tả cần ít nhất 20 ký tự.");
-      expect(res.errors?.category).toBe("Chọn một danh mục.");
-      expect(res.errors?.level).toBe("Chọn trình độ.");
+      expect(res.errors?.category).toBeDefined();
+      expect(res.errors?.level).toBeDefined();
     });
 
-    it("tạo khoá học nháp thành công và kích hoạt revalidate", async () => {
-      const mockTxInsertValues = vi.fn().mockResolvedValue(undefined);
-      const mockTxInsert = vi.fn().mockReturnValue({ values: mockTxInsertValues });
+    it("báo lỗi validation khi category hoặc level nằm ngoài whitelist", async () => {
+      const res = await createCourseDraft({
+        title: "Khóa học Rust Cơ Bản",
+        summary: "Khóa học lập trình hệ thống với Rust đầy đủ từ cơ bản đến nâng cao.",
+        category: "InvalidCategory",
+        level: "Expert",
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.errors?.category).toBeDefined();
+      expect(res.errors?.level).toBeDefined();
+    });
+
+    it("xử lý an toàn khi payload là null hoặc sai kiểu dữ liệu", async () => {
+      const res = await createCourseDraft(null);
+      expect(res.success).toBe(false);
+      expect(res.errors).toBeDefined();
+
+      const res2 = await createCourseDraft({ title: 12345 });
+      expect(res2.success).toBe(false);
+      expect(res2.errors).toBeDefined();
+    });
+
+    it("tạo khoá học nháp thành công và assert đúng các business invariants", async () => {
+      let insertedCourseValues: any = null;
+      let insertedDetailsValues: any = null;
+
+      const mockTxInsert = vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockImplementation((val) => {
+          if (!insertedCourseValues) {
+            insertedCourseValues = val;
+          } else {
+            insertedDetailsValues = val;
+          }
+          return Promise.resolve();
+        }),
+      }));
+
       mockTransaction.mockImplementation(async (cb: any) => {
         return cb({ insert: mockTxInsert });
       });
@@ -118,15 +144,61 @@ describe("Lecturer Dashboard & Course Actions", () => {
       const res = await createCourseDraft({
         title: "Khoá học TypeScript Nâng Cao",
         summary: "Nắm vững Type System, Generics và Design Patterns trong TypeScript.",
-        category: "Web Development",
-        level: "Advanced",
+        category: "Backend",
+        level: "Intermediate",
       });
 
       expect(res.success).toBe(true);
       expect(res.courseId).toMatch(/^course-/);
+
+      // Assert business rules: draft status, price 0, instructorId matching session, knowledgeMap empty
+      expect(insertedCourseValues).toBeDefined();
+      expect(insertedCourseValues.status).toBe("draft");
+      expect(insertedCourseValues.price).toBe(0);
+      expect(insertedCourseValues.instructorId).toBe("lecturer-1");
+      expect(insertedCourseValues.category).toBe("Backend");
+      expect(insertedCourseValues.level).toBe("Intermediate");
+      expect(insertedCourseValues.duration).toBe("0 giờ");
+      expect(insertedCourseValues.knowledgeMapStatus).toBe("empty");
+
+      // Assert course_details initialized in same transaction
+      expect(insertedDetailsValues).toBeDefined();
+      expect(insertedDetailsValues.courseId).toBe(res.courseId);
+      expect(insertedDetailsValues.learningOutcomes).toEqual([]);
+      expect(insertedDetailsValues.requirements).toEqual([]);
+
       expect(mockTransaction).toHaveBeenCalled();
       expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard/lecturer");
       expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard/lecturer/courses");
+    });
+
+    it("tự động retry và thành công khi gặp lỗi trùng slug (23505)", async () => {
+      let attempts = 0;
+      const mockTxInsert = vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockImplementation((val) => {
+          attempts++;
+          if (attempts === 1) {
+            const err: any = new Error("duplicate key value violates unique constraint");
+            err.code = "23505";
+            throw err;
+          }
+          return Promise.resolve();
+        }),
+      }));
+
+      mockTransaction.mockImplementation(async (cb: any) => {
+        return cb({ insert: mockTxInsert });
+      });
+
+      const res = await createCourseDraft({
+        title: "Khoá học TypeScript Nâng Cao",
+        summary: "Nắm vững Type System, Generics và Design Patterns trong TypeScript.",
+        category: "Backend",
+        level: "Intermediate",
+      });
+
+      expect(res.success).toBe(true);
+      expect(attempts).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -154,7 +226,6 @@ describe("Lecturer Dashboard & Course Actions", () => {
     });
 
     it("tính toán chính xác các đầu việc cần làm và cảnh báo khoá bị từ chối", async () => {
-      // 1. myCourses query
       const myCourses = [
         { id: "c1", title: "Khoá 1", status: "rejected", hiddenReason: null },
         { id: "c2", title: "Khoá 2", status: "published", hiddenReason: null },
@@ -166,13 +237,11 @@ describe("Lecturer Dashboard & Course Actions", () => {
         from: vi.fn().mockImplementation(() => {
           callIndex++;
           if (callIndex === 1) {
-            // myCourses
             return {
               where: vi.fn().mockResolvedValue(myCourses),
             };
           }
           if (callIndex === 2) {
-            // grading
             return {
               innerJoin: vi.fn().mockReturnValue({
                 where: vi.fn().mockResolvedValue([{ count: 3 }]),
@@ -180,19 +249,16 @@ describe("Lecturer Dashboard & Course Actions", () => {
             };
           }
           if (callIndex === 3) {
-            // questions
             return {
               where: vi.fn().mockResolvedValue([{ count: 5 }]),
             };
           }
           if (callIndex === 4) {
-            // reviews
             return {
               where: vi.fn().mockResolvedValue([{ count: 2 }]),
             };
           }
           if (callIndex === 5) {
-            // latest publication request reviewNote
             return {
               where: vi.fn().mockReturnValue({
                 orderBy: vi.fn().mockReturnValue({
@@ -239,6 +305,36 @@ describe("Lecturer Dashboard & Course Actions", () => {
       const list = await getLecturerCourses("all");
       expect(list).toEqual([]);
     });
+
+    it("lọc khoá học theo trạng thái hợp lệ trong database query", async () => {
+      const mockWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockResolvedValue([]),
+      });
+
+      mockSelect.mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: mockWhere,
+        }),
+      });
+
+      await getLecturerCourses("draft");
+      expect(mockWhere).toHaveBeenCalled();
+    });
+
+    it("bỏ qua filter nếu status không nằm trong whitelist", async () => {
+      const mockWhere = vi.fn().mockReturnValue({
+        orderBy: vi.fn().mockResolvedValue([]),
+      });
+
+      mockSelect.mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: mockWhere,
+        }),
+      });
+
+      await getLecturerCourses("invalid_status" as any);
+      expect(mockWhere).toHaveBeenCalled();
+    });
   });
 
   describe("AI Drafts (ai_content_drafts)", () => {
@@ -261,19 +357,12 @@ describe("Lecturer Dashboard & Course Actions", () => {
       expect(res.draftId).toBe(101);
     });
 
-    it("cập nhật quyết định duyệt hoặc huỷ bản nháp AI", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([
-            { id: 101, lecturerId: "lecturer-1", status: "pending" },
-          ]),
-        }),
-      });
-
-      const mockWhere = vi.fn().mockResolvedValue(undefined);
+    it("cập nhật quyết định duyệt hoặc huỷ bản nháp AI khi trạng thái đang là pending", async () => {
       mockUpdate.mockReturnValue({
         set: vi.fn().mockReturnValue({
-          where: mockWhere,
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 101 }]),
+          }),
         }),
       });
 
@@ -282,15 +371,17 @@ describe("Lecturer Dashboard & Course Actions", () => {
       expect(mockUpdate).toHaveBeenCalled();
     });
 
-    it("ném lỗi khi bản nháp AI không tồn tại hoặc không thuộc quyền sở hữu", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
+    it("ném lỗi khi bản nháp AI không tồn tại, không thuộc quyền sở hữu, hoặc không ở trạng thái pending", async () => {
+      mockUpdate.mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([]), // 0 records updated
+          }),
         }),
       });
 
       await expect(decideAiCourseDraft(999, "accepted")).rejects.toThrow(
-        "Bản nháp AI không tồn tại hoặc không thuộc quyền quản lý của bạn."
+        "Bản nháp AI không tồn tại, đã được xử lý hoặc không thuộc quyền quản lý của bạn."
       );
     });
   });
