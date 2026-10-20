@@ -71,11 +71,13 @@ async function context(
         const parsed = JSON.parse(activity.metadata);
         if (parsed?.draft && Object.keys(parsed.draft).length > 0) {
           enrollment.goalDraft = parsed.draft;
-          // Persist back to enrollment
-          await store
-            .update(studentEnrollments)
-            .set({ goalDraft: parsed.draft })
-            .where(eq(studentEnrollments.id, enrollment.id));
+          // Only persist back to enrollment if running inside an exclusive writable transaction
+          if (lock) {
+            await store
+              .update(studentEnrollments)
+              .set({ goalDraft: parsed.draft })
+              .where(eq(studentEnrollments.id, enrollment.id));
+          }
         }
       }
     } catch {
