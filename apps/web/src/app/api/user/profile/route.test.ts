@@ -75,6 +75,22 @@ describe("PATCH /api/user/profile", () => {
     expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 
+  it.each(["Nguyen Van A", "  Nguyen Van A  "])("từ chối tên chưa thay đổi sau khi trim: %s", async (name) => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1", name: "Nguyen Van A", email: "learner@codi.vn" },
+    });
+
+    const response = await PATCH(createJsonRequest({ name }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Tên hiển thị chưa thay đổi" });
+    expect(mockGetSession).toHaveBeenCalledWith({
+      headers: expect.any(Headers),
+      query: { disableCookieCache: true },
+    });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
   it("cập nhật thành công, gọi Better Auth với name đã trim và trả về 200", async () => {
     // Arrange
     const rawName = "  Tran Thi B  ";
