@@ -634,15 +634,7 @@ export async function saveQuizData(
   if (lessonId !== "entry") await requireCourseLesson(courseId, lessonId);
 
   await db.transaction(async (tx) => {
-    // 2. Nếu là bài kiểm tra đầu vào, bỏ flag isDiagnostic ở các quiz khác của khoá (tối đa 1 bài/khoá)
-    if (isEntry) {
-      await tx
-        .update(assessments)
-        .set({ isDiagnostic: false })
-        .where(and(eq(assessments.courseId, courseId), eq(assessments.isDiagnostic, true)));
-    }
-
-    // 3. Tìm hoặc tạo assessment
+    // 2. Tìm hoặc tạo assessment; giữ nguyên cờ diagnostic của bài đầu vào hiện có.
     let [existingAssessment] = await tx
       .select()
       .from(assessments)
@@ -687,7 +679,7 @@ export async function saveQuizData(
       assessmentId = newAssessment.id;
     }
 
-    // 4. Lưu từng câu hỏi và các lựa chọn
+    // 3. Lưu từng câu hỏi và các lựa chọn
     for (let pos = 0; pos < input.questions.length; pos++) {
       const q = input.questions[pos];
       const [insertedQ] = await tx
