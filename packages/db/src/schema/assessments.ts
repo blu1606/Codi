@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { courses } from "./courses";
 import { courseLessons } from "./course-content";
@@ -92,11 +92,16 @@ export const assessmentSubmissions = pgTable.withRLS("assessment_submissions", {
   mode: submissionMode("mode"),
   // Text answer, or the submitted code for coding exercises.
   answerText: text("answer_text"),
+  codingRun: jsonb("coding_run").$type<{ phase: "done" | "syntax" | "runtime" | "timeout"; logs: string[]; durationMs: number; line: number | null; solutionViewed?: boolean; solutionEligible?: boolean; sampleDurationMs?: number }>(),
   fileUrl: text("file_url"),
   fileName: text("file_name"),
   linkUrl: text("link_url"),
+  // Pending submissions retain their submitted content while the learner edits a replacement.
+  assignmentDraft: jsonb("assignment_draft").$type<{ linkUrl: string; answerText: string; fileKey: string | null; fileName: string | null }>(),
   status: submissionStatus("status").default("draft").notNull(),
   score: numeric("score", { precision: 6, scale: 2, mode: "number" }),
+  // Rounded correct-question percentage (mockup §10), before score scaling/decimal storage.
+  quizPercent: integer("quiz_percent"),
   isPassed: boolean("is_passed"),
   isLate: boolean("is_late").default(false).notNull(),
   // UC-29: lecturer grade and feedback; editing a past grade keeps the same row.
@@ -112,6 +117,7 @@ export const assessmentSubmissions = pgTable.withRLS("assessment_submissions", {
   index("submissions_grading_queue_idx").on(table.status, table.submittedAt),
   check("submissions_attempt_check", sql`${table.attempt} > 0`),
   check("submissions_quiz_revision_check", sql`${table.quizRevision} IS NULL OR ${table.quizRevision} > 0`),
+  check("submissions_quiz_percent_check", sql`${table.quizPercent} IS NULL OR ${table.quizPercent} BETWEEN 0 AND 100`),
   check("submissions_submitted_check", sql`${table.status} = 'draft' OR ${table.submittedAt} IS NOT NULL`),
   check("submissions_graded_check", sql`${table.status} <> 'graded' OR ${table.score} IS NOT NULL`),
 ]);

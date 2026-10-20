@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CourseDetailError, fetchCourseDetail, formatLessonDuration } from "./course-details";
+import { CourseDetailError, fetchCourseDetail, formatLessonDuration, getLessonTypeMeta } from "./course-details";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -26,4 +26,19 @@ describe("course detail API client", () => {
   it.each([[0, ""], [59, "0:59"], [60, "1:00"], [3661, "1:01:01"]])("formats lesson duration %i as %s", (seconds, expected) => {
     expect(formatLessonDuration(seconds)).toBe(expected);
   });
+
+  it.each([
+    ["Quiz 1: Kiến thức cơ bản", "quiz", "Quiz"],
+    ["Bài tập thực hành về nhà", "assignment", "Bài tập"],
+    ["Thử thách code thuật toán", "code", "Bài code"],
+    ["Hướng dẫn cài đặt môi trường", "tutorial", "Hướng dẫn code"],
+    ["Slide bài giảng chương 1 (PDF)", "pdf", "Slide/PDF"],
+    ["Đọc thêm: Tài liệu chính thức", "reading", "Bài đọc"],
+    ["Video giới thiệu khóa học", "video", "Video"],
+  ])("maps '%s' to type %s with label '%s'", (title, expectedType, expectedLabel) => {
+    const meta = getLessonTypeMeta(title);
+    expect(meta.type).toBe(expectedType);
+    expect(meta.label).toBe(expectedLabel);
+  });
 });
+

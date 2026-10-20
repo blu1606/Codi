@@ -73,6 +73,7 @@ export const pathProposalOutput = pathProposal.extend({
     .max(1000),
 });
 export type PathLesson = {
+  kind?: import("./lesson-kind").LessonKind;
   id: string;
   title: string;
   chapterId: string;

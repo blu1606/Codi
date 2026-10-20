@@ -80,6 +80,12 @@ export function createAuth(env: AuthConfig, database: Database) {
       enabled: true,
       revokeSessionsOnPasswordReset: true,
     },
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google", "github"],
+      },
+    },
     secret: env.BETTER_AUTH_SECRET,
     hooks: {
       before: createAuthMiddleware(async (ctx) => {

@@ -21,15 +21,20 @@ interface CheckoutPageProps {
   params: Promise<{
     slug: string;
   }>;
+  searchParams?: Promise<{
+    order?: string;
+  }>;
 }
 
 const PAYMENT_METHODS = [
   { id: "vietqr", name: "Chuyển khoản / Ứng dụng ngân hàng", icon: "/codi.png", qr: "" },
 ];
 
-export default function CheckoutPage({ params }: CheckoutPageProps) {
+export default function CheckoutPage({ params, searchParams }: CheckoutPageProps) {
   const router = useRouter();
   const { slug } = use(params);
+  const resolvedSearchParams = searchParams ? use(searchParams) : undefined;
+  const orderCode = resolvedSearchParams?.order;
   
   const { data: session, isPending } = authClient.useSession();
   const [selectedMethod, setSelectedMethod] = useState(PAYMENT_METHODS[0]);
@@ -46,11 +51,11 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
     setOrder(null);
     setError(null);
     setIsPaid(false);
-    createCheckoutOrder(slug)
+    createCheckoutOrder(slug, orderCode)
       .then((data) => { if (active) setOrder(data); })
       .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Không thể tạo thanh toán."); });
     return () => { active = false; };
-  }, [session?.user.id, slug, attempt]);
+  }, [session?.user.id, slug, orderCode, attempt]);
 
   useEffect(() => {
     if (!transactionId || isPaid) return;
@@ -80,7 +85,8 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
   if (isPending) return <div className="p-8 text-center">Đang tải...</div>;
 
   if (!session?.user) {
-    router.push("/login");
+    const nextUrl = `/courses/${slug}/checkout${orderCode ? `?order=${encodeURIComponent(orderCode)}` : ""}`;
+    router.push(`/login?next=${encodeURIComponent(nextUrl)}`);
     return null;
   }
 
@@ -197,7 +203,19 @@ export default function CheckoutPage({ params }: CheckoutPageProps) {
           </Card>
 
           <div className="mt-6 flex justify-end items-center gap-4">
-            <Button variant="outline" render={<Link href={`/courses/${slug}`} />} nativeButton={false}>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (transactionId) {
+                  await fetch("/api/orders/cancel", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ orderCode: transactionId }),
+                  }).catch(() => {});
+                }
+                router.push(`/courses/${encodeURIComponent(slug)}`);
+              }}
+            >
               Hủy giao dịch
             </Button>
           </div>

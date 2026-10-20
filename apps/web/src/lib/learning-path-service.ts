@@ -16,7 +16,10 @@ import { courses } from "@codi-1/db/schema/courses";
 import {
   courseChapters,
   courseLessons,
+  lessonMaterials,
 } from "@codi-1/db/schema/course-content";
+import { codingExercises } from "@codi-1/db/schema/coding-exercises";
+import type { LessonKind } from "./lesson-kind";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
 import {
   enrollmentSkillMastery,
@@ -291,6 +294,28 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     path ? input.previous : defaultItems(input),
     e.pathSource,
   );
+  // Derive the label from published content, never from a lesson's title or seed id.
+  // Drizzle's single-table SELECT builder removes qualification from Column nodes
+  // inside SQL expressions; keep this correlated outer reference qualified.
+  const outerLessonId = sql.raw('"course_lessons"."id"');
+  const kinds = await store
+    .select({
+      id: courseLessons.id,
+      kind: sql<LessonKind>`case
+      when exists (select 1 from ${assessments} a join ${codingExercises} e on e.assessment_id = a.id where a.lesson_id = ${outerLessonId} and a.status = 'published' and a.is_diagnostic = false and jsonb_array_length(e.tutorial_steps) > 0) then 'tutorial'
+      when exists (select 1 from ${assessments} a where a.lesson_id = ${outerLessonId} and a.status = 'published' and a.is_diagnostic = false and a.type = 'coding') then 'coding'
+      when exists (select 1 from ${lessonMaterials} m where m.lesson_id = ${outerLessonId} and m.type = 'video') then 'video'
+      when exists (select 1 from ${lessonMaterials} m where m.lesson_id = ${outerLessonId} and m.type in ('pdf', 'slide')) then 'pdf'
+      when exists (select 1 from ${assessments} a where a.lesson_id = ${outerLessonId} and a.status = 'published' and a.is_diagnostic = false and a.type = 'quiz') then 'quiz'
+      else 'reading' end`,
+    })
+    .from(courseLessons)
+    .where(
+      inArray(
+        courseLessons.id,
+        selected.rows.map((row) => row.id),
+      ),
+    );
   const [review] = await store
     .select({ rating: courseReviews.rating, text: courseReviews.text })
     .from(courseReviews)
@@ -325,6 +350,10 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     : [];
   return {
     ...selected,
+    rows: selected.rows.map((row) => ({
+      ...row,
+      kind: kinds.find((k) => k.id === row.id)?.kind ?? "reading",
+    })),
     course: { id: course.id, title: course.title, slug: course.slug },
     status: e.pathStatus,
     source: e.pathSource,
@@ -541,6 +570,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
       submittedAt: assessmentSubmissions.submittedAt,
       lessonId: assessments.lessonId,
       correct: assessmentSubmissions.isPassed,
+      solutionViewed: sql<boolean>`coalesce((${assessmentSubmissions.codingRun}->>'solutionViewed')::boolean, false)`,
     })
     .from(assessmentSubmissions)
     .innerJoin(
@@ -564,7 +594,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
       ),
     );
   const observations = [
-    ...quiz,
+    ...quiz.map((row) => ({ ...row, solutionViewed: false })),
     ...code.map((row) => ({ ...row, key: "code", position: 0, questionId: 0 })),
   ].sort(
     (a, b) =>
@@ -599,10 +629,13 @@ async function consumeEvidence(store: Store, ctx: Context) {
           ),
         );
       const values = {
-        pMastery: updateBkt(
-          prior?.pMastery ?? skill.bktPInit,
-          observation.correct,
-          skill,
+        pMastery: Math.min(
+          observation.solutionViewed ? 0.7 : 1,
+          updateBkt(
+            prior?.pMastery ?? skill.bktPInit,
+            observation.correct,
+            skill,
+          ),
         ),
         evidenceCount: (prior?.evidenceCount ?? 0) + 1,
         correctCount: (prior?.correctCount ?? 0) + Number(observation.correct),
