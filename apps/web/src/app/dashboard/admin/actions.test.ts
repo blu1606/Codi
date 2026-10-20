@@ -14,6 +14,7 @@ vi.mock("@codi-1/auth", () => ({
 }));
 
 const mockTransaction = vi.fn();
+const mockDbSelect = vi.fn();
 
 vi.mock("@/services", () => ({
   auth: {
@@ -23,11 +24,7 @@ vi.mock("@/services", () => ({
   },
   db: {
     transaction: (cb: any) => mockTransaction(cb),
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({}),
-      }),
-    }),
+    select: (...args: any[]) => mockDbSelect(...args),
   },
 }));
 
@@ -428,5 +425,282 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
     const { getAdminDashboardData } = await import("./actions");
     await expect(getAdminDashboardData()).rejects.toThrow("Forbidden");
   });
+
+  it("getUserImpactCounts trả về số liệu tác động chính xác", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "admin-1", email: "admin@codi.vn" },
+    });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    // Call 1: ownedRes -> [{ val: 5 }]
+    // Call 2: ordersRes -> [{ val: 2 }]
+    // Call 3: taughtRes -> [{ val: 3 }]
+    mockDbSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([{ val: 5 }]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ val: 2 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ val: 3 }]),
+        }),
+      });
+
+    const { getUserImpactCounts } = await import("./actions");
+    const res = await getUserImpactCounts("target-user-123");
+
+    expect(res).toEqual({
+      ownedCourses: 5,
+      pendingOrders: 2,
+      taughtCourses: 3,
+    });
+  });
+
+  it("getUserImpactCounts trả về 0 khi kết quả truy vấn rỗng", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "admin-1", email: "admin@codi.vn" },
+    });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    mockDbSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+    const { getUserImpactCounts } = await import("./actions");
+    const res = await getUserImpactCounts("target-user-empty");
+
+    expect(res).toEqual({
+      ownedCourses: 0,
+      pendingOrders: 0,
+      taughtCourses: 0,
+    });
+  });
+
+  it("getAdminDashboardData trả về đầy đủ KPIs, việc cần xử lý và đơn hàng gần đây (bao gồm đơn quá hạn)", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "admin-1", email: "admin@codi.vn" },
+    });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const now = Date.now();
+    const twoDaysAgo = new Date(now - 48 * 60 * 60 * 1000);
+    const oneHourAgo = new Date(now - 60 * 60 * 1000);
+
+    // Call 1: paidOrders30dRes
+    // Call 2: allOrders30dRes
+    // Call 3: newLearnersRes
+    // Call 4: publishedCoursesRes
+    // Call 5: pendingCoursesRes
+    // Call 6: overdueOrdersRes
+    // Call 7: expiringVouchersRes
+    // Call 8: inactiveUsersRes
+    // Call 9: recentOrdersRaw
+    mockDbSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ totalRevenue: 15000000, count: 12 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ count: 20 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([{ count: 35 }]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ count: 8 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ count: 3 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ count: 2 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ count: 1 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ count: 4 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          leftJoin: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([
+                {
+                  id: 101,
+                  code: "ORD-001",
+                  totalAmount: 500000,
+                  status: "pending",
+                  createdAt: twoDaysAgo,
+                  buyerName: "Nguyen Van A",
+                  buyerEmail: "a@codi.vn",
+                },
+                {
+                  id: 102,
+                  code: "ORD-002",
+                  totalAmount: 300000,
+                  status: "pending",
+                  createdAt: oneHourAgo,
+                  buyerName: null,
+                  buyerEmail: null,
+                },
+                {
+                  id: 103,
+                  code: "ORD-003",
+                  totalAmount: 700000,
+                  status: "paid",
+                  createdAt: twoDaysAgo,
+                  buyerName: "Tran Van C",
+                  buyerEmail: "c@codi.vn",
+                },
+              ]),
+            }),
+          }),
+        }),
+      });
+
+    const { getAdminDashboardData } = await import("./actions");
+    const data = await getAdminDashboardData();
+
+    expect(data.kpis).toEqual({
+      revenue30d: 15000000,
+      paidOrders30d: 12,
+      allOrders30d: 20,
+      newLearners30d: 35,
+      publishedCourses: 8,
+    });
+    expect(data.todo).toEqual({
+      pendingCoursesCount: 3,
+      overdueOrdersCount: 2,
+      expiringVouchersCount: 1,
+      inactiveUsersCount: 4,
+    });
+    expect(data.recentOrders).toHaveLength(3);
+    expect(data.recentOrders[0].isOverdue).toBe(true);
+    expect(data.recentOrders[0].buyerName).toBe("Nguyen Van A");
+    expect(data.recentOrders[1].isOverdue).toBe(false);
+    expect(data.recentOrders[1].buyerName).toBe("Người dùng");
+    expect(data.recentOrders[1].buyerEmail).toBe("");
+    expect(data.recentOrders[2].isOverdue).toBe(false);
+  });
+
+  it("getAdminDashboardData trả về giá trị mặc định 0 khi các truy vấn rỗng", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "admin-1", email: "admin@codi.vn" },
+    });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    mockDbSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          leftJoin: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
+      });
+
+    const { getAdminDashboardData } = await import("./actions");
+    const data = await getAdminDashboardData();
+
+    expect(data.kpis).toEqual({
+      revenue30d: 0,
+      paidOrders30d: 0,
+      allOrders30d: 0,
+      newLearners30d: 0,
+      publishedCourses: 0,
+    });
+    expect(data.todo).toEqual({
+      pendingCoursesCount: 0,
+      overdueOrdersCount: 0,
+      expiringVouchersCount: 0,
+      inactiveUsersCount: 0,
+    });
+    expect(data.recentOrders).toEqual([]);
+  });
 });
+
 
