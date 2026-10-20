@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Ban, ShieldCheck, BookOpen, Receipt, Presentation } from "lucide-react";
@@ -19,21 +19,21 @@ import {
 
 import { getUserImpactCounts, toggleUserBan, type UserImpactCounts } from "../actions";
 
-export default function BanToggle({
-  userId,
-  userName = "người dùng",
-  userEmail = "",
-  isBanned,
-  banReason,
-  isSelf,
-}: {
+type BanToggleProps = {
   userId: string;
   userName?: string;
   userEmail?: string;
   isBanned: boolean;
   banReason?: string;
   isSelf: boolean;
-}) {
+};
+
+export default function BanToggle(props: BanToggleProps) {
+  // Dialog consent and loaded impact belong to one target and account state.
+  return <UserBanToggle key={`${props.userId}:${props.isBanned}:${props.isSelf}`} {...props} />;
+}
+
+function UserBanToggle({ userId, userName = "người dùng", userEmail = "", isBanned, isSelf }: BanToggleProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -41,34 +41,45 @@ export default function BanToggle({
   const [deactOpen, setDeactOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [consented, setConsented] = useState(false);
-  const [impactCounts, setImpactCounts] = useState<UserImpactCounts>({
-    ownedCourses: 0,
-    pendingOrders: 0,
-    taughtCourses: 0,
-  });
-  const [loadingImpact, setLoadingImpact] = useState(false);
+  const [impact, setImpact] = useState<
+    { status: "idle" | "loading" | "error" } | { status: "ready"; counts: UserImpactCounts }
+  >({ status: "idle" });
+  const impactRequest = useRef(0);
+  useEffect(() => () => { impactRequest.current += 1; }, []);
 
   // Reactivation dialog state
   const [reactOpen, setReactOpen] = useState(false);
 
-  const openDeactivationDialog = async () => {
-    setReason("");
-    setConsented(false);
-    setDeactOpen(true);
-    setLoadingImpact(true);
+  const loadImpact = async () => {
+    const request = ++impactRequest.current;
+    setImpact({ status: "loading" });
     try {
       const counts = await getUserImpactCounts(userId);
-      setImpactCounts(counts);
+      if (request === impactRequest.current) setImpact({ status: "ready", counts });
     } catch {
-      // Default fallback
-      setImpactCounts({ ownedCourses: 0, pendingOrders: 0, taughtCourses: 0 });
-    } finally {
-      setLoadingImpact(false);
+      if (request === impactRequest.current) setImpact({ status: "error" });
     }
   };
 
+  const openDeactivationDialog = () => {
+    if (isPending) return;
+    setReason("");
+    setConsented(false);
+    setDeactOpen(true);
+    void loadImpact();
+  };
+
+  const changeDeactivationOpen = (open: boolean) => {
+    if (isPending) return;
+    if (!open) {
+      impactRequest.current += 1;
+      setImpact({ status: "idle" });
+    }
+    setDeactOpen(open);
+  };
+
   const handleDeactivate = () => {
-    if (!reason.trim() || !consented) return;
+    if (!deactOpen || isSelf || isBanned || isPending || impact.status !== "ready" || !reason.trim() || !consented) return;
     startTransition(async () => {
       try {
         await toggleUserBan(userId, true, reason.trim());
@@ -82,6 +93,7 @@ export default function BanToggle({
   };
 
   const handleReactivate = () => {
+    if (!reactOpen || isSelf || !isBanned || isPending) return;
     startTransition(async () => {
       try {
         await toggleUserBan(userId, false);
@@ -150,7 +162,7 @@ export default function BanToggle({
     );
   }
 
-  const isConfirmDisabled = isPending || loadingImpact || !consented || !reason.trim();
+  const isConfirmDisabled = isPending || impact.status !== "ready" || !consented || !reason.trim();
 
   return (
     <>
@@ -159,13 +171,14 @@ export default function BanToggle({
         variant="ghost"
         className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
         onClick={openDeactivationDialog}
+        disabled={isPending}
       >
         <Ban className="h-3.5 w-3.5 mr-1" />
         Vô hiệu hoá
       </Button>
 
       {/* Deactivation Dialog */}
-      <Dialog open={deactOpen} onOpenChange={(open) => { if (!isPending) setDeactOpen(open); }}>
+      <Dialog open={deactOpen} onOpenChange={changeDeactivationOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Vô hiệu hoá {userName}?</DialogTitle>
@@ -180,26 +193,35 @@ export default function BanToggle({
             {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
 
             {/* Impact counts */}
+            {impact.status === "loading" && <p role="status" className="text-sm text-muted-foreground">Đang tải tác động...</p>}
+            {impact.status === "error" && (
+              <div role="alert" className="space-y-2 text-sm text-destructive">
+                <p>Không thể tải tác động. Vui lòng thử lại trước khi xác nhận.</p>
+                <Button type="button" variant="outline" disabled={isPending} onClick={() => void loadImpact()}>Thử lại</Button>
+              </div>
+            )}
+            {impact.status === "ready" && (
             <div className="rounded-lg border border-border/80 bg-muted/40 p-3 space-y-2 text-sm">
               <div className="flex items-center gap-2 text-foreground">
                 <BookOpen className="h-4 w-4 text-primary" />
                 <span>
-                  <strong>{impactCounts.ownedCourses}</strong> khoá học đang sở hữu
+                  <strong>{impact.counts.ownedCourses}</strong> khoá học đang sở hữu
                 </span>
               </div>
               <div className="flex items-center gap-2 text-foreground">
                 <Receipt className="h-4 w-4 text-primary" />
                 <span>
-                  <strong>{impactCounts.pendingOrders}</strong> đơn hàng chờ thanh toán
+                  <strong>{impact.counts.pendingOrders}</strong> đơn hàng chờ thanh toán
                 </span>
               </div>
               <div className="flex items-center gap-2 text-foreground">
                 <Presentation className="h-4 w-4 text-primary" />
                 <span>
-                  Đang giảng dạy <strong>{impactCounts.taughtCourses}</strong> khoá học
+                  Đang giảng dạy <strong>{impact.counts.taughtCourses}</strong> khoá học
                 </span>
               </div>
             </div>
+            )}
 
             {/* Required Reason */}
             <div className="space-y-1.5">
@@ -239,7 +261,7 @@ export default function BanToggle({
               type="button"
               variant="outline"
               disabled={isPending}
-              onClick={() => setDeactOpen(false)}
+              onClick={() => changeDeactivationOpen(false)}
             >
               Huỷ
             </Button>

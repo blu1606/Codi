@@ -51,6 +51,12 @@ export default function UsersClient({
     };
   }, [users]);
 
+  const countsByStatus = useMemo(() => ({
+    all: users.length,
+    active: users.filter((user) => !user.banned).length,
+    inactive: users.filter((user) => user.banned).length,
+  }), [users]);
+
   const filteredUsers = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return users.filter((u) => {
@@ -82,6 +88,20 @@ export default function UsersClient({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Lọc theo trạng thái">
+        {([
+          { key: "all", label: "Tất cả" },
+          { key: "active", label: "Đang hoạt động" },
+          { key: "inactive", label: "Đã vô hiệu hoá" },
+        ] as const).map((item) => (
+          <Button key={item.key} type="button" size="sm"
+            variant={statusFilter === item.key ? "secondary" : "outline"}
+            aria-pressed={statusFilter === item.key}
+            onClick={() => setStatusFilter(item.key)}>
+            {item.label} ({countsByStatus[item.key]})
+          </Button>
+        ))}
+      </div>
       {/* Search and Filters Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-end">
         <div className="space-y-1.5">
