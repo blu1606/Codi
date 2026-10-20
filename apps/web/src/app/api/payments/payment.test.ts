@@ -1,4 +1,8 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import { orders, orderEvents, payments } from "@codi-1/db";
+import { studentTransactions } from "@codi-1/db/schema/student-profile";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 const mocks = vi.hoisted(() => ({ limit: vi.fn(), values: vi.fn(), getSession: vi.fn(), transaction: vi.fn() }));
 vi.mock("@/services", () => ({
  db: {
@@ -154,7 +158,7 @@ it("enrolls only a sufficiently funded authenticated incoming transfer and settl
   );
 });
 
-it("does not enroll learner if the order is already cancelled or expired", async () => {
+it("does not enroll learner if the order is already cancelled", async () => {
   mocks.limit.mockResolvedValue([
     {
       id: "CODI12345",
@@ -172,7 +176,7 @@ it("does not enroll learner if the order is already cancelled or expired", async
       select: () => ({
         from: () => ({
           where: () => ({
-            limit: vi.fn().mockResolvedValue([{ id: "order-123", status: "cancelled" }]),
+            limit: vi.fn().mockResolvedValue([{ id: "order-123", status: "cancelled", receivedAmount: 0 }]),
           }),
         }),
       }),
@@ -186,7 +190,7 @@ it("does not enroll learner if the order is already cancelled or expired", async
       }),
       insert: () => ({
         values: (value: unknown) => {
-          enroll(value);
+          if (value && typeof value === "object" && "courseId" in value) enroll(value);
           return { onConflictDoNothing: vi.fn() };
         },
       }),
@@ -208,6 +212,98 @@ it("does not enroll learner if the order is already cancelled or expired", async
   });
   expect(update).toHaveBeenCalledWith({ status: "failed" });
   expect(enroll).not.toHaveBeenCalled();
+});
+
+it.each([50000, 500000])("reconciles a unique %i VND receipt after cancellation without double-counting replay", async (amount) => {
+  const order = {
+    id: 998,
+    code: "CODI99998",
+    userId: "session-user",
+    status: "cancelled",
+    totalAmount: 500000,
+    receivedAmount: 25000,
+    needsReconciliation: false,
+  };
+  const receipts: Record<string, unknown>[] = [];
+  const events: Record<string, unknown>[] = [];
+  const unexpectedInsert = vi.fn();
+  const updateOrder = vi.fn();
+  const execute = vi.fn().mockResolvedValue(undefined);
+  mocks.limit.mockResolvedValue([{
+    id: order.code, userId: order.userId, courseId: "course-1", amount: order.totalAmount, status: "cancelled",
+  }]);
+  mocks.transaction.mockImplementation(async (fn) => fn({
+    execute,
+    select: () => ({
+      from: (table: unknown) => ({
+        where: (predicate: SQL) => ({
+          limit: async () => {
+            if (table === payments) {
+              const { params } = new PgDialect().sqlToQuery(predicate);
+              return receipts.filter((receipt) => params.includes(receipt.transactionCode));
+            }
+            if (table === orders) return [{ ...order }];
+            throw new Error("Unexpected reconciliation query");
+          },
+        }),
+      }),
+    }),
+    update: (table: unknown) => ({
+      set: (value: Record<string, unknown>) => ({
+        where: async () => {
+          if (table === orders) {
+            updateOrder(value);
+            Object.assign(order, value);
+          } else {
+            expect(table).toBe(studentTransactions);
+          }
+        },
+      }),
+    }),
+    insert: (table: unknown) => ({
+      values: async (value: Record<string, unknown>) => {
+        if (table === payments) receipts.push(value);
+        else if (table === orderEvents) events.push(value);
+        else unexpectedInsert(table, value);
+      },
+    }),
+  }));
+  const delivery = () => callback(request({
+    id: 99998001, transferType: "in", accountNumber: "12345678", content: order.code, transferAmount: amount,
+  }));
+
+  const first = await delivery();
+  expect(first.status).toBe(200);
+  expect(await first.json()).toEqual({ success: true, message: "Order not pending, marked for reconciliation" });
+  expect(order).toMatchObject({ status: "cancelled", receivedAmount: 25000 + amount, needsReconciliation: true });
+  expect(receipts).toEqual([expect.objectContaining({
+    orderId: order.id, transactionCode: "99998001", amount, status: "failed",
+  })]);
+  expect(events).toEqual([expect.objectContaining({
+    orderId: order.id, actorId: order.userId, label: expect.stringContaining("cần đối soát"),
+  })]);
+
+  const replay = await delivery();
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toEqual({ success: true, message: "Already processed" });
+  expect(order.receivedAmount).toBe(25000 + amount);
+  expect(updateOrder).toHaveBeenCalledTimes(1);
+  expect(receipts).toHaveLength(1);
+  expect(events).toHaveLength(1);
+  expect(unexpectedInsert).not.toHaveBeenCalled();
+  expect(execute).toHaveBeenCalledTimes(2);
+
+  const nextReceipt = await callback(request({
+    referenceCode: "SEPAY_NEXT_99998", transferType: "in", accountNumber: "12345678",
+    content: order.code, transferAmount: 10000,
+  }));
+  expect(nextReceipt.status).toBe(200);
+  expect(order).toMatchObject({ status: "cancelled", receivedAmount: 35000 + amount, needsReconciliation: true });
+  expect(receipts).toHaveLength(2);
+  expect(receipts[1]).toMatchObject({ transactionCode: "SEPAY_NEXT_99998", amount: 10000, status: "failed" });
+  expect(events).toHaveLength(2);
+  expect(updateOrder).toHaveBeenCalledTimes(2);
+  expect(unexpectedInsert).not.toHaveBeenCalled();
 });
 
 it("reuses and validates orderCode in create-transaction", async () => {

@@ -396,42 +396,42 @@ describe("Order API Routes", () => {
       );
     });
 
-    it("P2: resolves canonical code and rejects replacement by numeric ID if settled to paid", async () => {
+    it("resolves canonical code and rejects replacement by numeric ID if settled to paid", async () => {
       const executedSql: string[] = [];
+      const operations: string[] = [];
+      const insert = vi.fn();
+      const limitFn = vi.fn()
+        .mockImplementationOnce(async () => {
+          operations.push("resolve");
+          return [{ id: 10, code: "CODI12345" }];
+        })
+        .mockImplementationOnce(async () => {
+          operations.push("reread-paid");
+          return [{
+            id: 10,
+            code: "CODI12345",
+            userId: "user-123",
+            voucherId: null,
+            subtotal: 500000,
+            discountAmount: 0,
+            totalAmount: 500000,
+            receivedAmount: 500000,
+            status: "paid",
+            failReason: null,
+            isBuyNow: false,
+          }];
+        });
       mocks.transaction.mockImplementation(async (fn) =>
         fn({
+          insert,
           execute: (stmt: any) => {
+            operations.push("lock");
             executedSql.push(stmt?.queryChunks ? JSON.stringify(stmt.queryChunks) : "sql");
             return Promise.resolve();
           },
           select: () => ({
             from: () => ({
               where: vi.fn().mockImplementation(() => {
-                const limitFn = vi.fn()
-                  // 1. Initial query by numeric ID resolves code 'CODI12345'
-                  .mockResolvedValueOnce([
-                    {
-                      id: 10,
-                      code: "CODI12345",
-                    },
-                  ])
-                  // 2. Re-read under lock shows order was settled to 'paid' by concurrent callback
-                  .mockResolvedValueOnce([
-                    {
-                      id: 10,
-                      code: "CODI12345",
-                      userId: "user-123",
-                      voucherId: null,
-                      subtotal: 500000,
-                      discountAmount: 0,
-                      totalAmount: 500000,
-                      receivedAmount: 500000,
-                      status: "paid",
-                      failReason: null,
-                      isBuyNow: false,
-                    },
-                  ]);
-
                 return {
                   limit: limitFn,
                 };
@@ -452,6 +452,9 @@ describe("Order API Routes", () => {
       // Verify lock was acquired on canonical code 'CODI12345', not numeric ID '10'
       expect(executedSql.length).toBeGreaterThan(0);
       expect(executedSql[0]).toContain("CODI12345");
+      expect(limitFn).toHaveBeenCalledTimes(2);
+      expect(operations).toEqual(["resolve", "lock", "reread-paid"]);
+      expect(insert).not.toHaveBeenCalled();
     });
   });
 

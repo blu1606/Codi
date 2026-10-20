@@ -162,6 +162,25 @@ export async function POST(req: Request) {
           isLateHonoured = true;
         } else {
           // Other non-pending states (cancelled, refunded, or failed not expired)
+          if (existingOrder.status === "cancelled") {
+            // Cancellation can commit before this receipt acquires the order lock.
+            // Keep it terminal, but account for the money requiring manual refund.
+            await txDB
+              .update(orders)
+              .set({
+                receivedAmount: existingOrder.receivedAmount + amountReceived,
+                needsReconciliation: true,
+                updatedAt: new Date(),
+              })
+              .where(eq(orders.id, existingOrder.id));
+
+            await txDB.insert(orderEvents).values({
+              orderId: existingOrder.id,
+              label: "Nhận thanh toán sau khi đơn đã huỷ (cần đối soát hoàn tiền)",
+              actorId: tx.userId,
+            });
+          }
+
           await txDB
             .update(studentTransactions)
             .set({ status: "failed" })
