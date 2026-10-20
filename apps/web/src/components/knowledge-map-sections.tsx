@@ -1,7 +1,12 @@
 "use client";
 import Link from "next/link";
 import type { Route } from "next";
-import { LockKeyhole, Map as MapIcon, ArrowRight } from "lucide-react";
+import {
+  LockKeyhole,
+  Map as MapIcon,
+  ArrowRight,
+  Lightbulb,
+} from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import {
   Card,
@@ -11,6 +16,8 @@ import {
 } from "@codi-1/ui/components/card";
 import { MasteryChip } from "@codi-1/ui/components/mastery-chip";
 import { cn } from "@codi-1/ui/lib/utils";
+import { MASTERY_LABELS, MASTERY_LEVELS } from "@codi-1/ui/lib/mastery";
+import { KNOWLEDGE_NODE } from "@codi-1/ui/lib/knowledge-graph-layout";
 import type { KnowledgeMapView } from "@/lib/learning-path-contract";
 type ConceptNode = KnowledgeMapView["nodes"][number];
 function RecommendedConcept() {
@@ -85,12 +92,80 @@ export function KnowledgeMapList({
 }
 
 const masteryColors = [
-  "bg-mastery-0",
-  "bg-mastery-1",
-  "bg-mastery-2",
-  "bg-mastery-3",
-  "bg-mastery-4",
+  "bg-card text-foreground",
+  "bg-viz-s1 text-foreground",
+  "bg-viz-s2 text-foreground",
+  "bg-viz-s3 text-viz-on-s4",
+  "bg-viz-s4 text-viz-on-s4",
 ];
+const shortMasteryLabel = (level: ConceptNode["level"]) =>
+  level === 0 ? MASTERY_LABELS[0] : level < 3 ? "Đang học" : "Thành thạo";
+
+export function KnowledgeMapLegend() {
+  return (
+    <ul
+      className="flex flex-wrap gap-x-4 gap-y-2 text-sm leading-[1.55]"
+      aria-label="Mức thành thạo"
+    >
+      {MASTERY_LEVELS.map((level) => (
+        <li key={level} className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-3 rounded-[3px]",
+              masteryColors[level],
+              level === 0 && "border border-border-strong",
+            )}
+          />
+          {MASTERY_LABELS[level]}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function KnowledgeMapMastery({ data }: { data: KnowledgeMapView }) {
+  return (
+    <Card className="gap-3 rounded-lg border border-border p-4 text-base leading-[1.55] shadow-none! ring-0 min-[481px]:p-5">
+      <CardHeader className="px-0">
+        <CardTitle className="text-base leading-[1.4]">
+          Theo mức thành thạo
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-2 px-0">
+        {[...data.nodes]
+          .sort((a, b) => b.level - a.level)
+          .map((n) => (
+            <div
+              key={n.id}
+              className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-0.5 text-sm min-[481px]:grid-cols-[minmax(96px,34%)_minmax(0,1fr)_auto]"
+            >
+              <span className="break-words leading-[1.35]">{n.name}</span>
+              <span
+                role="meter"
+                aria-label={n.name}
+                aria-valuemin={0}
+                aria-valuemax={4}
+                aria-valuenow={n.level}
+                aria-valuetext={
+                  n.locked ? "Chưa mở khoá" : MASTERY_LABELS[n.level]
+                }
+                className="col-span-2 row-start-2 h-3 overflow-hidden rounded bg-muted min-[481px]:col-span-1 min-[481px]:row-start-auto"
+              >
+                <span
+                  className="block h-full rounded bg-viz-1"
+                  style={{ width: `${n.level * 25}%` }}
+                />
+              </span>
+              <span className="whitespace-nowrap text-right text-foreground tabular-nums">
+                {n.locked ? "Chưa mở khoá" : shortMasteryLabel(n.level)}
+              </span>
+            </div>
+          ))}
+      </CardContent>
+    </Card>
+  );
+}
 export function KnowledgeMapNode({
   n,
   pos,
@@ -108,25 +183,62 @@ export function KnowledgeMapNode({
     <button
       type="button"
       aria-pressed={selected}
+      aria-label={`${n.name}: ${n.locked ? "Chưa mở khoá" : MASTERY_LABELS[n.level]}${n.recommended ? " · Bài học được gợi ý" : ""}`}
+      title={`${n.name} — ${n.locked ? "Chưa mở khoá — cần học khái niệm tiên quyết trước" : MASTERY_LABELS[n.level]}`}
       onClick={() => onSelect(n.id)}
       className={cn(
-        "absolute flex h-32 w-56 flex-col justify-center gap-2 rounded-lg border border-border bg-card p-3 text-left shadow-sm",
-        highlighted && "border-primary ring-2 ring-primary",
+        "absolute grid content-center gap-0.5 rounded-md border border-border-strong px-2.5 py-1.5 text-left outline-none hover:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+        masteryColors[n.level],
+        n.locked && "border-dashed bg-card text-muted-foreground",
+        highlighted && "border-2 border-viz-1",
+        selected && "ring-2 ring-primary ring-offset-2 ring-offset-card",
       )}
-      style={{ left: pos.x, top: pos.y }}
+      style={{
+        left: pos.x,
+        top: pos.y,
+        width: KNOWLEDGE_NODE.width,
+        height: KNOWLEDGE_NODE.height,
+      }}
     >
-      <span className="flex min-w-0 items-center gap-2">
-        <span
-          className={cn("size-3 shrink-0 rounded-full", masteryColors[n.level])}
-        />
-        <strong className="truncate">{n.name}</strong>
+      <span className="line-clamp-2 text-[13px] font-semibold leading-[1.3]">
+        {n.name}
       </span>
-      <MasteryChip level={n.level} />
-      {n.recommended && <RecommendedConcept />}
-      {n.locked && (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <LockKeyhole className="size-3" /> Chưa mở khoá
-        </span>
+      <span
+        className={cn(
+          "flex items-center gap-1.5 whitespace-nowrap text-[11px] leading-[1.55]",
+          n.level < 3 && "text-muted-foreground",
+        )}
+      >
+        {n.locked ? (
+          <>
+            <LockKeyhole aria-hidden="true" className="size-3.5" /> Chưa mở khoá
+          </>
+        ) : (
+          <>
+            <span aria-hidden="true" className="inline-flex gap-0.5">
+              {MASTERY_LEVELS.filter((level) => level > 0).map((level) => (
+                <span
+                  key={level}
+                  className={cn(
+                    "h-1 w-2 rounded-sm bg-border-strong",
+                    level <= n.level &&
+                      (n.level >= 3 ? "bg-viz-on-s4" : "bg-viz-1"),
+                  )}
+                />
+              ))}
+            </span>
+            {shortMasteryLabel(n.level)}
+          </>
+        )}
+      </span>
+      {n.recommended && (
+        <>
+          <Lightbulb
+            aria-hidden="true"
+            className="absolute right-1 top-1 size-3"
+          />
+          <span className="sr-only">Bài học được gợi ý</span>
+        </>
       )}
     </button>
   );

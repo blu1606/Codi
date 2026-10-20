@@ -1,24 +1,68 @@
 "use client";
 
+import { KNOWLEDGE_NODE } from "@codi-1/ui/lib/knowledge-graph-layout";
+
 // Data visualization primitives, not hand-drawn UI icons. All colours use graph/theme tokens.
 type Props = {
-  id: string; width: number; height: number;
+  id: string;
+  width: number;
+  height: number;
   positions: Map<number, { x: number; y: number }>;
-  edges: { from: number; to: number }[]; highlighted: Set<number>;
+  edges: { from: number; to: number }[];
+  highlighted: Set<number>;
 };
-export function KnowledgeGraphLines({ id, width, height, positions, edges, highlighted }: Props) {
-  return <svg width={width} height={height} className="absolute inset-0" aria-hidden="true">
-    <defs><marker id={`${id}-arrow`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" className="fill-primary" /></marker></defs>
-    {edges.map((edge) => {
-      const from = positions.get(edge.from)!; const to = positions.get(edge.to)!;
-      const active = highlighted.has(edge.from) && highlighted.has(edge.to);
-      return <path key={`${edge.from}:${edge.to}`} d={`M${from.x + 232},${from.y + 64} C${from.x + 258},${from.y + 64} ${to.x - 24},${to.y + 64} ${to.x - 4},${to.y + 64}`} fill="none" strokeWidth={active ? 3 : 1.5} className={active ? "stroke-primary" : "stroke-border-strong"} markerEnd={`url(#${id}-arrow)`} />;
-    })}
-  </svg>;
-}
-export function KnowledgeGraphMinimap({ width, height, positions, edges, highlighted }: Omit<Props, "id">) {
-  return <svg width="128" height="64" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-    {edges.map((e) => { const from = positions.get(e.from)!; const to = positions.get(e.to)!; return <line key={`${e.from}:${e.to}`} x1={from.x + 224} y1={from.y + 64} x2={to.x} y2={to.y + 64} className="stroke-primary" strokeWidth={6} />; })}
-    {[...positions].map(([id, pos]) => <rect key={id} x={pos.x} y={pos.y} width={224} height={128} rx={12} className={highlighted.has(id) ? "fill-primary" : "fill-border-strong"} />)}
-  </svg>;
+export function KnowledgeGraphLines({
+  id,
+  width,
+  height,
+  positions,
+  edges,
+  highlighted,
+}: Props) {
+  return (
+    <svg
+      width={width}
+      height={height}
+      className="absolute inset-0"
+      aria-hidden="true"
+    >
+      <defs>
+        {["base", "path"].map((kind) => (
+          <marker
+            key={kind}
+            id={`${id}-${kind}`}
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
+            <path
+              d="M 0 0 L 10 5 L 0 10 z"
+              className={kind === "path" ? "fill-viz-1" : "fill-viz-axis"}
+            />
+          </marker>
+        ))}
+      </defs>
+      {edges.map((edge) => {
+        const from = positions.get(edge.from)!;
+        const to = positions.get(edge.to)!;
+        const active = highlighted.has(edge.from) && highlighted.has(edge.to);
+        const x1 = from.x + KNOWLEDGE_NODE.width / 2;
+        const y1 = from.y + KNOWLEDGE_NODE.height;
+        const x2 = to.x + KNOWLEDGE_NODE.width / 2;
+        return (
+          <path
+            key={`${edge.from}:${edge.to}`}
+            d={`M${x1} ${y1} C${x1} ${y1 + 28}, ${x2} ${to.y - 28}, ${x2} ${to.y - 2}`}
+            fill="none"
+            strokeWidth={active ? 2 : 1.5}
+            className={active ? "stroke-viz-1" : "stroke-viz-axis"}
+            markerEnd={`url(#${id}-${active ? "path" : "base"})`}
+          />
+        );
+      })}
+    </svg>
+  );
 }
