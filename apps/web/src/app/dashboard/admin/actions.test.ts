@@ -288,8 +288,32 @@ describe("toggleUserBan action", () => {
     const { mockTx } = createMockTx(fakeAdmins);
     mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-    await expect(toggleUserBan(targetUserId, true)).rejects.toThrow(
+    await expect(toggleUserBan(targetUserId, true, "Lý do")).rejects.toThrow(
       "Khong the khoa Admin dang hoat dong duy nhat."
+    );
+  });
+
+  it("từ chối khoá tài khoản khi không có lý do hoặc lý do chỉ chứa khoảng trắng", async () => {
+    const adminId = "admin-1";
+    const targetUserId = "user-target";
+    mockGetSession.mockResolvedValue({
+      user: { id: adminId, email: "admin@codi.vn" },
+    });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const { mockTx } = createMockTx([
+      { id: "role-1", userId: adminId },
+    ]);
+    mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
+
+    await expect(toggleUserBan(targetUserId, true, "")).rejects.toThrow(
+      "Lý do vô hiệu hoá là bắt buộc."
+    );
+    await expect(toggleUserBan(targetUserId, true, "   ")).rejects.toThrow(
+      "Lý do vô hiệu hoá là bắt buộc."
+    );
+    await expect(toggleUserBan(targetUserId, true)).rejects.toThrow(
+      "Lý do vô hiệu hoá là bắt buộc."
     );
   });
 
@@ -358,7 +382,7 @@ describe("toggleUserBan action", () => {
 
     mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-    await toggleUserBan(targetUserId, true);
+    await toggleUserBan(targetUserId, true, "Vi pham noi quy nen tang.");
 
     expect(mockTx.update).toHaveBeenCalled();
     expect(mockSet).toHaveBeenCalledWith({
@@ -368,3 +392,41 @@ describe("toggleUserBan action", () => {
     expect(mockTx.delete).toHaveBeenCalled();
   });
 });
+
+describe("getUserImpactCounts and getAdminDashboardData actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHeaders.mockResolvedValue(new Headers());
+  });
+
+  it("getUserImpactCounts ném lỗi Unauthorized khi không có session", async () => {
+    mockGetSession.mockResolvedValue(null);
+    const { getUserImpactCounts } = await import("./actions");
+    await expect(getUserImpactCounts("target-1")).rejects.toThrow("Unauthorized");
+  });
+
+  it("getAdminDashboardData ném lỗi Unauthorized khi không có session", async () => {
+    mockGetSession.mockResolvedValue(null);
+    const { getAdminDashboardData } = await import("./actions");
+    await expect(getAdminDashboardData()).rejects.toThrow("Unauthorized");
+  });
+
+  it("getUserImpactCounts ném lỗi nếu người gọi không phải ADMIN", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-non-admin", email: "student@codi.vn" },
+    });
+    mockRequireRole.mockRejectedValue(new Error("Forbidden"));
+    const { getUserImpactCounts } = await import("./actions");
+    await expect(getUserImpactCounts("target-1")).rejects.toThrow("Forbidden");
+  });
+
+  it("getAdminDashboardData ném lỗi nếu người gọi không phải ADMIN", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-non-admin", email: "student@codi.vn" },
+    });
+    mockRequireRole.mockRejectedValue(new Error("Forbidden"));
+    const { getAdminDashboardData } = await import("./actions");
+    await expect(getAdminDashboardData()).rejects.toThrow("Forbidden");
+  });
+});
+
