@@ -183,9 +183,9 @@ describe("filterCourseCatalog", () => {
 
   describe("getTypeaheadSuggestions", () => {
     const catalog = [
-      { id: "c1", title: "React Fundamentals", category: "Frontend", level: "Beginner", description: "Learn React" },
-      { id: "c2", title: "React Native Mobile", category: "Mobile", level: "Intermediate", description: "Build apps" },
-      { id: "c3", title: "Node.js Backend", category: "Backend", level: "Beginner", description: "APIs with Node" },
+      { id: "c1", title: "React Fundamentals", category: "Frontend", level: "Beginner", description: "Learn React", topics: ["React", "Hooks", "JSX"] },
+      { id: "c2", title: "React Native Mobile", category: "Mobile", level: "Intermediate", description: "Build apps", topics: ["Mobile", "React Native"] },
+      { id: "c3", title: "Node.js Backend", category: "Backend", level: "Beginner", description: "APIs with Node", topics: ["Node.js", "Express"] },
     ];
 
     it("gợi ý và gom nhóm chính xác theo danh mục", async () => {
@@ -198,10 +198,31 @@ describe("filterCourseCatalog", () => {
       expect(result.grouped["Mobile"][0].id).toBe("c2");
     });
 
+    it("trả về querySuggestions và topResults với badge Khóa học / Chủ đề", async () => {
+      const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
+      const result = getTypeaheadSuggestions(catalog, "React");
+      expect(result.querySuggestions).toBeDefined();
+      expect(result.querySuggestions.length).toBeGreaterThan(0);
+      expect(result.querySuggestions).toContain("React Fundamentals");
+
+      expect(result.topResults).toBeDefined();
+      expect(result.topResults.length).toBeGreaterThan(0);
+
+      const courseTop = result.topResults.find((r) => r.type === "Khóa học");
+      expect(courseTop).toBeDefined();
+      expect(courseTop?.badgeLabel).toBe("Khóa học");
+
+      const topicTop = result.topResults.find((r) => r.type === "Chủ đề");
+      expect(topicTop).toBeDefined();
+      expect(topicTop?.badgeLabel).toBe("Chủ đề");
+    });
+
     it("trả về isEmpty: true khi không có gợi ý phù hợp", async () => {
       const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
       const result = getTypeaheadSuggestions(catalog, "PythonMachineLearning");
       expect(result.matches).toHaveLength(0);
+      expect(result.topResults).toHaveLength(0);
+      expect(result.querySuggestions).toHaveLength(0);
       expect(result.isEmpty).toBe(true);
       expect(result.grouped).toEqual({});
     });
@@ -210,6 +231,8 @@ describe("filterCourseCatalog", () => {
       const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
       const result = getTypeaheadSuggestions(catalog, "   ");
       expect(result.matches).toHaveLength(0);
+      expect(result.topResults).toHaveLength(0);
+      expect(result.querySuggestions).toHaveLength(0);
       expect(result.isEmpty).toBe(false);
     });
   });
