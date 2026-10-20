@@ -123,7 +123,7 @@ function rateLimitTime(headers: Headers): string | undefined {
 
 /**
  * Server-only collector. Caller establishes session-owned linkage and analysis consent first.
- * Sequential reads intentionally stay below the two-request concurrency ceiling.
+ * Two repository workers share request/byte/time ceilings; identity/listing finish first.
  */
 export async function collectGithubProfile(
   input: GithubCollectorInput,
@@ -497,8 +497,8 @@ export async function collectGithubProfile(
     .filter((repo) => repo.disposition === "capped")
     .slice(0, limits.selectedRepos);
   for (const repo of selected) repo.disposition = "selected";
-  for (const repo of selected) {
-    if (stopped) break;
+  const collectRepository = async (repo: GithubRepositorySnapshot) => {
+    if (stopped) return;
     const scope = { repositoryId: repo.id };
     const base = `/repos/${repo.owner}/${repo.name}`;
     try {
@@ -515,7 +515,7 @@ export async function collectGithubProfile(
     } catch (error) {
       issue({ ...scope, operation: "ref" }, error);
     }
-    if (stopped) break;
+    if (stopped) return;
     try {
       const bytes = z
         .record(
@@ -535,7 +535,7 @@ export async function collectGithubProfile(
     } catch (error) {
       issue({ ...scope, operation: "languages" }, error);
     }
-    if (stopped || !repo.commitSha) continue;
+    if (stopped || !repo.commitSha) return;
     let directory: z.infer<typeof directorySchema>;
     try {
       directory = directorySchema.parse(
@@ -543,7 +543,7 @@ export async function collectGithubProfile(
       );
     } catch (error) {
       issue({ ...scope, operation: "directory" }, error);
-      continue;
+      return;
     }
     // The Contents API caps directories at 1000 entries. Absence at that ceiling is unknown.
     const directoryCapped = directory.length === 1000;
@@ -635,6 +635,21 @@ export async function collectGithubProfile(
         if (code === "not_found") file.state = "missing";
       }
     }
-  }
+  };
+  let nextRepository = 0;
+  const worker = async () => {
+    while (!stopped && nextRepository < selected.length) {
+      const repo = selected[nextRepository++];
+      if (repo) await collectRepository(repo);
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  // Completion order must not affect downstream observation selection.
+  const order = new Map(selected.map((repo, index) => [repo.id, index]));
+  snapshot.evidence.sort(
+    (a, b) =>
+      (order.get(a.repositoryId) ?? 0) - (order.get(b.repositoryId) ?? 0) ||
+      a.id.localeCompare(b.id),
+  );
   return finish();
 }

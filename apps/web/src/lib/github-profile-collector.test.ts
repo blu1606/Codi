@@ -45,7 +45,7 @@ const blob = (text = manifest) => {
 type Handler = (
   url: URL,
   init: RequestInit,
-) => Response | Promise<Response> | undefined;
+) => Response | Promise<Response | undefined> | undefined;
 function transport(handler?: Handler) {
   return vi.fn<typeof fetch>(async (url, init) => {
     const parsed = new URL(String(url));
@@ -785,5 +785,57 @@ describe("GitHub public profile collector", () => {
       responseBytes: 1048576,
       aggregateBytes: 4194304,
     });
+  });
+
+  it("overlaps two repository reads without exceeding two workers and keeps evidence ordered", async () => {
+    vi.useFakeTimers();
+    let active = 0;
+    let peak = 0;
+    const fetch = transport(async (url) => {
+      if (url.pathname === "/users/learner/repos")
+        return json(
+          [10, 11, 12, 13].map((id) => repo({ id, name: `project-${id}` })),
+        );
+      if (url.pathname.startsWith("/repos/")) {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) =>
+          setTimeout(resolve, url.pathname.includes("project-10") ? 20 : 5),
+        );
+        active--;
+      }
+    });
+    const pending = collectGithubProfile(input, { fetch });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(peak).toBe(2);
+    expect(active).toBe(0);
+    expect(result.status).toBe("complete");
+    expect(result.evidence.map((item) => item.repositoryId)).toEqual([
+      10, 10, 11, 11, 12, 12, 13, 13,
+    ]);
+    expect(
+      result.repositories.every((item) =>
+        item.files.some((file) => file.state === "collected"),
+      ),
+    ).toBe(true);
+  });
+
+  it("shares the request ceiling across both workers and starts no extra request after exhaustion", async () => {
+    const fetch = transport((url) =>
+      url.pathname === "/users/learner/repos"
+        ? json([10, 11, 12].map((id) => repo({ id, name: `project-${id}` })))
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, {
+      fetch,
+      limits: { requests: 5 },
+    });
+    expect(fetch).toHaveBeenCalledTimes(5);
+    expect(result.coverage.requests).toBe(5);
+    expect(result.status).toBe("partial");
+    expect(result.issues.some((issue) => issue.code === "request_limit")).toBe(
+      true,
+    );
   });
 });
