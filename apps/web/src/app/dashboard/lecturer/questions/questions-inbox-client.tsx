@@ -29,6 +29,7 @@ import { Textarea } from "@codi-1/ui/components/textarea";
 import { cn } from "@codi-1/ui/lib/utils";
 import {
   formatRelativeTime,
+  getConversationMessageRoleLabel,
   validateReplyText,
 } from "@/lib/qa-reviews-service";
 import {
@@ -718,9 +719,9 @@ export function QuestionsInboxClient({
                             <strong className="text-xs font-semibold text-foreground">
                               {msg.authorName}
                             </strong>
-                            {msg.isLecturer && (
+                            {msg.authorId !== selectedConversation.learnerId && (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary text-primary-foreground">
-                                Giảng viên
+                                {getConversationMessageRoleLabel(msg, selectedConversation.learnerId)}
                               </span>
                             )}
                           </div>

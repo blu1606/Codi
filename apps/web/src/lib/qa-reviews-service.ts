@@ -11,6 +11,15 @@ export interface ConversationMessageItem {
   createdAt: string | Date;
 }
 
+/** Private replies from staff other than the course lecturer are admin replies. */
+export function getConversationMessageRoleLabel(
+  message: Pick<ConversationMessageItem, "authorId" | "isLecturer">,
+  learnerId: string
+): "Giảng viên" | "Quản trị viên" | null {
+  if (message.authorId === learnerId) return null;
+  return message.isLecturer ? "Giảng viên" : "Quản trị viên";
+}
+
 /**
  * Validate lecturer reply text (min 5 characters per §14.1 & §14.2).
  */

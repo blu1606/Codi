@@ -4,11 +4,26 @@ import {
   canResolveConversation,
   formatDate,
   formatRelativeTime,
+  getConversationMessageRoleLabel,
   validateReplyText,
   validateReviewReply,
 } from "./qa-reviews-service";
 
 describe("QA & Reviews Pure Domain Service Tests", () => {
+  describe("conversation message role labels", () => {
+    it("labels an admin reply as administrator rather than lecturer", () => {
+      expect(getConversationMessageRoleLabel({ authorId: "admin", isLecturer: false }, "learner")).toBe("Quản trị viên");
+    });
+
+    it("labels an actual lecturer reply as lecturer", () => {
+      expect(getConversationMessageRoleLabel({ authorId: "lecturer", isLecturer: true }, "learner")).toBe("Giảng viên");
+    });
+
+    it("does not give a staff badge to the conversation learner", () => {
+      expect(getConversationMessageRoleLabel({ authorId: "learner", isLecturer: false }, "learner")).toBeNull();
+    });
+  });
+
   describe("validateReplyText (STATE-MACHINES.md §14.1 & §14.2)", () => {
     it("rejects replies shorter than 5 characters", () => {
       expect(validateReplyText("").isValid).toBe(false);

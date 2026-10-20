@@ -331,7 +331,7 @@ export async function getLecturerQuestionsData(filters?: {
           authorId: m.authorId,
           authorName: m.authorName || "Người dùng",
           authorAvatar: m.authorAvatar,
-          isLecturer: m.isLecturer,
+          isLecturer: m.isLecturer && m.authorId === user.id,
           body: m.body,
           createdAt: m.createdAt.toISOString(),
         })),
@@ -490,10 +490,11 @@ export async function replyToPrivateConversation(input: {
   }
 
   // Thêm tin nhắn của giảng viên / quản trị viên
+  const isLecturer = conv.instructorId === user.id && roles.includes(ROLE.LECTURER);
   await db.insert(conversationMessages).values({
     conversationId: conv.id,
     authorId: user.id,
-    isLecturer: true,
+    isLecturer,
     body: input.text.trim(),
   });
 
@@ -511,8 +512,8 @@ export async function replyToPrivateConversation(input: {
     }`;
     await notif.notify(
       conv.learnerId,
-      "Có trả lời từ giảng viên",
-      `${user.name || "Giảng viên"} đã trả lời cuộc hội thoại của bạn.`,
+      isLecturer ? "Có trả lời từ giảng viên" : "Có trả lời từ quản trị viên",
+      `${user.name || (isLecturer ? "Giảng viên" : "Quản trị viên")} đã trả lời cuộc hội thoại của bạn.`,
       link
     );
   } catch {
@@ -566,11 +567,16 @@ export async function resolveConversation(input: {
 
   // Kiểm tra điều kiện: ít nhất 1 tin nhắn từ giảng viên
   const messages = await db
-    .select({ isLecturer: conversationMessages.isLecturer })
+    .select({
+      authorId: conversationMessages.authorId,
+      isLecturer: conversationMessages.isLecturer,
+    })
     .from(conversationMessages)
     .where(eq(conversationMessages.conversationId, conv.id));
 
-  const resolveCheck = canResolveConversation(messages);
+  const resolveCheck = canResolveConversation(
+    messages.filter((message) => message.authorId === conv.instructorId)
+  );
   if (!resolveCheck.canResolve) {
     return { success: false, error: resolveCheck.error };
   }

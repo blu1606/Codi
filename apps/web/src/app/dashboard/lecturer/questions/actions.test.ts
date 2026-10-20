@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ForbiddenError, ROLE } from "@codi-1/auth";
+import { conversationMessages, courseConversations } from "@codi-1/db";
 
 const mockLecturer = {
   id: "lecturer-user-1",
@@ -96,6 +97,37 @@ describe("Lecturer Questions & Conversations Server Actions", () => {
   });
 
   describe("getLecturerQuestionsData", () => {
+    it("does not expose a foreign author's legacy lecturer flag as lecturer provenance", async () => {
+      const now = new Date("2026-10-20T00:00:00Z");
+      const listQuery = (rows: unknown[]) => {
+        const query = {
+          innerJoin: vi.fn(() => query),
+          leftJoin: vi.fn(() => query),
+          where: vi.fn(() => query),
+          orderBy: vi.fn().mockResolvedValue(rows),
+        };
+        return { from: () => query };
+      };
+      mockSelect
+        .mockReturnValueOnce({ from: () => ({ where: async () => [{ id: "c1", title: "Course" }] }) })
+        .mockReturnValueOnce(listQuery([]))
+        .mockReturnValueOnce(listQuery([{
+          id: 5, courseId: "c1", courseTitle: "Course", lessonId: "l1", lessonTitle: "Lesson",
+          learnerId: mockLearner.id, learnerName: mockLearner.name, learnerAvatar: null,
+          status: "open", fromAi: true, aiContext: null, createdAt: now,
+        }]))
+        .mockReturnValueOnce(listQuery([
+          { id: 1, authorId: mockAdmin.id, authorName: mockAdmin.name, authorAvatar: null, isLecturer: true, body: "Admin reply", createdAt: now },
+          { id: 2, authorId: mockLecturer.id, authorName: mockLecturer.name, authorAvatar: null, isLecturer: true, body: "Lecturer reply", createdAt: now },
+        ]));
+
+      const result = await getLecturerQuestionsData({ view: "conversations", id: "5" });
+      expect(result.selectedConversation?.messages).toEqual([
+        expect.objectContaining({ authorId: mockAdmin.id, isLecturer: false }),
+        expect.objectContaining({ authorId: mockLecturer.id, isLecturer: true }),
+      ]);
+    });
+
     it("returns empty structure when lecturer has no courses", async () => {
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -280,6 +312,88 @@ describe("Lecturer Questions & Conversations Server Actions", () => {
     });
   });
 
+  describe("private reply provenance and resolution", () => {
+    it("rejects a learner-only private reply", async () => {
+      currentSessionUser = mockLearner;
+      mockGetActiveRoles.mockResolvedValue([ROLE.LEARNER]);
+      await expect(replyToPrivateConversation({ conversationId: 5, text: "Một câu trả lời hợp lệ." })).rejects.toThrow(ForbiddenError);
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
+
+    it("rejects an unrelated lecturer's private reply", async () => {
+      mockSelect.mockReturnValue({
+        from: () => ({ innerJoin: () => ({ where: async () => [{ id: 5, status: "open", instructorId: "another-lecturer" }] }) }),
+      });
+      const result = await replyToPrivateConversation({ conversationId: 5, text: "Một câu trả lời hợp lệ." });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("không có quyền");
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { label: "admin-only non-owner", actor: mockAdmin, roles: [ROLE.ADMIN], instructorId: mockLecturer.id, isLecturer: false },
+      { label: "admin-only owner", actor: mockAdmin, roles: [ROLE.ADMIN], instructorId: mockAdmin.id, isLecturer: false },
+      { label: "admin with lecturer role on another course", actor: mockAdmin, roles: [ROLE.ADMIN, ROLE.LECTURER], instructorId: mockLecturer.id, isLecturer: false },
+      { label: "course lecturer", actor: mockLecturer, roles: [ROLE.LECTURER], instructorId: mockLecturer.id, isLecturer: true },
+      { label: "course lecturer with admin role", actor: mockLecturer, roles: [ROLE.ADMIN, ROLE.LECTURER], instructorId: mockLecturer.id, isLecturer: true },
+    ])("preserves $label provenance before an admin attempts resolution", async ({ actor, roles, instructorId, isLecturer }) => {
+      currentSessionUser = actor;
+      mockGetActiveRoles.mockResolvedValue(roles);
+      const conv = { id: 5, status: "open", courseId: "c1", lessonId: "l1", learnerId: mockLearner.id, instructorId };
+      const messages = [{ authorId: mockLearner.id, isLecturer: false }];
+      mockSelect.mockImplementation(() => ({
+        from: (table: unknown) => {
+          if (table === courseConversations) {
+            return { innerJoin: () => ({ where: async () => [conv] }) };
+          }
+          expect(table).toBe(conversationMessages);
+          return { where: async () => messages };
+        },
+      }));
+      mockInsert.mockReturnValue({
+        values: vi.fn().mockImplementation(async (message: { authorId: string; isLecturer: boolean }) => {
+          messages.push(message);
+        }),
+      });
+      const setValues = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+      mockUpdate.mockReturnValue({ set: setValues });
+
+      expect((await replyToPrivateConversation({ conversationId: 5, text: "Một câu trả lời hợp lệ." })).success).toBe(true);
+      currentSessionUser = mockAdmin;
+      mockGetActiveRoles.mockResolvedValue([ROLE.ADMIN]);
+      const result = await resolveConversation({ conversationId: 5 });
+
+      expect(result.success).toBe(isLecturer);
+      expect(messages[1]).toMatchObject({ authorId: actor.id, isLecturer });
+      expect(mockNotify).toHaveBeenCalledWith(
+        mockLearner.id,
+        isLecturer ? "Có trả lời từ giảng viên" : "Có trả lời từ quản trị viên",
+        expect.any(String),
+        "/learn/c1/l1"
+      );
+      if (isLecturer) {
+        expect(setValues).toHaveBeenCalledWith(expect.objectContaining({ status: "resolved", resolvedBy: mockAdmin.id }));
+      } else {
+        expect(result.error).toContain("trước khi đánh dấu đã giải quyết");
+        expect(setValues).not.toHaveBeenCalledWith(expect.objectContaining({ status: "resolved" }));
+      }
+    });
+
+    it("does not trust a lecturer flag on a reply authored by another user", async () => {
+      currentSessionUser = mockAdmin;
+      mockGetActiveRoles.mockResolvedValue([ROLE.ADMIN]);
+      mockSelect.mockReturnValueOnce({
+        from: () => ({ innerJoin: () => ({ where: async () => [{ id: 5, status: "open", instructorId: mockLecturer.id }] }) }),
+      }).mockReturnValueOnce({
+        from: () => ({ where: async () => [{ authorId: mockAdmin.id, isLecturer: true }] }),
+      });
+
+      const result = await resolveConversation({ conversationId: 5 });
+      expect(result.success).toBe(false);
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+  });
+
   describe("resolveConversation (Decision D8 / D9 & §14.2)", () => {
     it("refuses to resolve conversation if no lecturer reply has been sent", async () => {
       let queryCount = 0;
@@ -355,7 +469,7 @@ describe("Lecturer Questions & Conversations Server Actions", () => {
           return {
             where: vi.fn().mockResolvedValue([
               { isLecturer: false },
-              { isLecturer: true }, // Lecturer has replied
+              { authorId: mockLecturer.id, isLecturer: true }, // Lecturer has replied
             ]),
           };
         }),
@@ -398,7 +512,7 @@ describe("Lecturer Questions & Conversations Server Actions", () => {
           }
           return {
             where: vi.fn().mockResolvedValue([
-              { isLecturer: true }, // Prerequisite met
+              { authorId: "some-other-lecturer", isLecturer: true }, // Prerequisite met
             ]),
           };
         }),
