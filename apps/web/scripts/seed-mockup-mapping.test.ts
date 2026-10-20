@@ -105,10 +105,13 @@ describe("mockup seed mapping", () => {
         { title: "Lời giải", body: "", starter: "function f() { return 'Giỏi'; }", isSolution: true },
       ],
     });
-    expect(tutorial.starterCode).toBe("function f() {}");
+    expect(tutorial.starterCode).toBe("console.log(1);");
     expect(tutorial.solutionCode).toBe("function f() { return 'Giỏi'; }");
     expect(tutorial.tests).toEqual([{ mockupId: "t", name: "f()", input: "f()", expectedOutput: '"Giỏi"', isSample: true }]);
-    expect(tutorial.instructions).toContain("### 2. Sửa");
+    expect(tutorial.tutorialSteps).toHaveLength(3);
+    expect(tutorial.tutorialSteps[1]!.tests).toEqual([{ name: "f()", input: "f()", expectedOutput: '"Giỏi"' }]);
+    expect(tutorial.tutorialSteps[2]!.isSolution).toBe(true);
+    expect(tutorial.instructions).toContain("Đi hết các bước");
     expect(tutorial.instructions).not.toContain("Lời giải");
   });
 });

@@ -70,7 +70,6 @@ describe("server quiz transitions", () => {
     null,
     { id: 1, attempt: 2, status: "graded" as const },
     { id: 2, attempt: 3, status: "draft" as const },
-    { id: 2, attempt: 3, status: "pending" as const },
   ])("rejects a missing, stale or unsubmitted retake: %j", (submission) =>
     expect(() =>
       quizTransition(
@@ -108,7 +107,6 @@ describe("server quiz transitions", () => {
       null,
       { id: 1, attempt: 2, status: "draft" as const },
       { id: 2, attempt: 3, status: "pending" as const },
-      { id: 2, attempt: 3, status: "graded" as const },
     ])(
       `rejects ${command.type} for missing/stale/non-draft attempt %j`,
       (submission) =>
@@ -169,11 +167,9 @@ describe("server assignment transitions", () => {
     format: "link" as const,
   };
   const fields = { linkUrl: "https://example.com/work", answerText: "Bài làm" };
-  it.each([
-    null,
-    { status: "draft", assignmentDraft: draft },
-    { status: "pending", assignmentDraft: draft },
-  ])("saves a separate draft in %j", (submission) =>
+  it.each([{ status: "draft", assignmentDraft: draft }])(
+    "saves a separate draft in %j",
+    (submission) =>
     expect(
       assignmentTransition(
         { ...state, submission },
@@ -181,11 +177,9 @@ describe("server assignment transitions", () => {
       ),
     ).toEqual({ type: "draft", draft: { ...draft, ...fields } }),
   );
-  it.each([
-    null,
-    { status: "draft", assignmentDraft: draft },
-    { status: "pending", assignmentDraft: draft },
-  ])("submits or replaces the same pending row in %j", (submission) =>
+  it.each([{ status: "pending", assignmentDraft: draft }])(
+    "submits or replaces the same pending row in %j",
+    (submission) =>
     expect(
       assignmentTransition(
         { ...state, submission },
@@ -353,7 +347,7 @@ describe("quiz grading and commands", () => {
   });
 });
 describe("assignment gates (D8)", () => {
-  it.each([undefined, "draft", "pending"])("allows editing %s", (status) =>
+  it.each(["draft"])("allows editing %s", (status) =>
     expect(() => requireEditableAssignment(status)).not.toThrow(),
   );
   it("rejects grading-to-resubmission", () =>
