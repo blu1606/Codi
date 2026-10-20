@@ -49,6 +49,34 @@ afterEach(async () => {
 });
 
 describe("cart requests across logout", () => {
+  it.each(["pending", "succeeded"])("does not restart desktop/mobile carts when a concurrent logout has %s", async (state) => {
+    await render(true);
+    const sessionId = auth.session!.session.id;
+    const first = deferred<{ error: unknown }>();
+    const second = deferred<{ error: unknown }>();
+    let firstResult!: Promise<{ error: unknown }>;
+    let secondResult!: Promise<{ error: unknown }>;
+    await act(async () => {
+      firstResult = endSession(sessionId, () => first.promise);
+      secondResult = endSession(sessionId, () => second.promise);
+    });
+    expect(signal(0).aborted).toBe(true);
+    expect(signal(1).aborted).toBe(true);
+    if (state === "succeeded") {
+      await act(async () => { second.resolve({ error: null }); await secondResult; });
+    }
+    await act(async () => { first.resolve({ error: { status: 500 } }); await firstResult; });
+    await update();
+    await act(async () => root.render(null));
+    await render(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    if (state === "pending") {
+      await act(async () => { second.resolve({ error: null }); await secondResult; });
+    }
+    await update();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("does not fetch again when the same user's session object is refreshed", async () => {
     await render();
     expect(label()).toBe("Giỏ hàng, 3 khoá học");
