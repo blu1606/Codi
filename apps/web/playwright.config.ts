@@ -23,7 +23,11 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   timeout: 120_000,
   expect: { timeout: 20_000 },
-  reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
+  reporter: [
+    ["list"],
+    ["html", { outputFolder: "playwright-report", open: "never" }],
+    ["json", { outputFile: "test-results/results.json" }],
+  ],
   use: {
     baseURL,
     channel,
@@ -58,7 +62,8 @@ export default defineConfig({
     ? {
         command: "node scripts/prepare-pdf-assets.mjs && pnpm exec next dev --port 3002",
         url: `${DEFAULT_BASE_URL}/login`,
-        reuseExistingServer: true,
+        // Never inherit another session's database/configuration merely because it uses this port.
+        reuseExistingServer: false,
         timeout: 300_000,
         stdout: "ignore",
         stderr: "pipe",

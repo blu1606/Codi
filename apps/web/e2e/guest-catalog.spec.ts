@@ -1,8 +1,10 @@
 import type { Page } from "@playwright/test";
 
 import {
-  cancelOrder,
+  cleanupOrderAndCart,
+  cartCourseIds,
   orderCodeFromUrl,
+  PAYMENTS_UNAVAILABLE,
   paymentScreenAvailable,
   publishedCourses,
   purchasableCourses,
@@ -85,7 +87,6 @@ test.describe("guest catalog and course detail", () => {
 
   test("UI-COM-06 course detail syllabus labels each lesson with its type", async ({ page, request }) => {
     // Some seeded courses have no chapters yet; check the first course that has a syllabus.
-    const labels = page.getByText(/^(Video|Bài đọc|Quiz|Bài tập code|Bài tập)$/);
     let checked: string | null = null;
     for (const course of await publishedCourses(request)) {
       await openDetail(page, course.slug);
@@ -95,7 +96,14 @@ test.describe("guest catalog and course detail", () => {
       break;
     }
     expect(checked, "no published course with lessons").not.toBeNull();
-    await expect(labels.first()).toBeVisible();
+    const syllabus = page.getByRole("region", { name: /Nội dung khóa học/ });
+    await syllabus.getByRole("button", { name: "Mở rộng tất cả" }).click();
+    const lessons = syllabus.getByRole("listitem");
+    expect(await lessons.count(), "syllabus must contain lessons").toBeGreaterThan(0);
+    for (const lesson of await lessons.all()) {
+      await expect(lesson.getByText(/^(Video|Bài đọc|Quiz|Bài tập code|Bài tập)$/)).toBeVisible();
+      await expect(lesson.locator("svg").first()).toBeVisible();
+    }
   });
 
   test("UI-COM-07 free-preview lessons carry a 'Học thử' badge", async ({ page, request }) => {
@@ -131,12 +139,13 @@ test.describe("guest catalog and course detail", () => {
   test("UI-COM-10 wrong password in the overlay shows an inline error and keeps the overlay open", async ({
     page,
     request,
+    health,
   }) => {
     const [course] = (await publishedCourses(request)).filter((c) => c.price > 0);
     await openDetail(page, course.slug);
     await purchaseCard(page).getByRole("button", { name: "Thêm vào giỏ" }).click();
-    await signInThroughGate(page, "Sai-mat-khau-123!");
-    await expect(gate(page).getByText(/không đúng|không chính xác|sai/i)).toBeVisible();
+    await health.expectHttp(page, { status: 401, method: "POST", pathname: "/api/auth/sign-in/email" }, () => signInThroughGate(page, "Sai-mat-khau-123!"));
+    await expect.soft(gate(page).getByText(/không đúng|không chính xác|sai/i)).toBeVisible();
     await expect(gate(page)).toBeVisible();
     expect(new URL(page.url()).pathname).toBe(`/courses/${course.slug}`);
   });
@@ -144,6 +153,7 @@ test.describe("guest catalog and course detail", () => {
   test("UI-COM-11 signing in from the overlay adds the course on the same page", async ({ page, rolePage }) => {
     const learner = await rolePage("learner");
     const [course] = await purchasableCourses(learner.request, 1);
+    const cartBefore = await cartCourseIds(learner.request);
     try {
       await openDetail(page, course.slug);
       await purchaseCard(page).getByRole("button", { name: "Thêm vào giỏ" }).click();
@@ -154,6 +164,9 @@ test.describe("guest catalog and course detail", () => {
       await expect(toast).toBeVisible();
       await expect(toast.getByRole("button", { name: "Xem giỏ hàng" })).toBeVisible();
       await expect(purchaseCard(page).getByText("Đã trong giỏ hàng")).toBeVisible();
+      await expect.poll(() => cartCourseIds(page.request)).toEqual(expect.arrayContaining([...cartBefore, course.id]));
+      expect((await cartCourseIds(page.request)).length).toBe(cartBefore.length + 1);
+      await expect(page.getByRole("link", { name: `Giỏ hàng, ${cartBefore.length + 1} khoá học`, exact: true })).toBeVisible();
     } finally {
       await removeFromCart(learner.request, course.id);
     }
@@ -172,17 +185,21 @@ test.describe("guest catalog and course detail", () => {
       await expect(gate(page).getByText("Đăng nhập để mua khoá học.")).toBeVisible();
       await signInThroughGate(page);
       await page.waitForURL(`**/courses/${course.slug}/checkout?order=*`);
-      if (await paymentScreenAvailable(page, health)) {
-        await expect(page.getByText(course.title, { exact: true })).toBeVisible();
-      }
+      test.skip(!(await paymentScreenAvailable(page, health)), PAYMENTS_UNAVAILABLE);
+      await expect(page.getByText(course.title, { exact: true })).toBeVisible();
     } finally {
       const code = orderCodeFromUrl(page.url());
-      if (code) await cancelOrder(learner.request, code);
+      await cleanupOrderAndCart(learner.request, code, [course.id]);
     }
   });
 
-  test("UI-COM-14 guest opening /cart is sent to sign-in with returnTo=/cart", async ({ page }) => {
-    await page.goto("/cart");
+  test("UI-COM-14 guest opening /cart is sent to sign-in with returnTo=/cart", async ({ page, health }) => {
+    // CartView's mount effect is replayed by dev StrictMode; both observed requests must be the guard denial.
+    await health.expectHttp(page, { status: 401, method: "GET", pathname: "/api/student/cart", maxCount: 2 }, async () => {
+      await page.goto("/cart");
+      await page.waitForURL((url) => url.pathname === "/login");
+      await page.waitForLoadState("networkidle");
+    });
     await page.waitForURL((url) => url.pathname === "/login");
     expect(new URL(page.url()).searchParams.get("returnTo")).toBe("/cart");
     await expect(page.getByLabel("Địa chỉ Email")).toBeVisible();

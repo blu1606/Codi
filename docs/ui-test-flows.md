@@ -12,11 +12,11 @@ Tài liệu này chỉ định nghĩa **ca test và cách chạy**. Kết quả 
 |---|---|
 | App | Suite tự chạy `next dev --port 3002` (cổng 3001 để dành cho `pnpm dev` hằng ngày), `BETTER_AUTH_URL=http://localhost:3002` |
 | Trình duyệt | `@playwright/test` 1.63.0 (devDependency của `apps/web`), `channel: "chrome"` (Chrome đã cài; đổi bằng `PW_CHANNEL`) |
-| DB | DB dev dùng chung (`DATABASE_URL` trong `apps/web/.env`). Không chạy khi một phiên khác đang `pnpm install` hoặc seed DB |
+| DB | DB dev dùng chung (`DATABASE_URL` trong `apps/web/.env`). Điều phối khoảng ghi dữ liệu với các phiên khác; không chạy đồng thời seed hoặc test ghi cùng tài khoản |
 | Tài khoản | `pnpm db:seed-accounts` tạo `<base>+student` (LEARNER, đã xác thực), `<base>+gv` (LECTURER), `<base>+admin` (ADMIN) từ `SEED_ACCOUNT_TARGETS` / `SEED_ACCOUNT_PASSWORD`. Script đọc từ `.env`, không in ra |
 | Dữ liệu học | `db:seed-onboarding`, `db:seed-learning-path`, `db:seed-lesson-player`, `db:seed-assessments`, `db:seed-coding` (xem `apps/web/package.json`) |
 | Tài khoản tạm | Ca đăng ký / quản trị tạo `<base>+uitest<tag><timestamp>`; OTP đọc từ bảng `verification` của DB dev (chỉ khi `E2E_ALLOW_DB=1`), không in ra |
-| Thanh toán | Màn checkout cần `SEPAY_*` trong `apps/web/.env`; thiếu thì endpoint trả 503 và các ca cần màn QR tự `skip`. Không thanh toán thật, không giả webhook |
+| Thanh toán | Màn checkout cần `SEPAY_*` hợp lệ; chỉ `skip` khi server local do suite khởi động thiếu/sai cấu hình và hiển thị trạng thái không khả dụng. Server đã cấu hình hoặc server ngoài không khả dụng là FAIL. Không thanh toán thật, không giả webhook |
 
 Quy tắc chung cho mọi ca:
 - Ghi lại console error, request 4xx/5xx và nội dung badge "N Issues" của Next dev overlay. Overlay có lỗi tính là issue.
@@ -188,25 +188,56 @@ pnpm --filter web exec playwright test cart-checkout -g "UI-COM-4"   # một fil
 pnpm --filter web exec playwright show-report   # mở báo cáo HTML (apps/web/playwright-report/)
 ```
 
+PowerShell:
+
+```powershell
+$env:E2E_ALLOW_DB = '1'
+pnpm test:e2e
+Remove-Item Env:E2E_ALLOW_DB
+```
+
+Kiểm tra collection mà không khởi động app, đăng nhập hoặc ghi DB:
+
+```bash
+pnpm --filter web exec playwright test --list --reporter=list
+```
+
+**Không có chế độ read-only chỉ bằng cách bỏ `E2E_ALLOW_DB`.** Setup vẫn tạo session; các ca OTP vẫn đăng ký
+tài khoản/gửi email; giỏ hàng, đơn hàng và nháp code vẫn có thể thay đổi. Cờ này chỉ mở các ca đọc OTP trực tiếp
+từ DB để xác thực tài khoản tạm. Xác nhận target và điều phối các tác dụng phụ trước khi chạy suite.
+
 | Biến | Ý nghĩa |
 |---|---|
 | `SEED_ACCOUNT_TARGETS`, `SEED_ACCOUNT_PASSWORD` | Bắt buộc. Đọc từ `apps/web/.env`; tài khoản là alias `+student` / `+gv` / `+admin` của mục đầu tiên |
 | `E2E_ALLOW_DB=1` | Cho phép tạo tài khoản tạm và đọc OTP từ bảng `verification` (`DATABASE_URL`). Không đặt thì các ca đó `skip` |
 | `E2E_BASE_URL` | Mặc định `http://localhost:3002`. Đặt khác thì suite không tự khởi động server |
 | `PW_CHANNEL` | Kênh trình duyệt, mặc định `chrome` (bundled browser không được cài) |
+| `SEPAY_WEBHOOK_SECRET`, `SEPAY_BANK_CODE`, `SEPAY_ACCOUNT_NUMBER` | Cần để mở màn thanh toán. Khi endpoint trả 503 do thiếu cấu hình, các ca cần màn này ghi rõ lý do không chạy được. Không thực hiện chuyển khoản hay giả webhook |
 
 Cách chạy:
 - `webServer` khởi động `next dev --port 3002` (kèm `BETTER_AUTH_URL`) rồi tự tắt khi xong; nếu cổng 3002 đã có server thì
-  dùng lại. Cổng 3001 không bị đụng tới.
+  dừng báo lỗi, không tự dùng lại server có thể trỏ DB/cấu hình khác. Cổng 3001 không bị đụng tới.
 - Project `setup` (`auth.setup.ts`) đăng nhập 3 tài khoản seed và lưu storage state vào `apps/web/e2e/.auth/` (gitignore).
 - `workers: 1`, chạy tuần tự vì DB dùng chung. Không retry ở máy cá nhân.
 - Project `mobile-390` chỉ chạy test gắn tag `@mobile` và kiểm tra không tràn ngang.
-- Fixture `health` (`e2e/fixtures.ts`) đánh fail mọi test có console error, page error hoặc response 5xx ngoài danh sách nhiễu
-  đã ghi chú (lỗi hydration đã biết được kiểm riêng ở UI-LRN-29 / UI-ADM-22).
+- Fixture `health` (`e2e/fixtures.ts`) đánh fail mọi test có console error, page error hoặc response cùng origin 4xx/5xx
+  ngoài danh sách nhiễu đã ghi chú (lỗi hydration đã biết được kiểm riêng ở UI-LRN-29 / UI-ADM-22). Các phản hồi lỗi
+  chủ đích được giới hạn đúng page, method, path, status và số lần trong thao tác; mặc định một lần. Riêng guard GET giỏ
+  cho phép tối đa hai lần do effect mount chạy lại trong dev StrictMode (đã đo thực tế); vẫn lưu trong attachment `browser-health`.
+  Voucher hợp lệ phải khớp phép tính WELCOME20 (20%, tối thiểu 500000 VND, không trần), không chỉ đổi chữ tổng tiền.
 - Dọn dẹp: test chỉ xoá đúng khoá học mình thêm vào giỏ, huỷ đơn mình tạo, hoàn tác khoá/đổi role trên tài khoản tạm. Không bao
   giờ khoá hoặc hạ quyền tài khoản seed. Checkout từ giỏ chạy trên tài khoản tạm vì đơn từ giỏ lấy hết dòng trong giỏ.
+- Alias `+uitest…` vẫn được giữ trong DB sau lần chạy; suite không xoá tài khoản. Các ca coding xác nhận phản hồi lưu
+  nháp từ server khi nhập và khi khôi phục code ban đầu, thay vì chờ toàn trang hết request.
 - Ảnh VietQR bị chặn và trace tắt để báo cáo không chứa số tài khoản nhận tiền.
 - Ca lệch spec được viết theo spec và để FAIL thật (không `skip`, không `test.fail`); danh sách nằm trong báo cáo lần chạy.
+- UI-COM-12/44/52/54 cần màn thanh toán: thiếu điều kiện chạy thì ghi `skip`, không tính các bước chưa kiểm tra là pass.
+  UI-COM-52 phải xác nhận huỷ qua UI, trở về `/cart` và thấy khoá học được trả lại; cleanup API không thay thế bước này.
+- Có 74 ca hành vi và 3 ca setup. Kết quả JSON ở `apps/web/test-results/results.json`, HTML ở
+  `apps/web/playwright-report/`. Báo cáo thô, ảnh lỗi và storage state chỉ dùng cục bộ: có thể chứa email hoặc dữ liệu
+  tài khoản thử, không commit hay tải công khai.
+- E2E chạy thủ công. CI chưa chạy E2E vì suite cần DB dev dùng chung, tài khoản seed
+  và có thể gửi email xác thực. Chỉ đưa vào CI khi có DB, mailbox và dữ liệu fixture riêng, có cơ chế dọn theo lần chạy.
 
 | File | ID |
 |---|---|
@@ -217,5 +248,26 @@ Cách chạy:
 | `roles-guards.spec.ts` | UI-GRD-01–09 (kèm UI-LRN-26/27, UI-COM-56, UI-LEC-15) |
 | `lecturer.spec.ts` | UI-LEC-01, 03, 04 |
 | `admin-users.spec.ts` | UI-ADM-01, 03, 10, 12–22, UI-COM-13 |
+
+### Giới hạn chứng minh và kiểm tra nghiệp vụ
+
+- COM52/53/55 yêu cầu dialog hủy ở cả checkout và banner giỏ: "Giữ đơn hàng" giữ pending/cart, xác nhận mới gọi hủy,
+  về `/cart` và kiểm tra course ID được phục hồi. Response thành công và pending banner biến mất chưa phải truy vấn độc lập
+  trạng thái `cancelled` của đúng order. COM44/55 dọn cả order lẫn course ID kể cả khi thêm dòng thứ hai thất bại.
+- Helper hành vi admin đi qua confirmation/consent; chỉ helper **cleanup** tương thích thao tác trực tiếp của implementation cũ.
+  ADM12 dùng tài khoản mới không có enrollment/order/course để kiểm tra số 0 và tách acknowledgement khỏi reason hợp lệ.
+  ADM13 bật acknowledgement rồi thử reason rỗng/whitespace; nếu UI chặn submit thì server validation chưa được kiểm chứng.
+  Khi product thiếu dialog, các bước gate/session/reactivation sau đó **chưa chạy**, không diễn giải là tất cả đều hỏng.
+- Menu admin/lecturer chưa triển khai phải không tương tác; menu đã triển khai phải mở đúng route/page. Không bắt buộc
+  một tính năng mãi ở trạng thái "Sắp ra mắt". Annotation ghi rõ destination chưa được kiểm tra.
+- COM06 kiểm tra từng dòng bài trong syllabus đã mở; COM11 kiểm tra giỏ persisted và badge; LRN14 loại `0/0`, thao tác
+  filter và đối chiếu input/expected/actual. GRD07 kiểm tra đích browser, không nhận redirect login/dashboard sai là pass.
+- Assertion copy độc lập dùng soft assertion vẫn làm test FAIL, nhưng cho phép kiểm tra tiếp bảo toàn input/navigation.
+  CTA chính không được nới để khớp implementation; control hiện hữu có thể được thao tác riêng để phân biệt lỗi copy và hành vi.
+- COM26 hiện chỉ kiểm tra recovery cho địa chỉ lạ; so sánh email thật/lạ trong catalog chưa được tự động chứng minh.
+  Ảnh QR bị chặn vì dữ liệu nhận tiền: COM54 không chứng minh tải QR thành công hoặc UI fallback khi ảnh lỗi.
+  Settlement thật, inbox recovery, paid AI và submit tiến độ vẫn ngoài phạm vi chạy này.
+- Báo cáo phải gắn với snapshot cụ thể. Run lịch sử 58 pass (3 setup + 55 behavior), 18 fail cả hai lần, 1 flaky, 0 skip
+  không tự xác nhận các sửa test sau audit nghiệp vụ; ghi riêng kết quả mới và các nhánh dừng sớm.
 
 Ghi kết quả vào `plans/reports/ui-test-<yymmdd-hhmm>-<area>.md`.

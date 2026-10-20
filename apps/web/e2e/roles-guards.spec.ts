@@ -49,14 +49,18 @@ test.describe("role guards", () => {
     await expect(page.getByText("Quản trị viên", { exact: true })).toBeVisible();
   });
 
-  test("UI-GRD-05 (UI-COM-56) staff get no cart link and /cart does not show a cart", async ({ rolePage }) => {
+  test("UI-GRD-05 (UI-COM-56) staff get no cart link and /cart does not show a cart", async ({ rolePage, health }) => {
     for (const role of ["lecturer", "admin"] as const) {
       const page = await rolePage(role);
       await page.goto(`/dashboard/${role}`);
       await expect(page.getByRole("navigation", { name: "Điều hướng chính" })).toBeVisible();
       await expect(page.getByRole("link", { name: /^Giỏ hàng/ })).toHaveCount(0);
 
-      await page.goto("/cart");
+      // Bound the observed dev StrictMode replay of CartView's mount effect to this page visit.
+      await health.expectHttp(page, { status: 403, method: "GET", pathname: "/api/student/cart", maxCount: 2 }, async () => {
+        await page.goto("/cart");
+        await page.waitForLoadState("networkidle");
+      });
       await expect(page.getByText("Chỉ học viên mới có thể xem giỏ hàng")).toBeVisible();
       await expect(page.getByRole("heading", { name: "Tóm tắt đơn hàng" })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Thanh toán" })).toHaveCount(0);
@@ -72,7 +76,7 @@ test.describe("role guards", () => {
     }
   });
 
-  test("UI-GRD-07 no visible internal link on staff home pages leads to a 4xx/5xx page", async ({ rolePage }) => {
+  test("UI-GRD-07 staff home links reach their destination without auth or error redirects", async ({ rolePage }) => {
     const pages = { lecturer: ["/dashboard/lecturer"], admin: ["/dashboard/admin", "/dashboard/admin/users"] } as const;
     const broken: string[] = [];
     for (const role of ["lecturer", "admin"] as const) {
@@ -84,8 +88,13 @@ test.describe("role guards", () => {
           ...new Set(links.map((a) => a.getAttribute("href")?.split(/[?#]/)[0] ?? "")),
         ]);
         for (const href of hrefs.filter((h) => h && !h.startsWith("/api/"))) {
-          const res = await page.request.get(href, { timeout: 120_000 });
-          if (res.status() >= 400) broken.push(`${role} ${home}: ${href} -> ${res.status()}`);
+          const res = await page.goto(href);
+          const destination = href === "/dashboard" ? `/dashboard/${role}` : href;
+          if (!res || res.status() >= 400 || pathOf(page) !== destination) {
+            broken.push(`${role} ${home}: ${href} -> ${pathOf(page)} (${res?.status() ?? "no response"})`);
+          }
+          await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+          await expect(page.getByLabel("Địa chỉ Email")).toHaveCount(0);
         }
       }
     }

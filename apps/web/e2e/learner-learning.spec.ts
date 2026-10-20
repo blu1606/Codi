@@ -117,14 +117,26 @@ test.describe("learner learning", () => {
       "function sumEven(numbers) {\n  return numbers.filter((n) => n % 2 === 0).reduce((sum, n) => sum + n, 0);\n}\n";
     await withDraft(page, solution, async () => {
       await runButton(page).click();
-      await expect(page.getByText(/^(\d+)\/\1 bài kiểm thử đạt$/)).toBeVisible({ timeout: 60_000 });
+      const result = page.getByText(/^([1-9]\d*)\/\1 bài kiểm thử đạt$/);
+      await expect(result).toBeVisible({ timeout: 60_000 });
+      const total = Number((await result.innerText()).split("/")[0]);
       const filters = page.getByLabel("Lọc kiểm thử");
       for (const label of ["Tất cả", "Đạt", "Chưa đạt"]) {
         await expect(filters.getByRole("button", { name: label, exact: true })).toBeVisible();
       }
+      const rows = page.locator("details").filter({ has: page.locator("summary", { hasText: /Đạt|Chưa đạt/ }) });
+      await expect(rows).toHaveCount(total);
+      await filters.getByRole("button", { name: "Chưa đạt", exact: true }).click();
+      await expect(rows).toHaveCount(0);
+      await filters.getByRole("button", { name: "Đạt", exact: true }).click();
+      await expect(rows).toHaveCount(total);
+      await filters.getByRole("button", { name: "Tất cả", exact: true }).click();
+      await expect(rows).toHaveCount(total);
       const detail = page.locator("details").filter({ has: page.locator("summary", { hasText: "Mảng rỗng" }) });
       await detail.locator("summary").click();
-      await expect(detail.getByText("Kết quả thực tế")).toBeVisible();
+      for (const [label, value] of [["Đầu vào", "sumEven([])"], ["Kết quả mong đợi", "0"], ["Kết quả thực tế", "0"]]) {
+        await expect(detail.locator("dl div").filter({ has: page.getByText(label, { exact: true }) }).locator("dd")).toHaveText(value);
+      }
     });
   });
 
@@ -158,7 +170,13 @@ test.describe("learner learning", () => {
     await page.getByRole("table").getByRole("button", { name: "Chuỗi", exact: true }).click();
     const details = page.getByText("Bài học liên quan").locator("xpath=ancestor::*[@data-slot='card'][1]");
     await expect(details.getByText(/Chưa học|Đang học|Thành thạo|Vững/).first()).toBeVisible();
-    await expect(details.getByRole("link", { name: "Học bài này" })).toBeVisible();
+    await expect.soft(details.getByRole("link", { name: "Học bài này" })).toBeVisible();
+    const related = details.getByRole("link").filter({ hasText: /Học bài này|Chuỗi/ }).first();
+    const href = await related.getAttribute("href");
+    expect(href).toMatch(/^\/learn\/[^/]+\/[0-9a-f-]{36}$/);
+    await related.click();
+    await expect(page.getByRole("heading", { name: "Bài học này đang bị khoá" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Về lộ trình" }).first()).toBeVisible();
   });
 
   test("UI-LRN-28 lesson player fits 390px and opens the 'Danh sách bài học' sheet", { tag: "@mobile" }, async ({

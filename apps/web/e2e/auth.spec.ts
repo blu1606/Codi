@@ -44,14 +44,13 @@ test.describe("sign-up, OTP, password recovery, settings", () => {
     await expect(page.getByRole("button", { name: /Gửi lại mã/ })).toBeVisible();
   });
 
-  test("UI-COM-22 a wrong OTP shows a Vietnamese inline error and keeps the digits", async ({ page }) => {
+  test("UI-COM-22 a wrong OTP shows a Vietnamese inline error and keeps the digits", async ({ page, health }) => {
     await reachOtpScreen(page, "badotp");
     await digit(page, 1).click();
     await page.keyboard.type("000000");
-    await page.getByRole("button", { name: "Xác thực và hoàn tất" }).click();
-    await expect(card(page).getByText(/mã .*(không đúng|không chính xác|không hợp lệ|hết hạn)/i)).toBeVisible();
-    await expect(digit(page, 1)).toHaveValue("0");
-    await expect(digit(page, 6)).toHaveValue("0");
+    await health.expectHttp(page, { status: 400, method: "POST", pathname: "/api/auth/email-otp/verify-email" }, () => page.getByRole("button", { name: "Xác thực và hoàn tất" }).click());
+    await expect.soft(card(page).getByText(/mã .*(không đúng|không chính xác|không hợp lệ|hết hạn)/i)).toBeVisible();
+    for (let n = 1; n <= 6; n++) await expect(digit(page, n)).toHaveValue("0");
   });
 
   test("UI-COM-23 the verify button stays disabled until all 6 digits are entered", async ({ page }) => {
@@ -63,7 +62,9 @@ test.describe("sign-up, OTP, password recovery, settings", () => {
 
   test("UI-COM-24 'Sửa' on the OTP screen returns to edit the email", async ({ page }) => {
     const email = await reachOtpScreen(page, "edit");
-    await page.getByRole("button", { name: "Sửa", exact: true }).click();
+    await expect.soft(page.getByRole("button", { name: "Sửa", exact: true })).toBeVisible();
+    // Keep the contract failure while independently exercising the existing email-edit control.
+    await page.getByRole("button", { name: /^(Sửa|Đăng ký lại)$/ }).click();
     await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
     await expect(page.getByText("Xác thực tài khoản")).toHaveCount(0);
   });
@@ -73,7 +74,7 @@ test.describe("sign-up, OTP, password recovery, settings", () => {
     await expect(page.getByRole("button", { name: /Gửi lại mã/ })).toBeDisabled();
   });
 
-  test("UI-COM-26 forgot password shows a neutral confirmation with the address and a spam-folder hint", async ({
+  test("UI-COM-26 unknown-address recovery shows the address and a spam-folder hint", async ({
     page,
   }) => {
     // Unknown address only: no mail is sent and the seeded mailbox is not spammed.
@@ -101,7 +102,7 @@ test.describe("sign-up, OTP, password recovery, settings", () => {
     const nameField = dialog.getByLabel("Tên hiển thị");
     const original = await nameField.inputValue();
     try {
-      await expect(dialog.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+      await expect.soft(dialog.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
       await nameField.fill(`${original} x`);
       await expect(dialog.getByRole("button", { name: "Lưu thay đổi" })).toBeEnabled();
     } finally {

@@ -10,8 +10,7 @@ export { expect };
 // Console / page errors that are not product defects in the flow under test. Each entry says why.
 const KNOWN_NOISE: { pattern: RegExp; reason: string }[] = [
   {
-    // Chrome logs every 4xx/5xx sub-resource as a console error. Gated flows expect 401/403/404, and 5xx
-    // responses are caught separately by the response listener below, so the console copy is redundant.
+    // Same-origin 4xx/5xx responses are recorded separately below; the console copy has no request context.
     pattern: /^Failed to load resource: the server responded with a status of \d+/,
     reason: "duplicate of network status",
   },
@@ -36,6 +35,8 @@ const KNOWN_NOISE: { pattern: RegExp; reason: string }[] = [
 ];
 
 export interface Health {
+  /** Expect an exact response during this action; bounded repeats require evidence at the call site. */
+  expectHttp(page: Page, response: { status: number; method: string; pathname: string; maxCount?: number }, action: () => Promise<unknown>): Promise<void>;
   /** Accept an extra console/page error for the current test only (for example an expected 500 path). */
   allow(pattern: RegExp): void;
   /** Start collecting errors from another page (role pages and throwaway contexts call this). */
@@ -48,10 +49,27 @@ export interface Health {
 
 function createHealth(baseURL: string): Health {
   const allowed: RegExp[] = [];
-  const errors: string[] = [];
+  const errors: { text: string; expected: boolean }[] = [];
+  const pending: { page: Page; status: number; method: string; pathname: string; remaining: number }[] = [];
   const origin = new URL(baseURL).origin;
   const watched = new WeakSet<Page>();
   return {
+    async expectHttp(page, response, action) {
+      const rule = { page, ...response, remaining: response.maxCount ?? 1 };
+      pending.push(rule);
+      try {
+        const [actual] = await Promise.all([
+          page.waitForResponse((res) => {
+            const url = new URL(res.url());
+            return url.origin === origin && url.pathname === response.pathname && res.request().method() === response.method;
+          }),
+          action(),
+        ]);
+        expect(actual.status(), `${response.method} ${response.pathname}`).toBe(response.status);
+      } finally {
+        pending.splice(pending.indexOf(rule), 1);
+      }
+    },
     allow: (pattern) => void allowed.push(pattern),
     watch(page) {
       if (watched.has(page)) return;
@@ -60,22 +78,26 @@ function createHealth(baseURL: string): Health {
       // screenshots and reports cannot contain it. The checkout screen stays usable without the image.
       void page.route(/^https:\/\/img\.vietqr\.io\//, (route) => route.abort("blockedbyclient"));
       page.on("console", (msg) => {
-        if (msg.type() === "error") errors.push(`console: ${msg.text().slice(0, 400)}`);
+        if (msg.type() === "error") errors.push({ text: `console: ${msg.text().slice(0, 400)}`, expected: false });
       });
-      page.on("pageerror", (err) => errors.push(`pageerror: ${err.message.slice(0, 400)}`));
+      page.on("pageerror", (err) => errors.push({ text: `pageerror: ${err.message.slice(0, 400)}`, expected: false }));
       page.on("response", (res) => {
-        if (res.status() >= 500 && res.url().startsWith(origin)) {
-          errors.push(`http ${res.status()} ${res.request().method()} ${new URL(res.url()).pathname}`);
+        const url = new URL(res.url());
+        if (res.status() >= 400 && url.origin === origin) {
+          const rule = pending.find((entry) => entry.remaining > 0 && entry.page === page &&
+            entry.status === res.status() && entry.method === res.request().method() && entry.pathname === url.pathname);
+          if (rule) rule.remaining--;
+          errors.push({ text: `http ${res.status()} ${res.request().method()} ${url.pathname}`, expected: Boolean(rule) });
         }
       });
     },
-    all: () => [...errors],
+    all: () => errors.map((e) => e.text),
     unexpected: () =>
       errors.filter(
-        (e) =>
-          !KNOWN_NOISE.some((n) => n.pattern.test(e.replace(/^(console|pageerror): /, ""))) &&
-          !allowed.some((a) => a.test(e)),
-      ),
+        (e) => !e.expected &&
+          !KNOWN_NOISE.some((n) => n.pattern.test(e.text.replace(/^(console|pageerror): /, ""))) &&
+          !allowed.some((a) => a.test(e.text)),
+      ).map((e) => e.text),
   };
 }
 
@@ -170,12 +192,13 @@ interface Fixtures {
 
 export const test = base.extend<Fixtures>({
   health: [
-    async ({ page, baseURL }, use) => {
+    async ({ page, baseURL }, use, testInfo) => {
       const health = createHealth(baseURL ?? "http://localhost:3002");
       health.watch(page);
       await use(health);
+      await testInfo.attach("browser-health", { body: JSON.stringify(health.all()), contentType: "application/json" });
       const unexpected = health.unexpected();
-      expect(unexpected, "unexpected console errors, page errors or 5xx responses").toEqual([]);
+      expect(unexpected, "unexpected console errors, page errors or 4xx/5xx responses").toEqual([]);
     },
     { auto: true },
   ],

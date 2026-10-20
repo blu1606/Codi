@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
+import { getSepayConfig } from "../src/lib/sepay-config";
 import type { Health } from "./fixtures";
 
 export interface CatalogCourse {
@@ -60,25 +61,40 @@ export async function buyNow(request: APIRequestContext, courseId: string): Prom
 /** Cancels a pending order created by a test. Cancelling an already cancelled order is tolerated. */
 export async function cancelOrder(request: APIRequestContext, orderCode: string): Promise<void> {
   const res = await request.post("/api/orders/cancel", { data: { orderCode } });
-  if (!res.ok() && res.status() !== 404 && res.status() !== 409 && res.status() !== 400) {
+  if (!res.ok() && res.status() !== 404) {
     throw new Error(`POST /api/orders/cancel failed with HTTP ${res.status()}`);
   }
 }
 
 export const orderCodeFromUrl = (url: string): string | null => new URL(url).searchParams.get("order");
 
+/** Attempt every owned cleanup, including cart restoration after cancellation, and preserve all failures. */
+export async function cleanupOrderAndCart(request: APIRequestContext, orderCode: string | null, courseIds: string[]): Promise<void> {
+  const errors: unknown[] = [];
+  if (orderCode) {
+    try { await cancelOrder(request, orderCode); } catch (error) { errors.push(error); }
+  }
+  for (const courseId of courseIds) {
+    try { await removeFromCart(request, courseId); } catch (error) { errors.push(error); }
+  }
+  if (errors.length) throw new AggregateError(errors, "Owned order/cart cleanup failed");
+}
+
 /**
  * Waits for the course checkout screen. Returns false when the payment endpoint fails closed because SePay is not
- * configured (SEPAY_* empty in apps/web/.env): the page then shows "Thanh toán tạm thời chưa khả dụng." and the
- * expected 503 from /api/payments/create-transaction is accepted for this test.
+ * configured in the suite-owned local server: the page then shows "Thanh toán tạm thời chưa khả dụng.".
+ * An unavailable screen on a configured or externally managed server is a failure, not a prerequisite skip.
  */
 export async function paymentScreenAvailable(page: Page, health: Health): Promise<boolean> {
   const heading = page.getByRole("heading", { name: "Thanh toán khóa học" });
   const unavailable = page.getByText("Thanh toán tạm thời chưa khả dụng.");
   await expect(heading.or(unavailable)).toBeVisible();
   if (await heading.isVisible()) return true;
+  if (new URL(page.url()).origin !== "http://localhost:3002" || getSepayConfig()) {
+    throw new Error("Payment screen unavailable on a configured or external server; verify the server configuration.");
+  }
   health.allow(/^http 503 POST \/api\/payments\/create-transaction$/);
   return false;
 }
 
-export const PAYMENTS_UNAVAILABLE = "Payment screen unavailable: SEPAY_* is empty in apps/web/.env (endpoint fails closed).";
+export const PAYMENTS_UNAVAILABLE = "Payment screen unavailable: local SEPAY_* configuration is missing or invalid (endpoint fails closed).";
