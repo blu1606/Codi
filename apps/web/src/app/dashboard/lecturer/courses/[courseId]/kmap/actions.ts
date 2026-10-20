@@ -56,6 +56,26 @@ export interface KnowledgeMapDataDto {
   defaultOrder: { id: string; title: string }[] | null;
 }
 
+async function requireCourseSkills(
+  store: Pick<typeof db, "select">,
+  courseId: string,
+  skillIds: number[]
+) {
+  if (skillIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error("Khái niệm không thuộc khoá học này.");
+  }
+  const requestedIds = [...new Set(skillIds)];
+  // Hold membership stable until the edge mutation commits.
+  const ownedSkills = await store
+    .select({ id: skills.id })
+    .from(skills)
+    .where(and(eq(skills.courseId, courseId), inArray(skills.id, requestedIds)))
+    .for("share");
+  if (ownedSkills.length !== requestedIds.length) {
+    throw new Error("Khái niệm không thuộc khoá học này.");
+  }
+}
+
 /**
  * Lấy toàn bộ dữ liệu Bản đồ kiến thức AI (Màn hình S24).
  * Hỗ trợ cả chế độ xem chỉ đọc khi khoá học đang chờ duyệt (isLocked = true).
@@ -277,7 +297,10 @@ export async function runKnowledgeMapAnalysis(courseId: string) {
       await db
         .update(skillPrerequisites)
         .set({ review: "suggested" })
-        .where(inArray(skillPrerequisites.skillId, skillIds));
+        .where(and(
+          inArray(skillPrerequisites.skillId, skillIds),
+          inArray(skillPrerequisites.prerequisiteSkillId, skillIds)
+        ));
     }
   }
 
@@ -341,16 +364,23 @@ export async function reviewKnowledgeMapItem(
       .update(skills)
       .set({ review: payload.review })
       .where(and(eq(skills.id, payload.skillId), eq(skills.courseId, courseId)));
-  } else if (kind === "edge" && payload.fromSkillId && payload.toSkillId) {
-    await db
-      .update(skillPrerequisites)
-      .set({ review: payload.review })
-      .where(
-        and(
-          eq(skillPrerequisites.prerequisiteSkillId, payload.fromSkillId),
-          eq(skillPrerequisites.skillId, payload.toSkillId)
-        )
-      );
+  } else if (kind === "edge") {
+    const { fromSkillId, toSkillId } = payload;
+    if (fromSkillId === undefined || toSkillId === undefined) {
+      throw new Error("Khái niệm không thuộc khoá học này.");
+    }
+    await db.transaction(async (tx) => {
+      await requireCourseSkills(tx, courseId, [fromSkillId, toSkillId]);
+      await tx
+        .update(skillPrerequisites)
+        .set({ review: payload.review })
+        .where(
+          and(
+            eq(skillPrerequisites.prerequisiteSkillId, fromSkillId),
+            eq(skillPrerequisites.skillId, toSkillId)
+          )
+        );
+    });
   }
 
   // STATE-MACHINES §18: Nếu đang là confirmed mà có chỉnh sửa thì chuyển về ready
@@ -409,38 +439,41 @@ export async function addKnowledgeMapEdge(
     throw new Error("Một khái niệm không thể cần học trước chính nó.");
   }
 
-  const [existing] = await db
-    .select()
-    .from(skillPrerequisites)
-    .where(
-      and(
-        eq(skillPrerequisites.prerequisiteSkillId, fromSkillId),
-        eq(skillPrerequisites.skillId, toSkillId)
-      )
-    );
-
-  if (existing) {
-    if (existing.review !== "declined") {
-      throw new Error("Quan hệ này đã có.");
-    }
-    // Nếu trước đó đã bỏ thì khôi phục lại và đặt thành accepted
-    await db
-      .update(skillPrerequisites)
-      .set({ review: "accepted" })
+  await db.transaction(async (tx) => {
+    await requireCourseSkills(tx, courseId, [fromSkillId, toSkillId]);
+    const [existing] = await tx
+      .select()
+      .from(skillPrerequisites)
       .where(
         and(
           eq(skillPrerequisites.prerequisiteSkillId, fromSkillId),
           eq(skillPrerequisites.skillId, toSkillId)
         )
       );
-  } else {
-    await db.insert(skillPrerequisites).values({
-      prerequisiteSkillId: fromSkillId,
-      skillId: toSkillId,
-      source: "lecturer",
-      review: "accepted",
-    });
-  }
+
+    if (existing) {
+      if (existing.review !== "declined") {
+        throw new Error("Quan hệ này đã có.");
+      }
+      // Nếu trước đó đã bỏ thì khôi phục lại và đặt thành accepted
+      await tx
+        .update(skillPrerequisites)
+        .set({ review: "accepted" })
+        .where(
+          and(
+            eq(skillPrerequisites.prerequisiteSkillId, fromSkillId),
+            eq(skillPrerequisites.skillId, toSkillId)
+          )
+        );
+    } else {
+      await tx.insert(skillPrerequisites).values({
+        prerequisiteSkillId: fromSkillId,
+        skillId: toSkillId,
+        source: "lecturer",
+        review: "accepted",
+      });
+    }
+  });
 
   if (course.knowledgeMapStatus === "confirmed") {
     await db
@@ -470,7 +503,10 @@ export async function acceptAllKnowledgeMap(courseId: string) {
       ? await db
           .select()
           .from(skillPrerequisites)
-          .where(inArray(skillPrerequisites.skillId, skillIds))
+          .where(and(
+            inArray(skillPrerequisites.skillId, skillIds),
+            inArray(skillPrerequisites.prerequisiteSkillId, skillIds)
+          ))
       : [];
 
   const suggestedSkills = allSkills.filter((s) => s.review === "suggested");

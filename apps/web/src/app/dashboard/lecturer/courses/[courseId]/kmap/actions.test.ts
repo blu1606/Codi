@@ -22,6 +22,7 @@ const mockSelect = vi.fn();
 const mockInsert = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
+const mockTransaction = vi.fn();
 
 vi.mock("@/services", () => ({
   auth: {
@@ -34,6 +35,7 @@ vi.mock("@/services", () => ({
     insert: (...args: any[]) => mockInsert(...args),
     update: (...args: any[]) => mockUpdate(...args),
     delete: (...args: any[]) => mockDelete(...args),
+    transaction: (...args: any[]) => mockTransaction(...args),
   },
 }));
 
@@ -69,6 +71,9 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
       user: { id: "lecturer-1" },
     });
     mockRequireRole.mockResolvedValue(undefined);
+    mockTransaction.mockImplementation((callback) => callback({
+      select: mockSelect, update: mockUpdate, insert: mockInsert,
+    }));
   });
 
   describe("getKnowledgeMapData", () => {
@@ -301,6 +306,10 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
             callCount++;
             if (callCount === 1) {
               return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]);
+            }
+            if (callCount === 2) {
+              const rows = [{ id: 101 }, { id: 102 }];
+              return Object.assign(Promise.resolve(rows), { for: vi.fn().mockResolvedValue(rows) });
             }
             return Promise.resolve([{ prerequisiteSkillId: 101, skillId: 102, review: "accepted" }]);
           }),
