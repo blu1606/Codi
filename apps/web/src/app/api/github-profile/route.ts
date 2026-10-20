@@ -10,6 +10,7 @@ import {
   type GithubProfileTrustedBudget,
 } from "@/lib/github-profile-store";
 import { projectGithubProfile } from "@/lib/github-profile-analysis-contract";
+import { githubProfileAiDiagnosticsSchema } from "@/lib/github-profile-ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -232,11 +233,15 @@ export async function POST(request: NextRequest) {
             : result.code === "github_not_linked"
               ? 409
               : 502;
+      const diagnostics = githubProfileAiDiagnosticsSchema.safeParse(
+        result.diagnostics,
+      );
       return NextResponse.json(
         {
           code: result.code,
           error: result.error,
           ...(result.retryAt ? { retryAt: result.retryAt } : {}),
+          ...(diagnostics.success ? { diagnostics: diagnostics.data } : {}),
         },
         { status, headers: privateHeaders },
       );

@@ -234,6 +234,82 @@ afterEach(() => {
 });
 
 describe("GitHub profile route boundaries (offline doubles, not live acceptance)", () => {
+  it("preserves safe diagnostics from real helper and service without publication or leakage", async () => {
+    const original = providerTransport();
+    transport.mockImplementation(async (url, init) =>
+      String(url) === "https://api.openai.com/v1/responses"
+        ? json({ error: "PRIVATE_PROVIDER_BODY fixture-ai-key owner 123" }, 503)
+        : original(url, init),
+    );
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    const body = await response.json();
+    expect(body).toEqual({
+      code: "ai_failed",
+      error: "Chưa tạo được hồ sơ năng lực. Không tự thử lại.",
+      diagnostics: {
+        phase: "generation",
+        category: "http",
+        httpStatus: 503,
+        elapsedMs: expect.any(Number),
+      },
+    });
+    expect(JSON.stringify(body)).not.toMatch(
+      /PRIVATE|fixture|owner|123|snapshot|reservation/,
+    );
+    expect(mocks.store.reserveGeneration).toHaveBeenCalledOnce();
+    expect(mocks.store.publish).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "valid-extra",
+    "bad-phase",
+    "bad-category",
+    "bad-status",
+    "bad-elapsed",
+  ])("whitelists diagnostic response fields: %s", async (variant) => {
+    const diagnostics = {
+      phase: "generation",
+      category: "http",
+      httpStatus: 500,
+      elapsedMs: 12,
+      rawBody: "PRIVATE",
+      message: "PRIVATE",
+      token: "PRIVATE",
+      userId: "PRIVATE",
+    };
+    if (variant === "bad-phase") diagnostics.phase = "PRIVATE_PROVIDER_PHASE";
+    if (variant === "bad-category")
+      diagnostics.category = "PRIVATE_PROVIDER_CODE";
+    if (variant === "bad-status") diagnostics.httpStatus = 999;
+    if (variant === "bad-elapsed") diagnostics.elapsedMs = -1;
+    mocks.run.mockResolvedValue({
+      ok: false,
+      code: "ai_failed",
+      error: "safe",
+      diagnostics,
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(body).toEqual({
+      code: "ai_failed",
+      error: "safe",
+      ...(variant === "valid-extra"
+        ? {
+            diagnostics: {
+              phase: "generation",
+              category: "http",
+              httpStatus: 500,
+              elapsedMs: 12,
+            },
+          }
+        : {}),
+    });
+    expect(JSON.stringify(body)).not.toContain("PRIVATE");
+  });
+
   it.each(["https://foreign.test", "null", ""])(
     "rejects missing/foreign Origin %s before authentication",
     async (origin) => {

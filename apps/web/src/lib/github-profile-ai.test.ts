@@ -157,6 +157,140 @@ function harness(tokens = 1000) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("bounded one-call GitHub profile synthesis", () => {
+  it.each(["preflight", "generation"] as const)(
+    "retains only safe HTTP diagnostics for %s",
+    async (phase) => {
+      const task = harness();
+      task[phase === "preflight" ? "count" : "generate"].mockResolvedValue(
+        json(
+          { error: "PRIVATE_PROVIDER_BODY", code: "arbitrary-provider-code" },
+          429,
+        ),
+      );
+      const error = await generateGithubProfileAnalysis(
+        snapshot(),
+        task.options,
+      ).catch((error: unknown) => error);
+      expect(error).toMatchObject({
+        diagnostics: {
+          phase,
+          category: "http",
+          httpStatus: 429,
+          elapsedMs: expect.any(Number),
+        },
+      });
+      expect(
+        Object.keys((error as GithubProfileAiError).diagnostics!).sort(),
+      ).toEqual(["category", "elapsedMs", "httpStatus", "phase"]);
+      expect(JSON.stringify(error)).not.toMatch(
+        /PRIVATE|arbitrary-provider-code|learner|file-1/,
+      );
+      expect(task.calls).toHaveLength(phase === "preflight" ? 1 : 2);
+    },
+  );
+
+  it.each([
+    "network",
+    "body_missing",
+    "body_limit",
+    "body_read",
+    "body_invalid",
+    "response_schema",
+    "output_json",
+    "output_schema",
+    "count_mismatch",
+    "provenance",
+  ] as const)(
+    "distinguishes sanitized generation stage %s",
+    async (failure) => {
+      const task = harness();
+      const reply = generation();
+      let phase = "generation";
+      let category: string = failure;
+      if (failure === "network")
+        task.generate.mockRejectedValue(
+          new Error("PRIVATE_NETWORK_PROMPT_TOKEN"),
+        );
+      else if (failure === "body_missing")
+        task.generate.mockResolvedValue(new Response(null));
+      else if (failure === "body_limit")
+        task.generate.mockResolvedValue(json({ private: "x".repeat(300_000) }));
+      else if (failure === "body_read")
+        task.generate.mockResolvedValue(
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(new Error("PRIVATE_STREAM"));
+              },
+            }),
+          ),
+        );
+      else if (failure === "body_invalid")
+        task.generate.mockResolvedValue(new Response("PRIVATE_NOT_JSON"));
+      else {
+        if (failure === "response_schema") {
+          reply.model = "PRIVATE_MODEL";
+          phase = failure;
+          category = "schema";
+        }
+        if (failure === "count_mismatch") {
+          reply.usage.input_tokens++;
+          phase = "response_schema";
+        }
+        if (failure === "output_json") {
+          reply.output[0]!.content[0]!.text = "PRIVATE_NOT_JSON";
+          phase = failure;
+          category = "body_invalid";
+        }
+        if (failure === "output_schema") {
+          reply.output[0]!.content[0]!.text = JSON.stringify({ PRIVATE: true });
+          phase = failure;
+          category = "schema";
+        }
+        if (failure === "provenance") {
+          const value = analysis();
+          value.technologies[0]!.supports[0]!.evidenceId = "PRIVATE_INVENTED";
+          reply.output[0]!.content[0]!.text = JSON.stringify(value);
+          phase = failure;
+        }
+        task.generate.mockResolvedValue(json(reply));
+      }
+      const error = await generateGithubProfileAnalysis(
+        snapshot(),
+        task.options,
+      ).catch((error: unknown) => error);
+      expect(error).toMatchObject({
+        reservationState: "consumed",
+        diagnostics: {
+          phase,
+          category,
+          httpStatus: failure === "network" ? null : 200,
+          elapsedMs: expect.any(Number),
+        },
+      });
+      expect(JSON.stringify(error)).not.toContain("PRIVATE");
+      expect(task.generate).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("measures elapsed time without returning provider text", async () => {
+    const task = harness();
+    vi.spyOn(performance, "now")
+      .mockReturnValueOnce(100)
+      .mockReturnValueOnce(147.9);
+    task.count.mockRejectedValue(new Error("PRIVATE"));
+    await expect(
+      generateGithubProfileAnalysis(snapshot(), task.options),
+    ).rejects.toMatchObject({
+      diagnostics: {
+        phase: "preflight",
+        category: "network",
+        elapsedMs: 47,
+        httpStatus: null,
+      },
+    });
+  });
+
   it("counts the exact instruction/input/schema context before atomically reserving and dispatching", async () => {
     const task = harness();
     const result = await generateGithubProfileAnalysis(
@@ -311,6 +445,11 @@ describe("bounded one-call GitHub profile synthesis", () => {
       ).rejects.toMatchObject({
         code: "preflight_failed",
         reservationState: "not_attempted",
+        diagnostics: {
+          phase: "preflight",
+          category: "schema",
+          httpStatus: 200,
+        },
       });
       expect(task.reserveGeneration).not.toHaveBeenCalled();
       expect(task.calls).toHaveLength(1);
@@ -480,6 +619,7 @@ describe("bounded one-call GitHub profile synthesis", () => {
     ).rejects.toMatchObject({
       code: "aborted",
       reservationState: "not_attempted",
+      diagnostics: { phase: "input", category: "aborted", httpStatus: null },
     });
     expect(task.transport).not.toHaveBeenCalled();
   });

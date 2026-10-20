@@ -11,6 +11,8 @@ import {
 import {
   generateGithubProfileAnalysis,
   GithubProfileAiError,
+  githubProfileAiDiagnosticsSchema,
+  type GithubProfileAiDiagnostics,
   type GithubProfileAiOptions,
   type GithubProfileAiResult,
 } from "./github-profile-ai";
@@ -117,6 +119,7 @@ export type GithubProfileServiceResult =
       snapshot?: GithubCollectionSnapshot;
       /** Unknown/consumed must never be refunded or retried automatically. */
       reservationState?: GithubProfileAiError["reservationState"];
+      diagnostics?: GithubProfileAiDiagnostics;
     };
 
 function deadline(ms: number, parent: AbortSignal) {
@@ -228,6 +231,7 @@ export async function runGithubProfileRequest(
   let phase: "account" | "token" | "collection" | "ai" = "account";
   let snapshot: GithubCollectionSnapshot | undefined;
   let phaseDeadline: ReturnType<typeof deadline> | undefined;
+  let aiStarted: number | undefined;
   try {
     const account = await untilAborted(
       () => options.getLinkedAccount(request.signal),
@@ -303,6 +307,7 @@ export async function runGithubProfileRequest(
         generation: null,
       };
     phase = "ai";
+    aiStarted = performance.now();
     phaseDeadline = deadline(
       GITHUB_PROFILE_SERVICE_LIMITS.aiMs,
       request.signal,
@@ -326,7 +331,32 @@ export async function runGithubProfileRequest(
       profile: projectGithubProfile(snapshot, generation.analysis),
     };
   } catch (error) {
-    const detail = snapshot ? { snapshot } : {};
+    const diagnostic = githubProfileAiDiagnosticsSchema.safeParse(
+      error instanceof GithubProfileAiError ? error.diagnostics : undefined,
+    );
+    const detail = {
+      ...(snapshot ? { snapshot } : {}),
+      ...(diagnostic.success
+        ? { diagnostics: diagnostic.data }
+        : phase === "ai" && aiStarted !== undefined
+          ? {
+              diagnostics: {
+                phase: "ai" as const,
+                category:
+                  options.abortSignal.aborted ||
+                  request.signal.aborted ||
+                  phaseDeadline?.signal.aborted
+                    ? ("aborted" as const)
+                    : ("unknown" as const),
+                elapsedMs: Math.max(
+                  0,
+                  Math.floor(performance.now() - aiStarted),
+                ),
+                httpStatus: null,
+              },
+            }
+          : {}),
+    };
     if (options.abortSignal.aborted)
       return fail("aborted", {
         ...detail,

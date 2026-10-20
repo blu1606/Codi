@@ -55,13 +55,59 @@ type FailureCode =
   | "generation_failed"
   | "invalid_output";
 type ReservationState = "not_attempted" | "denied" | "unknown" | "consumed";
+// Only locally assigned stages/categories may cross the authenticated API boundary.
+export const githubProfileAiDiagnosticsSchema = z.object({
+  phase: z.enum([
+    "input",
+    "preflight",
+    "reservation",
+    "generation",
+    "response_schema",
+    "output_json",
+    "output_schema",
+    "provenance",
+    "ai",
+  ]),
+  category: z.enum([
+    "invalid_input",
+    "no_observations",
+    "http",
+    "network",
+    "body_missing",
+    "body_limit",
+    "body_read",
+    "body_invalid",
+    "schema",
+    "count_mismatch",
+    "provenance",
+    "input_limit",
+    "reservation_denied",
+    "reservation_failed",
+    "aborted",
+    "unknown",
+  ]),
+  elapsedMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  httpStatus: z.number().int().min(100).max(599).nullable(),
+});
+export type GithubProfileAiDiagnostics = z.infer<
+  typeof githubProfileAiDiagnosticsSchema
+>;
 export class GithubProfileAiError extends Error {
   constructor(
     public readonly code: FailureCode,
     public readonly reservationState: ReservationState,
+    public readonly diagnostics?: GithubProfileAiDiagnostics,
   ) {
     super(`GitHub profile synthesis failed: ${code}`);
     this.name = "GithubProfileAiError";
+  }
+}
+
+class ResponseBodyError extends Error {
+  constructor(
+    public readonly category: GithubProfileAiDiagnostics["category"],
+  ) {
+    super("response_failure");
   }
 }
 
@@ -195,8 +241,8 @@ async function boundedJson(
   limit: number,
 ): Promise<unknown> {
   if (!response.ok || !response.body) {
-    await response.body?.cancel();
-    throw new Error("http_failure");
+    await response.body?.cancel().catch(() => undefined);
+    throw new ResponseBodyError(response.ok ? "body_missing" : "http");
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -206,7 +252,7 @@ async function boundedJson(
       const part = await reader.read();
       if (part.done) break;
       length += part.value.byteLength;
-      if (length > limit) throw new Error("response_limit");
+      if (length > limit) throw new ResponseBodyError("body_limit");
       chunks.push(part.value);
     }
     const bytes = new Uint8Array(length);
@@ -215,7 +261,16 @@ async function boundedJson(
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    try {
+      return JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+      );
+    } catch {
+      throw new ResponseBodyError("body_invalid");
+    }
+  } catch (error) {
+    if (error instanceof ResponseBodyError) throw error;
+    throw new ResponseBodyError("body_read");
   } finally {
     await reader.cancel().catch(() => {});
     reader.releaseLock();
@@ -254,6 +309,10 @@ export async function generateGithubProfileAnalysis(
 ): Promise<GithubProfileAiResult> {
   let state: ReservationState = "not_attempted";
   let phase: FailureCode = "invalid_input";
+  const started = performance.now();
+  let diagnosticPhase: GithubProfileAiDiagnostics["phase"] = "input";
+  let category: GithubProfileAiDiagnostics["category"] = "invalid_input";
+  let httpStatus: number | null = null;
   const signal = AbortSignal.any([
     options.abortSignal,
     AbortSignal.timeout(GITHUB_PROFILE_AI_LIMITS.totalMs),
@@ -290,16 +349,27 @@ export async function generateGithubProfileAnalysis(
         cache: "no-store",
       });
     phase = "preflight_failed";
+    diagnosticPhase = "preflight";
+    const read = async (url: string, body: string, limit: number) => {
+      httpStatus = null;
+      category = "network";
+      const response = await post(url, body);
+      httpStatus =
+        response.status >= 100 && response.status <= 599
+          ? response.status
+          : null;
+      category = "body_read";
+      const raw = await boundedJson(response, limit);
+      category = "schema";
+      return raw;
+    };
     const count = z
       .object({
         object: z.literal("response.input_tokens"),
         input_tokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
       })
       .parse(
-        await boundedJson(
-          await post(`${ENDPOINT}/input_tokens`, JSON.stringify(countBody)),
-          4096,
-        ),
+        await read(`${ENDPOINT}/input_tokens`, JSON.stringify(countBody), 4096),
       );
     signal.throwIfAborted();
     if (count.input_tokens > GITHUB_PROFILE_AI_LIMITS.inputTokens)
@@ -311,6 +381,9 @@ export async function generateGithubProfileAnalysis(
       maximumCostMicroUsd: maximumCost(count.input_tokens),
     });
     phase = "reservation_failed";
+    diagnosticPhase = "reservation";
+    category = "reservation_failed";
+    httpStatus = null;
     state = "unknown";
     const reserved = await untilAborted(
       options.reserveGeneration(reservation),
@@ -318,17 +391,17 @@ export async function generateGithubProfileAnalysis(
     );
     if (reserved !== true) {
       state = "denied";
+      category = "reservation_denied";
       throw new Error("reservation_denied");
     }
     state = "consumed";
     signal.throwIfAborted();
     phase = "generation_failed";
-    const raw = await boundedJson(
-      await post(ENDPOINT, generationBody),
-      256 * 1024,
-    );
+    diagnosticPhase = "generation";
+    const raw = await read(ENDPOINT, generationBody, 256 * 1024);
     signal.throwIfAborted();
     phase = "invalid_output";
+    diagnosticPhase = "response_schema";
     const response = z
       .object({
         model: z.literal("gpt-6-luna"),
@@ -356,15 +429,22 @@ export async function generateGithubProfileAnalysis(
         }),
       })
       .parse(raw);
-    if (response.usage.input_tokens !== count.input_tokens)
+    if (response.usage.input_tokens !== count.input_tokens) {
+      category = "count_mismatch";
       throw new Error("count_mismatch");
-    const parsed = wireSchema.parse(
-      JSON.parse(
-        response.output
-          .flatMap((item) => item.content.map((part) => part.text))
-          .join(""),
-      ),
+    }
+    diagnosticPhase = "output_json";
+    category = "body_invalid";
+    const output = JSON.parse(
+      response.output
+        .flatMap((item) => item.content.map((part) => part.text))
+        .join(""),
     );
+    diagnosticPhase = "output_schema";
+    category = "schema";
+    const parsed = wireSchema.parse(output);
+    diagnosticPhase = "provenance";
+    category = "provenance";
     const analysis = validateGithubProfileAnalysis(retained, parsed, excluded);
     return {
       analysis,
@@ -375,7 +455,27 @@ export async function generateGithubProfileAnalysis(
       reservedMaximumCostMicroUsd: reservation.maximumCostMicroUsd,
     };
   } catch (error) {
-    if (error instanceof GithubProfileAiError) throw error;
-    throw new GithubProfileAiError(signal.aborted ? "aborted" : phase, state);
+    const code =
+      error instanceof GithubProfileAiError
+        ? error.code
+        : signal.aborted
+          ? "aborted"
+          : phase;
+    throw new GithubProfileAiError(code, state, {
+      phase: diagnosticPhase,
+      category: signal.aborted
+        ? "aborted"
+        : error instanceof GithubProfileAiError
+          ? error.code === "input_limit"
+            ? "input_limit"
+            : error.code === "no_observations"
+              ? "no_observations"
+              : category
+          : error instanceof ResponseBodyError
+            ? error.category
+            : category,
+      elapsedMs: Math.max(0, Math.floor(performance.now() - started)),
+      httpStatus,
+    });
   }
 }

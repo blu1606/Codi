@@ -573,6 +573,12 @@ describe("GitHub direct request orchestration", () => {
       code: "ai_timeout",
       reservationState: "unknown",
       snapshot: { evidence: [{ kind: "languages" }] },
+      diagnostics: {
+        phase: "ai",
+        category: "aborted",
+        httpStatus: null,
+        elapsedMs: expect.any(Number),
+      },
     });
     finish(true);
     await vi.advanceTimersByTimeAsync(0);
@@ -625,6 +631,24 @@ describe("GitHub direct request orchestration", () => {
               : "consumed",
       });
       expect(JSON.stringify(result)).not.toContain("fixture-ai-key");
+      expect(result).toMatchObject({
+        diagnostics: {
+          phase:
+            phase === "count"
+              ? "preflight"
+              : phase === "invalid_output"
+                ? "provenance"
+                : phase,
+          category:
+            phase === "reservation"
+              ? "reservation_denied"
+              : phase === "invalid_output"
+                ? "provenance"
+                : "network",
+          httpStatus: phase === "invalid_output" ? 200 : null,
+          elapsedMs: expect.any(Number),
+        },
+      });
       expect(h.count).toHaveBeenCalledTimes(1);
       expect(h.generate).toHaveBeenCalledTimes(
         phase === "count" || phase === "reservation" ? 0 : 1,
