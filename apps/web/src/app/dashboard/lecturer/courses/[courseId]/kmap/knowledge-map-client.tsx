@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -60,6 +60,8 @@ import { cn } from "@codi-1/ui/lib/utils";
 import {
   computeAcceptAllPlan,
   computeLecturerGraphLayers,
+  findCycle,
+  topoSortLessons,
   type KnowledgeGraphConcept,
   type KnowledgeGraphEdge,
 } from "@/lib/knowledge-map-runner";
@@ -82,8 +84,11 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
   const router = useRouter();
   const graphId = useId();
 
-  // Local state initialized from server data
+  // Refresh saved graph data without resetting local drafts or view controls.
   const [data, setData] = useState<KnowledgeMapDataDto>(initialData);
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
   const [viewMode, setViewMode] = useState<"graph" | "list">("graph");
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [chapterFilter, setChapterFilter] = useState<string>("all");
@@ -105,7 +110,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
   const [newEdgeTo, setNewEdgeTo] = useState<string>("");
   const [isAddingEdge, setIsAddingEdge] = useState(false);
 
-  const { course, concepts, edges, isLocked, chapters, lessons, cycle, defaultOrder } = data;
+  const { course, concepts, edges, isLocked, chapters, lessons } = data;
 
   // Active / Live items (excluding declined)
   const liveConcepts = useMemo(() => concepts.filter((c) => c.review !== "declined"), [concepts]);
@@ -120,6 +125,15 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
           liveConceptIds.has(e.to)
       ),
     [edges, liveConceptIds]
+  );
+
+  const cycle = useMemo(
+    () => findCycle([...liveConceptIds], activeEdges),
+    [liveConceptIds, activeEdges]
+  );
+  const defaultOrder = useMemo(
+    () => topoSortLessons(concepts, edges, lessons),
+    [concepts, edges, lessons]
   );
 
   // Pending items count
