@@ -6,7 +6,7 @@ import type { Database } from "@codi-1/db";
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
-  transaction: vi.fn(), revalidate: vi.fn(), verifySession: vi.fn(),
+  transaction: vi.fn(), revalidate: vi.fn(), verifySession: vi.fn(), lock: vi.fn(),
 }));
 vi.mock("@/services", () => ({ db: mocks }));
 vi.mock("@/lib/lecturer-auth", () => ({ verifyLecturerSession: mocks.verifySession }));
@@ -51,7 +51,8 @@ function select(selection?: Row) {
     leftJoin() { return query; },
     orderBy(...values: SQL[]) { ordering = values; return query; },
     limit(value: number) { maximum = value; return query; },
-    for(mode: string) { events.push(`lock:${name}:${mode}`); return query; },
+    // Observe the requested query mode, not actual PostgreSQL lock acquisition.
+    for(mode: string) { mocks.lock(name, mode); events.push(`lock:${name}:${mode}`); return query; },
     then(resolve: (rows: Row[]) => unknown, reject?: (error: unknown) => unknown) {
       return Promise.resolve().then(() => {
         let rows = tables[name]!.filter((row) => matches(predicate, row));
@@ -150,7 +151,51 @@ beforeEach(() => {
 });
 const onboarding = () => createOnboardingService(mocks as unknown as Database);
 
+function expectEventBefore(before: string, after: string) {
+  expect(events).toContain(before);
+  expect(events).toContain(after);
+  expect(events.indexOf(before)).toBeLessThan(events.indexOf(after));
+}
+
 describe("immutable quiz revisions", () => {
+  it.each(["lock:assessments:update", "insert:quiz_questions"])("rejects absent event %s when checking lock ordering", (missing) => {
+    events = ["lock:assessments:update", "insert:quiz_questions"].filter((event) => event !== missing);
+    expect(() => expectEventBefore("lock:assessments:update", "insert:quiz_questions")).toThrow();
+  });
+
+  it.each([null, undefined, 0, -1, 1.5, NaN, Infinity, "1"])("rejects invalid persisted attempt revision %s instead of falling back to current", async (pin) => {
+    tables.assessment_submissions![0]!.quizRevision = pin;
+    const before = structuredClone(tables);
+    await expect(onboarding().get("learner", "own")).rejects.toThrow("Không tìm thấy phiên bản bài kiểm tra.");
+    expect(tables).toEqual(before);
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.delete).not.toHaveBeenCalled();
+    expect(mocks.lock).not.toHaveBeenCalled();
+  });
+
+  it.each(["in-progress", "done"])("requests a read-only snapshot for %s GET without lock or mutation calls", async (state) => {
+    tables.student_enrollments![0]!.diagnosticStatus = state;
+    if (state === "done") {
+      Object.assign(tables.assessment_submissions![0]!, { status: "graded", score: 1, gradedAt: new Date() });
+      Object.assign(tables.assessment_answers![0]!, { isCorrect: true, earnedPoints: 1 });
+    }
+    const before = structuredClone(tables);
+    const view = await onboarding().get("learner", "own");
+    expect(view.attemptId).toBe(40);
+    expect(view.diagnostic!.questions.map((question) => question.id)).toEqual([20, 21]);
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: "repeatable read", accessMode: "read only",
+    });
+    expect(mocks.lock).not.toHaveBeenCalled();
+    expect(events.filter((event) => event.startsWith("lock:"))).toEqual([]);
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.delete).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+    expect(tables).toEqual(before);
+  });
   it("declares positive revisions and revision-scoped question positions", () => {
     for (const [table, name] of [[assessments, "assessments_quiz_revision_check"], [quizQuestions, "quiz_questions_revision_check"], [assessmentSubmissions, "submissions_quiz_revision_check"]] as const) {
       const check = getTableConfig(table).checks.find((check) => check.name === name)!;
@@ -181,7 +226,7 @@ describe("immutable quiz revisions", () => {
     expect(resumed.diagnostic!.questions.map((q) => q.id)).toEqual([20, 21]);
     expect(resumed.attemptId).toBe(40);
     expect(resumed.answers).toHaveLength(oldAnswers!.length);
-    expect(events.indexOf("lock:assessments:update")).toBeLessThan(events.indexOf("insert:quiz_questions"));
+    expectEventBefore("lock:assessments:update", "insert:quiz_questions");
     expect(events).not.toContain("delete:quiz_questions");
   });
 
@@ -203,7 +248,7 @@ describe("immutable quiz revisions", () => {
     expect(tables.assessment_submissions!.at(-1)).toMatchObject({ quizRevision: 2, attempt: 2, status: "draft" });
     expect(tables.assessment_answers).toEqual(saved);
     expect(events).toContain("lock:assessments:share");
-    expect(events.indexOf("lock:student_enrollments:update")).toBeLessThan(events.indexOf("lock:assessments:share"));
+    expectEventBefore("lock:student_enrollments:update", "lock:assessments:share");
   });
 
   it("pins the first zero-answer attempt to latest, not a default revision", async () => {
