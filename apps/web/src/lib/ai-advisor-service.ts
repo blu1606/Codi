@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { and, asc, count, desc, eq, inArray, like, sql } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import {
   aiInteractionLogs,
@@ -7,6 +8,7 @@ import {
   courseLessons,
   courses,
   lessonProgress,
+  studentActivities,
   studentEnrollments,
 } from "@codi-1/db";
 import type { GoalDraft } from "@codi-1/db/schema/onboarding-values";
@@ -20,6 +22,23 @@ import {
 } from "./ai-advisor-contract";
 
 export { formatVnd, levelLabel };
+
+export function generateGuestFeedbackToken(logId: number, secret: string): string {
+  return createHmac("sha256", secret).update(`advisor-guest-log:${logId}`).digest("base64url");
+}
+
+export function verifyGuestFeedbackToken(logId: number, token: string, secret: string): boolean {
+  try {
+    const expected = createHmac("sha256", secret).update(`advisor-guest-log:${logId}`).digest();
+    const actual = Buffer.from(token, "base64url");
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface AdvisorContextUser {
   id: string;
@@ -84,6 +103,32 @@ export async function getLearnerProgressContext(
     .orderBy(desc(studentEnrollments.lastActiveAt), desc(studentEnrollments.enrolledAt));
 
   if (!enrollments.length) {
+    // Check if the learner previously stored an advisor intake in studentActivities
+    try {
+      const [activity] = await db
+        .select({
+          metadata: studentActivities.metadata,
+        })
+        .from(studentActivities)
+        .where(
+          and(
+            eq(studentActivities.userId, userId),
+            eq(studentActivities.type, "course_view"),
+            like(studentActivities.metadata, "%advisor_intake%")
+          )
+        )
+        .orderBy(desc(studentActivities.occurredAt))
+        .limit(1);
+
+      if (activity?.metadata) {
+        const parsed = JSON.parse(activity.metadata);
+        if (parsed?.intake) {
+          return { currentCourse: null, ownedCourseIds: [], savedIntake: parsed.intake };
+        }
+      }
+    } catch {
+      // Ignore parse / read errors
+    }
     return { currentCourse: null, ownedCourseIds: [] };
   }
 
@@ -201,7 +246,30 @@ export async function syncLearnerIntakeGoalDraft(
 
   if (!goal && !level && !hours) return;
 
-  // Find active enrollments where goal is not yet finalized
+  // 1. Always record in studentActivities so intake persists even with 0 active enrollments
+  try {
+    await db.insert(studentActivities).values({
+      userId,
+      type: "course_view",
+      metadata: JSON.stringify({
+        type: "advisor_intake",
+        intake: {
+          goal: intake.goal ?? null,
+          level: intake.level ?? null,
+          hoursPerWeek: intake.hoursPerWeek ?? null,
+        },
+        draft: {
+          ...(goal ? { goal } : {}),
+          ...(level ? { level } : {}),
+          ...(hours ? { hours } : {}),
+        },
+      }),
+    });
+  } catch (err) {
+    console.warn("Failed to persist intake activity", err);
+  }
+
+  // 2. Find active enrollments where goal is not yet finalized
   const pendingEnrollments = await db
     .select({
       id: studentEnrollments.id,
@@ -348,14 +416,36 @@ export function buildAdvisorAnswer(params: {
     isBestMatch,
   });
 
-  // Scenario 1: User explicitly asks for something not in catalogue
-  const subjectMatch = promptLower.match(/blockchain|web3|solidity|rust|swift|flutter/i);
-  if (subjectMatch) {
-    const subject = subjectMatch[0].toLowerCase();
+  // Scenario 1: User explicitly asks for a subject/topic
+  // Match common queries like "có khoá python không?", "có khoá học về web3 không?", "học flutter cho người mới"
+  // As well as explicit keywords: blockchain, web3, solidity, rust, swift, flutter, etc.
+  const subjectExtractionRegex =
+    /(?:có\s+khoá(?:\s+học)?(?:\s+nào)?(?:\s+về|\s+cho)?|dạy\s+về|tìm\s+khoá(?:\s+học)?(?:\s+về)?)\s+([a-zA-Z0-9+#.\s]+?)(?:\s+không|\s+cho\s+người|\?|$)/i;
+  const keywordFallbackRegex =
+    /\b(blockchain|web3|solidity|rust|swift|flutter|python|golang|kotlin|vue|angular|devops|aws|docker|kubernetes|ai|machine learning)\b/i;
+
+  let querySubject: string | null = null;
+  const matchDirect = promptLower.match(subjectExtractionRegex);
+  if (matchDirect && matchDirect[1]) {
+    const rawClean = matchDirect[1].trim().replace(/[?!.,]+$/, "");
+    if (rawClean.length >= 2) {
+      querySubject = rawClean.toLowerCase();
+    }
+  }
+  if (!querySubject) {
+    const matchKeyword = promptLower.match(keywordFallbackRegex);
+    if (matchKeyword && matchKeyword[1]) {
+      querySubject = matchKeyword[1].toLowerCase();
+    }
+  }
+
+  if (querySubject) {
     const hasSubjectInCatalog = catalog.some((c) =>
-      c.title.toLowerCase().includes(subject) ||
-      c.description.toLowerCase().includes(subject)
+      c.title.toLowerCase().includes(querySubject!) ||
+      c.description.toLowerCase().includes(querySubject!) ||
+      c.slug.toLowerCase().includes(querySubject!)
     );
+
     if (!hasSubjectInCatalog) {
       const alternative = sortedList.slice(0, 2);
       return {

@@ -169,4 +169,44 @@ describe("ai-advisor-service business logic", () => {
     expect(res.text).toContain("Codi chưa có khoá cho mục tiêu này");
     expect(res.courses.length).toBe(2);
   });
+
+  it("detects absent subject outside the original whitelist (e.g. Python)", () => {
+    const res = buildAdvisorAnswer({
+      prompt: "Có khoá Python không?",
+      catalog: mockCatalog,
+      intake: { skipped: [] },
+      ownedCourseIds: [],
+    });
+
+    expect(res.noMatch).toBe(true);
+    expect(res.text).toContain("Codi chưa có khoá cho mục tiêu này");
+    expect(res.courses.length).toBe(2);
+  });
+
+  it("does not trigger noMatch when requested subject is present in catalog (e.g. React)", () => {
+    const res = buildAdvisorAnswer({
+      prompt: "Có khoá React không?",
+      catalog: mockCatalog,
+      intake: { skipped: [] },
+      ownedCourseIds: [],
+    });
+
+    expect(res.noMatch).toBe(false);
+    expect(res.courses.length).toBeGreaterThan(0);
+    expect(res.courses[0].id).toBe("course-react-001");
+  });
+
+  it("generates and verifies guest capability tokens securely", async () => {
+    const { generateGuestFeedbackToken, verifyGuestFeedbackToken } = await import(
+      "./ai-advisor-service"
+    );
+    const secret = "test-auth-secret-123";
+    const token = generateGuestFeedbackToken(42, secret);
+
+    expect(typeof token).toBe("string");
+    expect(verifyGuestFeedbackToken(42, token, secret)).toBe(true);
+    expect(verifyGuestFeedbackToken(42, "tampered-token", secret)).toBe(false);
+    expect(verifyGuestFeedbackToken(99, token, secret)).toBe(false);
+    expect(verifyGuestFeedbackToken(42, token, "wrong-secret")).toBe(false);
+  });
 });

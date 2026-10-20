@@ -4,12 +4,14 @@ import { auth, db } from "@/services";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   buildAdvisorAnswer,
+  generateGuestFeedbackToken,
   getLearnerProgressContext,
   getPublishedCatalog,
   logAdvisorInteraction,
   syncLearnerIntakeGoalDraft,
 } from "@/lib/ai-advisor-service";
 import { intakeStateSchema, type IntakeState } from "@/lib/ai-advisor-contract";
+import { ENV } from "@/env";
 
 export const maxDuration = 30;
 
@@ -123,9 +125,13 @@ export async function POST(req: Request) {
       isSuccess: true,
     });
 
+    const feedbackToken =
+      !userId && logId ? generateGuestFeedbackToken(logId, ENV.BETTER_AUTH_SECRET) : null;
+
     return NextResponse.json({
       ...answer,
       logId,
+      feedbackToken,
       currentCourse: progressContext.currentCourse,
     });
   } catch (error: any) {

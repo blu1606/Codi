@@ -63,6 +63,7 @@ export interface ChatMessage {
   noMatch?: boolean;
   // Feedback properties
   logId?: number | null;
+  feedbackToken?: string | null;
   vote?: "up" | "down" | null;
   reason?: DownVoteReason | null;
 }
@@ -154,16 +155,6 @@ export function AiAdvisorView({
 
         setLoadingContext(false);
 
-        // Resume guest intent action if learner just logged in
-        if (data.user && initialAction && initialCourseId && !pendingActionHandledRef.current) {
-          pendingActionHandledRef.current = true;
-          if (initialAction === "add-cart") {
-            void handleAddToCart(initialCourseId, "khoá học đã chọn");
-          } else if (initialAction === "enroll-free") {
-            void handleEnrollFree(initialCourseId, "khoá học đã chọn");
-          }
-        }
-
         if (initialPrompt && messages.length === 0) {
           setTimeout(() => {
             handleSend(initialPrompt);
@@ -179,6 +170,28 @@ export function AiAdvisorView({
       active = false;
     };
   }, []);
+
+  // Replay pending guest intent action once authenticated user state is confirmed
+  useEffect(() => {
+    if (!initData?.user || !initialAction || !initialCourseId || pendingActionHandledRef.current) {
+      return;
+    }
+    pendingActionHandledRef.current = true;
+
+    // Clean up query parameters from browser URL without triggering full page reload
+    if (typeof window !== "undefined" && window.history?.replaceState) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("action");
+      url.searchParams.delete("courseId");
+      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+    }
+
+    if (initialAction === "add-cart") {
+      void handleAddToCart(initialCourseId, "khoá học đã chọn", initData.user);
+    } else if (initialAction === "enroll-free") {
+      void handleEnrollFree(initialCourseId, "khoá học đã chọn", initData.user);
+    }
+  }, [initData?.user, initialAction, initialCourseId]);
 
   // Auto-scroll on messages change
   useEffect(() => {
@@ -262,7 +275,7 @@ export function AiAdvisorView({
         throw new Error("Codi tạm thời không phản hồi");
       }
 
-      const data: AdvisorStructuredResponse & { logId?: number } = await res.json();
+      const data: AdvisorStructuredResponse & { logId?: number; feedbackToken?: string | null } = await res.json();
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -277,6 +290,7 @@ export function AiAdvisorView({
                 followups: data.followups,
                 noMatch: data.noMatch,
                 logId: data.logId,
+                feedbackToken: data.feedbackToken ?? null,
                 vote: null,
                 reason: null,
               }
@@ -483,6 +497,7 @@ export function AiAdvisorView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           logId: m.logId,
+          feedbackToken: m.feedbackToken,
           vote: newVote,
         }),
       });
@@ -505,6 +520,7 @@ export function AiAdvisorView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           logId: m.logId,
+          feedbackToken: m.feedbackToken,
           vote: "down",
           reason,
         }),
@@ -512,8 +528,13 @@ export function AiAdvisorView({
     } catch {}
   };
 
-  const handleAddToCart = async (courseId: string, title: string) => {
-    if (!initData?.user) {
+  const handleAddToCart = async (
+    courseId: string,
+    title: string,
+    currentUser?: { id: string } | null
+  ) => {
+    const activeUser = currentUser !== undefined ? currentUser : initData?.user;
+    if (!activeUser) {
       router.push(`/login?callbackURL=${encodeURIComponent(`/ai?action=add-cart&courseId=${courseId}`)}`);
       return;
     }
@@ -548,8 +569,13 @@ export function AiAdvisorView({
     }
   };
 
-  const handleEnrollFree = async (courseId: string, title: string) => {
-    if (!initData?.user) {
+  const handleEnrollFree = async (
+    courseId: string,
+    title: string,
+    currentUser?: { id: string } | null
+  ) => {
+    const activeUser = currentUser !== undefined ? currentUser : initData?.user;
+    if (!activeUser) {
       router.push(`/login?callbackURL=${encodeURIComponent(`/ai?action=enroll-free&courseId=${courseId}`)}`);
       return;
     }

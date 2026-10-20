@@ -85,6 +85,7 @@ export type DownVoteReason = (typeof DOWN_VOTE_REASONS)[number];
 
 export const advisorFeedbackCommand = z.object({
   logId: z.number().int().positive().optional(),
+  feedbackToken: z.string().optional().nullable(),
   vote: z.enum(["up", "down"]).nullable(),
   reason: z.enum(DOWN_VOTE_REASONS).optional().nullable(),
   comment: z.string().max(1000).optional().nullable(),

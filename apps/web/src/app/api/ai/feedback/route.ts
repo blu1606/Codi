@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { auth, db } from "@/services";
 import { aiInteractionLogs } from "@codi-1/db";
 import { advisorFeedbackCommand } from "@/lib/ai-advisor-contract";
+import { verifyGuestFeedbackToken } from "@/lib/ai-advisor-service";
+import { ENV } from "@/env";
 
 export async function POST(req: Request) {
   try {
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Dữ liệu phản hồi không hợp lệ" }, { status: 400 });
     }
 
-    const { logId, vote, reason } = parsed.data;
+    const { logId, feedbackToken, vote, reason } = parsed.data;
 
     // If logId exists, verify ownership and requestType, then append feedback without clobbering diagnostics
     if (logId) {
@@ -52,8 +54,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Bạn không có quyền đánh giá tương tác này." }, { status: 403 });
       }
 
-      // If guest interaction (existing.userId === null), require feedback within 24h
+      // If guest interaction (existing.userId === null), require valid capability token and 24h window
       if (existing.userId === null) {
+        if (!feedbackToken || !verifyGuestFeedbackToken(existing.id, feedbackToken, ENV.BETTER_AUTH_SECRET)) {
+          return NextResponse.json(
+            { error: "Mã xác thực phản hồi khách không hợp lệ." },
+            { status: 403 }
+          );
+        }
+
         const ageMs = Date.now() - new Date(existing.createdAt).getTime();
         if (ageMs > 24 * 60 * 60 * 1000) {
           return NextResponse.json({ error: "Phiên tương tác khách đã hết hạn đánh giá." }, { status: 400 });

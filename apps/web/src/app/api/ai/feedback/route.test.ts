@@ -41,6 +41,12 @@ vi.mock("@/services", () => ({
   db: mockDb,
 }));
 
+vi.mock("@/env", () => ({
+  ENV: {
+    BETTER_AUTH_SECRET: "test-better-auth-secret-super-secure-key",
+  },
+}));
+
 import { POST } from "./route";
 
 describe("POST /api/ai/feedback", () => {
@@ -92,6 +98,8 @@ describe("POST /api/ai/feedback", () => {
   });
 
   it("preserves diagnostic errorMessage when appending feedback", async () => {
+    mockDb.existingLog.userId = "user-owner";
+    mockSession.current = { user: { id: "user-owner" } };
     mockDb.existingLog.errorMessage = "Diagnostic: Model timed out after 30s";
 
     const req = new NextRequest("http://localhost/api/ai/feedback", {
@@ -127,5 +135,68 @@ describe("POST /api/ai/feedback", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(mockDb.existingLog.errorMessage).toBe("[Feedback: up]");
+  });
+
+  it("rejects guest feedback without feedbackToken", async () => {
+    mockDb.existingLog.userId = null;
+    mockSession.current = null;
+
+    const req = new NextRequest("http://localhost/api/ai/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        logId: 101,
+        vote: "up",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.error).toContain("Mã xác thực");
+  });
+
+  it("rejects guest feedback with forged or mismatched feedbackToken", async () => {
+    mockDb.existingLog.userId = null;
+    mockSession.current = null;
+
+    const req = new NextRequest("http://localhost/api/ai/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        logId: 101,
+        feedbackToken: "forged-invalid-token",
+        vote: "up",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.error).toContain("Mã xác thực");
+  });
+
+  it("accepts guest feedback with valid cryptographic feedbackToken", async () => {
+    mockDb.existingLog.userId = null;
+    mockSession.current = null;
+
+    const { generateGuestFeedbackToken } = await import("@/lib/ai-advisor-service");
+    const { ENV } = await import("@/env");
+    const validToken = generateGuestFeedbackToken(101, ENV.BETTER_AUTH_SECRET);
+
+    const req = new NextRequest("http://localhost/api/ai/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        logId: 101,
+        feedbackToken: validToken,
+        vote: "down",
+        reason: "Sai trình độ",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockDb.existingLog.errorMessage).toBe("[Feedback: down - Sai trình độ]");
   });
 });

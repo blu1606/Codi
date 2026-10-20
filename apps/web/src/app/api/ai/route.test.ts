@@ -77,7 +77,14 @@ vi.mock("@/lib/ai-advisor-service", () => ({
     noMatch: false,
   })),
   logAdvisorInteraction: vi.fn(async () => 101),
+  generateGuestFeedbackToken: vi.fn(() => "mock-guest-token-101"),
   syncLearnerIntakeGoalDraft: vi.fn(async () => {}),
+}));
+
+vi.mock("@/env", () => ({
+  ENV: {
+    BETTER_AUTH_SECRET: "test-secret",
+  },
 }));
 
 import { GET, POST } from "./route";
