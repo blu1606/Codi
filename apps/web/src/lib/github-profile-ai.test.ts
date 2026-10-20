@@ -157,6 +157,44 @@ function harness(tokens = 1000) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("bounded one-call GitHub profile synthesis", () => {
+  it("emits required closed objects without unsupported schema composition", async () => {
+    const task = harness();
+    await generateGithubProfileAnalysis(snapshot(), task.options);
+    const format = (task.calls[0]!.body.text as { format: { schema: Wire } })
+      .format;
+    let objects = 0;
+    const visit = (value: unknown) => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      const node = value as Wire;
+      for (const keyword of [
+        "allOf",
+        "not",
+        "dependentRequired",
+        "dependentSchemas",
+        "if",
+        "then",
+        "else",
+      ])
+        expect(node).not.toHaveProperty(keyword);
+      if (node.type === "object") {
+        objects++;
+        expect(node.additionalProperties).toBe(false);
+        expect([...(node.required as string[])].sort()).toEqual(
+          Object.keys(node.properties as Wire).sort(),
+        );
+      }
+      Object.values(node).forEach(visit);
+    };
+    expect(format.schema.type).toBe("object");
+    expect(format.schema).not.toHaveProperty("anyOf");
+    visit(format.schema);
+    expect(objects).toBeGreaterThan(3);
+  });
+
   it.each(["preflight", "generation"] as const)(
     "retains only safe HTTP diagnostics for %s",
     async (phase) => {
