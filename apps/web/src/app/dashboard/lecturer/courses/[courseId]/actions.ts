@@ -65,6 +65,30 @@ export async function getEditableCourse(courseId: string) {
   return { course, user };
 }
 
+async function requireCourseChapter(courseId: string, chapterId: string) {
+  const [chapter] = await db
+    .select({ id: courseChapters.id })
+    .from(courseChapters)
+    .where(and(eq(courseChapters.id, chapterId), eq(courseChapters.courseId, courseId)));
+  if (!chapter) throw new Error("Không tìm thấy chương trong khoá học này.");
+  return chapter;
+}
+
+async function getCourseLesson(courseId: string, lessonId: string) {
+  const [result] = await db
+    .select({ lesson: courseLessons })
+    .from(courseLessons)
+    .innerJoin(courseChapters, eq(courseLessons.chapterId, courseChapters.id))
+    .where(and(eq(courseLessons.id, lessonId), eq(courseChapters.courseId, courseId)));
+  return result?.lesson;
+}
+
+async function requireCourseLesson(courseId: string, lessonId: string) {
+  const lesson = await getCourseLesson(courseId, lessonId);
+  if (!lesson) throw new Error("Không tìm thấy bài học.");
+  return lesson;
+}
+
 /**
  * Đánh dấu bản đồ kiến thức là 'stale' nếu khoá học đã xuất bản bị chỉnh sửa nội dung (D17).
  */
@@ -251,6 +275,7 @@ export async function renameChapter(
   const { course } = await getEditableCourse(courseId);
   const cleanTitle = title.trim();
   if (!cleanTitle) throw new Error("Tên chương không được để trống.");
+  await requireCourseChapter(courseId, chapterId);
 
   await db
     .update(courseChapters)
@@ -290,12 +315,12 @@ export async function moveChapter(
     await tx
       .update(courseChapters)
       .set({ position: targetCh.position })
-      .where(eq(courseChapters.id, currentCh.id));
+      .where(and(eq(courseChapters.id, currentCh.id), eq(courseChapters.courseId, courseId)));
 
     await tx
       .update(courseChapters)
       .set({ position: currentCh.position })
-      .where(eq(courseChapters.id, targetCh.id));
+      .where(and(eq(courseChapters.id, targetCh.id), eq(courseChapters.courseId, courseId)));
 
     await markKnowledgeMapStaleIfPublished(course, tx);
   });
@@ -309,6 +334,7 @@ export async function moveChapter(
  */
 export async function deleteChapter(courseId: string, chapterId: string) {
   const { course } = await getEditableCourse(courseId);
+  await requireCourseChapter(courseId, chapterId);
 
   await db
     .delete(courseChapters)
@@ -328,6 +354,7 @@ export async function addLesson(
   title?: string
 ) {
   const { course } = await getEditableCourse(courseId);
+  await requireCourseChapter(courseId, chapterId);
 
   const [lastLesson] = await db
     .select({ position: courseLessons.position })
@@ -365,11 +392,12 @@ export async function renameLesson(
   const { course } = await getEditableCourse(courseId);
   const cleanTitle = title.trim();
   if (!cleanTitle) throw new Error("Tên bài học không được để trống.");
+  const lesson = await requireCourseLesson(courseId, lessonId);
 
   await db
     .update(courseLessons)
     .set({ title: cleanTitle })
-    .where(eq(courseLessons.id, lessonId));
+    .where(and(eq(courseLessons.id, lessonId), eq(courseLessons.chapterId, lesson.chapterId)));
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
@@ -385,10 +413,7 @@ export async function moveLesson(
 ) {
   const { course } = await getEditableCourse(courseId);
 
-  const [current] = await db
-    .select()
-    .from(courseLessons)
-    .where(eq(courseLessons.id, lessonId));
+  const current = await getCourseLesson(courseId, lessonId);
 
   if (!current) return { success: false };
 
@@ -410,12 +435,12 @@ export async function moveLesson(
     await tx
       .update(courseLessons)
       .set({ position: targetLs.position })
-      .where(eq(courseLessons.id, current.id));
+      .where(and(eq(courseLessons.id, current.id), eq(courseLessons.chapterId, current.chapterId)));
 
     await tx
       .update(courseLessons)
       .set({ position: current.position })
-      .where(eq(courseLessons.id, targetLs.id));
+      .where(and(eq(courseLessons.id, targetLs.id), eq(courseLessons.chapterId, current.chapterId)));
 
     await markKnowledgeMapStaleIfPublished(course, tx);
   });
@@ -430,14 +455,13 @@ export async function moveLesson(
 export async function deleteLesson(courseId: string, lessonId: string) {
   const { course } = await getEditableCourse(courseId);
 
-  const [deletedLesson] = await db
-    .select()
-    .from(courseLessons)
-    .where(eq(courseLessons.id, lessonId));
+  const deletedLesson = await getCourseLesson(courseId, lessonId);
 
   if (!deletedLesson) return { success: false };
 
-  await db.delete(courseLessons).where(eq(courseLessons.id, lessonId));
+  await db.delete(courseLessons).where(
+    and(eq(courseLessons.id, lessonId), eq(courseLessons.chapterId, deletedLesson.chapterId))
+  );
 
   await markKnowledgeMapStaleIfPublished(course);
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
@@ -461,6 +485,7 @@ export async function restoreLesson(
   lessonData: { id: string; chapterId: string; title: string; position: number }
 ) {
   const { course } = await getEditableCourse(courseId);
+  await requireCourseChapter(courseId, lessonData.chapterId);
 
   await db.insert(courseLessons).values({
     id: lessonData.id,
@@ -497,14 +522,7 @@ export async function getQuizBuilderData(courseId: string, lessonId: string) {
   let targetLesson = null;
 
   if (!isEntry) {
-    const [ls] = await db
-      .select()
-      .from(courseLessons)
-      .where(eq(courseLessons.id, lessonId));
-    if (!ls) {
-      throw new Error("Không tìm thấy bài học.");
-    }
-    targetLesson = ls;
+    targetLesson = await requireCourseLesson(courseId, lessonId);
   }
 
   // Tìm assessment tương ứng
@@ -613,6 +631,8 @@ export async function saveQuizData(
     }
   }
 
+  if (lessonId !== "entry") await requireCourseLesson(courseId, lessonId);
+
   await db.transaction(async (tx) => {
     // 2. Nếu là bài kiểm tra đầu vào, bỏ flag isDiagnostic ở các quiz khác của khoá (tối đa 1 bài/khoá)
     if (isEntry) {
@@ -715,11 +735,8 @@ export async function generateAiQuizQuestions(
   let contextTopic = course.title;
 
   if (!isEntry) {
-    const [lesson] = await db
-      .select()
-      .from(courseLessons)
-      .where(eq(courseLessons.id, lessonId));
-    if (lesson?.title) {
+    const lesson = await requireCourseLesson(courseId, lessonId);
+    if (lesson.title) {
       contextTopic = `${course.title} - ${lesson.title}`;
     }
   }

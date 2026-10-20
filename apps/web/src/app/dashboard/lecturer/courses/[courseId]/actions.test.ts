@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { courseChapters, courseLessons, courses } from "@codi-1/db";
 
 const mockGetSession = vi.fn();
 const mockRequireRole = vi.fn();
@@ -50,6 +51,22 @@ import {
   saveQuizData,
   updateCourseInfo,
 } from "./actions";
+
+function mockOwnedContent(course: Record<string, unknown>, lesson: Record<string, unknown>) {
+  mockSelect.mockImplementation((selection?: { lesson?: unknown }) => ({
+    from: vi.fn().mockImplementation((table) => {
+      const rows = table === courses ? [course]
+        : table === courseChapters ? [{ id: lesson.chapterId, courseId: course.id }]
+        : table === courseLessons ? (selection?.lesson ? [{ lesson }] : [lesson])
+        : [];
+      const query = {
+        where: vi.fn().mockResolvedValue(rows),
+        innerJoin: vi.fn().mockReturnThis(),
+      };
+      return query;
+    }),
+  }));
+}
 
 describe("Course Editor & Quiz Builder Actions (#114)", () => {
   beforeEach(() => {
@@ -201,22 +218,10 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
     });
 
     it("xoá bài học trả về thông tin bài học để hỗ trợ Hoàn tác (Undo toast §7.17)", async () => {
-      let callCount = 0;
-      mockSelect.mockImplementation(() => ({
-        from: vi.fn().mockImplementation(() => {
-          callCount++;
-          if (callCount === 1) {
-            // getEditableCourse
-            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
-          }
-          // deletedLesson
-          return {
-            where: vi.fn().mockResolvedValue([
-              { id: "ls-10", chapterId: "ch-1", title: "Bài 1: Cài đặt môi trường", position: 0 },
-            ]),
-          };
-        }),
-      }));
+      mockOwnedContent(
+        { id: "c-1", instructorId: "lecturer-1", status: "draft" },
+        { id: "ls-10", chapterId: "ch-1", title: "Bài 1: Cài đặt môi trường", position: 0 },
+      );
 
       mockDelete.mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
@@ -228,11 +233,10 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
     });
 
     it("khôi phục bài học vừa xoá thành công khi bấm Hoàn tác", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]),
-        }),
-      });
+      mockOwnedContent(
+        { id: "c-1", instructorId: "lecturer-1", status: "draft" },
+        { id: "ls-10", chapterId: "ch-1" },
+      );
 
       mockInsert.mockReturnValue({
         values: vi.fn().mockResolvedValue(undefined),
@@ -252,13 +256,10 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
 
   describe("saveQuizData (Quiz Builder)", () => {
     beforeEach(() => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([
-            { id: "c-1", instructorId: "lecturer-1", status: "draft" },
-          ]),
-        }),
-      });
+      mockOwnedContent(
+        { id: "c-1", instructorId: "lecturer-1", status: "draft" },
+        { id: "ls-1", chapterId: "ch-1", title: "Quiz lesson" },
+      );
     });
 
     it("ném lỗi khi điểm đạt không nằm trong khoảng 1-100", async () => {
@@ -342,20 +343,10 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
 
   describe("generateAiQuizQuestions", () => {
     it("sinh câu hỏi AI cho quiz bài học và lưu vào ai_content_drafts", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockImplementation(() => {
-            return Promise.resolve([
-              {
-                id: "c-1",
-                instructorId: "lecturer-1",
-                title: "React TypeScript Chuyên Sâu",
-                status: "draft",
-              },
-            ]);
-          }),
-        }),
-      });
+      mockOwnedContent(
+        { id: "c-1", instructorId: "lecturer-1", title: "React TypeScript Chuyên Sâu", status: "draft" },
+        { id: "ls-1", chapterId: "ch-1", title: "React lesson" },
+      );
 
       const mockValues = vi.fn().mockResolvedValue(undefined);
       mockInsert.mockReturnValue({ values: mockValues });
