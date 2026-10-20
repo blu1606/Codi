@@ -143,7 +143,7 @@ export async function getCourseEditorData(courseId: string) {
 
   // Kiểm tra xem khoá học đã có bài kiểm tra đầu vào chưa
   const [entryTest] = await db
-    .select({ id: assessments.id, title: assessments.title })
+    .select({ id: assessments.id, title: assessments.title, currentQuizRevision: assessments.currentQuizRevision })
     .from(assessments)
     .where(and(eq(assessments.courseId, courseId), eq(assessments.isDiagnostic, true)))
     .limit(1);
@@ -154,7 +154,7 @@ export async function getCourseEditorData(courseId: string) {
     const [qCount] = await db
       .select({ count: count() })
       .from(quizQuestions)
-      .where(eq(quizQuestions.assessmentId, entryTest.id));
+      .where(and(eq(quizQuestions.assessmentId, entryTest.id), eq(quizQuestions.quizRevision, entryTest.currentQuizRevision)));
     entryQuestionCount = Number(qCount?.count || 0);
   }
 
@@ -554,7 +554,7 @@ export async function getQuizBuilderData(courseId: string, lessonId: string) {
     const qs = await db
       .select()
       .from(quizQuestions)
-      .where(eq(quizQuestions.assessmentId, assessment.id))
+      .where(and(eq(quizQuestions.assessmentId, assessment.id), eq(quizQuestions.quizRevision, assessment.currentQuizRevision)))
       .orderBy(asc(quizQuestions.position));
 
     const qIds = qs.map((q) => q.id);
@@ -647,22 +647,13 @@ export async function saveQuizData(
               eq(assessments.type, "quiz")
             )
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     let assessmentId: number;
+    const quizRevision = existingAssessment ? existingAssessment.currentQuizRevision + 1 : 1;
     if (existingAssessment) {
       assessmentId = existingAssessment.id;
-      await tx
-        .update(assessments)
-        .set({
-          passingScore: input.passingScore,
-          isDiagnostic: isEntry,
-          updatedAt: new Date(),
-        })
-        .where(eq(assessments.id, assessmentId));
-
-      // Xoá các câu hỏi cũ để cập nhật danh sách mới
-      await tx.delete(quizQuestions).where(eq(quizQuestions.assessmentId, assessmentId));
     } else {
       const [newAssessment] = await tx
         .insert(assessments)
@@ -686,6 +677,7 @@ export async function saveQuizData(
         .insert(quizQuestions)
         .values({
           assessmentId,
+          quizRevision,
           lessonId: isEntry ? null : lessonId,
           text: q.text.trim(),
           explanation: q.explanation?.trim() || null,
@@ -703,6 +695,15 @@ export async function saveQuizData(
           position: oPos,
         });
       }
+    }
+
+    if (existingAssessment) {
+      await tx.update(assessments).set({
+        currentQuizRevision: quizRevision,
+        passingScore: input.passingScore,
+        isDiagnostic: isEntry,
+        updatedAt: new Date(),
+      }).where(and(eq(assessments.id, assessmentId), eq(assessments.courseId, courseId)));
     }
 
     await markKnowledgeMapStaleIfPublished(course, tx);

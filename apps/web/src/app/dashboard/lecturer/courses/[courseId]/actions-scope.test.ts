@@ -61,6 +61,7 @@ function select(selection?: Record<string, unknown>) {
     where(value: SQL) { predicate = value; return query; },
     orderBy() { return query; },
     limit(value: number) { maximum = value; return query; },
+    for() { return query; },
     then(resolve: (rows: Row[]) => unknown, reject?: (error: unknown) => unknown) {
       return Promise.resolve().then(result).then(resolve, reject);
     },

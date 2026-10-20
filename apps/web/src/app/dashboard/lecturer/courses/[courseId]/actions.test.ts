@@ -312,7 +312,9 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
           select: vi.fn().mockReturnValue({
             from: vi.fn().mockReturnValue({
               where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{ id: 99 }]),
+                limit: vi.fn().mockReturnValue({
+                  for: vi.fn().mockResolvedValue([{ id: 99, currentQuizRevision: 1 }]),
+                }),
               }),
             }),
           }),

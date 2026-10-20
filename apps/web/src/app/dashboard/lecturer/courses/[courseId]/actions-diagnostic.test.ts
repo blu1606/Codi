@@ -63,6 +63,7 @@ function select(selection?: Record<string, unknown>) {
     where(value: SQL) { predicate = value; return query; },
     orderBy() { return query; },
     limit(value: number) { maximum = value; return query; },
+    for() { return query; },
     then(resolve: (rows: Row[]) => unknown, reject?: (error: unknown) => unknown) {
       return Promise.resolve().then(() => tables[name]!.filter((row) => {
         const context = name === "course_lessons" ? { ...row, courseId: "own" } : row;
@@ -79,7 +80,7 @@ function mutation(operation: "insert" | "update" | "delete", table: Table) {
   let predicate: SQL;
   const execute = () => {
     const rows = tables[name]!;
-    const affected = operation === "insert" ? [{ id: ++sequence, ...values }] : rows.filter((row) => matches(predicate, row));
+    const affected = operation === "insert" ? [{ id: ++sequence, ...(name === "assessments" ? { currentQuizRevision: 1 } : {}), ...values }] : rows.filter((row) => matches(predicate, row));
     const next = operation === "insert" ? [...rows, ...affected]
       : operation === "delete" ? rows.filter((row) => !affected.includes(row))
       : rows.map((row) => affected.includes(row) ? { ...row, ...values } : row);
@@ -114,6 +115,7 @@ beforeEach(() => {
     ],
     quiz_questions: [], quiz_options: [],
   };
+  tables.assessments = tables.assessments!.map((row) => ({ currentQuizRevision: 1, ...row }));
   mocks.verifySession.mockResolvedValue({ id: "lecturer" });
   mocks.select.mockImplementation(select);
   mocks.insert.mockImplementation((table: Table) => mutation("insert", table));
@@ -160,21 +162,23 @@ describe("entry-diagnostic persistence", () => {
       const reopened = await getQuizBuilderData("own", "entry");
       expect(reopened.passingScore).toBe(passingScore);
       expect(reopened.questions).toEqual([expect.objectContaining({ text: questions[0]!.text, correctIndex: 1, options: ["No", "Yes"] })]);
-      expect(tables.quiz_questions!.filter((row) => row.assessmentId === created.id)).toHaveLength(1);
-      expect(tables.quiz_options).toHaveLength(2);
+      const current = tables.assessments!.find((row) => row.id === created.id)!;
+      expect(tables.quiz_questions!.filter((row) => row.assessmentId === created.id && row.quizRevision === current.currentQuizRevision)).toHaveLength(1);
+      expect(tables.quiz_questions!.filter((row) => row.assessmentId === created.id)).toHaveLength(passingScore === 80 ? 2 : 3);
+      expect(tables.quiz_options).toHaveLength(passingScore === 80 ? 4 : 6);
     }
     expect(mocks.revalidate).toHaveBeenCalledTimes(3);
   });
 
   it("keeps ordinary lesson saves independent of an existing diagnostic", async () => {
-    tables.assessments!.push({ id: 40, courseId: "own", lessonId: null, type: "quiz", isDiagnostic: true, passingScore: 75 });
+    tables.assessments!.push({ id: 40, courseId: "own", lessonId: null, type: "quiz", isDiagnostic: true, passingScore: 75, currentQuizRevision: 1 });
     await expect(saveQuizData("own", "lesson", { ...input, isEntry: false })).resolves.toEqual({ success: true });
     expect(tables.assessments!.find((row) => row.id === 40)).toMatchObject({ isDiagnostic: true, lessonId: null, passingScore: 75 });
     expect(tables.assessments!.find((row) => row.id === 30)).toMatchObject({ isDiagnostic: false, lessonId: "lesson", passingScore: 70 });
   });
 
   it("reuses a persisted diagnostic on the entry route even without the input flag", async () => {
-    tables.assessments!.push({ id: 40, courseId: "own", lessonId: null, type: "quiz", isDiagnostic: true, passingScore: 75 });
+    tables.assessments!.push({ id: 40, courseId: "own", lessonId: null, type: "quiz", isDiagnostic: true, passingScore: 75, currentQuizRevision: 1 });
     await expect(saveQuizData("own", "entry", { ...input, isEntry: false })).resolves.toEqual({ success: true });
     expect(tables.assessments).toHaveLength(3);
     expect(tables.assessments!.find((row) => row.id === 40)).toMatchObject({ isDiagnostic: true, lessonId: null, passingScore: 70 });

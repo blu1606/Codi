@@ -19,6 +19,18 @@ Each mutation locks the owner's enrollment row inside a transaction. Answers bel
 submission; server checks the active attempt, current question and option ownership. Back/next and choices are
 saved immediately; a reload offers continuation from the saved question. A retake creates a new attempt,
 retaining earlier submissions. Duplicate submission returns the result without applying evidence twice.
+Quiz content uses immutable integer revisions. Author saves append a complete question/option set and advance
+`assessments.currentQuizRevision` atomically; they never delete or rewrite a prior set. Every diagnostic attempt
+stores `assessment_submissions.quizRevision` at creation, even before any answer. Resume, grading and result
+review load that pinned set; intro for a new attempt/retake loads the current revision. Mutation lock order is
+enrollment first, then assessment `FOR SHARE`; author publication takes the same assessment `FOR UPDATE` lock.
+Passing-score, max-score, lesson checklist and completion policies are unchanged. Historical learning-path
+evidence must keep joining its original questions, without a current-revision filter.
+
+Deployment requires the coordinated revision-column/backfill/index migration and revision-aware ordinary quiz
+writers. Existing quiz questions and submissions (including zero-answer drafts) must be pinned to revision 1
+without changing IDs, scores, answers or evidence; this preserves available history, not content lost before
+the migration. The source change alone is not deployable against the previous schema or mixed old writers.
 `diagnosticPolicy` is the pure command policy exercised by Vitest on CI for every transition and rejected state.
 Postponing is permitted only at intro; leaving an in-progress test preserves it for resume.
 During goal edit, “Huỷ chỉnh sửa” discards the draft and keeps the saved goal, diagnostic and path unchanged.
