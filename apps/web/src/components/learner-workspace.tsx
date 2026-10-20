@@ -285,7 +285,11 @@ export default function LearnerWorkspace({
                 const c = data.courses.find((c) => c.id === id);
                 if (c) {
                   setError(null);
-                  setEditing(c);
+                  if (c.goalSetAt) {
+                    setEditing(c);
+                  } else {
+                    router.push(`${home(c)}/onboarding` as Route);
+                  }
                 }
               }}
             />

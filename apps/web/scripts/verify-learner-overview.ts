@@ -520,6 +520,103 @@ async function main() {
           "B retains its full interval after A's delayed heartbeat and queued stop",
         );
       }
+      for (const lessonB of [f.lessonIds[1]!, f.lessonId]) {
+        for (const stoppedB of [false, true]) {
+          step = `delayed initial start (${lessonB === f.lessonId ? "same" : "different"} lesson; B stopped: ${stoppedB})`;
+          await tx
+            .delete(studentStudyClocks)
+            .where(eq(studentStudyClocks.userId, learner));
+          const readClock = async () =>
+            (
+              await tx
+                .select()
+                .from(studentStudyClocks)
+                .where(eq(studentStudyClocks.userId, learner))
+            )[0]!;
+          const readDay = async () =>
+            (
+              await tx
+                .select()
+                .from(studentStudyDays)
+                .where(
+                  and(
+                    eq(studentStudyDays.userId, learner),
+                    eq(studentStudyDays.date, "2026-10-19"),
+                  ),
+                )
+            )[0]!;
+          const before = await readDay();
+          const trackerB = randomUUID();
+          const preparedA = await clock.heartbeat(
+            learner,
+            f.courseId,
+            f.lessonId,
+            "prepare",
+            trackerA,
+          );
+          assert.equal(preparedA.owner, null);
+          let release!: () => void;
+          const held = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          const delayed = held.then(() =>
+            clock.heartbeat(
+              learner,
+              f.courseId,
+              f.lessonId,
+              "start",
+              trackerA,
+              preparedA.owner,
+            ),
+          );
+          await startClock(lessonB, trackerB);
+          const started = now.getTime();
+          if (stoppedB) {
+            now = new Date(started + 10000);
+            await clock.heartbeat(
+              learner,
+              f.courseId,
+              lessonB,
+              "stop",
+              trackerB,
+            );
+          }
+          const owned = await readClock();
+          const credited = await readDay();
+          now = new Date(started + 11000);
+          release();
+          assert.deepEqual(await delayed, { recorded: false });
+          assert.deepEqual(
+            await clock.heartbeat(
+              learner,
+              f.courseId,
+              f.lessonId,
+              "stop",
+              trackerA,
+            ),
+            { recorded: false },
+          );
+          assert.deepEqual(await readClock(), owned);
+          assert.deepEqual(await readDay(), credited);
+          assert.equal(owned.trackerId, trackerB);
+          if (stoppedB) {
+            assert.equal(owned.lastSeenAt, null);
+            assert.equal(credited.seconds - before.seconds, 10);
+          } else {
+            for (const elapsed of [30000, 60000, 90000]) {
+              now = new Date(started + elapsed);
+              await clock.heartbeat(
+                learner,
+                f.courseId,
+                lessonB,
+                "heartbeat",
+                trackerB,
+              );
+            }
+            assert.equal((await readDay()).seconds - before.seconds, 90);
+          }
+        }
+      }
       console.log(
         "Learner overview DB checks passed: ownership/roles, empty/hidden/suspended courses, completion, latest grades, run exclusion, scoped feedback/mastery, durable dismiss/undo, no progress mutation, weekly/streak and deduplicated active study time. All fixture rows roll back.",
       );

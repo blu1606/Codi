@@ -120,6 +120,7 @@ export type LearnerCourse = {
   cover: string | null;
   hidden: boolean;
   goal: string | null;
+  goalSetAt: string | null;
   weeklyGoalMinutes: number | null;
   lastActiveAt: string;
   pathStatus: string;

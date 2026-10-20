@@ -418,6 +418,7 @@ export function createLearnerOverviewService(
                 cover,
                 hidden: c.status !== "published",
                 goal: e.learningGoal,
+                goalSetAt: e.goalSetAt?.toISOString() ?? null,
                 weeklyGoalMinutes: e.weeklyGoalMinutes,
                 lastActiveAt: (e.lastActiveAt ?? e.enrolledAt).toISOString(),
                 pathStatus: e.pathStatus,

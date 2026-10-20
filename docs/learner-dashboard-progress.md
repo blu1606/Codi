@@ -12,7 +12,7 @@ Implements [#102](https://github.com/blu1606/Codi/issues/102), under epic #94: m
 | Study time | One server clock per learner, owned by a unique focus session; prepare reads the ownership token, start acquires only if it is unchanged, 30s heartbeat renews only its own active clock while visible/focused; gaps over 45s discarded; split at Vietnam midnight | Contract/tracker tests, ownership regressions for same/different-lesson tabs, DB stop/expiry checks, authenticated browser requests |
 | Mastery badges | Existing five-level BKT presentation; no evidence means level 0 | DB verification, escaped/text-labelled UI |
 | Diagnostic card | Default/ready/skipped only; durable enrollment-scoped dismiss and version-checked undo; real onboarding retake command | API/component/DB tests, browser CTA and reload |
-| Change goal | Dialog explains rearranging unfinished lessons; existing onboarding `goal-edit` command preserves grades/completed lessons | Browser confirmation/navigation; existing onboarding tests |
+| Change goal | Enrollments without `goalSetAt` open initial onboarding directly; finalized goals retain the confirmation dialog and existing `goal-edit` command | Component regressions for fresh/draft goals and finalized goals with/without a ready path; existing onboarding tests |
 | Active/completed courses | Accordion lists share the path completion rule, including AI-skippable lessons | DB verification and browser tabs |
 | Results | Latest quiz attempt; latest code **submit** (runs excluded); pending/graded assignments and inline lecturer feedback | DB verification, browser latest result display |
 | Loading/error | Skeleton, safe error message and retry; previous data retained on a failed refresh | API/component tests, browser retry |
@@ -33,6 +33,12 @@ Acquisition uses a two-step compare-and-set protocol. `{action: "prepare", track
 Heartbeat/stop payloads remain `{action: "heartbeat" | "stop", trackerId}`. Old open clients must reload: `{active, trackerId}` and starts without `expectedOwner` return HTTP 400. A rejected start is retried on the next event/tick while still focused; an ignored heartbeat never becomes an acquisition, preserving the earlier delayed-heartbeat fix. No browser timestamps or durations authorize ownership or credit.
 
 ## Reproduce validation
+
+### PR #144 first-goal follow-up
+
+The overview now includes each enrollment's `goalSetAt`, matching the onboarding server's finalization guard. The weekly-goal action navigates directly to initial setup when it is null, without sending `goal-edit` or opening its confirmation dialog. A finalized goal retains confirmation and the existing edit request, even before a learning path is ready.
+
+The two fresh/draft component cases failed against the prior implementation and pass after the fix. Two finalized-goal cases verify confirmation, the exact edit request and navigation after success. The subsequent browser/DB follow-up is recorded in [the verification report](ui-review/issue-102/pr144-followup/README.md), including new screenshots, the hydration diagnosis and the mobile heatmap correction. Local validation now includes 937 tests across 69 files, TypeScript, production build and a design-token audit with 0 violations. These are author QA results for the corrected working tree; remote preview/reviewer acceptance and merge remain separate.
 
 From the repository root:
 

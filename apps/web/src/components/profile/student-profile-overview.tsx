@@ -160,7 +160,7 @@ export default function StudentProfileOverview() {
   }));
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
       <nav
         className="order-1 flex gap-1 border-b border-border"
         aria-label="Điều hướng hồ sơ"
@@ -271,13 +271,15 @@ export default function StudentProfileOverview() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-start gap-6">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
                   <div className="min-w-0 flex-1 rounded-md border border-border p-4">
                     <div
-                      className="overflow-hidden"
+                      className="overflow-x-auto"
                       aria-label={`Contribution heatmap for ${year}`}
+                      role="region"
+                      tabIndex={0}
                     >
-                      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)]">
+                      <div className="grid min-w-[40rem] grid-cols-[2.5rem_minmax(0,1fr)]">
                         <div />
                         <div className="grid grid-cols-[repeat(53,minmax(0,1fr))] gap-1 pb-1 text-[10px] text-muted-foreground">
                           {heatmap.map((_, i) => (
@@ -331,7 +333,7 @@ export default function StudentProfileOverview() {
                     </div>
                   </div>
                   <div
-                    className="flex w-28 shrink-0 flex-col gap-1 pt-1"
+                    className="order-first flex shrink-0 gap-1 lg:order-none lg:w-28 lg:flex-col lg:pt-1"
                     aria-label="Select year"
                   >
                     {[currentYear, currentYear - 1, currentYear - 2].map(

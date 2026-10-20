@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { StudyActivityAction } from "../src/lib/learner-overview-contract";
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { and, eq, inArray } from "drizzle-orm";
@@ -43,11 +43,24 @@ async function main() {
     email = `${userId}@example.invalid`,
     password = randomUUID();
   const ownedId = `overview-qa-course-${randomUUID()}`,
-    doneId = `overview-qa-done-${randomUUID()}`;
-  const out = resolve("../../docs/ui-review/issue-102");
+    doneId = `overview-qa-done-${randomUUID()}`,
+    freshId = `overview-qa-fresh-${randomUUID()}`;
+  const out = resolve(
+    process.env.QA_OUTPUT_DIR ?? "../../docs/ui-review/issue-102",
+  );
   await mkdir(out, { recursive: true });
   let browser: any;
   let stage = "account";
+  const errors: {
+    stage: string;
+    url: string;
+    message: string;
+    stack?: string;
+  }[] = [];
+  const report: Record<string, unknown> = {
+    origin,
+    startedAt: new Date().toISOString(),
+  };
   try {
     await db.transaction(async (tx) => {
       await tx
@@ -90,9 +103,17 @@ async function main() {
       colorScheme: "light",
     });
     await context.addCookies(cookies);
-    const page = await context.newPage(),
-      errors: string[] = [];
-    page.on("pageerror", (e: Error) => errors.push(e.message));
+    context.on("page", (p: any) =>
+      p.on("pageerror", (e: Error) => {
+        errors.push({
+          stage,
+          url: p.url(),
+          message: e.message,
+          stack: e.stack,
+        });
+      }),
+    );
+    const page = await context.newPage();
     const screenshot = async (name: string) => {
       await page.evaluate(() => document.fonts.ready);
       await page.screenshot({
@@ -154,6 +175,65 @@ async function main() {
       .getByRole("heading", { name: "Chưa có khoá học đang học" })
       .waitFor();
     await screenshot("progress-empty");
+    stage = "fresh enrollment weekly-goal initial setup";
+    await db.transaction(async (tx) => {
+      await seedAssessmentFixture(tx, freshId, [userId]);
+    });
+    const onboardingRequests: { status: number; command: unknown }[] = [];
+    const recordOnboarding = async (r: any) => {
+      if (
+        r.url() === `${origin}/api/learn/${freshId}/onboarding` &&
+        r.request().method() === "POST"
+      ) {
+        onboardingRequests.push({
+          status: r.status(),
+          command: r.request().postDataJSON(),
+        });
+      }
+    };
+    page.on("response", recordOnboarding);
+    await page.goto(`${origin}/dashboard`);
+    await page.getByText("Giả định", { exact: true }).waitFor();
+    await page
+      .getByRole("button", { name: "Chỉnh mục tiêu", exact: true })
+      .click();
+    await page.waitForURL(`**/learn/${freshId}/onboarding`);
+    await page
+      .getByRole("heading", {
+        name: "Bạn muốn đạt được gì với khoá học này?",
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    assert.equal(
+      onboardingRequests.length,
+      0,
+      "Initial setup must not send goal-edit",
+    );
+    await screenshot("fresh-goal-initial-setup");
+    const skipped = page.waitForResponse(
+      (r: any) =>
+        r.url() === `${origin}/api/learn/${freshId}/onboarding` &&
+        r.request().postDataJSON()?.type === "goal-skip",
+    );
+    await page.getByRole("button", { name: "Bỏ qua", exact: true }).click();
+    assert.equal((await skipped).status(), 200);
+    await page
+      .getByRole("heading", { name: "Bạn muốn học như thế nào?", exact: true })
+      .waitFor();
+    assert.ok(onboardingRequests.every((r) => r.status === 200));
+    report.freshGoal = { initialEditRequests: 0, requests: onboardingRequests };
+    console.log(
+      "Browser QA: fresh enrollment opens initial setup without goal-edit or 409; initial goal save returns 200.",
+    );
+    page.off("response", recordOnboarding);
+    await page.goto(`${origin}/dashboard`);
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(studentActivities)
+        .where(eq(studentActivities.userId, userId));
+      await tx.delete(courses).where(eq(courses.id, freshId));
+    });
     stage = "learning fixture";
     const f = await db.transaction(async (tx) => {
       const f = await seedAssessmentFixture(tx, ownedId, [userId]);
@@ -376,6 +456,34 @@ async function main() {
       await page.setViewportSize({ width: 375, height: 812 });
       await overflow();
       await screenshot(`${route}-mobile`);
+      await page.evaluate(() => {
+        localStorage.setItem("theme", "dark");
+        document.documentElement.classList.add("dark");
+      });
+      await screenshot(`${route}-dark-mobile`);
+      if (route === "progress") {
+        const table = page.getByRole("region", {
+          name: "Kết quả bài học JavaScript nền tảng",
+          exact: true,
+        });
+        const scrolled = await table.evaluate((el: HTMLElement) => {
+          el.scrollLeft = el.scrollWidth;
+          const last = [...el.querySelectorAll("th")].at(-1)!;
+          return {
+            left: el.scrollLeft,
+            lastColumnVisible:
+              last.getBoundingClientRect().right <=
+              el.getBoundingClientRect().right + 1,
+          };
+        });
+        assert.ok(scrolled.left > 0 && scrolled.lastColumnVisible);
+        report.mobileResultsScroll = scrolled;
+        await screenshot("progress-mobile-results-right");
+      }
+      await page.evaluate(() => {
+        localStorage.setItem("theme", "light");
+        document.documentElement.classList.remove("dark");
+      });
       await page.setViewportSize({ width: 1440, height: 1000 });
     }
     stage = "error and retry";
@@ -446,6 +554,122 @@ async function main() {
       await send(endpointB, trackerB, "heartbeat");
       await send(endpointB, trackerB, "stop");
     }
+    stage = "real lesson tracker focus while stop response is held";
+    const checkDelayedInitialStart = async () => {
+      const initialStartCases: {
+        sameLesson: boolean;
+        delayedStartRecorded: boolean;
+        ownerPreserved: boolean;
+      }[] = [];
+      for (const lessonB of [f.lessonIds[1]!, f.lessonId]) {
+        stage = `two real tabs, delayed initial start (${lessonB === f.lessonIds[1] ? "same" : "different"} lesson)`;
+        const tabA = await context.newPage();
+        const tabB = await context.newPage();
+        for (const tab of [tabA, tabB]) {
+          await (
+            await context.newCDPSession(tab)
+          ).send("Emulation.setFocusEmulationEnabled", { enabled: false });
+        }
+        let release!: () => void;
+        let heldStart!: () => void;
+        const releasePromise = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const heldPromise = new Promise<void>((resolve) => {
+          heldStart = resolve;
+        });
+        await tabA.route(endpoint, async (route: any) => {
+          if (route.request().postDataJSON().action === "start") {
+            heldStart();
+            await releasePromise;
+          }
+          await route.continue();
+        });
+        const activity = (r: any, action: string) =>
+          r.url().endsWith("/activity") &&
+          r.request().postDataJSON()?.action === action;
+        try {
+          await tabA.bringToFront();
+          const staleStart = tabA.waitForResponse(
+            (r: any) => activity(r, "start"),
+            { timeout: 30000 },
+          );
+          const staleStop = tabA.waitForResponse(
+            (r: any) => activity(r, "stop"),
+            { timeout: 30000 },
+          );
+          void staleStart.catch(() => {});
+          void staleStop.catch(() => {});
+          await tabA.goto(`${origin}/learn/${ownedId}/${f.lessonIds[1]}`);
+          await Promise.race([
+            heldPromise,
+            new Promise((_, reject) =>
+              setTimeout(
+                () => reject(new Error("A's initial start was not held")),
+                15000,
+              ),
+            ),
+          ]);
+          stage += ": awaiting B start";
+          console.log(
+            "Study QA: A initial start held before server processing.",
+          );
+          await (
+            await context.newCDPSession(tabA)
+          ).send("Emulation.setFocusEmulationEnabled", { enabled: false });
+          const acceptedStart = tabB.waitForResponse((r: any) =>
+            activity(r, "start"),
+          );
+          void acceptedStart.catch(() => {});
+          await tabB.bringToFront();
+          await tabB.goto(`${origin}/learn/${ownedId}/${lessonB}`);
+          await (
+            await context.newCDPSession(tabB)
+          ).send("Emulation.setFocusEmulationEnabled", { enabled: false });
+          await tabB.bringToFront();
+          assert.equal((await (await acceptedStart).json()).recorded, true);
+          console.log("Study QA: B initial start accepted.");
+          assert.equal(
+            await tabA.evaluate(() => document.hasFocus()),
+            false,
+            "A must really lose focus",
+          );
+          const readClock = async () =>
+            (
+              await db
+                .select()
+                .from(studentStudyClocks)
+                .where(eq(studentStudyClocks.userId, userId))
+            )[0]!;
+          const owned = await readClock();
+          assert.equal(owned.lessonId, lessonB);
+          stage += ": release A start";
+          release();
+          assert.equal((await (await staleStart).json()).recorded, false);
+          stage += ": queued A stop";
+          assert.equal((await (await staleStop).json()).recorded, false);
+          assert.deepEqual(
+            await readClock(),
+            owned,
+            "Delayed initial A start/stop must preserve B's PostgreSQL clock",
+          );
+          initialStartCases.push({
+            sameLesson: lessonB === f.lessonIds[1],
+            delayedStartRecorded: false,
+            ownerPreserved: true,
+          });
+        } finally {
+          release();
+          await tabA.close();
+          await tabB.close();
+          await page.bringToFront();
+        }
+      }
+      report.delayedInitialStart = initialStartCases;
+      console.log(
+        "Study QA: two real tabs preserve B's PostgreSQL owner after A's delayed initial start/stop, same and different lessons.",
+      );
+    };
     stage = "real lesson tracker focus while stop response is held";
     const isActivity = (r: any, action: StudyActivityAction) =>
       r.url() === endpoint &&
@@ -627,45 +851,122 @@ async function main() {
       .getByRole("button", { name: "Huỷ chỉnh sửa", exact: true })
       .click();
     stage = "authenticated profile heatmap light/dark";
+    const heatmapYear = new Date().getUTCFullYear();
+    await db.insert(studentActivities).values(
+      [1, 2, 4].flatMap((count, day) =>
+        Array.from({ length: count }, (_, index) => ({
+          userId,
+          type: "lesson_complete" as const,
+          occurredAt: new Date(Date.UTC(heatmapYear, 1, day + 2, 5, index)),
+        })),
+      ),
+    );
     await page.goto(`${origin}/profile`);
     const heatmap = page
       .locator('[data-slot="card"]')
       .filter({ has: page.getByText(/contributions in \d{4}/) });
     await heatmap.waitFor();
-    for (const theme of ["light", "dark"]) {
-      await page.evaluate((theme: string) => {
-        localStorage.setItem("theme", theme);
-        document.documentElement.classList.toggle("dark", theme === "dark");
-      }, theme);
-      const colors = await heatmap.evaluate((el: HTMLElement) => {
-        const empty = [
-          ...el.querySelectorAll<HTMLElement>("span[title]"),
-        ].filter((cell) => cell.classList.contains("bg-muted"));
-        return {
-          count: empty.length,
-          visible: empty.every(
-            (cell) =>
-              cell.getBoundingClientRect().width > 0 &&
-              cell.getBoundingClientRect().height > 0,
+    await page
+      .getByText(`3 contributions in ${heatmapYear}`, { exact: true })
+      .waitFor();
+    const heatmapChecks: unknown[] = [];
+    for (const width of [1440, 375]) {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate((theme: string) => {
+          localStorage.setItem("theme", theme);
+          document.documentElement.classList.toggle("dark", theme === "dark");
+        }, theme);
+        const colors = await heatmap.evaluate((el: HTMLElement) => {
+          const empty = [
+            ...el.querySelectorAll<HTMLElement>("span[title]"),
+          ].filter((cell) => cell.classList.contains("bg-muted"));
+          return {
+            count: empty.length,
+            visible: empty.every(
+              (cell) =>
+                cell.getBoundingClientRect().width > 0 &&
+                cell.getBoundingClientRect().height > 0,
+            ),
+            fill: getComputedStyle(empty[0]!).backgroundColor,
+            background: getComputedStyle(el).backgroundColor,
+            legend: getComputedStyle(el.querySelector("i")!).backgroundColor,
+            active: [...el.querySelectorAll<HTMLElement>("span[title]")]
+              .filter(
+                (cell) =>
+                  !cell.classList.contains("bg-muted") &&
+                  !cell.classList.contains("bg-transparent"),
+              )
+              .map((cell) => ({
+                title: cell.title,
+                width: cell.getBoundingClientRect().width,
+                fill: getComputedStyle(cell).backgroundColor,
+              })),
+          };
+        });
+        await heatmap.screenshot({
+          path: resolve(
+            out,
+            `profile-heatmap-${theme}${width === 375 ? "-mobile" : ""}.png`,
           ),
-          fill: getComputedStyle(empty[0]!).backgroundColor,
-          background: getComputedStyle(el).backgroundColor,
-          legend: getComputedStyle(el.querySelector("i")!).backgroundColor,
-        };
-      });
-      assert.ok(colors.count > 300 && colors.visible);
-      assert.notEqual(colors.fill, colors.background);
-      assert.equal(colors.fill, colors.legend);
-      await heatmap.screenshot({
-        path: resolve(out, `profile-heatmap-${theme}.png`),
-        animations: "disabled",
-      });
+          animations: "disabled",
+        });
+        heatmapChecks.push({ width, theme, ...colors });
+        report.heatmap = heatmapChecks;
+        assert.ok(
+          colors.count > 300 && colors.visible,
+          `Heatmap empty cells have visible dimensions at ${width}px`,
+        );
+        assert.equal(colors.active.length, 3);
+        assert.ok(colors.active.every((cell: any) => cell.width > 0));
+        assert.notEqual(colors.fill, colors.background);
+        assert.equal(colors.fill, colors.legend);
+        await overflow();
+        if (width === 375) {
+          const calendar = heatmap.getByRole("region", {
+            name: `Contribution heatmap for ${heatmapYear}`,
+            exact: true,
+          });
+          assert.ok(
+            await calendar.evaluate((el: HTMLElement) => {
+              el.scrollLeft = el.scrollWidth;
+              return el.scrollLeft > 0;
+            }),
+          );
+          await heatmap.screenshot({
+            path: resolve(out, `profile-heatmap-${theme}-mobile-end.png`),
+            animations: "disabled",
+          });
+          await calendar.evaluate((el: HTMLElement) => {
+            el.scrollLeft = 0;
+          });
+        }
+      }
     }
-    assert.equal(errors.length, 0, errors.join("; "));
+    await heatmap
+      .getByRole("button", { name: String(heatmapYear - 1), exact: true })
+      .click();
+    await page
+      .getByText(`0 contributions in ${heatmapYear - 1}`, { exact: true })
+      .waitFor();
+    await heatmap.screenshot({
+      path: resolve(out, "profile-heatmap-empty-dark-mobile.png"),
+      animations: "disabled",
+    });
+    await overflow();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await checkDelayedInitialStart();
+    assert.equal(errors.length, 0, JSON.stringify(errors));
+    report.passed = true;
     console.log(
       "Browser QA passed: delayed stop/focus resumes immediately, obsolete stops preserve same/different-lesson clocks via real HTTP, authenticated dashboard/progress/results, goal save/reopen, heatmap light/dark, empty/loading/retry, diagnostic CTA/durable dismiss and 375px layouts without browser errors or page overflow.",
     );
   } catch (error) {
+    report.passed = false;
+    report.failure = {
+      stage,
+      message: error instanceof Error ? error.message : "unexpected failure",
+    };
     console.error(
       `Browser verification failed at ${stage}:`,
       error instanceof Error
@@ -674,6 +975,14 @@ async function main() {
     );
     process.exitCode = 1;
   } finally {
+    await writeFile(
+      resolve(out, "browser-report.json"),
+      JSON.stringify(
+        { ...report, errors, finishedAt: new Date().toISOString() },
+        null,
+        2,
+      ),
+    );
     await browser?.close();
     await db.transaction(async (tx) => {
       await tx
@@ -682,7 +991,9 @@ async function main() {
       await tx
         .delete(user)
         .where(and(eq(user.id, userId), eq(user.email, email)));
-      await tx.delete(courses).where(inArray(courses.id, [ownedId, doneId]));
+      await tx
+        .delete(courses)
+        .where(inArray(courses.id, [ownedId, doneId, freshId]));
     });
     await db.$client.end();
     console.log("Only this run's QA users/courses/data cleaned up.");

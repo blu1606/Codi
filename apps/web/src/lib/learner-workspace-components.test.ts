@@ -23,6 +23,7 @@ const course: LearnerCourse = {
   cover: null,
   hidden: false,
   goal: null,
+  goalSetAt: "2026-10-18T03:00:00Z",
   weeklyGoalMinutes: 300,
   lastActiveAt: "2026-10-19T03:00:00Z",
   pathStatus: "ready",
@@ -103,9 +104,9 @@ async function mount(element: ReturnType<typeof createElement>) {
     root!.render(element);
   });
 }
-async function click(label: string) {
+async function click(label: string, scope: ParentNode = document) {
   await act(async () => {
-    const button = [...document.querySelectorAll("button")].find(
+    const button = [...scope.querySelectorAll("button")].find(
       (b) => b.textContent?.trim() === label,
     );
     expect(button, label).toBeTruthy();
@@ -122,6 +123,61 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 describe("learner workspace states", () => {
+  it.each([false, true])(
+    "routes an unfinalized goal to initial setup without an edit request (draft: %s)",
+    async (hasDraft) => {
+      const data = structuredClone(overview);
+      Object.assign(data.courses[0]!, {
+        goalSetAt: null,
+        goal: hasDraft ? "project" : null,
+        weeklyGoalMinutes: hasDraft ? 120 : null,
+        pathStatus: "none",
+        showDiagnostic: false,
+      });
+      Object.assign(data.weekly, {
+        assumed: !hasDraft,
+        goalMinutes: hasDraft ? 120 : 300,
+      });
+      const fetcher = vi.fn(async (_url, options) =>
+        options.method === "GET"
+          ? response(data)
+          : response({ error: "Chưa thể chỉnh mục tiêu." }, 409),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      await mount(createElement(LearnerWorkspace));
+      await click("Chỉnh mục tiêu");
+      expect(mocks.push).toHaveBeenCalledWith("/learn/owned/onboarding");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.body.textContent).not.toContain("Chưa thể chỉnh mục tiêu");
+    },
+  );
+  it.each(["none", "ready"])(
+    "confirms a finalized goal edit and opens onboarding after server success (path: %s)",
+    async (pathStatus) => {
+      const data = structuredClone(overview);
+      data.courses[0]!.pathStatus = pathStatus;
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(response(data))
+        .mockResolvedValueOnce(response({ ok: true }));
+      vi.stubGlobal("fetch", fetcher);
+      await mount(createElement(LearnerWorkspace));
+      await click("Chỉnh mục tiêu");
+      expect(mocks.push).not.toHaveBeenCalled();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog).toBeTruthy();
+      await click("Chỉnh mục tiêu", dialog!);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(fetcher.mock.calls[1]![0]).toBe("/api/learn/owned/onboarding");
+      expect(JSON.parse(fetcher.mock.calls[1]![1].body)).toEqual({
+        type: "goal-edit",
+      });
+      expect(mocks.push).toHaveBeenCalledWith("/learn/owned/onboarding");
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    },
+  );
   it("provides retry after an initial failure and loads real continue/goal links", async () => {
     const fetcher = vi
       .fn()
