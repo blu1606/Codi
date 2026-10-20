@@ -66,6 +66,138 @@ function snapshot(evidence: GithubEvidence[]): GithubCollectionSnapshot {
 }
 
 describe("deterministic GitHub technology observations", () => {
+  it.each([
+    "dependencies",
+    "devDependencies",
+    "peerDependencies",
+    "optionalDependencies",
+  ])("does not identify Python frameworks from npm names in %s", (section) => {
+    const source = snapshot([
+      file(
+        "npm",
+        1,
+        "package.json",
+        JSON.stringify({
+          [section]: { django: "1", fastapi: "1", flask: "1" },
+        }),
+      ),
+    ]);
+    expect(extractGithubTechnologies(source)).toEqual([]);
+  });
+
+  it.each([
+    "react",
+    "next",
+    "vue",
+    "express",
+    "typescript",
+    "vitest",
+    "jest",
+    "drizzle-orm",
+    "prisma",
+  ])(
+    "does not identify a JavaScript technology from Python requirement %s",
+    (name) => {
+      const source = snapshot([
+        file("python", 1, "requirements.txt", `${name}==1`),
+      ]);
+      expect(extractGithubTechnologies(source)).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["react", "React", "framework"],
+    ["next", "Next.js", "framework"],
+    ["vue", "Vue", "framework"],
+    ["express", "Express", "framework"],
+    ["@nestjs/core", "NestJS", "framework"],
+    ["typescript", "TypeScript", "tool"],
+    ["vitest", "Vitest", "tool"],
+    ["jest", "Jest", "tool"],
+    ["@playwright/test", "Playwright", "tool"],
+    ["drizzle-orm", "Drizzle ORM", "tool"],
+    ["prisma", "Prisma", "tool"],
+  ])(
+    "preserves npm declaration %s with its evidence",
+    (name, technology, kind) => {
+      const source = snapshot([
+        file(
+          "npm",
+          1,
+          "package.json",
+          JSON.stringify({ dependencies: { [name!]: "1" } }),
+        ),
+      ]);
+      expect(extractGithubTechnologies(source)).toEqual([
+        {
+          technology,
+          kind,
+          signal: "declared_dependency",
+          repositoryIds: [1],
+          evidenceIds: ["npm"],
+        },
+      ]);
+    },
+  );
+
+  it.each([
+    ["Django", "Django"],
+    ["FastAPI", "FastAPI"],
+    ["Flask", "Flask"],
+  ])(
+    "preserves Python declaration %s with its evidence",
+    (name, technology) => {
+      const source = snapshot([
+        file("python", 2, "requirements.txt", `${name}>=1`),
+      ]);
+      expect(extractGithubTechnologies(source)).toEqual([
+        {
+          technology,
+          kind: "framework",
+          signal: "declared_dependency",
+          repositoryIds: [2],
+          evidenceIds: ["python"],
+        },
+      ]);
+    },
+  );
+
+  it("keeps ecosystem attribution and exclusions independent in a mixed snapshot", () => {
+    const source = snapshot([
+      file(
+        "npm",
+        1,
+        "package.json",
+        '{"dependencies":{"react":"19","django":"1"}}',
+      ),
+      file("python", 2, "requirements.txt", "django==5\nreact==1\nnext==1\n"),
+    ]);
+    const before = JSON.stringify(source);
+    expect(extractGithubTechnologies(source)).toEqual([
+      {
+        technology: "Django",
+        kind: "framework",
+        signal: "declared_dependency",
+        repositoryIds: [2],
+        evidenceIds: ["python"],
+      },
+      {
+        technology: "React",
+        kind: "framework",
+        signal: "declared_dependency",
+        repositoryIds: [1],
+        evidenceIds: ["npm"],
+      },
+    ]);
+    expect(
+      extractGithubTechnologies(source, [1]).map((item) => item.technology),
+    ).toEqual(["Django"]);
+    expect(
+      extractGithubTechnologies(source, [2]).map((item) => item.technology),
+    ).toEqual(["React"]);
+    expect(JSON.stringify(source)).toBe(before);
+  });
+
   it("reports positive declared dependencies, with evidence, without treating declarations as mastery", () => {
     const source = snapshot([
       file(

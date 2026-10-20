@@ -3,24 +3,29 @@ import type {
   GithubTechnologyObservation,
 } from "./github-profile-contract";
 
-const DEPENDENCIES: Record<
+type DependencyMap = Record<
   string,
   { technology: string; kind: "framework" | "tool" }
-> = {
+>;
+
+const NPM_DEPENDENCIES: DependencyMap = {
   react: { technology: "React", kind: "framework" },
   next: { technology: "Next.js", kind: "framework" },
   vue: { technology: "Vue", kind: "framework" },
   express: { technology: "Express", kind: "framework" },
   "@nestjs/core": { technology: "NestJS", kind: "framework" },
-  django: { technology: "Django", kind: "framework" },
-  fastapi: { technology: "FastAPI", kind: "framework" },
-  flask: { technology: "Flask", kind: "framework" },
   typescript: { technology: "TypeScript", kind: "tool" },
   vitest: { technology: "Vitest", kind: "tool" },
   jest: { technology: "Jest", kind: "tool" },
   "@playwright/test": { technology: "Playwright", kind: "tool" },
   "drizzle-orm": { technology: "Drizzle ORM", kind: "tool" },
   prisma: { technology: "Prisma", kind: "tool" },
+};
+
+const PYTHON_DEPENDENCIES: DependencyMap = {
+  django: { technology: "Django", kind: "framework" },
+  fastapi: { technology: "FastAPI", kind: "framework" },
+  flask: { technology: "Flask", kind: "framework" },
 };
 
 function declaredDependencies(path: string, text: string): string[] {
@@ -117,12 +122,20 @@ export function extractGithubTechnologies(
           );
       }
     } else {
+      // A dependency name identifies a package only within its manifest's ecosystem.
+      const dependencies =
+        evidence.path === "package.json"
+          ? NPM_DEPENDENCIES
+          : evidence.path === "requirements.txt"
+            ? PYTHON_DEPENDENCIES
+            : null;
+      if (!dependencies) continue;
       for (const dependency of declaredDependencies(
         evidence.path,
         evidence.text,
       )) {
-        if (!Object.hasOwn(DEPENDENCIES, dependency)) continue;
-        const mapped = DEPENDENCIES[dependency]!;
+        if (!Object.hasOwn(dependencies, dependency)) continue;
+        const mapped = dependencies[dependency]!;
         add(
           mapped.technology,
           mapped.kind,
