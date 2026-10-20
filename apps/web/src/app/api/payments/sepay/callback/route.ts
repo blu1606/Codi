@@ -359,7 +359,203 @@ export async function POST(req: Request) {
               .onConflictDoNothing();
           }
         } else {
-          return { orderNotPending: true };
+          // Concurrent status transition occurred between initial check and update.
+          // Fetch fresh order record under transaction lock.
+          const [freshOrder] = await txDB
+            .select({
+              id: orders.id,
+              status: orders.status,
+              failReason: orders.failReason,
+              totalAmount: orders.totalAmount,
+              voucherId: orders.voucherId,
+            })
+            .from(orders)
+            .where(eq(orders.code, txId))
+            .limit(1);
+
+          if (freshOrder && freshOrder.status === "failed" && freshOrder.failReason === "expired") {
+            // Concurrent expiry occurred: apply late payment rules (D2)
+            const freshItems = await txDB
+              .select({ id: orderItems.id, courseId: orderItems.courseId })
+              .from(orderItems)
+              .where(eq(orderItems.orderId, freshOrder.id));
+            const freshCourseIds = freshItems.map((it) => it.courseId);
+
+            let allFreshOwned = false;
+            if (freshCourseIds.length > 0) {
+              const owned = await txDB
+                .select({ courseId: studentEnrollments.courseId })
+                .from(studentEnrollments)
+                .where(
+                  and(
+                    eq(studentEnrollments.userId, tx.userId),
+                    inArray(studentEnrollments.courseId, freshCourseIds),
+                  ),
+                );
+              if (owned.length === freshCourseIds.length) {
+                allFreshOwned = true;
+              }
+            }
+
+            if (!allFreshOwned) {
+              // Auto-honour: transition from failed to paid
+              const isOverpaid = newAccumulated > freshOrder.totalAmount;
+              await txDB
+                .update(orders)
+                .set({
+                  status: "paid",
+                  receivedAmount: newAccumulated,
+                  needsReconciliation: isOverpaid ? true : false,
+                  paidAt: new Date(),
+                  updatedAt: new Date(),
+                })
+                .where(and(eq(orders.id, freshOrder.id), eq(orders.status, "failed")));
+
+              await txDB.insert(orderEvents).values({
+                orderId: freshOrder.id,
+                label: "Thanh toán muộn được chấp nhận",
+                actorId: tx.userId,
+              });
+
+              if (isOverpaid) {
+                await txDB.insert(orderEvents).values({
+                  orderId: freshOrder.id,
+                  label: `Chuyển thừa ${newAccumulated - freshOrder.totalAmount} ₫ (Cần đối soát)`,
+                  actorId: tx.userId,
+                });
+              }
+
+              if (freshCourseIds.length > 0) {
+                courseIdsToEnroll = freshCourseIds;
+              }
+
+              if (freshOrder.voucherId) {
+                const voucherRes = await txDB
+                  .update(vouchers)
+                  .set({
+                    usedCount: sql`${vouchers.usedCount} + 1`,
+                  })
+                  .where(
+                    and(
+                      eq(vouchers.id, freshOrder.voucherId),
+                      or(
+                        isNull(vouchers.usageLimit),
+                        sql`${vouchers.usedCount} < ${vouchers.usageLimit}`,
+                      ),
+                    ),
+                  )
+                  .returning({ id: vouchers.id });
+
+                if (voucherRes.length === 0) {
+                  await txDB
+                    .update(orders)
+                    .set({ needsReconciliation: true })
+                    .where(eq(orders.id, freshOrder.id));
+
+                  await txDB.insert(orderEvents).values({
+                    orderId: freshOrder.id,
+                    label: "Mã giảm giá vượt hạn mức sử dụng khi thanh toán (Cần đối soát)",
+                    actorId: tx.userId,
+                  });
+                }
+              }
+
+              try {
+                await createNotificationService(txDB).notify(
+                  tx.userId,
+                  "Thanh toán thành công",
+                  `Đơn ${txId} đã được xác nhận. Khoá học đã sẵn sàng.`,
+                  `/checkout/success?order=${freshOrder.id}`,
+                );
+              } catch (notifErr) {
+                console.error("Failed to send payment notification:", notifErr);
+              }
+
+              const itemMap = new Map<string, number>();
+              for (const item of freshItems) {
+                itemMap.set(item.courseId, item.id);
+              }
+
+              for (const cId of courseIdsToEnroll) {
+                await txDB
+                  .insert(studentEnrollments)
+                  .values({
+                    userId: tx.userId,
+                    courseId: cId,
+                    orderItemId: itemMap.get(cId),
+                  })
+                  .onConflictDoNothing();
+              }
+            } else {
+              // Already owned: flag for reconciliation and revert transaction status
+              await txDB
+                .update(orders)
+                .set({
+                  receivedAmount: newAccumulated,
+                  needsReconciliation: true,
+                  updatedAt: new Date(),
+                })
+                .where(eq(orders.id, freshOrder.id));
+
+              await txDB.insert(orderEvents).values({
+                orderId: freshOrder.id,
+                label: "Thanh toán muộn cho các khoá đã sở hữu (Cần đối soát hoàn tiền)",
+                actorId: tx.userId,
+              });
+
+              await txDB
+                .update(studentTransactions)
+                .set({ status: "failed" })
+                .where(eq(studentTransactions.id, txId));
+
+              if (providerTxCode) {
+                await txDB
+                  .update(payments)
+                  .set({
+                    status: "failed",
+                    failureReason: "Khoá học đã được sở hữu, cần đối soát",
+                  })
+                  .where(eq(payments.transactionCode, providerTxCode));
+              }
+
+              return { orderNotPending: true, orderStatus: "failed_already_owned" };
+            }
+          } else {
+            // Order is cancelled or another non-pending state: mark for reconciliation
+            if (freshOrder) {
+              await txDB
+                .update(orders)
+                .set({
+                  receivedAmount: newAccumulated,
+                  needsReconciliation: true,
+                  updatedAt: new Date(),
+                })
+                .where(eq(orders.id, freshOrder.id));
+
+              await txDB.insert(orderEvents).values({
+                orderId: freshOrder.id,
+                label: `Nhận thanh toán khi đơn không ở trạng thái chờ (status: ${freshOrder.status}, cần đối soát)`,
+                actorId: tx.userId,
+              });
+            }
+
+            await txDB
+              .update(studentTransactions)
+              .set({ status: "failed" })
+              .where(eq(studentTransactions.id, txId));
+
+            if (providerTxCode) {
+              await txDB
+                .update(payments)
+                .set({
+                  status: "failed",
+                  failureReason: `Order is not pending (status: ${freshOrder?.status ?? "unknown"})`,
+                })
+                .where(eq(payments.transactionCode, providerTxCode));
+            }
+
+            return { orderNotPending: true, orderStatus: freshOrder?.status ?? "non-pending" };
+          }
         }
       } else {
         // Fallback for legacy transactions without orders table entry

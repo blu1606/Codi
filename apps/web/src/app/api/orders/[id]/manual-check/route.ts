@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { auth, db } from "@/services";
 import { orders } from "@codi-1/db";
 
@@ -53,19 +53,35 @@ export async function POST(
 
     // Check expiry
     if (order.status === "pending" && order.paymentDeadline && new Date(order.paymentDeadline) <= new Date()) {
-      const isUnderpaid = order.receivedAmount > 0;
-      await db
-        .update(orders)
-        .set({
-          status: "failed",
-          failReason: "expired",
-          needsReconciliation: isUnderpaid ? true : undefined,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(orders.id, order.id), eq(orders.status, "pending")));
+      await db.transaction(async (tx) => {
+        if (order.code) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${order.code}))`);
+        }
+        // Re-check order status under lock
+        const [lockedOrder] = await tx
+          .select({ status: orders.status, receivedAmount: orders.receivedAmount })
+          .from(orders)
+          .where(eq(orders.id, order.id))
+          .limit(1);
 
-      order.status = "failed";
-      order.failReason = "expired";
+        if (lockedOrder && lockedOrder.status === "pending") {
+          const isUnderpaid = lockedOrder.receivedAmount > 0;
+          await tx
+            .update(orders)
+            .set({
+              status: "failed",
+              failReason: "expired",
+              needsReconciliation: isUnderpaid ? true : undefined,
+              updatedAt: new Date(),
+            })
+            .where(and(eq(orders.id, order.id), eq(orders.status, "pending")));
+
+          order.status = "failed";
+          order.failReason = "expired";
+        } else if (lockedOrder) {
+          order.status = lockedOrder.status;
+        }
+      });
     }
 
     return NextResponse.json({

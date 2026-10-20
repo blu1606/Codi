@@ -744,3 +744,220 @@ it("P2: flags order with needsReconciliation when partial transfer arrives after
   expect(eventLabels.some((l) => l.includes("Thanh toán thiếu sau khi hết hạn"))).toBe(true);
 });
 
+it("P1: late-honours order if concurrent expiry changed pending order to failed right before settlement", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI99995",
+      amount: 500000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "course-1",
+    },
+  ]);
+
+  const updateOrderMock = vi.fn();
+  const enrollMock = vi.fn();
+  const eventLabels: string[] = [];
+  let selectCallCount = 0;
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: () => ({
+        from: () => ({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            return {
+              // 1st: initial select sees pending (before race)
+              // 2nd: freshOrder re-select sees failed (expired)
+              limit: vi.fn().mockImplementation(() => {
+                if (selectCallCount === 1) {
+                  return Promise.resolve([
+                    {
+                      id: 995,
+                      code: "CODI99995",
+                      userId: "session-user",
+                      status: "pending",
+                      failReason: null,
+                      totalAmount: 500000,
+                      receivedAmount: 0,
+                      voucherId: null,
+                    },
+                  ]);
+                }
+                return Promise.resolve([
+                  {
+                    id: 995,
+                    status: "failed",
+                    failReason: "expired",
+                    totalAmount: 500000,
+                    voucherId: null,
+                  },
+                ]);
+              }),
+              then: (resolve: any) => {
+                if (selectCallCount === 3) {
+                  // freshItems
+                  return resolve([{ id: 1, courseId: "course-1" }]);
+                }
+                // owned courses check (empty -> not owned)
+                return resolve([]);
+              },
+            };
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (val: any) => {
+          updateOrderMock(val);
+          return {
+            where: () => ({
+              returning: vi.fn().mockImplementation(() => {
+                // When updating studentTransactions, return the updated id
+                if (val?.status === "paid" && !("receivedAmount" in val)) {
+                  return [{ id: "CODI99995" }];
+                }
+                // When updating orders.status = 'pending', return empty to simulate race condition
+                return [];
+              }),
+            }),
+          };
+        },
+      }),
+      insert: () => ({
+        values: (val: any) => {
+          if (val && typeof val === "object" && "label" in val) {
+            eventLabels.push(val.label);
+          }
+          if (val && typeof val === "object" && "courseId" in val && !("orderId" in val)) {
+            enrollMock(val);
+          }
+          return { onConflictDoNothing: vi.fn(), returning: vi.fn().mockResolvedValue([{ id: 1 }]) };
+        },
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI99995",
+      transferAmount: 500000,
+    }),
+  );
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ success: true });
+  expect(updateOrderMock).toHaveBeenCalledWith(
+    expect.objectContaining({ status: "paid" }),
+  );
+  expect(enrollMock).toHaveBeenCalledWith(
+    expect.objectContaining({ userId: "session-user", courseId: "course-1" }),
+  );
+  expect(eventLabels).toContain("Thanh toán muộn được chấp nhận");
+});
+
+it("P1: marks for reconciliation if concurrent expiry changed pending order to failed and courses are already owned", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI99996",
+      amount: 500000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "course-1",
+    },
+  ]);
+
+  const updateOrderMock = vi.fn();
+  const enrollMock = vi.fn();
+  let selectCallCount = 0;
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: () => ({
+        from: () => ({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            return {
+              limit: vi.fn().mockImplementation(() => {
+                if (selectCallCount === 1) {
+                  return Promise.resolve([
+                    {
+                      id: 996,
+                      code: "CODI99996",
+                      userId: "session-user",
+                      status: "pending",
+                      failReason: null,
+                      totalAmount: 500000,
+                      receivedAmount: 0,
+                      voucherId: null,
+                    },
+                  ]);
+                }
+                return Promise.resolve([
+                  {
+                    id: 996,
+                    status: "failed",
+                    failReason: "expired",
+                    totalAmount: 500000,
+                    voucherId: null,
+                  },
+                ]);
+              }),
+              then: (resolve: any) => {
+                if (selectCallCount === 3) {
+                  return resolve([{ id: 1, courseId: "course-1" }]);
+                }
+                // owned courses check (has course-1 -> already owned!)
+                return resolve([{ courseId: "course-1" }]);
+              },
+            };
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (val: any) => {
+          updateOrderMock(val);
+          return {
+            where: () => ({
+              returning: vi.fn().mockImplementation(() => {
+                // When updating studentTransactions, return the updated id
+                if (val?.status === "paid" && !("receivedAmount" in val)) {
+                  return [{ id: "CODI99996" }];
+                }
+                return [];
+              }),
+            }),
+          };
+        },
+      }),
+      insert: () => ({
+        values: (val: any) => {
+          if (val && typeof val === "object" && "courseId" in val && !("orderId" in val)) {
+            enrollMock(val);
+          }
+          return { onConflictDoNothing: vi.fn(), returning: vi.fn().mockResolvedValue([{ id: 1 }]) };
+        },
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI99996",
+      transferAmount: 500000,
+    }),
+  );
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ success: true, message: "Order not pending, marked for reconciliation" });
+  expect(updateOrderMock).toHaveBeenCalledWith(
+    expect.objectContaining({ needsReconciliation: true }),
+  );
+  expect(enrollMock).not.toHaveBeenCalled();
+});
+

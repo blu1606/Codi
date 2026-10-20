@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { auth, db } from "@/services";
 import { orders, orderItems, orderEvents } from "@codi-1/db";
 import { studentTransactions } from "@codi-1/db/schema/student-profile";
@@ -32,6 +32,9 @@ export async function POST(
     const isNumeric = /^\d+$/.test(trimmed);
 
     return await db.transaction(async (tx) => {
+      // Serialize concurrent operations on this order code
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${trimmed}))`);
+
       // Find old order
       const [oldOrder] = await tx
         .select({

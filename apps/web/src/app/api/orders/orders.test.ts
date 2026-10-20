@@ -33,7 +33,8 @@ vi.mock("@/services", () => ({
       },
     }),
     insert: () => ({ values: mocks.values }),
-    transaction: (fn: any) => mocks.transaction(fn),
+    execute: vi.fn().mockResolvedValue(undefined),
+    transaction: (fn: any) => mocks.transaction((tx: any) => fn({ execute: vi.fn().mockResolvedValue(undefined), ...tx })),
   },
   auth: { api: { getSession: mocks.getSession } },
 }));
