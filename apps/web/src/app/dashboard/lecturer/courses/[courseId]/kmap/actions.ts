@@ -160,10 +160,12 @@ export async function getKnowledgeMapData(courseId: string): Promise<KnowledgeMa
     review: e.review,
   }));
 
-  // Điều chỉnh trạng thái nếu khoá học chưa có bài học nào
+  // Content availability controls empty/ready; ready does not imply analysis or confirmation.
   let effectiveStatus = course.knowledgeMapStatus;
   if (lessons.length === 0) {
     effectiveStatus = "empty";
+  } else if (effectiveStatus === "empty") {
+    effectiveStatus = "ready";
   }
 
   // Tìm vòng lặp trên các cạnh hoạt động (không bị bỏ)

@@ -96,6 +96,39 @@ afterEach(async () => {
 });
 
 describe("knowledge map client saved graph state", () => {
+  it("offers analysis for a ready course with lessons but no extracted concepts", async () => {
+    const unanalysed = snapshot();
+    unanalysed.concepts = [];
+    await render(unanalysed);
+    expect(button("Phân tích lại").disabled).toBe(false);
+    expect(confirm().disabled).toBe(true);
+    await click("Phân tích lại");
+    expect(boundary.runKnowledgeMapAnalysis).toHaveBeenCalledWith("owned");
+    expect(boundary.confirmKnowledgeMap).not.toHaveBeenCalled();
+  });
+
+  it("does not offer analysis when no lessons are available", async () => {
+    const empty = snapshot();
+    empty.course.knowledgeMapStatus = "empty";
+    empty.concepts = [];
+    empty.lessons = [];
+    empty.defaultOrder = [];
+    await render(empty);
+    expect(document.body.textContent).toContain("Chưa có nội dung để phân tích");
+    expect([...document.querySelectorAll("button")].some((el) => el.textContent?.trim() === "Phân tích lại")).toBe(false);
+    expect(boundary.runKnowledgeMapAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("does not offer first analysis while the course is pending review", async () => {
+    const pending = snapshot();
+    pending.concepts = [];
+    pending.course.status = "pending";
+    pending.isLocked = true;
+    await render(pending);
+    expect([...document.querySelectorAll("button")].some((el) => el.textContent?.trim() === "Phân tích lại")).toBe(false);
+    expect(boundary.runKnowledgeMapAnalysis).not.toHaveBeenCalled();
+  });
+
   it("reflects the refreshed accept-all result without remounting the list view", async () => {
     const pending = snapshot();
     pending.concepts = pending.concepts.map((concept) => ({ ...concept, review: "suggested" }));
