@@ -24,7 +24,7 @@ import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
 import { COURSE_STATUSES, type CourseStatusType } from "@/lib/course-constants";
 import { createCourseSchema, type CreateCourseInput } from "@/lib/course-schema";
-import { generateUniqueCourseSlug } from "@/lib/course-slug";
+import { generateUniqueCourseSlug, isSlugUniqueConstraintError } from "@/lib/course-slug";
 
 export type { CourseStatusType, CreateCourseInput };
 
@@ -366,7 +366,7 @@ export async function createCourseDraft(
       return { success: true, courseId };
     } catch (err: any) {
       lastError = err;
-      if (err?.code === "23505" || err?.message?.includes("unique")) {
+      if (isSlugUniqueConstraintError(err)) {
         continue;
       }
       throw err;
