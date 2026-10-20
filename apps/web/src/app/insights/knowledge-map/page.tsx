@@ -17,7 +17,7 @@ export default async function KnowledgeMapPage({
     );
   const { course } = await searchParams;
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 pb-12 pt-8">
+    <main className="mx-auto min-w-0 w-full max-w-[1200px] px-4 pb-12 pt-8">
       <KnowledgeMap initialCourseId={course} />
     </main>
   );

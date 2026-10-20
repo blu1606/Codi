@@ -1,75 +1,55 @@
 # Issue #161 — Knowledge map mockup parity
 
-Epic #94 · S13c · Flow L12 · `/insights/knowledge-map`.
+Epic #94 · Module #97 · S13c / Flow L12 · `/insights/knowledge-map`.
 
 ## Implementation
 
-- Geometry matches `docs/mockup/js/charts.js`: nodes 152×60, horizontal gap 24, vertical gap 56, padding 16. Each topological layer is centred; edges run from the prerequisite's bottom centre to the next node's top centre.
-- Uses the existing `viz-s1…s4`, `viz-axis`, `viz-on-s4`, surface and border tokens in both themes. Locked nodes retain dashed borders and a lock label; mastery has text and a four-step meter.
-- Restores the page header, “Nên ôn tiếp”, legend, “Bảng số liệu” disclosure and sorted “Theo mức thành thạo” chart. The course selector appears only for multiple enrolled courses, as in the mock.
-- Selection still highlights ancestors and opens related lessons. Recommendation markers, confirmed-map visibility, ownership and lesson prerequisite checks retain the server contract. No schema/API changes.
-- The user explicitly chose to keep **Thống kê học tập** visible but disabled until the statistics module supplies `/insights/stats`; there is no link to a nonexistent route. This dependency must be resolved when that module is integrated.
-- PR #160 / issue #156 supplies the explicit lesson CTA separately. This branch starts from develop and leaves `ConceptDetails` lesson rendering untouched so that change can merge independently. Full UI-LRN-25 validation depends on integrating #160.
+- Matches the mockup's top-down geometry: 152×60 nodes, 24 horizontal gap, 56 vertical gap, 16 canvas padding and centred topological rows. Prerequisite edges use curved arrows.
+- Restores the page heading, recommendation, five-level legend, four-step node meters, table disclosure and sorted mastery chart. Selection keeps ancestor highlighting and the related lesson panel.
+- Uses actual API concepts, edges, mastery, ownership and prerequisite locks. Multiple courses retain a selector; unconfirmed maps remain hidden. No application API/schema or server guard changes.
+- The page and embedded course-home containers use `min-w-0` so the 888px graph scrolls inside its canvas at 375px rather than widening the whole document.
+- Adds **Học tập của tôi → Chức năng & Lối tắt → Bản đồ kiến thức**.
+- **Thống kê học tập** is visible but disabled as explicitly chosen by the user until the statistics module supplies a real route.
+- PR #160 / issue #156 remains separate at its original commit. This PR leaves lesson links in `ConceptDetails` unchanged; integrating the explicit “Học bài này” CTA and running UI-LRN-25 belongs to #160.
 
-## Mapping
+## Development course
 
-| Contract | Implementation | Verification |
-|---|---|---|
-| Read-only layered graph, mastery labels | `KnowledgeMap`, `KnowledgeMapNode`, `knowledgeGraphLayout`, `KnowledgeGraphLines` | Layout and component tests; desktop light geometry/background/radius compared with all 12 prototype nodes |
-| Selection and prerequisite path | Existing ancestor traversal and `ConceptDetails` | Component tests and browser selection assertions |
-| Locked lesson cannot navigate | Existing API/service lock fields and panel rendering | Existing guard tests; component and browser no-link assertions |
-| Diagnostic skipped / no evidence | Level zero, empty meter, no fabricated probability | Component tests and desktop light screenshot |
-| Empty / unconfirmed | `EmptyKnowledgeMap` | Existing tests, course-switch test, browser assertions |
-| Loading / HTTP failure / retry | Existing fetch lifecycle, visible retry | Component test and browser assertions |
-| Multiple courses | Selector, abort previous request, clear selection | Component course-switch test |
+`scripts/seed-knowledge-map-dev.ts` creates only a separate course `dev-knowledge-map-161` for an explicitly supplied learner ID. It has 12 concepts, 12 prerequisites, 12 lessons, 6 quizzes and a ready default path. Reading and quiz content come from the existing development exports. Existing learner activity is preserved on reruns.
 
-## Validation and remaining work
+Run from `apps/web`:
 
-- Full Vitest run: **72 files, 937 tests passed**, with `--coverage --maxWorkers=4`; configured coverage gate passed (98.95% statements, 85.16% branches, 96.96% functions, 98.84% lines). The configured coverage include list is shared infrastructure, not a claim of 98.95% graph coverage.
+```sh
+pnpm db:seed-knowledge-map -- --user-id=<learner-id>
+# Explicitly list this development simulation in the catalog:
+pnpm db:seed-knowledge-map -- --user-id=<learner-id> --catalog
+```
+
+The user authorized creating this development dataset and listing it on the test catalog as **JavaScript nền tảng — Mô phỏng bản đồ kiến thức**. It does not add seed fallbacks or scenario flags to application code. It changes no account passwords and requires no seed account password.
+
+Test entry: `/courses` → search “Mô phỏng bản đồ kiến thức” → **Tiếp tục học** → **Bản đồ kiến thức**. Direct course: `/learn/dev-knowledge-map-161`.
+
+## Validation
+
+- Full Vitest + configured coverage gate: **72 files, 937 tests passed**. Coverage: 98.95% statements, 85.16% branches, 96.96% functions, 98.84% lines. Coverage includes configured shared infrastructure, not a claim of graph-wide coverage.
+- Workspace `pnpm -r check-types`: passed after regenerating Next route types.
 - Design standards: **0 violations**.
-- Package type checks passed after regenerating stale Next route types left by the branch switch.
-- Desktop light browser assertions passed for the 12-node geometry/colours/radii, selection, ancestor highlighting, lock guards, table disclosure, unlearned state, empty/unconfirmed state and error retry. Loading was observed; the scratch suite then failed because its response-release callback had not yet been installed. The script was corrected to await the callback, but the subsequent Chrome launch was denied permission. **The complete browser matrix is not marked passed.**
-- **Still required before merge:** rerun the corrected browser suite on desktop 1280px and mobile 375px, in light and dark; refresh screenshots after the final chart-label/shadow/spacing polish. Current images show the earlier desktop light pass. Element screenshots include the shared sticky header, which can obscure the page heading; replace them with full-page captures.
-- Browser fixtures use the prototype's JavaScript course data and mocked API/session responses, not authenticated production accounts. No seeded authenticated end-to-end run is claimed.
+- Real service verification: confirmed graph, 12 nodes / 12 edges / layers **1–3–5–3**, 3 mastered, only “Xử lý lỗi” locked, next review “Bất đồng bộ”; 12 lesson rows, 6 quiz rows, ready default path, first lesson access allowed. The real catalog API includes the simulation.
+- Browser: **desktop 1280px / mobile 375px × light / dark passed**. Compared every node's geometry, background and radius with the prototype; selection, ancestor highlighting, lock/no-link, table, all-unlearned, empty/unconfirmed, error/retry and loading passed. No document overflow or browser page errors.
+- Current full-page screenshots below use the actual application component and a fresh real-service payload from the development course. API/session interception is used only by the temporary screenshot harness; the photos do not claim an authenticated lesson-player E2E run. Forced loading/error/unconfirmed/empty states are fixture responses.
+- Temporary screenshot route removed. No `.env`, credentials or browser state committed; `docs/mockup/**` unchanged. Images are committed alongside the implementation because direct GitHub drag-and-drop upload is unavailable.
 
-## Follow-up review on 2026-10-20
+## Current full-page screenshots
 
-- User requested a separate real development dataset matching the left-hand mockup, rather than changing the existing three-concept TypeScript course.
-- Added `scripts/seed-knowledge-map-dev.ts` and `pnpm --filter web db:seed-knowledge-map -- --user-id=<learner-id>`. The account is explicit; no password is needed. It creates a hidden course `dev-knowledge-map-161` titled “JavaScript nền tảng”, using concepts, prerequisites and mastery from the existing mockup export. Existing courses and progress are untouched; reruns preserve the fixture enrollment's learner activity.
-- Seeded only the learner account selected by the user. Verified through `createLearningPathService.getKnowledgeMap`: confirmed, 12 concepts, 12 edges, layers 1–3–5–3, 3 mastered, only “Xử lý lỗi” locked, next concept “Bất đồng bộ”. Every concept has a real related lesson.
-- Web TypeScript check passed after the seed script was added.
-- Refreshed full-page desktop light/dark screenshots. Both desktop browser runs passed node geometry/colour comparisons and selection, lock, table, empty, unconfirmed, retry and loading checks. These replace the earlier desktop-only evidence described above.
-- The mobile light run found document-level horizontal overflow at the initial map capture. Mobile verification is **not passed**; investigate before PR. Dark mobile has not run.
-- User requested to inspect before any PR. Work paused for that review; no push or PR. Temporary browser fixture route removed.
+Mockup references: [desktop light](mockup-desktop-light-map.png), [desktop dark](mockup-desktop-dark-map.png), [mobile light](mockup-mobile-light-map.png), [mobile dark](mockup-mobile-dark-map.png). The static prototype has no interactive node panel; Flow L12 defines selection/related lessons.
 
-Review URL: `http://localhost:3001/insights/knowledge-map?course=dev-knowledge-map-161`.
-
-## Testable course follow-up
-
-- On the user's request, expanded the same separate course into a usable simulation: 12 published reading lessons and 6 published quizzes copied from the existing JavaScript mockup export. Related reading content comes from `js-course-content.json` where available. Quiz answers use the snapshot's `correctIndex`; no assessment submissions are fabricated.
-- Initializes an untouched fixture enrollment with a ready default path. Existing goals, path choices, mastery and activity are preserved on reruns. No AI provider calls are needed.
-- Real service verification passed: course path ready/default, 12 lesson rows, 6 quiz rows, a current lesson with access allowed; the map remains confirmed with 12 nodes, 12 edges and layers 1–3–5–3.
-- Added a learner dashboard shortcut: **Học tập của tôi → Chức năng & Lối tắt → Bản đồ kiến thức**. Select “JavaScript nền tảng” to view this fixture. Direct course entry: `http://localhost:3001/learn/dev-knowledge-map-161`, then **Bản đồ kiến thức** beside **Lộ trình học**.
-- This follow-up does not resolve the previously recorded mobile overflow. No push or PR has been made; the user is still reviewing.
-
-## Catalog entry requested for manual testing
-
-- The user clarified that the simulation must appear on the **Khoá học** catalog itself. Ran the development seed with `--catalog`, publishing only `dev-knowledge-map-161` with the distinct title **JavaScript nền tảng — Mô phỏng bản đồ kiến thức**. The existing selected learner enrollment and activity remain unchanged.
-- Verified the real `/api/courses` response includes this ID with `status: published` and price 0. The existing catalog card's owned-course action routes to `/learn/dev-knowledge-map-161`; from there choose **Bản đồ kiến thức**. Search for “Mô phỏng bản đồ kiến thức” on `/courses` to locate it.
-- No catalog API filters or publication rules for other courses were changed. `--catalog` is an explicit development-seed option; ordinary reruns do not change visibility.
-- Temporary fixture route was removed. No `.env`, credentials, fake data or scenario flags are shipped in application code. `docs/mockup/**` is unchanged.
-- Images are stored in this repository as review evidence. Direct GitHub drag-and-drop uploads are unavailable in this environment.
-
-## Screenshot evidence (desktop light, pending final refresh)
-
-| State | Mockup | Implementation |
-|---|---|---|
-| Confirmed map | ![Mock map](mockup-desktop-light-map.png) | ![Map](implementation-desktop-light-map.png) |
-| All unlearned | ![Mock unlearned](mockup-desktop-light-unlearned.png) | ![Unlearned](implementation-desktop-light-unlearned.png) |
-| Selected, unlocked | Standalone prototype has no interactive panel; Flow L12 defines it | ![Selected](implementation-desktop-light-selected.png) |
-| Selected, locked | Same limitation | ![Locked](implementation-desktop-light-locked.png) |
-| Table expanded | Data-equivalent table under the graph | ![Table](implementation-desktop-light-table.png) |
-| Unconfirmed | Backend condition absent from standalone prototype | ![Unconfirmed](implementation-desktop-light-unconfirmed.png) |
-| No enrolments | Empty state | ![Empty](implementation-desktop-light-empty.png) |
-| HTTP error | Network condition absent from static prototype | ![Error](implementation-desktop-light-error.png) |
-| Loading | Network condition absent from static prototype | ![Loading](implementation-desktop-light-loading.png) |
+| State | Desktop light | Desktop dark | Mobile light | Mobile dark |
+|---|---|---|---|---|
+| Bản đồ | ![Bản đồ](implementation-desktop-light-map.png) | ![Bản đồ](implementation-desktop-dark-map.png) | ![Bản đồ](implementation-mobile-light-map.png) | ![Bản đồ](implementation-mobile-dark-map.png) |
+| Chọn bài mở khoá | ![Chọn bài mở khoá](implementation-desktop-light-selected.png) | ![Chọn bài mở khoá](implementation-desktop-dark-selected.png) | ![Chọn bài mở khoá](implementation-mobile-light-selected.png) | ![Chọn bài mở khoá](implementation-mobile-dark-selected.png) |
+| Chọn khái niệm bị khoá | ![Chọn khái niệm bị khoá](implementation-desktop-light-locked.png) | ![Chọn khái niệm bị khoá](implementation-desktop-dark-locked.png) | ![Chọn khái niệm bị khoá](implementation-mobile-light-locked.png) | ![Chọn khái niệm bị khoá](implementation-mobile-dark-locked.png) |
+| Bảng số liệu | ![Bảng số liệu](implementation-desktop-light-table.png) | ![Bảng số liệu](implementation-desktop-dark-table.png) | ![Bảng số liệu](implementation-mobile-light-table.png) | ![Bảng số liệu](implementation-mobile-dark-table.png) |
+| Chưa có bằng chứng | ![Chưa có bằng chứng](implementation-desktop-light-unlearned.png) | ![Chưa có bằng chứng](implementation-desktop-dark-unlearned.png) | ![Chưa có bằng chứng](implementation-mobile-light-unlearned.png) | ![Chưa có bằng chứng](implementation-mobile-dark-unlearned.png) |
+| Chưa xác nhận | ![Chưa xác nhận](implementation-desktop-light-unconfirmed.png) | ![Chưa xác nhận](implementation-desktop-dark-unconfirmed.png) | ![Chưa xác nhận](implementation-mobile-light-unconfirmed.png) | ![Chưa xác nhận](implementation-mobile-dark-unconfirmed.png) |
+| Chưa ghi danh | ![Chưa ghi danh](implementation-desktop-light-empty.png) | ![Chưa ghi danh](implementation-desktop-dark-empty.png) | ![Chưa ghi danh](implementation-mobile-light-empty.png) | ![Chưa ghi danh](implementation-mobile-dark-empty.png) |
+| Lỗi / thử lại | ![Lỗi / thử lại](implementation-desktop-light-error.png) | ![Lỗi / thử lại](implementation-desktop-dark-error.png) | ![Lỗi / thử lại](implementation-mobile-light-error.png) | ![Lỗi / thử lại](implementation-mobile-dark-error.png) |
+| Đang tải | ![Đang tải](implementation-desktop-light-loading.png) | ![Đang tải](implementation-desktop-dark-loading.png) | ![Đang tải](implementation-mobile-light-loading.png) | ![Đang tải](implementation-mobile-dark-loading.png) |
