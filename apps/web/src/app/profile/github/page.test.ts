@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   roles: vi.fn(),
   headers: vi.fn(),
   db: {},
+  read: vi.fn(),
+}));
+vi.mock("@/lib/github-profile-store", () => ({
+  createGithubProfileStore: () => ({ read: mocks.read }),
 }));
 vi.mock("@/services", () => ({
   auth: { api: { getSession: mocks.session } },
@@ -30,6 +34,7 @@ beforeEach(() => {
   mocks.headers.mockResolvedValue(new Headers());
   mocks.session.mockResolvedValue({ user: { id: "session-owned-user" } });
   mocks.roles.mockResolvedValue(["LEARNER"]);
+  mocks.read.mockResolvedValue(null);
 });
 
 describe("GitHub profile page authorization", () => {
@@ -37,6 +42,7 @@ describe("GitHub profile page authorization", () => {
     mocks.session.mockResolvedValue(null);
     await expect(GithubProfilePage()).rejects.toThrow("redirect:/login");
     expect(mocks.roles).not.toHaveBeenCalled();
+    expect(mocks.read).not.toHaveBeenCalled();
   });
   it.each([[], ["LECTURER"], ["ADMIN"]])(
     "rejects nonlearner active roles %j",
@@ -52,5 +58,14 @@ describe("GitHub profile page authorization", () => {
       headers: expect.any(Headers),
     });
     expect(page.type).toBe("main");
+    expect(mocks.read).toHaveBeenCalledWith("session-owned-user");
+  });
+  it("keeps the page available with a safe warning when stored data cannot be read", async () => {
+    mocks.read.mockRejectedValue(new Error("private database details"));
+    const page = await GithubProfilePage();
+    const warning = page.props.children.props.children[2];
+    expect(warning.props.role).toBe("alert");
+    expect(warning.props.children).not.toContain("private database details");
+    expect(warning.props.children).toContain("Chưa tải được hồ sơ đã lưu");
   });
 });

@@ -380,6 +380,39 @@ describe("GitHub profile consent and request UI", () => {
     expect(host.textContent).toContain("Liên kết không hợp lệ");
   });
 
+  it("keeps the saved initial profile visible when reanalysis finds no observations", async () => {
+    const saved = profile();
+    const latest = profile();
+    latest.technologies = [];
+    latest.areas = [];
+    latest.overall = null;
+    latest.factualSummary = [];
+    latest.observationAvailability = "none_observed";
+    latest.collectedAt = "2026-10-21T00:00:00Z";
+    fetcher.mockResolvedValue(json({ profile: latest }));
+    await act(async () =>
+      root.render(
+        createElement<{ initialProfile: ReturnType<typeof profile> }>(
+          GithubProfilePanel,
+          { initialProfile: saved },
+        ),
+      ),
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Ước tính ban đầu.");
+    await click("Phân tích lại");
+    await submit();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("Ước tính ban đầu.");
+    expect(host.textContent).toContain("100 byte");
+    expect(host.textContent).toContain(
+      "Lượt phân tích mới chưa ghi nhận quan sát công nghệ. Kết quả trước vẫn được giữ lại.",
+    );
+    expect(
+      host.querySelector('[aria-label="Kết quả phân tích"]')?.textContent,
+    ).not.toContain("Chưa ghi nhận quan sát công nghệ.");
+  });
+
   it("does not classify an empty partial result as proven weakness or insufficient data", async () => {
     const result = profile();
     result.technologies = [];

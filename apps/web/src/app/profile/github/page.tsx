@@ -5,6 +5,11 @@ import { getActiveRoles, ROLE } from "@codi-1/auth";
 
 import { auth, db } from "@/services";
 import GithubProfilePanel from "@/components/profile/github-profile-panel";
+import { createGithubProfileStore } from "@/lib/github-profile-store";
+import {
+  projectGithubProfile,
+  type GithubProfileProjection,
+} from "@/lib/github-profile-analysis-contract";
 
 export default async function GithubProfilePage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -12,6 +17,20 @@ export default async function GithubProfilePage() {
 
   const roles = await getActiveRoles(db, session.user.id);
   if (!roles.includes(ROLE.LEARNER)) redirect("/dashboard");
+
+  let initialProfile: GithubProfileProjection | null = null;
+  let readFailed = false;
+  try {
+    const stored = await createGithubProfileStore(db).read(session.user.id);
+    if (stored)
+      initialProfile = projectGithubProfile(
+        stored.snapshot,
+        stored.analysis,
+        stored.corrections,
+      );
+  } catch {
+    readFailed = true;
+  }
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6">
@@ -29,7 +48,13 @@ export default async function GithubProfilePage() {
             chọn.
           </p>
         </header>
-        <GithubProfilePanel />
+        {readFailed && (
+          <p role="alert" className="text-sm text-destructive">
+            Chưa tải được hồ sơ đã lưu. Không có lượt phân tích mới nào được bắt
+            đầu.
+          </p>
+        )}
+        <GithubProfilePanel initialProfile={initialProfile} />
       </div>
     </main>
   );

@@ -335,10 +335,14 @@ function ProfileResult({ profile }: { profile: GithubProfileProjection }) {
   );
 }
 
-export default function GithubProfilePanel() {
+export default function GithubProfilePanel({
+  initialProfile = null,
+}: { initialProfile?: GithubProfileProjection | null } = {}) {
   const [input, setInput] = useState("");
   const [consent, setConsent] = useState<"analysis" | "link" | null>(null);
-  const [profile, setProfile] = useState<GithubProfileProjection | null>(null);
+  const [profile, setProfile] = useState<GithubProfileProjection | null>(
+    initialProfile,
+  );
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, setPending] = useState(false);
   const [linking, setLinking] = useState(false);
@@ -440,7 +444,17 @@ export default function GithubProfilePanel() {
         });
       } else if (result.body?.profile?.version === 1) {
         // The owning service returns the accepted projection, not raw model output.
-        setProfile(result.body.profile as GithubProfileProjection);
+        const latest = result.body.profile as GithubProfileProjection;
+        if (
+          latest.observationAvailability === "none_observed" &&
+          profile?.observationAvailability === "observed"
+        ) {
+          setNote(
+            "Lượt phân tích mới chưa ghi nhận quan sát công nghệ. Kết quả trước vẫn được giữ lại.",
+          );
+        } else {
+          setProfile(latest);
+        }
       } else throw new Error("invalid_response");
     } catch {
       if (active.current === request)
