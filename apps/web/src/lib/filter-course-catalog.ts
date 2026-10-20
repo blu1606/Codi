@@ -95,14 +95,31 @@ export function filterCourseCatalog<T extends CourseCatalogEntry>(
   }
 }
 
+export type TypeaheadBadgeType = "Khóa học" | "Chủ đề";
+
+export interface TypeaheadTopResultItem<T> {
+  id: string;
+  title: string;
+  type: TypeaheadBadgeType;
+  badgeLabel: string;
+  course?: T;
+  topic?: string;
+  category?: string;
+}
+
 export interface TypeaheadResult<T> {
   matches: T[];
   grouped: Record<string, T[]>;
+  querySuggestions: string[];
+  topResults: TypeaheadTopResultItem<T>[];
   isEmpty: boolean;
 }
 
 /**
- * Gợi ý tìm kiếm (typeahead) gom nhóm theo danh mục.
+ * Gợi ý tìm kiếm (typeahead) theo Flow L1:
+ * - query suggestions
+ * - "Kết quả hàng đầu" với badge loại (Khóa học, Chủ đề)
+ * - gom nhóm theo danh mục và "Xem tất cả kết quả"
  */
 export function getTypeaheadSuggestions<T extends CourseCatalogEntry>(
   courses: readonly T[],
@@ -110,7 +127,13 @@ export function getTypeaheadSuggestions<T extends CourseCatalogEntry>(
 ): TypeaheadResult<T> {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) {
-    return { matches: [], grouped: {}, isEmpty: false };
+    return {
+      matches: [],
+      grouped: {},
+      querySuggestions: [],
+      topResults: [],
+      isEmpty: false,
+    };
   }
 
   const matches = courses.filter((course) => {
@@ -130,9 +153,70 @@ export function getTypeaheadSuggestions<T extends CourseCatalogEntry>(
     grouped[match.category].push(match);
   }
 
+  // 1. Query suggestions: các từ khóa/cụm từ gợi ý xuất phát từ tiêu đề khóa học hoặc chủ đề khớp
+  const suggestionSet = new Set<string>();
+  for (const course of courses) {
+    if (course.title.toLowerCase().includes(trimmed)) {
+      suggestionSet.add(course.title);
+    }
+    if (course.topics) {
+      for (const t of course.topics) {
+        if (t.toLowerCase().includes(trimmed)) {
+          suggestionSet.add(t);
+        }
+      }
+    }
+  }
+  const querySuggestions = Array.from(suggestionSet).slice(0, 5);
+
+  // 2. Kết quả hàng đầu: Khóa học và Chủ đề khớp
+  const topResults: TypeaheadTopResultItem<T>[] = [];
+  // Thêm các khóa học khớp trước (tối đa 4 khóa học)
+  const courseMatches = courses.filter(
+    (c) =>
+      c.title.toLowerCase().includes(trimmed) ||
+      c.description.toLowerCase().includes(trimmed)
+  );
+  for (const c of courseMatches.slice(0, 4)) {
+    const courseAny = c as any;
+    topResults.push({
+      id: `course-${courseAny.id ?? courseAny.slug ?? c.title}`,
+      title: c.title,
+      type: "Khóa học",
+      badgeLabel: "Khóa học",
+      course: c,
+      category: c.category,
+    });
+  }
+
+  // Thêm các chủ đề khớp (tối đa 3 chủ đề)
+  const matchedTopics = new Set<string>();
+  for (const c of courses) {
+    if (c.topics) {
+      for (const t of c.topics) {
+        if (t.toLowerCase().includes(trimmed) && !matchedTopics.has(t.toLowerCase())) {
+          matchedTopics.add(t.toLowerCase());
+          topResults.push({
+            id: `topic-${t}`,
+            title: t,
+            type: "Chủ đề",
+            badgeLabel: "Chủ đề",
+            topic: t,
+            category: c.category,
+          });
+        }
+      }
+    }
+  }
+
+  const isEmpty = matches.length === 0 && topResults.length === 0 && querySuggestions.length === 0;
+
   return {
     matches,
     grouped,
-    isEmpty: matches.length === 0,
+    querySuggestions,
+    topResults,
+    isEmpty,
   };
 }
+
