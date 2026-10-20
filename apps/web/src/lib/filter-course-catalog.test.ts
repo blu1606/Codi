@@ -160,6 +160,21 @@ describe("filterCourseCatalog", () => {
       expect(result.map((c) => c.id)).toEqual(["c2", "c1", "c3"]);
     });
 
+    it("sắp xếp theo học nhiều nhất (enrollment): số học viên giảm dần", () => {
+      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "enrollment" });
+      expect(result.map((c) => c.id)).toEqual(["c2", "c1", "c3"]);
+    });
+
+    it("sắp xếp theo phù hợp nhất (relevant) khi có từ khóa tìm kiếm", () => {
+      const searchList = [
+        { id: "c1", title: "React Nâng cao", category: "Frontend", level: "Advanced", description: "Lập trình web", enrollmentCount: 20 },
+        { id: "c2", title: "Học Lập trình Web", category: "Frontend", level: "Beginner", description: "Chứa React trong mô tả", enrollmentCount: 100 },
+      ];
+      // Title khớp "React" xếp trước dù ít enrollment hơn
+      const result = filterCourseCatalog(searchList, "React", "Tất cả", "Tất cả cấp độ", { sort: "relevant" });
+      expect(result.map((c) => c.id)).toEqual(["c1", "c2"]);
+    });
+
     it("sắp xếp theo mới nhất (newest)", () => {
       const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "newest" });
       expect(result.map((c) => c.id)).toEqual(["c2", "c3", "c1"]);

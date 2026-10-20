@@ -50,6 +50,13 @@ const PRICE_OPTIONS: { value: CatalogPriceFilter; label: string }[] = [
   { value: "paid", label: "Trả phí" },
 ];
 
+const SORT_OPTIONS: { value: CatalogSortOption; label: string }[] = [
+  { value: "popular", label: "Phù hợp nhất" },
+  { value: "newest", label: "Mới nhất" },
+  { value: "rating", label: "Đánh giá cao nhất" },
+  { value: "enrollment", label: "Học nhiều nhất" },
+];
+
 function CatalogSkeleton() {
   return (
     <div className={cardStyles.grid} aria-busy="true">
@@ -187,12 +194,18 @@ export default function CoursesPage() {
     const sortParam = params.get("sort");
     if (
       sortParam === "popular" ||
+      sortParam === "relevant" ||
       sortParam === "newest" ||
+      sortParam === "rating" ||
+      sortParam === "enrollment" ||
       sortParam === "price-asc" ||
-      sortParam === "price-desc" ||
-      sortParam === "rating"
+      sortParam === "price-desc"
     ) {
-      setSelectedSort(sortParam);
+      setSelectedSort(
+        sortParam === "relevant"
+          ? "popular"
+          : (sortParam as CatalogSortOption)
+      );
     }
     isHydratedRef.current = true;
   }, []);
@@ -361,15 +374,17 @@ export default function CoursesPage() {
     }
     if (selectedSort !== "popular") {
       const sortLabels: Record<CatalogSortOption, string> = {
-        popular: "Phổ biến nhất",
+        popular: "Phù hợp nhất",
+        relevant: "Phù hợp nhất",
         newest: "Mới nhất",
+        rating: "Đánh giá cao nhất",
+        enrollment: "Học nhiều nhất",
         "price-asc": "Giá: thấp → cao",
         "price-desc": "Giá: cao → thấp",
-        rating: "Đánh giá cao nhất",
       };
       chips.push({
         key: "sort",
-        label: `Sắp xếp: ${sortLabels[selectedSort]}`,
+        label: `Sắp xếp: ${sortLabels[selectedSort] ?? "Phù hợp nhất"}`,
         onRemove: () => setSelectedSort("popular"),
       });
     }
@@ -843,11 +858,11 @@ export default function CoursesPage() {
               onChange={(e) => setSelectedSort(e.target.value as CatalogSortOption)}
               className="h-9 px-2.5 rounded-lg bg-card border border-border text-xs text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             >
-              <option value="popular">Phổ biến nhất</option>
-              <option value="newest">Mới nhất</option>
-              <option value="price-asc">Giá: thấp → cao</option>
-              <option value="price-desc">Giá: cao → thấp</option>
-              <option value="rating">Đánh giá cao nhất</option>
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
