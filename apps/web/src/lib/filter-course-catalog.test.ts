@@ -182,6 +182,23 @@ describe("filterCourseCatalog", () => {
   });
 
   describe("getTypeaheadSuggestions", () => {
+    it("keeps category-only matches consistent with the catalog destination", async () => {
+      const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
+      const input = [{ title: "Interfaces", description: "Build views", category: "Frontend", level: "Beginner" }];
+      const destination = filterCourseCatalog(input, "frontend", "all", "all");
+      const suggestions = getTypeaheadSuggestions(input, "frontend");
+      expect(destination).toEqual(input);
+      expect(suggestions.matches).toEqual(destination);
+      expect(suggestions.isEmpty).toBe(false);
+    });
+
+    it.each([" REACT ", "apps", "Hooks", "not-found"])("uses the same query predicate as the catalog for %s", async (query) => {
+      const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
+      expect(getTypeaheadSuggestions(catalog, query).matches).toEqual(
+        filterCourseCatalog(catalog, query, "all", "all"),
+      );
+    });
+
     const catalog = [
       { id: "c1", title: "React Fundamentals", category: "Frontend", level: "Beginner", description: "Learn React", topics: ["React", "Hooks", "JSX"] },
       { id: "c2", title: "React Native Mobile", category: "Mobile", level: "Intermediate", description: "Build apps", topics: ["Mobile", "React Native"] },

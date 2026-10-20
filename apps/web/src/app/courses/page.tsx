@@ -246,10 +246,22 @@ export default function CoursesPage() {
     return () => controller.abort();
   }, [courses, session?.user?.id]);
 
+  // Share the current catalog destination with typeahead, including active filters and sort.
+  const filteredCourses = useMemo(() => {
+    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel, {
+      price: selectedPrice,
+      sort: selectedSort,
+    });
+  }, [courses, searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
+
   // 3. Typeahead suggestions
   const typeaheadResult = useMemo(() => {
-    return getTypeaheadSuggestions(courses, searchTerm);
-  }, [courses, searchTerm]);
+    return getTypeaheadSuggestions(filteredCourses, searchTerm);
+  }, [filteredCourses, searchTerm]);
+
+  useEffect(() => {
+    setActiveSuggestionIndex(-1);
+  }, [typeaheadResult]);
 
   // Build unified flat list for accessible keyboard navigation (ArrowDown/Up, Enter)
   // across Query Suggestions, Top Results, and "Xem tất cả kết quả"
@@ -317,15 +329,6 @@ export default function CoursesPage() {
       }
     }
   };
-
-
-  // 4. Filtered & Sorted courses
-  const filteredCourses = useMemo(() => {
-    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel, {
-      price: selectedPrice,
-      sort: selectedSort,
-    });
-  }, [courses, searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
 
   // 5. Active filter chips
   const activeChips = useMemo(() => {

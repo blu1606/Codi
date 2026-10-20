@@ -38,6 +38,7 @@ export function filterCourseCatalog<T extends CourseCatalogEntry>(
       query === "" ||
       course.title.toLowerCase().includes(query) ||
       course.description.toLowerCase().includes(query) ||
+      course.category.toLowerCase().includes(query) ||
       course.topics?.some((t) => t.toLowerCase().includes(query));
 
     const matchesCategory =
@@ -136,14 +137,7 @@ export function getTypeaheadSuggestions<T extends CourseCatalogEntry>(
     };
   }
 
-  const matches = courses.filter((course) => {
-    return (
-      course.title.toLowerCase().includes(trimmed) ||
-      course.description.toLowerCase().includes(trimmed) ||
-      course.category.toLowerCase().includes(trimmed) ||
-      course.topics?.some((t) => t.toLowerCase().includes(trimmed))
-    );
-  });
+  const matches = filterCourseCatalog(courses, query, "all", "all");
 
   const grouped: Record<string, T[]> = {};
   for (const match of matches) {
