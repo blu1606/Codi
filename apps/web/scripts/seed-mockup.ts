@@ -10,7 +10,8 @@ import { courseChapters, courseDetails, courseLessons, lessonMaterials } from "@
 import { lessonSkills, skillPrerequisites, skills } from "@codi-1/db/schema/knowledge-map";
 import { orderEvents, orderItems, orders, vouchers } from "@codi-1/db/schema/commerce";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
-import { assessmentAnswers, assessmentSubmissions, assessments, feedbackSnippets, quizOptions, quizQuestions } from "@codi-1/db/schema/assessments";
+import { assessmentAnswers, assessmentSubmissions, assessments, feedbackSnippets } from "@codi-1/db/schema/assessments";
+import { seedQuizRevision } from "./seed-quiz-revision";
 import { codingExercises, codingTestCases, codingWorkspaces } from "@codi-1/db/schema/coding-exercises";
 import { enrollmentSkillMastery, lessonProgress, pathItems, personalizedLearningPaths } from "@codi-1/db/schema/learning";
 import { learningPathCompletions } from "@codi-1/db/schema/learning-path-runtime";
@@ -64,11 +65,11 @@ type LessonRef = {
   uuid: string;
   courseId: string;
   durationMin: number;
-  quiz?: { id: number; passingScore: number; questions: QuestionRef[]; mockupIds: string[] };
+  quiz?: { id: number; quizRevision: number; passingScore: number; questions: QuestionRef[]; mockupIds: string[] };
   assignment?: { id: number; maxScore: number; passingScore: number };
   coding?: { assessmentId: number; exerciseId: number; starterCode: string; testIds: string[] };
 };
-type CourseRef = { course: MockupCourse; lessonIds: string[]; diagnostic?: { id: number; questions: QuestionRef[] }; skillIds: Map<string, number> };
+type CourseRef = { course: MockupCourse; lessonIds: string[]; diagnostic?: { id: number; quizRevision: number; questions: QuestionRef[] }; skillIds: Map<string, number> };
 type CatalogIndex = { courses: Map<string, CourseRef>; lessons: Map<string, LessonRef> };
 
 function requireEnv(name: string) {
@@ -147,21 +148,16 @@ async function upsertAssessment(tx: Store, key: { courseId: string; lessonId: st
   return created!.id;
 }
 
-// Question ids repeat across lessons in the mockup, so rows are keyed by (assessment, position).
+// Re-runs reuse identical content; changed mockup content publishes a complete immutable revision.
 async function upsertQuestions(tx: Store, assessmentId: number, questions: MockupQuestion[], lessonFor: (q: MockupQuestion) => string | null) {
-  const refs: QuestionRef[] = [];
-  for (const [position, q] of questions.entries()) {
-    const content = { lessonId: lessonFor(q), text: q.text, type: "single_choice" as const, explanation: q.explanation ?? null };
-    const [question] = await tx.insert(quizQuestions).values({ assessmentId, position, ...content }).onConflictDoUpdate({ target: [quizQuestions.assessmentId, quizQuestions.position], set: content }).returning({ id: quizQuestions.id });
-    const options: QuestionRef["options"] = [];
-    for (const [index, text] of q.options.entries()) {
-      const isCorrect = index === q.correctIndex;
-      const [option] = await tx.insert(quizOptions).values({ questionId: question!.id, text, isCorrect, position: index }).onConflictDoUpdate({ target: [quizOptions.questionId, quizOptions.position], set: { text, isCorrect } }).returning({ id: quizOptions.id });
-      options.push({ id: option!.id, isCorrect });
-    }
-    refs.push({ id: question!.id, conceptId: q.conceptId ?? undefined, options });
-  }
-  return refs;
+  const seeded = await seedQuizRevision(tx, assessmentId, questions.map((q) => ({
+    lessonId: lessonFor(q), text: q.text, explanation: q.explanation ?? null,
+    options: q.options.map((text, index) => ({ text, isCorrect: index === q.correctIndex })),
+  })));
+  return { quizRevision: seeded.quizRevision, questions: seeded.questions.map((question, index) => ({
+    id: question.id, conceptId: questions[index]?.conceptId ?? undefined,
+    options: question.options.map((option) => ({ id: option.id, isCorrect: option.isCorrect })),
+  })) };
 }
 
 async function seedCourse(tx: Store, data: MockupSnapshot, course: MockupCourse, index: CatalogIndex) {
@@ -234,7 +230,7 @@ async function seedCourse(tx: Store, data: MockupSnapshot, course: MockupCourse,
     const ref: LessonRef = { uuid: lessonId, courseId: course.id, durationMin: lesson.durationMin };
     if (lesson.quiz) {
       const quizId = await upsertAssessment(tx, { courseId: course.id, lessonId, type: "quiz" }, { title: `Quiz: ${lesson.title}`, instructions: "Chọn một đáp án đúng cho mỗi câu.", maxScore: QUIZ_MAX_SCORE, passingScore: lesson.quiz.passingScore, status: "published" });
-      ref.quiz = { id: quizId, passingScore: lesson.quiz.passingScore, mockupIds: lesson.quiz.questions.map((q) => q.id), questions: await upsertQuestions(tx, quizId, lesson.quiz.questions, () => lessonId) };
+      ref.quiz = { id: quizId, passingScore: lesson.quiz.passingScore, mockupIds: lesson.quiz.questions.map((q) => q.id), ...await upsertQuestions(tx, quizId, lesson.quiz.questions, () => lessonId) };
     }
     if (lesson.assignment) {
       const a = lesson.assignment;
@@ -262,7 +258,7 @@ async function seedCourse(tx: Store, data: MockupSnapshot, course: MockupCourse,
     // Diagnostic questions are evidence for the first lesson teaching their concept (BKT reads its skills).
     const lessonForConcept = (q: MockupQuestion) => lessonUuidOf(lessons.find((l) => q.conceptId && l.conceptIds.includes(q.conceptId))?.id);
     const diagnosticId = await upsertAssessment(tx, { courseId: course.id, lessonId: null, type: "quiz" }, { title: course.entryTest.title, instructions: "Trả lời để Codi xếp lộ trình phù hợp. Chọn \"Tôi chưa biết\" nếu bạn chưa học phần này.", maxScore: QUIZ_MAX_SCORE, status: "published" });
-    courseRef.diagnostic = { id: diagnosticId, questions: await upsertQuestions(tx, diagnosticId, course.entryTest.questions, lessonForConcept) };
+    courseRef.diagnostic = { id: diagnosticId, ...await upsertQuestions(tx, diagnosticId, course.entryTest.questions, lessonForConcept) };
   }
   index.courses.set(course.id, courseRef);
 }
@@ -374,7 +370,7 @@ async function seedEnrollment(tx: Store, data: MockupSnapshot, index: CatalogInd
     if (!quiz) { console.warn(`  Bỏ qua điểm quiz ${lessonKey}: bài không có quiz.`); continue; }
     const at = completedAt.get(lessonKey) ?? lastActive;
     const percent = Math.round(score);
-    const [submission] = await tx.insert(assessmentSubmissions).values({ assessmentId: quiz.id, enrollmentId, attempt: 1, status: "graded", score: (QUIZ_MAX_SCORE * percent) / 100, quizPercent: percent, isPassed: percent >= quiz.passingScore, submittedAt: at, gradedAt: at, savedAt: at, createdAt: at }).onConflictDoNothing().returning({ id: assessmentSubmissions.id });
+    const [submission] = await tx.insert(assessmentSubmissions).values({ assessmentId: quiz.id, quizRevision: quiz.quizRevision, enrollmentId, attempt: 1, status: "graded", score: (QUIZ_MAX_SCORE * percent) / 100, quizPercent: percent, isPassed: percent >= quiz.passingScore, submittedAt: at, gradedAt: at, savedAt: at, createdAt: at }).onConflictDoNothing().returning({ id: assessmentSubmissions.id });
     if (!submission) continue;
     const pattern = quizAnswerPattern(quiz.mockupIds, progress?.answers ?? {}, score);
     await tx.insert(assessmentAnswers).values(quiz.questions.map((q, i) => {
@@ -389,7 +385,7 @@ async function seedEnrollment(tx: Store, data: MockupSnapshot, index: CatalogInd
       const questions = courseRef.diagnostic.questions;
       const outcomes = diagnosticPattern(questions.map((q) => q.conceptId), seed.mastery, seed.diagnostic);
       const right = outcomes.filter((o) => o === "right").length;
-      const [created] = await tx.insert(assessmentSubmissions).values({ assessmentId: courseRef.diagnostic.id, enrollmentId, attempt: 1, status: "graded", score: right, isPassed: null, submittedAt: diagnosticAt, gradedAt: diagnosticAt, savedAt: diagnosticAt, createdAt: diagnosticAt }).onConflictDoNothing().returning({ id: assessmentSubmissions.id });
+      const [created] = await tx.insert(assessmentSubmissions).values({ assessmentId: courseRef.diagnostic.id, quizRevision: courseRef.diagnostic.quizRevision, enrollmentId, attempt: 1, status: "graded", score: right, isPassed: null, submittedAt: diagnosticAt, gradedAt: diagnosticAt, savedAt: diagnosticAt, createdAt: diagnosticAt }).onConflictDoNothing().returning({ id: assessmentSubmissions.id });
       if (created) {
         await tx.insert(assessmentAnswers).values(questions.map((q, i) => {
           const outcome = outcomes[i]!;

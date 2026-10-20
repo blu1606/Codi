@@ -1,14 +1,13 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import {
   assessments,
-  quizQuestions,
-  quizOptions,
 } from "@codi-1/db/schema/assessments";
 import { seedOnboardingFixture } from "./onboarding-fixture";
+import { seedQuizRevision } from "./seed-quiz-revision";
 
 export async function seedAssessmentFixture(
-  tx: Pick<Database, "select" | "insert">,
+  tx: Pick<Database, "select" | "insert" | "update">,
   courseId: string,
   userIds: string[],
   questionCount = 3,
@@ -68,50 +67,18 @@ export async function seedAssessmentFixture(
       explanation: "Thuộc tính length cho biết độ dài chuỗi.",
     },
   ];
-  for (let position = 0; position < questionCount; position++) {
+  const desired = Array.from({ length: questionCount }, (_, position) => {
     const item = examples[position % examples.length]!;
-    await tx
-      .insert(quizQuestions)
-      .values({
-        assessmentId: quiz.id,
-        lessonId,
-        text: item.text,
-        explanation: item.explanation,
-        position,
-      })
-      .onConflictDoNothing();
-    const [q] = await tx
-      .select()
-      .from(quizQuestions)
-      .where(
-        and(
-          eq(quizQuestions.assessmentId, quiz.id),
-          eq(quizQuestions.position, position),
-        ),
-      );
-    if (!q) throw new Error("Fixture question missing");
-    await tx
-      .insert(quizOptions)
-      .values([
-        { questionId: q.id, text: item.right, isCorrect: true, position: 0 },
-        { questionId: q.id, text: item.wrong, isCorrect: false, position: 1 },
-      ])
-      .onConflictDoNothing();
-  }
-  const questions = await tx
-    .select()
-    .from(quizQuestions)
-    .where(eq(quizQuestions.assessmentId, quiz.id))
-    .orderBy(asc(quizQuestions.position));
-  const options = await tx.select().from(quizOptions);
+    return { lessonId, text: item.text, explanation: item.explanation, options: [
+      { text: item.right, isCorrect: true }, { text: item.wrong, isCorrect: false },
+    ] };
+  });
+  const { questions } = await seedQuizRevision(tx, quiz.id, desired, true);
   return {
     ...fixture,
     lessonId,
     quizId: quiz.id,
     assignmentId: assignment.id,
-    questions: questions.map((q) => ({
-      ...q,
-      options: options.filter((o) => o.questionId === q.id),
-    })),
+    questions,
   };
 }
