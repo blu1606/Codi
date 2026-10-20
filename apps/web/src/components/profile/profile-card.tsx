@@ -45,6 +45,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
   const [avatarUrl, setAvatarUrl] = useState(user.image || null);
   const [pendingAvatar, setPendingAvatar] = useState<(AvatarSelection & { previewUrl: string }) | null>(null);
   const [saving, setSaving] = useState(false);
+  const isProfileDirty = draftName.trim() !== name || pendingAvatar !== null;
 
   useEffect(() => () => {
     if (pendingAvatar?.kind === "file") URL.revokeObjectURL(pendingAvatar.previewUrl);
@@ -62,6 +63,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
       toast.error("Họ và tên không được để trống");
       return;
     }
+    if (!isProfileDirty) return;
     try {
       setSaving(true);
       let res: Response;
@@ -172,7 +174,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
             </div>
 
             <div className="flex items-center gap-2 pt-2">
-              <Button type="submit" disabled={saving} className="gap-1.5">
+              <Button type="submit" disabled={saving || !draftName.trim() || !isProfileDirty} className="gap-1.5">
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
