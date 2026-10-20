@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@codi-1/ui/components/card";
-import { KnowledgeGraphLines } from "@codi-1/ui/components/knowledge-graph-lines";
+import { LearnerKnowledgeGraphLines } from "@codi-1/ui/components/learner-knowledge-graph-lines";
 import { knowledgeGraphLayout } from "@codi-1/ui/lib/knowledge-graph-layout";
 import { MASTERY_LABELS } from "@codi-1/ui/lib/mastery";
 import {
@@ -210,7 +210,7 @@ export default function KnowledgeMap({
                           className="relative mx-auto"
                           style={{ width: graph.width, height: graph.height }}
                         >
-                          <KnowledgeGraphLines
+                          <LearnerKnowledgeGraphLines
                             id={id}
                             width={graph.width}
                             height={graph.height}

@@ -108,6 +108,17 @@ describe("mockup knowledge map layout", () => {
       document.querySelectorAll('[aria-label="Mức thành thạo"] li'),
     ).toHaveLength(5);
     const graph = document.querySelector('[aria-label^="Sơ đồ khái niệm"]')!;
+    expect(concept("Biến").style.width).toBe("152px");
+    expect(concept("Biến").style.height).toBe("60px");
+    expect(graph.querySelector('path[fill="none"]')!.getAttribute("d")).toBe(
+      "M160 76 C160 104, 160 104, 160 130",
+    );
+    expect(
+      graph.querySelector('path[fill="none"]')!.getAttribute("class"),
+    ).toBe("stroke-viz-axis");
+    expect(
+      graph.querySelector('path[fill="none"]')!.getAttribute("marker-end"),
+    ).toMatch(/-base\)$/);
     await act(async () => concept("Hàm").click());
     expect(concept("Hàm").getAttribute("aria-pressed")).toBe("true");
     expect(graph.querySelectorAll("path.stroke-viz-1")).toHaveLength(1);
