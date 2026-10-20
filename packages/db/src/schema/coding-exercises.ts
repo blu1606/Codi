@@ -17,6 +17,7 @@ import {
 import { assessmentSubmissions, assessments } from "./assessments";
 import { studentEnrollments } from "./student-profile";
 import { user } from "./auth";
+import type { TutorialProgress, TutorialStep } from "./coding-tutorial";
 
 // Flow L6b / S11g / S23b. One exercise per CODING assessment; runs and submissions are
 // assessment_submissions rows (mode run | submit) with one result row per test case.
@@ -30,6 +31,11 @@ export const codingExercises = pgTable.withRLS("coding_exercises", {
     .unique()
     .references(() => assessments.id, { onDelete: "cascade" }),
   language: text("language").notNull(),
+  fileName: text("file_name"),
+  tutorialSteps: jsonb("tutorial_steps")
+    .$type<TutorialStep[]>()
+    .default([])
+    .notNull(),
   // "Khôi phục code ban đầu"
   starterCode: text("starter_code").notNull(),
   hints: jsonb("hints").$type<string[]>().default([]).notNull(),
@@ -92,6 +98,7 @@ export const codingWorkspaces = pgTable.withRLS(
       .notNull()
       .references(() => studentEnrollments.id, { onDelete: "cascade" }),
     draft: text("draft").notNull(),
+    tutorialProgress: jsonb("tutorial_progress").$type<TutorialProgress>(),
     solutionViewed: boolean("solution_viewed").default(false).notNull(),
     lastRunId: bigint("last_run_id", { mode: "number" }).references(
       () => assessmentSubmissions.id,
@@ -128,7 +135,9 @@ export const codingTestResults = pgTable.withRLS(
 
 // Cross-instance per-user lease and cooldown. No connection is held during execution.
 export const codingRunLeases = pgTable.withRLS("coding_run_leases", {
-  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
   token: text("token").notNull(),
   runningUntil: timestamp("running_until", { withTimezone: true }).notNull(),
   lastStartedAt: timestamp("last_started_at", { withTimezone: true }).notNull(),

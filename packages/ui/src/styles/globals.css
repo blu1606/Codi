@@ -8,6 +8,15 @@
 
 /* Contract: docs/mockup/DESIGN-TOKENS.md, app.css and charts.css. */
 :root {
+  /* The mockup keeps editor and console dark in both themes. */
+  --code-background: #0f172a;
+  --code-bar: #1e293b;
+  --code-foreground: #e2e8f0;
+  --code-muted: #94a3b8;
+  --code-error: #fca5a5;
+  --code-string: #86efac;
+  --code-keyword: #c4b5fd;
+  --code-number: #fcd34d;
   --background: #ffffff;
   --foreground: #111827;
   --card: #ffffff;
@@ -174,6 +183,14 @@
 }
 
 @theme inline {
+  --color-code-background: var(--code-background);
+  --color-code-bar: var(--code-bar);
+  --color-code-foreground: var(--code-foreground);
+  --color-code-muted: var(--code-muted);
+  --color-code-error: var(--code-error);
+  --color-code-string: var(--code-string);
+  --color-code-keyword: var(--code-keyword);
+  --color-code-number: var(--code-number);
   --font-sans: var(--font-be-vietnam-pro, "Be Vietnam Pro"), system-ui, sans-serif;
   --font-display: var(--font-lexend, "Lexend"), var(--font-be-vietnam-pro, "Be Vietnam Pro"), sans-serif;
   --font-mono: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
