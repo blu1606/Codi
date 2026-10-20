@@ -395,6 +395,64 @@ describe("Order API Routes", () => {
         }),
       );
     });
+
+    it("P2: resolves canonical code and rejects replacement by numeric ID if settled to paid", async () => {
+      const executedSql: string[] = [];
+      mocks.transaction.mockImplementation(async (fn) =>
+        fn({
+          execute: (stmt: any) => {
+            executedSql.push(stmt?.queryChunks ? JSON.stringify(stmt.queryChunks) : "sql");
+            return Promise.resolve();
+          },
+          select: () => ({
+            from: () => ({
+              where: vi.fn().mockImplementation(() => {
+                const limitFn = vi.fn()
+                  // 1. Initial query by numeric ID resolves code 'CODI12345'
+                  .mockResolvedValueOnce([
+                    {
+                      id: 10,
+                      code: "CODI12345",
+                    },
+                  ])
+                  // 2. Re-read under lock shows order was settled to 'paid' by concurrent callback
+                  .mockResolvedValueOnce([
+                    {
+                      id: 10,
+                      code: "CODI12345",
+                      userId: "user-123",
+                      voucherId: null,
+                      subtotal: 500000,
+                      discountAmount: 0,
+                      totalAmount: 500000,
+                      receivedAmount: 500000,
+                      status: "paid",
+                      failReason: null,
+                      isBuyNow: false,
+                    },
+                  ]);
+
+                return {
+                  limit: limitFn,
+                };
+              }),
+            }),
+          }),
+        }),
+      );
+
+      // Caller invokes route with numeric order ID "10"
+      const req = new Request("http://localhost/api/orders/10/new-code", { method: "POST" });
+      const res = await newCode(req, { params: Promise.resolve({ id: "10" }) });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("Chỉ đơn hàng đã hết hạn hoặc thất bại");
+
+      // Verify lock was acquired on canonical code 'CODI12345', not numeric ID '10'
+      expect(executedSql.length).toBeGreaterThan(0);
+      expect(executedSql[0]).toContain("CODI12345");
+    });
   });
 
   describe("POST /api/orders/cancel", () => {
@@ -412,7 +470,10 @@ describe("Order API Routes", () => {
           }),
           select: () => ({
             from: () => ({
-              where: () => Promise.resolve([{ courseId: "c1" }, { courseId: "c2" }]),
+              where: () => ({
+                limit: vi.fn().mockResolvedValue([{ id: 10, code: "CODI12345", status: "pending" }]),
+                then: (resolve: any) => Promise.resolve([{ courseId: "c1" }, { courseId: "c2" }]).then(resolve),
+              }),
             }),
           }),
           insert: () => ({

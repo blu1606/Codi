@@ -246,8 +246,57 @@ export async function POST(req: Request) {
         )
         .returning({ id: studentTransactions.id });
 
-      // If already processed by a concurrent webhook request and not late honoured
+      // If studentTransactions was already transitioned by a concurrent process (e.g. cancelled)
       if (updatedTx.length === 0 && !isLateHonoured) {
+        // Fetch fresh order state to determine whether order was cancelled or already settled
+        const [freshOrder] = existingOrder
+          ? await txDB
+              .select({
+                id: orders.id,
+                status: orders.status,
+                receivedAmount: orders.receivedAmount,
+              })
+              .from(orders)
+              .where(eq(orders.id, existingOrder.id))
+              .limit(1)
+          : [null];
+
+        // If order exists and is not paid (e.g. cancelled or failed), mark for reconciliation and fail payment receipt
+        if (freshOrder && freshOrder.status !== "paid") {
+          await txDB
+            .update(orders)
+            .set({
+              receivedAmount: newAccumulated,
+              needsReconciliation: true,
+              updatedAt: new Date(),
+            })
+            .where(eq(orders.id, freshOrder.id));
+
+          await txDB.insert(orderEvents).values({
+            orderId: freshOrder.id,
+            label: `Nhận thanh toán sau khi giao dịch đã ở trạng thái ${freshOrder.status} (cần đối soát hoàn tiền)`,
+            actorId: tx.userId,
+          });
+
+          await txDB
+            .update(studentTransactions)
+            .set({ status: "failed" })
+            .where(eq(studentTransactions.id, txId));
+
+          if (providerTxCode) {
+            await txDB
+              .update(payments)
+              .set({
+                status: "failed",
+                failureReason: `Giao dịch đã kết thúc hoặc bị huỷ (status: ${freshOrder.status})`,
+              })
+              .where(eq(payments.transactionCode, providerTxCode));
+          }
+
+          return { orderNotPending: true, orderStatus: freshOrder.status };
+        }
+
+        // If order was already paid or no order exists (legacy duplicate webhook delivery)
         return { alreadyProcessed: true };
       }
 

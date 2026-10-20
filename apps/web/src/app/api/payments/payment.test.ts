@@ -961,3 +961,138 @@ it("P1: marks for reconciliation if concurrent expiry changed pending order to f
   expect(enrollMock).not.toHaveBeenCalled();
 });
 
+it("P1: cancels concurrent callback and persists payment failure and reconciliation when order was cancelled", async () => {
+  mocks.limit.mockResolvedValue([
+    {
+      id: "CODI99997",
+      amount: 500000,
+      status: "pending",
+      userId: "session-user",
+      courseId: "course-1",
+    },
+  ]);
+
+  const updateOrderMock = vi.fn();
+  const updatePaymentMock = vi.fn();
+  const updateTxMock = vi.fn();
+  const enrollMock = vi.fn();
+  const eventLabels: string[] = [];
+  let selectCallCount = 0;
+
+  mocks.transaction.mockImplementation(async (fn) =>
+    fn({
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: () => ({
+        from: () => ({
+          where: vi.fn().mockImplementation(() => {
+            selectCallCount++;
+            return {
+              limit: vi.fn().mockImplementation(() => {
+                if (selectCallCount === 1) {
+                  // Idempotency check: providerTxCode not processed yet
+                  return Promise.resolve([]);
+                }
+                if (selectCallCount === 2) {
+                  // Initial check sees order pending before cancellation commits
+                  return Promise.resolve([
+                    {
+                      id: 997,
+                      code: "CODI99997",
+                      userId: "session-user",
+                      status: "pending",
+                      failReason: null,
+                      totalAmount: 500000,
+                      receivedAmount: 0,
+                      voucherId: null,
+                    },
+                  ]);
+                }
+                // Fresh order re-read after updatedTx returns 0: order is cancelled
+                return Promise.resolve([
+                  {
+                    id: 997,
+                    status: "cancelled",
+                    receivedAmount: 0,
+                  },
+                ]);
+              }),
+            };
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (val: any) => {
+          if ("needsReconciliation" in val) {
+            updateOrderMock(val);
+          } else if ("failureReason" in val) {
+            updatePaymentMock(val);
+          } else if (val?.status === "failed") {
+            updateTxMock(val);
+          }
+          return {
+            where: () => ({
+              // Updating studentTransactions pending -> paid returns 0 rows because cancellation changed it to cancelled
+              returning: vi.fn().mockReturnValue([]),
+            }),
+          };
+        },
+      }),
+      insert: () => ({
+        values: (val: any) => {
+          if (val && typeof val === "object" && "label" in val) {
+            eventLabels.push(val.label);
+          }
+          if (val && typeof val === "object" && "courseId" in val && !("orderId" in val)) {
+            enrollMock(val);
+          }
+          return { onConflictDoNothing: vi.fn(), returning: vi.fn().mockResolvedValue([{ id: 1 }]) };
+        },
+      }),
+    }),
+  );
+
+  const res = await callback(
+    request({
+      id: 99997001,
+      transferType: "in",
+      accountNumber: "12345678",
+      content: "CODI99997",
+      transferAmount: 500000,
+      referenceCode: "SEPAY_REF_99997",
+    }),
+  );
+
+  expect(res.status).toBe(200);
+  const data = await res.json();
+  expect(data).toMatchObject({ success: true, message: "Order not pending, marked for reconciliation" });
+
+  // Assert order marked for reconciliation
+  expect(updateOrderMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      receivedAmount: 500000,
+      needsReconciliation: true,
+    }),
+  );
+
+  // Assert payment receipt marked as failed with failureReason
+  expect(updatePaymentMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      status: "failed",
+    }),
+  );
+
+  // Assert transaction marked failed
+  expect(updateTxMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      status: "failed",
+    }),
+  );
+
+  // Assert no course was enrolled
+  expect(enrollMock).not.toHaveBeenCalled();
+
+  // Assert event was logged
+  expect(eventLabels.some((l) => l.includes("cần đối soát hoàn tiền"))).toBe(true);
+});
+
+

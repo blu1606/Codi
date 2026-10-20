@@ -32,10 +32,30 @@ export async function POST(
     const isNumeric = /^\d+$/.test(trimmed);
 
     return await db.transaction(async (tx) => {
-      // Serialize concurrent operations on this order code
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${trimmed}))`);
+      // 1. Resolve canonical order to obtain its canonical code
+      const [initialOrder] = await tx
+        .select({
+          id: orders.id,
+          code: orders.code,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.userId, session.user.id),
+            isNumeric ? or(eq(orders.id, Number(trimmed)), eq(orders.code, trimmed)) : eq(orders.code, trimmed),
+          ),
+        )
+        .limit(1);
 
-      // Find old order
+      if (!initialOrder) {
+        return NextResponse.json({ error: "Không tìm thấy đơn hàng" }, { status: 404 });
+      }
+
+      // Serialize concurrent operations on the canonical order code
+      const lockCode = initialOrder.code || trimmed;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockCode}))`);
+
+      // 2. Re-read authoritative order state under the canonical lock
       const [oldOrder] = await tx
         .select({
           id: orders.id,
@@ -52,12 +72,7 @@ export async function POST(
           paymentDeadline: orders.paymentDeadline,
         })
         .from(orders)
-        .where(
-          and(
-            eq(orders.userId, session.user.id),
-            isNumeric ? or(eq(orders.id, Number(trimmed)), eq(orders.code, trimmed)) : eq(orders.code, trimmed),
-          ),
-        )
+        .where(eq(orders.id, initialOrder.id))
         .limit(1);
 
       if (!oldOrder) {

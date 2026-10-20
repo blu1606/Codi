@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { auth, db } from "@/services";
 import { orderItems, orders } from "@codi-1/db";
 import { studentCart, studentTransactions } from "@codi-1/db/schema/student-profile";
@@ -27,106 +27,109 @@ export async function POST(req: Request) {
     }
 
     const cancelled = await db.transaction(async (tx) => {
-      let orderCancelledCount = 0;
+      // 1. Resolve canonical order to get its code
+      const [orderToCancel] = await tx
+        .select({
+          id: orders.id,
+          code: orders.code,
+          status: orders.status,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.userId, session.user.id),
+            orderId ? eq(orders.id, Number(orderId)) : eq(orders.code, String(orderCode)),
+          ),
+        )
+        .limit(1);
 
-      if (orderId) {
-        const res = await tx
-          .update(orders)
-          .set({
-            status: "cancelled",
-            failReason: "Người mua đã huỷ",
-            cancelledAt: new Date(),
-          })
-          .where(
-            and(
-              eq(orders.id, Number(orderId)),
-              eq(orders.userId, session.user.id),
-              eq(orders.status, "pending"),
-            ),
-          )
-          .returning({ id: orders.id, code: orders.code });
-        if (res.length > 0) {
-          orderCancelledCount += res.length;
-          const targetOrderId = res[0].id;
-          const items = await tx
-            .select({ courseId: orderItems.courseId })
-            .from(orderItems)
-            .where(eq(orderItems.orderId, targetOrderId));
-
-          for (const item of items) {
-            await tx
-              .insert(studentCart)
-              .values({
-                userId: session.user.id,
-                courseId: item.courseId,
-              })
-              .onConflictDoNothing();
-          }
-
-          if (res[0]?.code) {
-            await tx
-              .update(studentTransactions)
-              .set({ status: "cancelled" })
-              .where(
-                and(
-                  eq(studentTransactions.id, res[0].code),
-                  eq(studentTransactions.userId, session.user.id),
-                  eq(studentTransactions.status, "pending"),
-                ),
-              );
-          }
+      if (!orderToCancel) {
+        // Fallback: check studentTransactions if no order row exists
+        if (orderCode) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${String(orderCode)}))`);
+          const txRes = await tx
+            .update(studentTransactions)
+            .set({ status: "cancelled" })
+            .where(
+              and(
+                eq(studentTransactions.id, String(orderCode)),
+                eq(studentTransactions.userId, session.user.id),
+                eq(studentTransactions.status, "pending"),
+              ),
+            )
+            .returning({ id: studentTransactions.id });
+          return txRes.length > 0;
         }
-      } else if (orderCode) {
-        const res = await tx
-          .update(orders)
-          .set({
-            status: "cancelled",
-            failReason: "Người mua đã huỷ",
-            cancelledAt: new Date(),
+        return false;
+      }
+
+      // Serialize concurrent operations on this canonical order code
+      const lockCode = orderToCancel.code || (orderCode ? String(orderCode) : String(orderToCancel.id));
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockCode}))`);
+
+      // Re-read status under advisory lock to avoid race conditions with payment settlement
+      const [lockedOrder] = await tx
+        .select({
+          id: orders.id,
+          code: orders.code,
+          status: orders.status,
+        })
+        .from(orders)
+        .where(eq(orders.id, orderToCancel.id))
+        .limit(1);
+
+      if (!lockedOrder || lockedOrder.status !== "pending") {
+        return false;
+      }
+
+      // 2. Atomically update orders to cancelled
+      const res = await tx
+        .update(orders)
+        .set({
+          status: "cancelled",
+          failReason: "Người mua đã huỷ",
+          cancelledAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(orders.id, lockedOrder.id), eq(orders.status, "pending")))
+        .returning({ id: orders.id, code: orders.code });
+
+      if (res.length === 0) {
+        return false;
+      }
+
+      // Re-add items to studentCart
+      const items = await tx
+        .select({ courseId: orderItems.courseId })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, lockedOrder.id));
+
+      for (const item of items) {
+        await tx
+          .insert(studentCart)
+          .values({
+            userId: session.user.id,
+            courseId: item.courseId,
           })
-          .where(
-            and(
-              eq(orders.code, String(orderCode)),
-              eq(orders.userId, session.user.id),
-              eq(orders.status, "pending"),
-            ),
-          )
-          .returning({ id: orders.id, code: orders.code });
+          .onConflictDoNothing();
+      }
 
-        if (res.length > 0) {
-          orderCancelledCount += res.length;
-          const targetOrderId = res[0].id;
-          const items = await tx
-            .select({ courseId: orderItems.courseId })
-            .from(orderItems)
-            .where(eq(orderItems.orderId, targetOrderId));
-
-          for (const item of items) {
-            await tx
-              .insert(studentCart)
-              .values({
-                userId: session.user.id,
-                courseId: item.courseId,
-              })
-              .onConflictDoNothing();
-          }
-        }
-
-        const txRes = await tx
+      // Cancel associated studentTransactions
+      const txCode = lockedOrder.code || (orderCode ? String(orderCode) : null);
+      if (txCode) {
+        await tx
           .update(studentTransactions)
           .set({ status: "cancelled" })
           .where(
             and(
-              eq(studentTransactions.id, String(orderCode)),
+              eq(studentTransactions.id, txCode),
               eq(studentTransactions.userId, session.user.id),
               eq(studentTransactions.status, "pending"),
             ),
-          )
-          .returning({ id: studentTransactions.id });
-        orderCancelledCount += txRes.length;
+          );
       }
 
-      return orderCancelledCount > 0;
+      return true;
     });
 
     if (!cancelled) {
