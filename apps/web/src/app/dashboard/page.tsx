@@ -8,6 +8,7 @@ import Dashboard, { type DashboardNavItem } from "./dashboard";
 const LEARNER_NAV_ITEMS: DashboardNavItem[] = [
   { label: "Khoá học của tôi", disabled: true },
   { label: "Lộ trình học tập", disabled: true },
+  { label: "Bản đồ kiến thức", href: "/insights/knowledge-map" },
   { label: "Tiến độ & kết quả", disabled: true },
 ];
 
