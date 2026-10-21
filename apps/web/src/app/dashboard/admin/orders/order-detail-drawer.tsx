@@ -83,6 +83,17 @@ export function OrderDetailDrawer({
             )}
           </div>
 
+          {order.needsReconciliation && (
+            <div className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-xs text-warning space-y-1">
+              <span className="font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="size-3.5" /> Lưu ý đối soát ngân hàng (D2/D3)
+              </span>
+              <p>
+                Đơn hàng này được gắn cờ đối soát thủ công (có thể do chuyển khoản thừa tiền, thiếu tiền khi hết hạn, hoặc chuyển khoản muộn sau khi đã sở hữu khoá học). Vui lòng kiểm tra sao kê ngân hàng VietQR trước khi xử lý hoàn tiền ngoài hệ thống.
+              </p>
+            </div>
+          )}
+
           {/* Buyer details */}
           <div className="space-y-1 rounded-lg border border-border p-3 bg-muted/20">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
