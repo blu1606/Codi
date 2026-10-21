@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/services";
 import { courses, courseDetails, skills, studentEnrollments, user } from "@codi-1/db";
 
@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Count enrollment rows, not activity events, so each learner is counted once.
-    const enrollmentCount = count(studentEnrollments.id);
+    // Count distinct enrollment rows so each learner is counted once, even when joined with multiple skills.
+    const enrollmentCount = countDistinct(studentEnrollments.id);
     const statusFilter = includeHidden
       ? inArray(courses.status, ["published", "hidden"])
       : eq(courses.status, "published");
