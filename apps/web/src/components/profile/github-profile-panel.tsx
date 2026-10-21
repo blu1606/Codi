@@ -73,6 +73,18 @@ function citationHref(source: GithubProfileCitation): string | undefined {
   }
 }
 
+function mergeCitations(
+  ...groups: GithubProfileCitation[][]
+): GithubProfileCitation[] {
+  const merged = new Map<string, GithubProfileCitation>();
+  for (const source of groups.flat()) {
+    const current = merged.get(source.evidenceId);
+    if (!current || (!current.quote && source.quote))
+      merged.set(source.evidenceId, source);
+  }
+  return [...merged.values()];
+}
+
 function Citations({ sources }: { sources: GithubProfileCitation[] }) {
   return (
     <ul className="space-y-2 text-xs text-muted-foreground">
@@ -425,12 +437,12 @@ function ProfileResult({ profile }: { profile: GithubProfileProjection }) {
                       </div>
                       <EvidenceButton
                         label={`Công nghệ ${technology.observations[0]?.technology}`}
-                        sources={[
-                          ...technology.observations.flatMap(
+                        sources={mergeCitations(
+                          technology.observations.flatMap(
                             (item) => item.citations,
                           ),
-                          ...(technology.inference?.citations ?? []),
-                        ]}
+                          technology.inference?.citations ?? [],
+                        )}
                       />
                     </div>
                     <details

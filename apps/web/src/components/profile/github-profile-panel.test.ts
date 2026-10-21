@@ -312,6 +312,23 @@ describe("GitHub profile consent and request UI", () => {
     },
   );
 
+  it("deduplicates technology evidence while retaining the quote-enhanced citation", async () => {
+    const result = profile();
+    result.technologies[0]!.inference!.citations[0]!.quote =
+      "Bằng chứng được suy luận trích dẫn.";
+    await show(result);
+    await act(async () =>
+      host
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Xem bằng chứng: Công nghệ TypeScript"]',
+        )!
+        .click(),
+    );
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelectorAll("li")).toHaveLength(1);
+    expect(dialog.textContent).toContain("Bằng chứng được suy luận trích dẫn.");
+  });
+
   it.each([200, 502])(
     "cycles only illustrative pending steps and cleans up after HTTP %i",
     async (status) => {
