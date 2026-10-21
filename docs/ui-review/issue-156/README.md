@@ -8,6 +8,8 @@ Không sửa API, schema, quyền truy cập hoặc state machine. Đích bài h
 
 ## Kiểm thử
 
+**Cập nhật 21/10/2026 sau review PR #160:** đã ghép develop mới nhất và chạy đăng nhập thật trên bản #160 riêng cùng bản tích hợp #165. Cả hai đạt 4/4 ca desktop/mobile × light/dark, kiểm tra CTA, player và server/API prerequisite guard. [Báo cáo, phiên bản và ảnh chụp](real-session-review.md). Các kết quả bên dưới là lượt kiểm thử ban đầu.
+
 - 129 test liên quan pass.
 - Full suite + coverage: **72 file, 936 test pass**, với `--maxWorkers=4`. Lượt chạy mặc định trước đó có 1 lỗi `Sandbox unavailable` ở coding-runner.test.ts; lượt chạy lại toàn bộ pass, không sửa test hay source coding runner.
 - `pnpm run check-types`: pass.
