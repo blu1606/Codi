@@ -16,30 +16,46 @@ const json = (value: unknown, status = 200, headers = {}) =>
   });
 function harness() {
   const controller = new AbortController();
-  const identity = vi.fn(async () => json({ id: 123, login: "learner" }));
-  const listing = vi.fn(async () =>
-    json([
-      {
-        id: 1,
-        name: "project",
-        owner: { id: 123, login: "learner" },
-        private: false,
-        fork: false,
-        size: 10,
-        pushed_at: null,
-        default_branch: "main",
+  const repository = {
+    databaseId: 1,
+    name: "project",
+    owner: { databaseId: 123, login: "learner" },
+    isPrivate: false,
+    visibility: "PUBLIC",
+    isFork: false,
+    isEmpty: false,
+    diskUsage: 10,
+    pushedAt: null,
+    defaultBranchRef: {
+      name: "main",
+      target: { __typename: "Commit", oid: "a".repeat(40) },
+    },
+    languages: {
+      edges: [{ size: 100, node: { name: "TypeScript" } }],
+      pageInfo: { hasNextPage: false },
+    },
+  };
+  const graphqlBody = (
+    nodes: unknown[] = [repository],
+    databaseId = 123,
+    hasNextPage = false,
+  ) => ({
+    data: {
+      viewer: {
+        databaseId,
+        login: "learner",
+        repositories: {
+          nodes,
+          pageInfo: { hasNextPage, endCursor: hasNextPage ? "next" : null },
+        },
       },
-    ]),
-  );
-  const languages = vi.fn(async () => json({ TypeScript: 100 }));
+    },
+  });
+  const graphql = vi.fn(async () => json(graphqlBody()));
   const directory = vi.fn(async () => json([]));
   const githubFetch = vi.fn<typeof fetch>(async (url) => {
     const path = new URL(String(url)).pathname;
-    if (path === "/user") return identity();
-    if (path === "/users/learner/repos") return listing();
-    if (path.endsWith("/git/ref/heads/main"))
-      return json({ object: { type: "commit", sha: "a".repeat(40) } });
-    if (path.endsWith("/languages")) return languages();
+    if (path === "/graphql") return graphql();
     if (path.endsWith("/contents")) return directory();
     throw new Error("unexpected_fixture_path");
   });
@@ -101,9 +117,9 @@ function harness() {
   return {
     options,
     controller,
-    identity,
-    listing,
-    languages,
+    graphql,
+    graphqlBody,
+    repository,
     directory,
     githubFetch,
     aiFetch,
@@ -232,7 +248,7 @@ describe("GitHub direct request orchestration", () => {
       for (const [url, init] of h.githubFetch.mock.calls) {
         expect(init!.headers).toMatchObject({
           Authorization:
-            new URL(String(url)).pathname === "/user"
+            new URL(String(url)).pathname === "/graphql"
               ? "Bearer fixture-user-token"
               : `Basic ${Buffer.from("fixture-app:fixture-app-secret").toString("base64")}`,
         });
@@ -281,7 +297,7 @@ describe("GitHub direct request orchestration", () => {
 
   it("rejects immutable identity mismatch before any public repo reads", async () => {
     const h = harness();
-    h.identity.mockResolvedValue(json({ id: 999, login: "learner" }));
+    h.graphql.mockResolvedValue(json(h.graphqlBody([], 999)));
     expect(await runGithubProfileRequest(body, h.options)).toMatchObject({
       ok: false,
       code: "identity_mismatch",
@@ -342,7 +358,7 @@ describe("GitHub direct request orchestration", () => {
 
   it("returns factual empty results without count, generation or reservation", async () => {
     const h = harness();
-    h.listing.mockResolvedValue(json([]));
+    h.graphql.mockResolvedValue(json(h.graphqlBody([])));
     expect(await runGithubProfileRequest(body, h.options)).toMatchObject({
       ok: true,
       outcome: "no_observations",
@@ -374,7 +390,9 @@ describe("GitHub direct request orchestration", () => {
 
   it("does not invent AI for partial collection with no observations", async () => {
     const h = harness();
-    h.languages.mockResolvedValue(json({}, 500));
+    h.graphql.mockResolvedValue(
+      json(h.graphqlBody([{ ...h.repository, languages: null }])),
+    );
     expect(await runGithubProfileRequest(body, h.options)).toMatchObject({
       ok: true,
       outcome: "no_observations",
@@ -387,7 +405,7 @@ describe("GitHub direct request orchestration", () => {
     "handles failed identity collection HTTP %i without AI",
     async (status) => {
       const h = harness();
-      h.identity.mockResolvedValue(json({}, status));
+      h.graphql.mockResolvedValue(json({}, status));
       expect(await runGithubProfileRequest(body, h.options)).toMatchObject({
         ok: false,
         code: status === 401 ? "connection_expired" : "collection_failed",
@@ -413,18 +431,18 @@ describe("GitHub direct request orchestration", () => {
 
   it("returns failed app authentication without anonymous or bearer fallback", async () => {
     const h = harness();
-    h.listing.mockResolvedValue(json({}, 401));
+    h.directory.mockResolvedValue(json({}, 401));
     expect(await runGithubProfileRequest(body, h.options)).toMatchObject({
       ok: false,
       code: "app_auth_failed",
     });
-    expect(h.listing).toHaveBeenCalledTimes(1);
+    expect(h.directory).toHaveBeenCalledTimes(1);
     expect(h.aiFetch).not.toHaveBeenCalled();
   });
 
   it("bounds stalled per-read transport and does not manufacture AI", async () => {
     const h = harness();
-    h.identity.mockImplementation(() => new Promise(() => {}));
+    h.graphql.mockImplementation(() => new Promise(() => {}));
     const pending = runGithubProfileRequest(body, h.options);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(await pending).toMatchObject({
@@ -438,6 +456,9 @@ describe("GitHub direct request orchestration", () => {
 
   it("enforces the overall collection phase deadline across successful slow reads", async () => {
     const h = harness();
+    h.graphql
+      .mockResolvedValueOnce(json(h.graphqlBody([h.repository], 123, true)))
+      .mockResolvedValueOnce(json(h.graphqlBody([])));
     const original = h.options.githubFetch!;
     h.options.githubFetch = async (url, init) => {
       await new Promise((resolve) => setTimeout(resolve, 9000));
@@ -524,7 +545,7 @@ describe("GitHub direct request orchestration", () => {
 
   it("bounds a stalled collection body and never calls AI", async () => {
     const h = harness();
-    h.identity.mockResolvedValue(
+    h.graphql.mockResolvedValue(
       new Response(new ReadableStream({ start() {} })),
     );
     const pending = runGithubProfileRequest(body, h.options);
@@ -540,7 +561,7 @@ describe("GitHub direct request orchestration", () => {
   it("aborts an in-flight collector, blocks subsequent transport and discards late replies", async () => {
     const h = harness();
     let finish!: (value: Response) => void;
-    h.identity.mockImplementation(
+    h.graphql.mockImplementation(
       () =>
         new Promise((resolve) => {
           finish = resolve;
@@ -551,7 +572,7 @@ describe("GitHub direct request orchestration", () => {
     h.controller.abort();
     expect(await pending).toMatchObject({ ok: false, code: "aborted" });
     expect(h.githubFetch.mock.calls[0]![1]!.signal!.aborted).toBe(true);
-    finish(json({ id: 123, login: "learner" }));
+    finish(json(h.graphqlBody()));
     await vi.advanceTimersByTimeAsync(50_000);
     expect(h.githubFetch).toHaveBeenCalledTimes(1);
     expect(h.aiFetch).not.toHaveBeenCalled();

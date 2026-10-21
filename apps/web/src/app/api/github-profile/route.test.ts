@@ -140,29 +140,48 @@ function retained(): GithubCollectionSnapshot {
     },
   };
 }
-function providerTransport() {
+function providerTransport(empty = false) {
   return vi.fn<typeof fetch>(async (url) => {
     const parsed = new URL(String(url));
     if (parsed.origin === "https://api.github.com") {
-      if (parsed.pathname === "/user")
-        return json({ id: 123, login: "learner" });
-      if (parsed.pathname === "/users/learner/repos")
-        return json([
-          {
-            id: 1,
-            name: "project",
-            owner: { id: 123, login: "learner" },
-            private: false,
-            fork: false,
-            size: 10,
-            default_branch: "main",
-            pushed_at: null,
+      if (parsed.pathname === "/graphql")
+        return json({
+          data: {
+            viewer: {
+              databaseId: 123,
+              login: "learner",
+              repositories: {
+                nodes: empty
+                  ? []
+                  : [
+                      {
+                        databaseId: 1,
+                        name: "project",
+                        owner: { databaseId: 123, login: "learner" },
+                        isPrivate: false,
+                        visibility: "PUBLIC",
+                        isFork: false,
+                        isEmpty: false,
+                        diskUsage: 10,
+                        pushedAt: null,
+                        defaultBranchRef: {
+                          name: "main",
+                          target: {
+                            __typename: "Commit",
+                            oid: "a".repeat(40),
+                          },
+                        },
+                        languages: {
+                          edges: [{ size: 100, node: { name: "TypeScript" } }],
+                          pageInfo: { hasNextPage: false },
+                        },
+                      },
+                    ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
           },
-        ]);
-      if (parsed.pathname.endsWith("/git/ref/heads/main"))
-        return json({ object: { type: "commit", sha: "a".repeat(40) } });
-      if (parsed.pathname.endsWith("/languages"))
-        return json({ TypeScript: 100 });
+        });
       if (parsed.pathname.endsWith("/contents")) return json([]);
     }
     if (String(url) === "https://api.openai.com/v1/responses/input_tokens")
@@ -732,6 +751,27 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
       expect(mocks.store.release).toHaveBeenCalledWith(claim);
       expect(Object.keys(data)).toEqual(["profile"]);
       expect(data.profile.identity).toEqual({ id: "123", login: "learner" });
+      const githubCalls = transport.mock.calls.filter(
+        ([url]) => new URL(String(url)).origin === "https://api.github.com",
+      );
+      expect(githubCalls.map(([url]) => String(url))).toEqual([
+        "https://api.github.com/graphql",
+        `https://api.github.com/repos/learner/project/contents?ref=${"a".repeat(40)}`,
+      ]);
+      const graphqlInit = githubCalls[0]![1]!;
+      expect(graphqlInit.method).toBe("POST");
+      expect(new Headers(graphqlInit.headers).get("authorization")).toBe(
+        "Bearer fixture-user-token",
+      );
+      const graphqlBody = JSON.parse(String(graphqlInit.body));
+      expect(graphqlBody.operationName).toBe("CodiPublicProfile");
+      expect(graphqlBody.query).toMatch(/privacy:\s*PUBLIC/);
+      expect(graphqlBody.query).toMatch(/ownerAffiliations:\s*OWNER/);
+      const contentsInit = githubCalls[1]![1]!;
+      expect(contentsInit.method).toBe("GET");
+      expect(new Headers(contentsInit.headers).get("authorization")).toBe(
+        `Basic ${Buffer.from("fixture-app:fixture-app-secret").toString("base64")}`,
+      );
       expect(response.headers.get("Cache-Control")).toBe("private, no-store");
       const text = JSON.stringify(data);
       for (const hidden of [
@@ -777,11 +817,7 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
     expect(mocks.store.release).toHaveBeenCalledWith(claim);
   });
   it("does not publish empty observations or perform any generation", async () => {
-    transport.mockImplementation(async (url) =>
-      String(url).includes("/user") && !String(url).includes("/users/")
-        ? json({ id: 123, login: "learner" })
-        : json([]),
-    );
+    transport.mockImplementation(providerTransport(true));
     const response = await POST(request());
     expect(response.status).toBe(200);
     expect((await response.json()).profile.observationAvailability).toBe(
@@ -789,6 +825,10 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
     );
     expect(mocks.store.publish).not.toHaveBeenCalled();
     expect(mocks.store.reserveGeneration).not.toHaveBeenCalled();
+    expect(transport).toHaveBeenCalledExactlyOnceWith(
+      "https://api.github.com/graphql",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
   it("does not publish failures and strips private service result fields", async () => {
     mocks.run.mockResolvedValue({
