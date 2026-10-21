@@ -202,6 +202,7 @@ export async function adminUpdateCoursePrice(
         id: courses.id,
         title: courses.title,
         price: courses.price,
+        status: courses.status,
         instructorId: courses.instructorId,
       })
       .from(courses)
@@ -210,6 +211,12 @@ export async function adminUpdateCoursePrice(
 
     if (!course) {
       throw new Error("Không tìm thấy khoá học.");
+    }
+
+    if (course.status !== "published" && course.status !== "hidden") {
+      throw new Error(
+        `Chỉ có thể đổi giá cho khoá học đã xuất bản hoặc tạm ẩn (trạng thái hiện tại: ${course.status}).`
+      );
     }
 
     if (course.price === newPrice) {

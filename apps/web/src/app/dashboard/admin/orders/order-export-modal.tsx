@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,16 +25,25 @@ const COLUMN_DEFS = [
 export function OrderExportModal({
   open,
   onOpenChange,
-  orders,
+  orders: fallbackOrders,
   currentStatus,
+  currentFilter,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   orders: AdminOrderSummaryItem[];
   currentStatus: string;
+  currentFilter?: {
+    status?: string;
+    q?: string;
+    overdue?: boolean;
+    reconciliation?: boolean;
+  };
 }) {
   const [range, setRange] = useState<"7" | "30" | "90" | "all">("30");
   const [applyFilter, setApplyFilter] = useState(true);
+  const [exportData, setExportData] = useState<AdminOrderSummaryItem[]>(fallbackOrders);
+  const [loadingData, setLoadingData] = useState(false);
   const [columns, setColumns] = useState<Record<string, boolean>>({
     code: true,
     buyer: true,
@@ -48,22 +57,64 @@ export function OrderExportModal({
     paidAt: true,
   });
 
-  const DAY = 24 * 60 * 60 * 1000;
+  // Query actual orders according to export range and filter preset
+  useEffect(() => {
+    if (!open) return;
 
-  // Filter list live based on modal state
-  const filteredList = orders.filter((o) => {
-    if (!applyFilter) {
-      if (range === "all") return true;
-      const since = Date.now() - Number(range) * DAY;
-      return new Date(o.createdAt).getTime() >= since;
-    }
-    return true;
-  });
+    let cancelled = false;
+    setLoadingData(true);
+
+    import("../actions").then(({ getAdminOrdersExportAction }) => {
+      const queryFilter = {
+        range,
+        status: applyFilter ? ((currentFilter?.status || currentStatus) as any) : "all",
+        q: applyFilter ? (currentFilter?.q || "") : "",
+        overdueOnly: applyFilter ? !!currentFilter?.overdue : false,
+        reconciliationOnly: applyFilter ? !!currentFilter?.reconciliation : false,
+      };
+
+      getAdminOrdersExportAction(queryFilter)
+        .then((fetchedOrders) => {
+          if (!cancelled) {
+            setExportData(fetchedOrders);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            // Fallback to local filtering if server action fails
+            setExportData(fallbackOrders);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingData(false);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, range, applyFilter, currentStatus, currentFilter, fallbackOrders]);
+
+  const filteredList = exportData;
 
   const selectedColCount = Object.values(columns).filter(Boolean).length;
   const totalRevenue = filteredList.reduce((sum, o) => sum + (o.status === "paid" ? o.totalAmount : 0), 0);
 
   const formatVnd = (n: number) => `${n.toLocaleString("vi-VN")} ₫`;
+
+  const formatVnDateTime = (dateVal: string | Date | null | undefined) => {
+    if (!dateVal) return "";
+    return new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(new Date(dateVal));
+  };
 
   const handleExport = () => {
     if (selectedColCount === 0) {
@@ -117,8 +168,8 @@ export function OrderExportModal({
           discount: o.discountAmount,
           total: o.totalAmount,
           status: getStatusLabel(o.status),
-          createdAt: new Date(o.createdAt).toLocaleString("vi-VN"),
-          paidAt: o.paidAt ? new Date(o.paidAt).toLocaleString("vi-VN") : "",
+          createdAt: formatVnDateTime(o.createdAt),
+          paidAt: formatVnDateTime(o.paidAt),
         };
         return activeCols.map((c) => rowData[c]);
       }),

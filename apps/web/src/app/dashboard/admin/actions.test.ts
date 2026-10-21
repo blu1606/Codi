@@ -27,10 +27,12 @@ vi.mock("@/lib/admin-courses-service", () => ({
 
 const mockAdminCancelOrder = vi.fn().mockResolvedValue({ success: true, orderCode: "ORD-123" });
 const mockGetAdminOrderDetail = vi.fn().mockResolvedValue({ id: 123, code: "ORD-123" });
+const mockGetAdminOrders = vi.fn().mockResolvedValue({ orders: [], stats: {} });
 
 vi.mock("@/lib/admin-orders-service", () => ({
   adminCancelOrder: (...args: any[]) => mockAdminCancelOrder(...args),
   getAdminOrderDetail: (...args: any[]) => mockGetAdminOrderDetail(...args),
+  getAdminOrders: (...args: any[]) => mockGetAdminOrders(...args),
 }));
 
 const mockCreateAdminVoucher = vi.fn().mockResolvedValue({ success: true, id: 1 });
@@ -68,6 +70,7 @@ import {
   updateCoursePriceAction,
   cancelAdminOrderAction,
   getAdminOrderDetailAction,
+  getAdminOrdersExportAction,
   createVoucherAction,
   updateVoucherAction,
   toggleVoucherActiveAction,
@@ -464,6 +467,10 @@ describe("Admin Orders Actions (S34)", () => {
     mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
     mockRequireRole.mockResolvedValue(undefined);
 
+    // Omitted or whitespace reason is rejected on server
+    await expect(cancelAdminOrderAction(123, "")).rejects.toThrow("Lý do huỷ đơn hàng là bắt buộc.");
+    await expect(cancelAdminOrderAction(123, "   ")).rejects.toThrow("Lý do huỷ đơn hàng là bắt buộc.");
+
     const res = await cancelAdminOrderAction(123, "Khách yêu cầu");
     expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
     expect(res).toBeDefined();
@@ -477,6 +484,18 @@ describe("Admin Orders Actions (S34)", () => {
     mockRequireRole.mockResolvedValue(undefined);
 
     const res = await getAdminOrderDetailAction(123);
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+
+  it("getAdminOrdersExportAction requires auth and calls getAdminOrders", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(getAdminOrdersExportAction({ range: "30" })).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await getAdminOrdersExportAction({ range: "30" });
     expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
     expect(res).toBeDefined();
   });

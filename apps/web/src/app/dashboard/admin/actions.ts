@@ -191,8 +191,13 @@ export async function cancelAdminOrderAction(
   if (!session?.user) throw new Error("Unauthorized");
   await requireRole(db, session.user.id, ROLE.ADMIN);
 
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) {
+    throw new Error("Lý do huỷ đơn hàng là bắt buộc.");
+  }
+
   const { adminCancelOrder } = await import("@/lib/admin-orders-service");
-  return await adminCancelOrder(db, orderId, session.user.id, reason);
+  return await adminCancelOrder(db, orderId, session.user.id, trimmedReason);
 }
 
 export async function getAdminOrderDetailAction(
@@ -204,6 +209,18 @@ export async function getAdminOrderDetailAction(
 
   const { getAdminOrderDetail } = await import("@/lib/admin-orders-service");
   return await getAdminOrderDetail(db, orderIdOrCode);
+}
+
+export async function getAdminOrdersExportAction(
+  filter: import("@/lib/admin-orders-service").AdminOrdersFilter
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { getAdminOrders } = await import("@/lib/admin-orders-service");
+  const result = await getAdminOrders(db, filter);
+  return result.orders;
 }
 
 // ─────────────────────────────────────────────────────────────

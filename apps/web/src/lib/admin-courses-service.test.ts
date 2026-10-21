@@ -136,6 +136,7 @@ describe("admin-courses-service unit tests", () => {
         id: "course-1",
         title: "Lập trình React cơ bản",
         price: 500000,
+        status: "published",
         instructorId: "inst-1",
       };
 
@@ -158,11 +159,40 @@ describe("admin-courses-service unit tests", () => {
       ).rejects.toThrow("Giá mới đang trùng giá hiện tại.");
     });
 
-    it("updates price and returns previous and new prices", async () => {
+    it("throws when course is not published or hidden (e.g. draft, pending, rejected)", async () => {
+      const mockCourse = {
+        id: "course-draft",
+        title: "Khoá học nháp",
+        price: 500000,
+        status: "draft",
+        instructorId: "inst-1",
+      };
+
+      const mockTx = {
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([mockCourse]),
+            }),
+          }),
+        }),
+      };
+
+      const mockDb = {
+        transaction: vi.fn().mockImplementation(async (cb) => cb(mockTx)),
+      };
+
+      await expect(
+        adminUpdateCoursePrice(mockDb as any, "course-draft", 600000, "admin-1")
+      ).rejects.toThrow("Chỉ có thể đổi giá cho khoá học đã xuất bản hoặc tạm ẩn");
+    });
+
+    it("updates price and returns previous and new prices for published or hidden courses", async () => {
       const mockCourse = {
         id: "course-1",
         title: "Lập trình React cơ bản",
         price: 500000,
+        status: "hidden",
         instructorId: "inst-1",
       };
 

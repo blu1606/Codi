@@ -352,6 +352,12 @@ export function OrdersTableClient({
         onOpenChange={setExportModalOpen}
         orders={orders}
         currentStatus={initialFilter.status}
+        currentFilter={{
+          status: initialFilter.status,
+          q: searchTerm.trim(),
+          overdue: initialFilter.overdue,
+          reconciliation: initialFilter.reconciliation,
+        }}
       />
     </>
   );

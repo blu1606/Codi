@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { courses, orderEvents, orderItems, orders, user, vouchers } from "@codi-1/db";
-import { studentEnrollments } from "@codi-1/db/schema/student-profile";
+import { studentEnrollments, studentTransactions } from "@codi-1/db/schema/student-profile";
 import { createNotificationService } from "./notification-service";
 
 export type AdminOrderSummaryItem = {
@@ -303,45 +303,67 @@ export async function adminCancelOrder(
   adminUserId: string,
   reason?: string
 ): Promise<{ success: boolean; orderCode: string }> {
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) {
+    throw new Error("Lý do huỷ đơn hàng là bắt buộc.");
+  }
+
   return await db.transaction(async (tx: any) => {
-    const [order] = await tx
-      .select({ id: orders.id, code: orders.code, status: orders.status, userId: orders.userId })
-      .from(orders)
-      .where(eq(orders.id, orderId))
-      .limit(1);
+    // 1. Atomically UPDATE order only if status is currently 'pending'
+    const failReason = `Quản trị viên huỷ: ${trimmedReason}`;
+    const now = new Date();
 
-    if (!order) {
-      throw new Error("Không tìm thấy đơn hàng.");
-    }
-
-    if (order.status !== "pending") {
-      throw new Error(`Chỉ có thể huỷ đơn đang chờ thanh toán (trạng thái hiện tại: ${order.status}).`);
-    }
-
-    const failReason = reason?.trim() ? `Quản trị viên huỷ: ${reason.trim()}` : "Quản trị viên huỷ đơn hàng";
-
-    await tx
+    const updatedOrders = await tx
       .update(orders)
       .set({
         status: "cancelled",
         failReason,
-        cancelledAt: new Date(),
+        cancelledAt: now,
       })
-      .where(eq(orders.id, orderId));
+      .where(and(eq(orders.id, orderId), eq(orders.status, "pending")))
+      .returning({ id: orders.id, code: orders.code, userId: orders.userId });
 
+    if (!updatedOrders || updatedOrders.length === 0) {
+      // Check whether order exists or already in another terminal state
+      const [existing] = await tx
+        .select({ id: orders.id, status: orders.status })
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .limit(1);
+
+      if (!existing) {
+        throw new Error("Không tìm thấy đơn hàng.");
+      }
+      throw new Error(`Chỉ có thể huỷ đơn đang chờ thanh toán (trạng thái hiện tại: ${existing.status}).`);
+    }
+
+    const order = updatedOrders[0];
+
+    // 2. Atomically synchronize legacy studentTransactions record if it exists and is pending
+    await tx
+      .update(studentTransactions)
+      .set({ status: "cancelled" })
+      .where(
+        and(
+          eq(studentTransactions.id, order.code),
+          eq(studentTransactions.status, "pending")
+        )
+      );
+
+    // 3. Record order audit event
     await tx.insert(orderEvents).values({
       orderId,
-      label: `Quản trị viên huỷ đơn${reason?.trim() ? ` (${reason.trim()})` : ""}`,
+      label: `Quản trị viên huỷ đơn (${trimmedReason})`,
       actorId: adminUserId,
     });
 
-    // Notify learner
+    // 4. Notify learner
     try {
       const notificationService = createNotificationService(tx);
       await notificationService.notify(
         order.userId,
         `Đơn hàng ${order.code} đã bị huỷ`,
-        `Đơn hàng ${order.code} đã được quản trị viên huỷ.${reason?.trim() ? ` Lý do: ${reason.trim()}` : ""}`,
+        `Đơn hàng ${order.code} đã được quản trị viên huỷ. Lý do: ${trimmedReason}`,
         "/dashboard/learner"
       );
     } catch {
