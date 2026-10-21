@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { APIError } from "better-auth/api";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
 import { ENV } from "@/env.server";
@@ -120,6 +121,70 @@ export async function GET(request: NextRequest) {
     );
   } catch {
     return failure("store_failed", "Chưa tải được hồ sơ đã lưu.", 503);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  if (
+    request.headers.get("origin") !== request.nextUrl.origin ||
+    request.headers.get("sec-fetch-site") === "cross-site"
+  )
+    return failure("invalid_origin", "Yêu cầu không hợp lệ.", 403);
+  // No client-supplied account identity, credentials or options are accepted.
+  if (request.body !== null || request.nextUrl.search)
+    return failure("invalid_input", "Yêu cầu ngắt kết nối không hợp lệ.", 400);
+  try {
+    const userId = await viewer(request);
+    if (!userId)
+      return failure(
+        "unauthorized",
+        "Vui lòng đăng nhập bằng tài khoản học viên.",
+        401,
+      );
+    const linked = await createGithubProfileStore(db).getLinkedAccount(userId);
+    if (linked) {
+      // Better Auth rechecks ownership, session freshness and the last-account guard.
+      // Account deletion cascades to github_profiles; no learning data is deleted.
+      const result = await auth.api.unlinkAccount({
+        headers: request.headers,
+        body: { accountId: linked.accountId },
+      });
+      if (!result.status) throw new Error("unlink_failed");
+    }
+    return NextResponse.json(
+      { disconnected: true } satisfies { disconnected: true },
+      { headers: privateHeaders },
+    );
+  } catch (error) {
+    if (error instanceof APIError) {
+      switch (error.body?.code) {
+        case "FAILED_TO_UNLINK_LAST_ACCOUNT":
+          return failure(
+            "last_sign_in_method",
+            "Đặt mật khẩu trước khi ngắt kết nối GitHub.",
+            409,
+          );
+        case "SESSION_NOT_FRESH":
+          return failure(
+            "session_not_fresh",
+            "Vui lòng đăng nhập lại trước khi ngắt kết nối GitHub.",
+            403,
+          );
+        case "UNAUTHORIZED":
+          return failure("unauthorized", "Vui lòng đăng nhập lại.", 401);
+        case "ACCOUNT_NOT_FOUND":
+          return failure(
+            "github_not_linked",
+            "Kết nối GitHub đã thay đổi. Vui lòng tải lại trang.",
+            409,
+          );
+      }
+    }
+    return failure(
+      "disconnect_failed",
+      "Chưa ngắt được kết nối GitHub. Vui lòng tải lại trang trước khi thử lại.",
+      503,
+    );
   }
 }
 

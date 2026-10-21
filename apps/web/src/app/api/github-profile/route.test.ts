@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { APIError, unlinkAccount } from "better-auth/api";
+import { getTableConfig } from "drizzle-orm/pg-core";
+import { account } from "@codi-1/db/schema/auth";
+import { githubProfiles } from "@codi-1/db/schema/github-profile";
 import type { GithubCollectionSnapshot } from "@/lib/github-profile-contract";
 import { GITHUB_PROFILE_LIMITS } from "@/lib/github-profile-contract";
 import { projectGithubProfile } from "@/lib/github-profile-analysis-contract";
@@ -9,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   roles: vi.fn(),
   token: vi.fn(),
+  unlink: vi.fn(),
   createStore: vi.fn(),
   run: vi.fn(),
   store: {
@@ -28,7 +33,13 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/services", () => ({
-  auth: { api: { getSession: mocks.session, getAccessToken: mocks.token } },
+  auth: {
+    api: {
+      getSession: mocks.session,
+      getAccessToken: mocks.token,
+      unlinkAccount: mocks.unlink,
+    },
+  },
   db: { fixture: true },
 }));
 vi.mock("@codi-1/auth", () => ({
@@ -48,7 +59,7 @@ vi.mock("@/lib/github-profile-store", () => ({
   },
 }));
 import { GithubProfileStoreError } from "@/lib/github-profile-store";
-import { GET, POST, maxDuration, runtime } from "./route";
+import { DELETE, GET, POST, maxDuration, runtime } from "./route";
 const realService = await vi.importActual<
   typeof import("@/lib/github-profile-service")
 >("@/lib/github-profile-service");
@@ -205,6 +216,7 @@ beforeEach(() => {
   mocks.session.mockResolvedValue({ user: { id: "owner" } });
   mocks.roles.mockResolvedValue(["LEARNER"]);
   mocks.token.mockResolvedValue({ accessToken: "fixture-user-token" });
+  mocks.unlink.mockResolvedValue({ status: true });
   mocks.createStore.mockReturnValue(mocks.store);
   mocks.store.getLinkedAccount.mockResolvedValue({
     userId: "owner",
@@ -225,6 +237,214 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+describe("installed unlink protections and declared profile cascade (offline)", () => {
+  function installedUnlink(accounts: { id: string }[], ageSeconds = 0) {
+    const findAccounts = vi.fn().mockResolvedValue(accounts);
+    const deleteAccount = vi.fn().mockResolvedValue(undefined);
+    // Exercise the installed endpoint/middleware with a prevalidated session and
+    // adapter doubles, not a DB, cookie-authentication or concurrency simulation.
+    const invoke = (accountId = "local-row") =>
+      unlinkAccount({
+        body: { accountId },
+        context: {
+          session: {
+            user: { id: "owner" },
+            session: { createdAt: new Date(Date.now() - ageSeconds * 1000) },
+          },
+          sessionConfig: { freshAge: 3600 },
+          options: { account: { accountLinking: { enabled: true } } },
+          internalAdapter: { findAccounts, deleteAccount },
+        } as unknown as NonNullable<
+          Parameters<typeof unlinkAccount>[0]
+        >["context"],
+      });
+    return { invoke, findAccounts, deleteAccount };
+  }
+
+  it("refuses to delete the last sign-in account with unlink-all absent", async () => {
+    const task = installedUnlink([{ id: "local-row" }]);
+    await expect(task.invoke()).rejects.toMatchObject({
+      body: { code: "FAILED_TO_UNLINK_LAST_ACCOUNT" },
+    });
+    expect(task.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it("requires a fresh session before account reads or deletion", async () => {
+    const task = installedUnlink(
+      [{ id: "local-row" }, { id: "password-row" }],
+      3600,
+    );
+    await expect(task.invoke()).rejects.toMatchObject({
+      body: { code: "SESSION_NOT_FRESH" },
+    });
+    expect(task.findAccounts).not.toHaveBeenCalled();
+    expect(task.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it("rejects a row not owned by the session and deletes only the selected local row", async () => {
+    const task = installedUnlink([{ id: "local-row" }, { id: "password-row" }]);
+    await expect(task.invoke("foreign-row")).rejects.toMatchObject({
+      body: { code: "ACCOUNT_NOT_FOUND" },
+    });
+    expect(task.deleteAccount).not.toHaveBeenCalled();
+    expect(await task.invoke()).toEqual({ status: true });
+    expect(task.findAccounts).toHaveBeenCalledWith("owner");
+    expect(task.deleteAccount).toHaveBeenCalledExactlyOnceWith("local-row");
+  });
+
+  it("declares profile cleanup on account deletion, not user deletion", () => {
+    const foreignKey = getTableConfig(githubProfiles).foreignKeys.find(
+      (key) => key.reference().columns[0] === githubProfiles.accountId,
+    );
+    expect(foreignKey?.onDelete).toBe("cascade");
+    expect(foreignKey?.reference().foreignTable).toBe(account);
+    expect(foreignKey?.reference().foreignColumns).toEqual([account.id]);
+  });
+});
+
+describe("GitHub disconnect route (offline, no DB/provider calls)", () => {
+  const disconnectRequest = (
+    options: {
+      origin?: string;
+      site?: string;
+      body?: string;
+      query?: string;
+    } = {},
+  ) =>
+    new NextRequest(`${ORIGIN}/api/github-profile${options.query ?? ""}`, {
+      method: "DELETE",
+      headers: {
+        origin: options.origin ?? ORIGIN,
+        ...(options.site ? { "sec-fetch-site": options.site } : {}),
+      },
+      ...(options.body !== undefined ? { body: options.body } : {}),
+    });
+
+  afterEach(() => {
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(mocks.run).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+    for (const operation of [
+      "claim",
+      "release",
+      "read",
+      "publish",
+      "reserveGeneration",
+    ] as const)
+      expect(mocks.store[operation]).not.toHaveBeenCalled();
+  });
+
+  it("unlinks only the server-resolved local account with the caller's session headers", async () => {
+    const req = disconnectRequest();
+    const response = await DELETE(req);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ disconnected: true });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(mocks.store.getLinkedAccount).toHaveBeenCalledExactlyOnceWith(
+      "owner",
+    );
+    expect(mocks.unlink).toHaveBeenCalledExactlyOnceWith({
+      headers: req.headers,
+      body: { accountId: "local-row" },
+    });
+  });
+
+  it.each([
+    { origin: "https://foreign.test" },
+    { origin: "null" },
+    { origin: "" },
+    { site: "cross-site" },
+  ])(
+    "rejects invalid origin before session/store/unlink: %j",
+    async (options) => {
+      expect((await DELETE(disconnectRequest(options))).status).toBe(403);
+      expect(mocks.session).not.toHaveBeenCalled();
+      expect(mocks.createStore).not.toHaveBeenCalled();
+      expect(mocks.unlink).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { body: JSON.stringify({ accountId: "victim", accessToken: "PRIVATE" }) },
+    { body: "{}" },
+    { query: "?accountId=victim" },
+    { query: "?userId=victim&token=PRIVATE" },
+  ])(
+    "accepts no client identity, token or other input: %j",
+    async (options) => {
+      expect((await DELETE(disconnectRequest(options))).status).toBe(400);
+      expect(mocks.session).not.toHaveBeenCalled();
+      expect(mocks.unlink).not.toHaveBeenCalled();
+    },
+  );
+
+  it("requires an authenticated learner before account lookup", async () => {
+    mocks.session.mockResolvedValue(null);
+    expect((await DELETE(disconnectRequest())).status).toBe(401);
+    expect(mocks.roles).not.toHaveBeenCalled();
+    mocks.session.mockResolvedValue({ user: { id: "owner" } });
+    for (const roles of [[], ["ADMIN"], ["LECTURER"]]) {
+      mocks.roles.mockResolvedValue(roles);
+      expect((await DELETE(disconnectRequest())).status).toBe(401);
+    }
+    expect(mocks.createStore).not.toHaveBeenCalled();
+    expect(mocks.unlink).not.toHaveBeenCalled();
+  });
+
+  it("is idempotent when no GitHub link exists", async () => {
+    mocks.store.getLinkedAccount.mockResolvedValue(null);
+    const response = await DELETE(disconnectRequest());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ disconnected: true });
+    expect(mocks.unlink).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "FAILED_TO_UNLINK_LAST_ACCOUNT",
+      "BAD_REQUEST",
+      409,
+      "last_sign_in_method",
+    ],
+    ["SESSION_NOT_FRESH", "FORBIDDEN", 403, "session_not_fresh"],
+    ["UNAUTHORIZED", "UNAUTHORIZED", 401, "unauthorized"],
+    ["ACCOUNT_NOT_FOUND", "BAD_REQUEST", 409, "github_not_linked"],
+    ["UNKNOWN", "INTERNAL_SERVER_ERROR", 503, "disconnect_failed"],
+  ] as const)(
+    "maps auth %s without exposing raw errors",
+    async (code, status, httpStatus, safeCode) => {
+      mocks.unlink.mockRejectedValue(
+        new APIError(status, {
+          code,
+          message: "PRIVATE fixture-user-token local-row",
+        }),
+      );
+      const response = await DELETE(disconnectRequest());
+      expect(response.status).toBe(httpStatus);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      const body = await response.json();
+      expect(body.code).toBe(safeCode);
+      expect(JSON.stringify(body)).not.toMatch(
+        /PRIVATE|fixture|local-row|owner/,
+      );
+      if (code === "FAILED_TO_UNLINK_LAST_ACCOUNT")
+        expect(body.error).toContain("Đặt mật khẩu");
+    },
+  );
+
+  it("sanitizes lookup/unlink failures and never claims success for a false result", async () => {
+    mocks.store.getLinkedAccount.mockRejectedValueOnce(new Error("PRIVATE"));
+    expect((await DELETE(disconnectRequest())).status).toBe(503);
+    expect(mocks.unlink).not.toHaveBeenCalled();
+    mocks.unlink.mockRejectedValueOnce(new Error("PRIVATE"));
+    expect((await DELETE(disconnectRequest())).status).toBe(503);
+    mocks.unlink.mockResolvedValueOnce({ status: false });
+    const response = await DELETE(disconnectRequest());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: "disconnect_failed" });
+  });
 });
 
 describe("GitHub profile route boundaries (offline doubles, not live acceptance)", () => {
