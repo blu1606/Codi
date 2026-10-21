@@ -15,8 +15,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
+import { toast } from "sonner";
 
-import { authClient } from "@/lib/auth-client";
+import { authClient, signOutSession } from "@/lib/auth-client";
 import { getRoleHome, ROLE_LABEL, type RoleId } from "@codi-1/auth/roles";
 
 export default function UserMenu({ role = null }: { role?: RoleId | null }) {
@@ -31,6 +32,27 @@ export default function UserMenu({ role = null }: { role?: RoleId | null }) {
     imageUrl: string;
   } | null>(null);
   const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (!session || signingOut) return;
+    setSigningOut(true);
+    try {
+      const result = await signOutSession(session.session.id);
+      if (result.error) {
+        toast.error("Không thể đăng xuất. Vui lòng thử lại.");
+        return;
+      }
+      setProfileOverride(null);
+      setAvatarOverride(null);
+      setFailedAvatar(null);
+      router.push("/");
+    } catch {
+      toast.error("Không thể đăng xuất. Vui lòng thử lại.");
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   useEffect(() => {
     const handleProfileNameUpdated = (event: Event) => {
@@ -127,18 +149,8 @@ export default function UserMenu({ role = null }: { role?: RoleId | null }) {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
-            onClick={() => {
-              setProfileOverride(null);
-              setAvatarOverride(null);
-              setFailedAvatar(null);
-              authClient.signOut({
-                fetchOptions: {
-                  onSuccess: () => {
-                    router.push("/");
-                  },
-                },
-              });
-            }}
+            disabled={signingOut}
+            onClick={handleSignOut}
           >
             Đăng xuất
           </DropdownMenuItem>
