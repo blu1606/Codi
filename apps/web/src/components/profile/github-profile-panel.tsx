@@ -526,7 +526,8 @@ export default function GithubProfilePanel({
               lại.
             </p>
           )}
-          {failure.code === "github_not_linked" && (
+          {(failure.code === "github_not_linked" ||
+            failure.code === "connection_expired") && (
             <div className="space-y-2">
               <p>
                 Cần liên kết tài khoản GitHub với phiên Codi hiện tại trước khi
@@ -538,7 +539,9 @@ export default function GithubProfilePanel({
                 disabled={pending || linking}
                 onClick={() => setConsent("link")}
               >
-                Kết nối GitHub
+                {failure.code === "connection_expired"
+                  ? "Kết nối lại GitHub"
+                  : "Kết nối GitHub"}
               </Button>
             </div>
           )}

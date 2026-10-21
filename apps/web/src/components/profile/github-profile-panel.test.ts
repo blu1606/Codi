@@ -334,6 +334,63 @@ describe("GitHub profile consent and request UI", () => {
     expect(host.textContent).toContain("không tự phân tích khi bạn quay lại");
   });
 
+  it("reconnects an expired GitHub link only after consent and retains the saved profile", async () => {
+    fetcher.mockResolvedValue(
+      json(
+        {
+          error: "Kết nối GitHub đã hết hiệu lực. Vui lòng kết nối lại.",
+          code: "connection_expired",
+        },
+        502,
+      ),
+    );
+    await act(async () =>
+      root.render(
+        createElement<{ initialProfile: ReturnType<typeof profile> }>(
+          GithubProfilePanel,
+          { initialProfile: profile() },
+        ),
+      ),
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    await click("Phân tích lại");
+    await submit();
+    expect(button("Kết nối lại GitHub").disabled).toBe(false);
+    expect(host.textContent).toContain("@linked-user");
+    expect(host.textContent).toContain("Ước tính ban đầu.");
+
+    await click("Kết nối lại GitHub");
+    expect(document.querySelector("[role=dialog]")).not.toBeNull();
+    expect(auth.linkSocial).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await click("Để sau");
+    expect(auth.linkSocial).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("Ước tính ban đầu.");
+
+    let finishLink!: () => void;
+    auth.linkSocial.mockImplementation(() =>
+      new Promise<void>((resolve) => {
+        finishLink = resolve;
+      }).then(() => ({ data: { redirect: true }, error: null })),
+    );
+    await click("Kết nối lại GitHub");
+    await submit();
+    expect(auth.linkSocial).toHaveBeenCalledExactlyOnceWith({
+      provider: "github",
+      callbackURL: "/profile/github",
+      errorCallbackURL: "/profile/github",
+    });
+    expect(button("Phân tích lại").disabled).toBe(true);
+    expect(host.textContent).toContain("Ước tính ban đầu.");
+    await act(async () => finishLink());
+    expect(auth.linkSocial).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("không tự phân tích khi bạn quay lại");
+    expect(host.textContent).toContain("@linked-user");
+    expect(host.textContent).toContain("Ước tính ban đầu.");
+  });
+
   it("shows link errors without falling back to generic social sign-in", async () => {
     fetcher.mockResolvedValue(
       json({ error: "Chưa liên kết.", code: "github_not_linked" }, 409),
