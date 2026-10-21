@@ -30,6 +30,8 @@ Test entry: `/courses` → search “Mô phỏng bản đồ kiến thức” �
 
 ## Validation
 
+Updated 21/10/2026: [real-session verification on the updated develop base and a separate #133/#160/#144 integration checkout](real-session-review.md), including authenticated navigation, server/API prerequisite guards, lecturer compatibility, current checks, and the existing lecturer mobile-layout limitation. The results below describe the original UI implementation run.
+
 - Full Vitest + configured coverage gate: **72 files, 937 tests passed**. Coverage: 98.95% statements, 85.16% branches, 96.96% functions, 98.84% lines. Coverage includes configured shared infrastructure, not a claim of graph-wide coverage.
 - Workspace `pnpm -r check-types`: passed after regenerating Next route types.
 - Design standards: **0 violations**.
