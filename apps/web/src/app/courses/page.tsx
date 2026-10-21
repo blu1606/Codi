@@ -197,15 +197,12 @@ export default function CoursesPage() {
       sortParam === "relevant" ||
       sortParam === "newest" ||
       sortParam === "rating" ||
-      sortParam === "enrollment" ||
-      sortParam === "price-asc" ||
-      sortParam === "price-desc"
+      sortParam === "enrollment"
     ) {
-      setSelectedSort(
-        sortParam === "relevant"
-          ? "popular"
-          : (sortParam as CatalogSortOption)
-      );
+      setSelectedSort(sortParam === "relevant" ? "popular" : sortParam);
+    } else if (sortParam === "price-asc" || sortParam === "price-desc") {
+      // Chuẩn hóa URL cũ (price-asc, price-desc) về lựa chọn hỗ trợ mặc định 'popular' (Phù hợp nhất)
+      setSelectedSort("popular");
     }
     isHydratedRef.current = true;
   }, []);
@@ -259,11 +256,22 @@ export default function CoursesPage() {
     return () => controller.abort();
   }, [courses, session?.user?.id]);
 
+  // Share the current catalog destination with typeahead, including active filters and sort.
+  const filteredCourses = useMemo(() => {
+    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel, {
+      price: selectedPrice,
+      sort: selectedSort,
+    });
+  }, [courses, searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
+
   // 3. Typeahead suggestions
   const typeaheadResult = useMemo(() => {
-    return getTypeaheadSuggestions(courses, searchTerm);
-  }, [courses, searchTerm]);
+    return getTypeaheadSuggestions(filteredCourses, searchTerm);
+  }, [filteredCourses, searchTerm]);
 
+  useEffect(() => {
+    setActiveSuggestionIndex(-1);
+  }, [typeaheadResult]);
   // Build unified flat list for accessible keyboard navigation (ArrowDown/Up, Enter)
   // across Query Suggestions, Top Results, and "Xem tất cả kết quả"
   type NavigableItem =
@@ -331,15 +339,6 @@ export default function CoursesPage() {
     }
   };
 
-
-  // 4. Filtered & Sorted courses
-  const filteredCourses = useMemo(() => {
-    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel, {
-      price: selectedPrice,
-      sort: selectedSort,
-    });
-  }, [courses, searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
-
   // 5. Active filter chips
   const activeChips = useMemo(() => {
     const chips: { key: string; label: string; onRemove: () => void }[] = [];
@@ -384,7 +383,7 @@ export default function CoursesPage() {
       };
       chips.push({
         key: "sort",
-        label: `Sắp xếp: ${sortLabels[selectedSort] ?? "Phù hợp nhất"}`,
+        label: `Sắp xếp: ${sortLabels[selectedSort] ?? selectedSort}`,
         onRemove: () => setSelectedSort("popular"),
       });
     }
@@ -863,6 +862,7 @@ export default function CoursesPage() {
                   {opt.label}
                 </option>
               ))}
+
             </select>
           </div>
         </div>
@@ -922,7 +922,7 @@ export default function CoursesPage() {
                   className="gap-1.5 cursor-pointer"
                 >
                   <Sparkles className="h-4 w-4" />
-                  Hỏi AI Codi
+                  Hỏi AI Codi gợi ý khóa học
                 </Button>
               </div>
             </CardContent>

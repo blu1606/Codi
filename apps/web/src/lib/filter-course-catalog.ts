@@ -45,6 +45,7 @@ export function filterCourseCatalog<T extends CourseCatalogEntry>(
       query === "" ||
       course.title.toLowerCase().includes(query) ||
       course.description.toLowerCase().includes(query) ||
+      course.category.toLowerCase().includes(query) ||
       course.topics?.some((t) => t.toLowerCase().includes(query));
 
     const matchesCategory =
@@ -85,7 +86,7 @@ export function filterCourseCatalog<T extends CourseCatalogEntry>(
   switch (sortOption) {
     case "popular":
     case "relevant":
-      // Phù hợp nhất (default): sắp xếp theo độ phù hợp từ khóa nếu có query, fallback theo rating & enrollment
+      // Phù hợp nhất (default): ưu tiên theo mức độ khớp từ khóa nếu có query, fallback theo enrollment & rating
       if (query) {
         return result.sort((a, b) => {
           const aTitle = a.title.toLowerCase().includes(query) ? 2 : 0;
@@ -158,14 +159,7 @@ export function getTypeaheadSuggestions<T extends CourseCatalogEntry>(
     };
   }
 
-  const matches = courses.filter((course) => {
-    return (
-      course.title.toLowerCase().includes(trimmed) ||
-      course.description.toLowerCase().includes(trimmed) ||
-      course.category.toLowerCase().includes(trimmed) ||
-      course.topics?.some((t) => t.toLowerCase().includes(trimmed))
-    );
-  });
+  const matches = filterCourseCatalog(courses, query, "all", "all");
 
   const grouped: Record<string, T[]> = {};
   for (const match of matches) {
