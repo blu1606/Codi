@@ -183,6 +183,63 @@ describe("catalog typeahead destination consistency", () => {
     expect(new URLSearchParams(window.location.search).get("sort")).toBe("enrollment");
   });
 
+  it("normalizes legacy sort URLs (price-asc & price-desc) to popular and renders distinctive order [B, A, C]", async () => {
+    // Dữ liệu phân biệt rõ theo yêu cầu review:
+    // A: giá 100k, 50 học viên (id: "course-A")
+    // B: giá 300k, 100 học viên (id: "course-B")
+    // C: giá 200k, 1 học viên (id: "course-C")
+    // Dưới chế độ sắp xếp theo giá:
+    // - price-asc: A (100k) -> C (200k) -> B (300k)
+    // - price-desc: B (300k) -> C (200k) -> A (100k)
+    // Khi chuẩn hóa về "popular" (mặc định):
+    // - Không có query search -> sắp xếp theo enrollmentCount giảm dần -> B (100) -> A (50) -> C (1)
+    const distinctCatalog = [
+      { id: "A", slug: "course-a", title: "Khóa học A", category: "Frontend", level: "Beginner", description: "", price: 100000, enrollmentCount: 50, rating: 4.5, topics: [] },
+      { id: "B", slug: "course-b", title: "Khóa học B", category: "Frontend", level: "Beginner", description: "", price: 300000, enrollmentCount: 100, rating: 4.8, topics: [] },
+      { id: "C", slug: "course-c", title: "Khóa học C", category: "Frontend", level: "Beginner", description: "", price: 200000, enrollmentCount: 1, rating: 4.0, topics: [] },
+    ].map((c) => ({ ...c, status: "published", createdAt: "2026-10-01T00:00:00Z", duration: "1 giờ", instructorId: "lecturer", instructorName: "Lecturer", reviewCount: 0, coverImageUrl: null }));
+
+    const mockDistinctFetch = vi.fn(async (url: unknown) => {
+      if (url === "/api/courses") return Response.json({ courses: distinctCatalog });
+      if (url === "/api/courses/ownership") return Response.json({ ownership: {} });
+      throw new Error(`Unexpected request: ${String(url)}`);
+    });
+    vi.stubGlobal("fetch", mockDistinctFetch);
+
+    // 1. Kiểm tra với URL price-asc kèm theo bộ lọc cat và level để kiểm tra bảo lưu filter khác
+    await render("/courses?cat=Frontend&level=Beginner&sort=price-asc");
+    const sortSelectAsc = document.querySelector<HTMLSelectElement>("#f-sort")!;
+    expect(sortSelectAsc.value).toBe("popular");
+    // URL đã bỏ sort param, nhưng bảo lưu các filter khác
+    const searchParamsAsc = new URLSearchParams(window.location.search);
+    expect(searchParamsAsc.get("sort")).toBeNull();
+    expect(searchParamsAsc.get("cat")).toBe("Frontend");
+    expect(searchParamsAsc.get("level")).toBe("Beginner");
+    // Không còn chip "Sắp xếp" trong activeChips
+    const chipsAsc = [...document.querySelectorAll("span")].map((el) => el.textContent);
+    expect(chipsAsc.some((text) => text?.includes("Sắp xếp:"))).toBe(false);
+    // Thứ tự grid phải là B, A, C (popular/enrollment) chứ KHÔNG PHẢI A, C, B (price-asc)
+    expect(cards()).toEqual(["course-card-B", "course-card-A", "course-card-C"]);
+
+    // Dọn dẹp DOM trước lần render tiếp theo
+    await act(async () => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+
+    // 2. Kiểm tra với URL price-desc kèm theo reload / remount
+    await render("/courses?cat=Frontend&level=Beginner&sort=price-desc");
+    const sortSelectDesc = document.querySelector<HTMLSelectElement>("#f-sort")!;
+    expect(sortSelectDesc.value).toBe("popular");
+    const searchParamsDesc = new URLSearchParams(window.location.search);
+    expect(searchParamsDesc.get("sort")).toBeNull();
+    expect(searchParamsDesc.get("cat")).toBe("Frontend");
+    expect(searchParamsDesc.get("level")).toBe("Beginner");
+    const chipsDesc = [...document.querySelectorAll("span")].map((el) => el.textContent);
+    expect(chipsDesc.some((text) => text?.includes("Sắp xếp:"))).toBe(false);
+    // Thứ tự grid phải là B, A, C (popular/enrollment) chứ KHÔNG PHẢI B, C, A (price-desc)
+    expect(cards()).toEqual(["course-card-B", "course-card-A", "course-card-C"]);
+  });
+
   it("renders topics with 'Chủ đề' badge in typeahead topResults and clicking pre-fills search", async () => {
     await render();
     await type("Hooks");
