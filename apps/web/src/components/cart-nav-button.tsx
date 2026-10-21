@@ -4,43 +4,69 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { canRequestForSession, subscribeToSessionRequests } from "@/lib/session-requests";
 
 export default function CartNavButton({ mobile }: { mobile?: boolean } = {}) {
   const { data: session } = authClient.useSession();
-  const [count, setCount] = useState(0);
-
-  const fetchCart = () => {
-    if (!session?.user) {
-      setCount(0);
-      return;
-    }
-    fetch("/api/student/cart")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && typeof data.count === "number") {
-          setCount(data.count);
-        }
-      })
-      .catch(() => {});
-  };
+  const sessionId = session?.session.id;
+  const userId = session?.user.id;
+  const userRole = (session?.user as { role?: string } | undefined)?.role;
+  const [cart, setCart] = useState<{ sessionId: string; count: number; failed?: boolean } | null>(null);
+  const count = cart && cart.sessionId === sessionId ? cart.count : 0;
+  const label = cart && cart.sessionId === sessionId && cart.failed
+    ? "Giỏ hàng, không tải được số khoá học"
+    : `Giỏ hàng, ${count} khoá học`;
 
   useEffect(() => {
-    fetchCart();
-    const handleUpdate = () => fetchCart();
+    if (!sessionId || !userId || userRole === "lecturer" || userRole === "admin") return;
+    let controller: AbortController | undefined;
+    let leavingPage = false;
+    const fetchCart = async () => {
+      controller?.abort();
+      if (leavingPage || !canRequestForSession(sessionId)) return;
+      const request = new AbortController();
+      controller = request;
+      try {
+        const response = await fetch("/api/student/cart", { signal: request.signal });
+        if (request.signal.aborted) return;
+        if (!response.ok) throw new Error(`Cart request failed (${response.status})`);
+        const data = await response.json();
+        if (!request.signal.aborted && typeof data.count === "number") {
+          setCart({ sessionId, count: data.count });
+        }
+      } catch (error) {
+        if (request.signal.aborted) return;
+        setCart({ sessionId, count: 0, failed: true });
+        console.error("Không thể tải số khoá học trong giỏ hàng.", error);
+      }
+    };
+    const handleUpdate = () => { void fetchCart(); };
+    // A full navigation can cancel fetch before React's effect cleanup runs.
+    const handlePageHide = () => { leavingPage = true; controller?.abort(); };
+    const handlePageShow = () => { if (leavingPage) { leavingPage = false; handleUpdate(); } };
+    const unsubscribe = subscribeToSessionRequests(handleUpdate);
+    handleUpdate();
     window.addEventListener("codi:cart-updated", handleUpdate);
-    return () => window.removeEventListener("codi:cart-updated", handleUpdate);
-  }, [session?.user]);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      controller?.abort();
+      unsubscribe();
+      window.removeEventListener("codi:cart-updated", handleUpdate);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [sessionId, userId, userRole]);
 
   if (!session?.user) return null;
 
-  const userRole = (session.user as { role?: string }).role;
   if (userRole === "lecturer" || userRole === "admin") return null;
 
   if (mobile) {
     return (
       <Link
         href={"/cart" as any}
-        aria-label={`Giỏ hàng, ${count} khoá học`}
+        aria-label={label}
         className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
       >
         <div className="flex items-center gap-2.5">
@@ -59,7 +85,7 @@ export default function CartNavButton({ mobile }: { mobile?: boolean } = {}) {
   return (
     <Link
       href={"/cart" as any}
-      aria-label={`Giỏ hàng, ${count} khoá học`}
+      aria-label={label}
       className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-foreground hover:bg-accent transition-colors"
     >
       <ShoppingCart className="h-4 w-4" />
