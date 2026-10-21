@@ -1,0 +1,204 @@
+{
+  "verifiedOn": "2026-10-21",
+  "timeZone": "Asia/Saigon",
+  "reviewedHead": "c0d6c8dcc8583e98a1d504447e9a81e05f96ba9f",
+  "integratedBase": "bd91e568b7e80f76a3d15ec37dbcc2e36c270683",
+  "integrationCommit": "a4b43f8f732a4640f8acdae54e2b94a383b22d56",
+  "server": "production build, localhost:3166",
+  "retries": 0,
+  "initialRun": {
+    "passed": 6,
+    "failed": 6,
+    "cause": "Production sign-in rate limit (429); all failures occurred at fresh login after logout checks. Added 10.1s pacing between cases."
+  },
+  "overlappingLogouts": [
+    {
+      "title": "UI-COM-32 overlapping logout failure-first",
+      "theme": "light",
+      "device": "desktop",
+      "status": "passed",
+      "durationMs": 22023,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout success-first",
+      "theme": "light",
+      "device": "desktop",
+      "status": "passed",
+      "durationMs": 18926,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout both-fail",
+      "theme": "light",
+      "device": "desktop",
+      "status": "passed",
+      "durationMs": 17161,
+      "expectedHttpFailures": 2
+    },
+    {
+      "title": "UI-COM-32 overlapping logout failure-first",
+      "theme": "dark",
+      "device": "desktop",
+      "status": "passed",
+      "durationMs": 18103,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout success-first",
+      "theme": "dark",
+      "device": "desktop",
+      "status": "passed",
+      "durationMs": 19411,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout both-fail",
+      "theme": "dark",
+      "device": "desktop",
+      "status": "passed",
+      "durationMs": 17923,
+      "expectedHttpFailures": 2
+    },
+    {
+      "title": "UI-COM-32 overlapping logout failure-first",
+      "theme": "light",
+      "device": "mobile",
+      "status": "passed",
+      "durationMs": 18291,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout success-first",
+      "theme": "light",
+      "device": "mobile",
+      "status": "passed",
+      "durationMs": 18066,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout both-fail",
+      "theme": "light",
+      "device": "mobile",
+      "status": "passed",
+      "durationMs": 18818,
+      "expectedHttpFailures": 2
+    },
+    {
+      "title": "UI-COM-32 overlapping logout failure-first",
+      "theme": "dark",
+      "device": "mobile",
+      "status": "passed",
+      "durationMs": 17694,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout success-first",
+      "theme": "dark",
+      "device": "mobile",
+      "status": "passed",
+      "durationMs": 21222,
+      "expectedHttpFailures": 1
+    },
+    {
+      "title": "UI-COM-32 overlapping logout both-fail",
+      "theme": "dark",
+      "device": "mobile",
+      "status": "passed",
+      "durationMs": 17851,
+      "expectedHttpFailures": 2
+    }
+  ],
+  "originalUiCom32": [
+    {
+      "batch": 1,
+      "title": "UI-COM-32 'Đăng xuất' in the account menu returns the header to the guest state",
+      "status": "passed",
+      "durationMs": 5201
+    },
+    {
+      "batch": 1,
+      "title": "UI-COM-32 logout cancels pending cart requests before revoking the session",
+      "status": "passed",
+      "durationMs": 5100
+    },
+    {
+      "batch": 1,
+      "title": "UI-COM-32 failed logout preserves the session and cart, then allows retry",
+      "status": "passed",
+      "durationMs": 6657
+    },
+    {
+      "batch": 2,
+      "title": "UI-COM-32 'Đăng xuất' in the account menu returns the header to the guest state",
+      "status": "passed",
+      "durationMs": 5298
+    },
+    {
+      "batch": 2,
+      "title": "UI-COM-32 logout cancels pending cart requests before revoking the session",
+      "status": "passed",
+      "durationMs": 4492
+    },
+    {
+      "batch": 2,
+      "title": "UI-COM-32 failed logout preserves the session and cart, then allows retry",
+      "status": "passed",
+      "durationMs": 4897
+    },
+    {
+      "batch": 3,
+      "title": "UI-COM-32 'Đăng xuất' in the account menu returns the header to the guest state",
+      "status": "passed",
+      "durationMs": 5346
+    },
+    {
+      "batch": 3,
+      "title": "UI-COM-32 logout cancels pending cart requests before revoking the session",
+      "status": "passed",
+      "durationMs": 4198
+    },
+    {
+      "batch": 3,
+      "title": "UI-COM-32 failed logout preserves the session and cart, then allows retry",
+      "status": "passed",
+      "durationMs": 4804
+    },
+    {
+      "batch": 4,
+      "title": "UI-COM-32 'Đăng xuất' in the account menu returns the header to the guest state",
+      "status": "passed",
+      "durationMs": 4880
+    },
+    {
+      "batch": 4,
+      "title": "UI-COM-32 logout cancels pending cart requests before revoking the session",
+      "status": "passed",
+      "durationMs": 5456
+    },
+    {
+      "batch": 4,
+      "title": "UI-COM-32 failed logout preserves the session and cart, then allows retry",
+      "status": "passed",
+      "durationMs": 6590
+    },
+    {
+      "batch": 5,
+      "title": "UI-COM-32 'Đăng xuất' in the account menu returns the header to the guest state",
+      "status": "passed",
+      "durationMs": 7770
+    },
+    {
+      "batch": 5,
+      "title": "UI-COM-32 logout cancels pending cart requests before revoking the session",
+      "status": "passed",
+      "durationMs": 7186
+    },
+    {
+      "batch": 5,
+      "title": "UI-COM-32 failed logout preserves the session and cart, then allows retry",
+      "status": "passed",
+      "durationMs": 7446
+    }
+  ]
+}
