@@ -34,6 +34,10 @@ Heartbeat/stop payloads remain `{action: "heartbeat" | "stop", trackerId}`. Old 
 
 ## Reproduce validation
 
+### Current-develop review follow-up — 21/10/2026
+
+The remaining review checks are recorded in [the current-head browser report](ui-review/issue-102/pr144-current-review/README.md): real tab focus, delayed initial acquisition followed by two real 30-second heartbeats for both same/different lessons, and the settled header/dashboard/progress/profile matrix at 1280px/375px in light/dark. This run uses the merged develop base, avoids goal regeneration/model calls, and cleans up isolated QA data. The new full unit run passes **1,575 tests / 89 files**, with workspace types, standards and production build also passing. Earlier results below retain their original scope and versions.
+
 ### PR #144 first-goal follow-up
 
 The overview now includes each enrollment's `goalSetAt`, matching the onboarding server's finalization guard. The weekly-goal action navigates directly to initial setup when it is null, without sending `goal-edit` or opening its confirmation dialog. A finalized goal retains confirmation and the existing edit request, even before a learning path is ready.
