@@ -202,6 +202,11 @@ describe("GitHub profile consent and request UI", () => {
     expect(
       host.querySelector('[data-mockup="resultPage.header"] h1')?.textContent,
     ).toBe("@linked-user");
+    const header = host.querySelector('[data-mockup="resultPage.header"]')!;
+    expect(header.firstElementChild?.className).toContain("w-full");
+    expect(header.firstElementChild?.className).toContain("sm:w-auto");
+    expect(header.lastElementChild?.className).toContain("w-full");
+    expect(header.lastElementChild?.className).toContain("sm:w-auto");
     expect(
       host.querySelector('[data-mockup="resultPage.summary"]')?.children,
     ).toHaveLength(2);
