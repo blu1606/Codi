@@ -73,7 +73,8 @@ describe("catalog typeahead destination consistency", () => {
     expect(new URLSearchParams(window.location.search).get("cat")).toBe("Frontend");
     expect(new URLSearchParams(window.location.search).get("level")).toBe("Beginner");
     expect(new URLSearchParams(window.location.search).get("price")).toBe("free");
-    expect(new URLSearchParams(window.location.search).get("sort")).toBe("price-asc");
+    // Legacy sort option (price-asc) is normalized to 'popular' (Phù hợp nhất), so sort param is not written to URL
+    expect(new URLSearchParams(window.location.search).get("sort")).toBeNull();
     expect(navigation.push).not.toHaveBeenCalled();
   });
 
@@ -157,23 +158,28 @@ describe("catalog typeahead destination consistency", () => {
     expect(new URLSearchParams(window.location.search).get("price")).toBe("free");
   });
 
-  it("renders the 4 Flow L1 sort options in dropdown and handles legacy price-desc/price-asc transparently", async () => {
+  it("renders the 4 Flow L1 sort options in dropdown and normalizes legacy price-desc/price-asc to popular", async () => {
     await render("/courses?sort=price-desc");
     const sortSelect = document.querySelector<HTMLSelectElement>("#f-sort")!;
     expect(sortSelect).not.toBeNull();
     const options = [...sortSelect.querySelectorAll("option")].map((o) => o.textContent);
-    expect(options).toContain("Phù hợp nhất");
-    expect(options).toContain("Mới nhất");
-    expect(options).toContain("Đánh giá cao nhất");
-    expect(options).toContain("Học nhiều nhất");
-    expect(options).toContain("Giá: cao → thấp (cũ)");
-    expect(sortSelect.value).toBe("price-desc");
+    // Flow L1 defines exactly 4 sort options
+    expect(options).toEqual([
+      "Phù hợp nhất",
+      "Mới nhất",
+      "Đánh giá cao nhất",
+      "Học nhiều nhất",
+    ]);
+    // Legacy price-desc is normalized to popular
+    expect(sortSelect.value).toBe("popular");
+    expect(new URLSearchParams(window.location.search).get("sort")).toBeNull();
 
-    // Changing to a standard option
+    // Changing to a standard option updates dropdown and URL
     await act(async () => {
       sortSelect.value = "enrollment";
       sortSelect.dispatchEvent(new Event("change", { bubbles: true }));
     });
+    expect(sortSelect.value).toBe("enrollment");
     expect(new URLSearchParams(window.location.search).get("sort")).toBe("enrollment");
   });
 
