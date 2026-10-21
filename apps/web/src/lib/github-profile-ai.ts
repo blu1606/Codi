@@ -28,7 +28,8 @@ export interface GithubProfileAiOptions {
   abortSignal: AbortSignal;
   /** Atomically consume an allowed attempt AND reserve its cost before resolving true.
    * false means no attempt consumed; a throw is ambiguous and must be reconciled by the caller.
-   * Across all invocations the caller enforces the approved three-call / 20,000 microUSD ceiling.
+   * Across all invocations the caller enforces the approved cumulative 5,000,000 microUSD
+   * ceiling, including all historical reservations; there is no fixed attempt-count ceiling.
    * Never refund an attempt after dispatch or an ambiguous failure. */
   reserveGeneration: (
     reservation: Readonly<GithubProfileGenerationReservation>,

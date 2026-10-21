@@ -48,10 +48,12 @@ const requestSchema = claimInput.extend({
 const budgetSchema = z
   .object({
     budgetKey: id,
-    slot: z.enum([
-      "pre-integration",
-      "diagnostic-preintegration",
-      "integrated",
+    slot: z.union([
+      z.enum(["pre-integration", "diagnostic-preintegration", "integrated"]),
+      z
+        .string()
+        .regex(/^test-[a-z0-9-]{1,64}$/)
+        .refine((slot) => slot.trim() === slot),
     ]),
     candidateSha: z.string().regex(/^[0-9a-f]{40}$/),
   })
@@ -430,10 +432,7 @@ export function createGithubProfileStore(
               usage.cost < 0
             )
               throw new GithubProfileStoreError("store_failed");
-            if (
-              usage.attempts >= 3 ||
-              usage.cost + reservation.maximumCostMicroUsd > 20_000
-            )
+            if (usage.cost + reservation.maximumCostMicroUsd > 5_000_000)
               return false;
             // INSERT ... SELECT rechecks expiry and the whole request/account/consent fence
             // at the actual insertion, not only before the aggregate. No UPDATE/refund exists.

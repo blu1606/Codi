@@ -406,6 +406,18 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
     ["GITHUB_PROFILE_BUDGET_KEY", ""],
     ["GITHUB_PROFILE_BUDGET_KEY", "x".repeat(301)],
     ["GITHUB_PROFILE_BUDGET_SLOT", "client-slot"],
+    ...[
+      "",
+      "test-",
+      "test-A",
+      "test-a_b",
+      "test-a/b",
+      " test-a",
+      "test-a\n",
+      "test-a\r",
+      "test-a b",
+      `test-${"a".repeat(65)}`,
+    ].map((slot) => ["GITHUB_PROFILE_BUDGET_SLOT", slot]),
     ["GITHUB_PROFILE_CANDIDATE_SHA", "bad"],
   ])("fails closed for runtime budget %s=%s", async (key, value) => {
     vi.stubEnv(key, value);
@@ -452,7 +464,15 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
       expect(transport).not.toHaveBeenCalled();
     },
   );
-  it.each(["pre-integration", "diagnostic-preintegration", "integrated"])(
+  it.each([
+    "pre-integration",
+    "diagnostic-preintegration",
+    "integrated",
+    "test-a",
+    "test--",
+    "test-a-",
+    `test-${"a".repeat(64)}`,
+  ])(
     "uses session-owned local row and trusted %s reservation",
     async (slot) => {
       vi.stubEnv("GITHUB_PROFILE_BUDGET_SLOT", slot);

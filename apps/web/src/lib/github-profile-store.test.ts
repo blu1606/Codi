@@ -537,9 +537,9 @@ describe("durable private GitHub profile store", () => {
     );
   });
   it.each([
-    [3, 4346],
-    [1, 19_000],
-    [3, 0],
+    [2, 5_000_000 - reservation.maximumCostMicroUsd + 1],
+    [3, 5_000_000],
+    [4, 5_000_001],
   ])(
     "denies aggregate attempts=%i cost=%i without an insert",
     async (attempts, cost) => {
@@ -552,16 +552,105 @@ describe("durable private GitHub profile store", () => {
       );
     },
   );
-  it("allows the third attempt exactly at the total cost ceiling", async () => {
+  it("allows a reservation exactly at the cumulative five-dollar ceiling", async () => {
     const task = fixture([
       owner,
       linked,
       profile(),
-      [[2, 20_000 - reservation.maximumCostMicroUsd]],
+      [[4, 5_000_000 - reservation.maximumCostMicroUsd]],
       [{ request_id: request.requestId }],
     ]);
     expect(await task.store.reserveGeneration(request, reservation)).toBe(true);
   });
+  it.each([3, 4, 100])(
+    "allows another unique test slot after %i prior attempts under the cost ceiling",
+    async (attempts) => {
+      const task = fixture(
+        [
+          owner,
+          linked,
+          profile(),
+          [[attempts, 4680 + (attempts - 2) * reservation.maximumCostMicroUsd]],
+          [{ request_id: request.requestId }],
+        ],
+        { ...budget, slot: `test-validation-${attempts + 1}` },
+      );
+      expect(await task.store.reserveGeneration(request, reservation)).toBe(
+        true,
+      );
+      const insert = task.calls.find((call) => call.sql.startsWith("insert"))!;
+      expect(insert.params.slice(0, 2)).toEqual([
+        budget.budgetKey,
+        `test-validation-${attempts + 1}`,
+      ]);
+      expect(
+        task.calls.filter((call) => call.sql.startsWith("insert")),
+      ).toHaveLength(1);
+    },
+  );
+  it("includes both consumed historical reservations in the unfiltered budget-key total", async () => {
+    const historicalCosts = [2340, 2340];
+    const laterCosts =
+      5_000_000 - reservation.maximumCostMicroUsd - historicalCosts[0]!;
+    const total = historicalCosts.reduce((sum, cost) => sum + cost, laterCosts);
+    const task = fixture([owner, linked, profile(), [[3, total]]], {
+      ...budget,
+      slot: "test-history-cap",
+    });
+    expect(await task.store.reserveGeneration(request, reservation)).toBe(
+      false,
+    );
+    const aggregate = task.calls.find((call) =>
+      call.sql.includes("coalesce(sum("),
+    )!;
+    expect(aggregate.params).toEqual([budget.budgetKey]);
+    expect(aggregate.sql.split(" where ")[1]).toBe(
+      '"github_generation_reservations"."budget_key" = $1',
+    );
+    expect(aggregate.sql).not.toMatch(
+      /join|reserved_at|candidate_sha|request_id|"slot"/,
+    );
+    expect(
+      task.calls.some((call) => /^(insert|update|delete)/.test(call.sql)),
+    ).toBe(false);
+  });
+  it.each([
+    "pre-integration",
+    "diagnostic-preintegration",
+    "integrated",
+    "test-a",
+    "test--",
+    "test-a-",
+    `test-${"a".repeat(64)}`,
+  ])("accepts trusted slot %s", (slot) => {
+    const task = fixture();
+    expect(() =>
+      createGithubProfileStore(task.db, { ...budget, slot }),
+    ).not.toThrow();
+    expect(task.calls).toEqual([]);
+  });
+  it.each([
+    "",
+    "test-",
+    "test-A",
+    "test-a_b",
+    "test-a/b",
+    " test-a",
+    "test-a\n",
+    "test-a\r",
+    "test-a b",
+    `test-${"a".repeat(65)}`,
+    "exploratory",
+  ])(
+    "rejects malformed or unbounded trusted slot %j before any database access",
+    (slot) => {
+      const task = fixture();
+      expect(() =>
+        createGithubProfileStore(task.db, { ...budget, slot }),
+      ).toThrow();
+      expect(task.calls).toEqual([]);
+    },
+  );
   it("keeps the diagnostic slot distinct without changing the budget key", async () => {
     const task = fixture(
       [
@@ -664,6 +753,23 @@ describe("durable private GitHub profile store", () => {
     expect(
       task.calls.filter((call) => call.sql.startsWith("insert")),
     ).toHaveLength(1);
+  });
+  it("keeps duplicate test slot/request reservations blocked after multiple prior attempts", async () => {
+    const task = fixture([owner, linked, profile(), [[4, 9000]], []], {
+      ...budget,
+      slot: "test-already-consumed",
+    });
+    expect(await task.store.reserveGeneration(request, reservation)).toBe(
+      false,
+    );
+    const inserts = task.calls.filter((call) => call.sql.startsWith("insert"));
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]!.sql).toContain(
+      'on conflict do nothing returning "request_id"',
+    );
+    expect(task.calls.some((call) => /^(update|delete)/.test(call.sql))).toBe(
+      false,
+    );
   });
   it("sanitizes transaction failure and offers no reservation refund path", async () => {
     const task = fixture([
