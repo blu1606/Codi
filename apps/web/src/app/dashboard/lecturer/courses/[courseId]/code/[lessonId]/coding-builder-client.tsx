@@ -282,10 +282,10 @@ export function CodingBuilderClient({
       if (res.success && res.tests.length > 0) {
         setTests((prev) => [...prev, ...res.tests]);
         setIsDirty(true);
-        toast.success(`AI đã gợi ý thành công ${res.tests.length} test case biên mới!`);
+        toast.success(`Đã gợi ý thành công ${res.tests.length} test case biên mới!`);
         setActiveTab("tests");
       } else {
-        toast.info("AI không tìm thêm được trường hợp biên mới cho bài này.");
+        toast.info("Không tìm thêm được trường hợp biên mới cho bài này.");
       }
     } catch (err: any) {
       toast.error(err.message || "Không thể sinh test case biên bằng AI lúc này.");
@@ -370,7 +370,7 @@ export function CodingBuilderClient({
               Bài tập code (S23b)
             </span>
             <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-muted text-muted-foreground border border-border">
-              {language === "python" ? "Python (mô phỏng)" : "JavaScript"}
+              "JavaScript (QuickJS Sandbox)"
             </span>
             {isLocked && (
               <span className="px-2.5 py-0.5 text-xs font-semibold rounded-md bg-warning/10 text-warning border border-warning/20">
@@ -554,8 +554,8 @@ export function CodingBuilderClient({
                       }}
                       className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground"
                     >
-                      <option value="javascript">JavaScript (Chạy trực tiếp trên trình duyệt)</option>
-                      <option value="python">Python (Môi trường mô phỏng)</option>
+                      <option value="javascript">JavaScript (QuickJS WASM Sandbox)</option>
+                      <option value="python" disabled>Python (Chưa hỗ trợ trong Sandbox)</option>
                     </select>
                   </div>
 
@@ -736,7 +736,7 @@ export function CodingBuilderClient({
                       ) : (
                         <>
                           <Sparkles className="size-3.5" />
-                          AI gợi ý test biên
+                          Gợi ý test biên
                         </>
                       )}
                     </Button>

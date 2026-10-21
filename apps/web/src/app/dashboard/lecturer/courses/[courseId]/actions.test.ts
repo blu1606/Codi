@@ -1,3 +1,8 @@
+import {
+  getEditableCourse,
+  verifyChapterBelongsToCourse,
+  verifyLessonBelongsToCourse,
+} from "./course-queries";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { courseChapters, courseLessons, courses } from "@codi-1/db";
 
@@ -46,7 +51,6 @@ import {
   deleteChapter,
   deleteLesson,
   getCourseEditorData,
-  getEditableCourse,
   getLessonDetails,
   getQuizBuilderData,
   moveChapter,
@@ -57,8 +61,6 @@ import {
   saveQuizData,
   updateCourseInfo,
   updateLesson,
-  verifyChapterBelongsToCourse,
-  verifyLessonBelongsToCourse,
 } from "./actions";
 
 function mockOwnedContent(course: Record<string, unknown>, lesson: Record<string, unknown>) {

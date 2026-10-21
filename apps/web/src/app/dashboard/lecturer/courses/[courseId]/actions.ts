@@ -1,5 +1,13 @@
 "use server";
 
+import {
+  getEditableCourse,
+  requireCourseChapter,
+  requireCourseLesson,
+  getCourseLesson,
+  markKnowledgeMapStaleIfPublished,
+} from "./course-queries";
+
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -75,72 +83,6 @@ export interface LessonSnapshot {
       options: (typeof quizOptions.$inferSelect)[];
     }[];
   }[];
-}
-
-/**
- * Kiểm tra quyền sở hữu khoá học và đảm bảo khoá học không ở trạng thái pending (chỉ đọc).
- */
-export async function getEditableCourse(courseId: string) {
-  const user = await verifyLecturerSession();
-
-  const [course] = await db
-    .select()
-    .from(courses)
-    .where(and(eq(courses.id, courseId), eq(courses.instructorId, user.id)));
-
-  if (!course) {
-    throw new Error("Không tìm thấy khoá học hoặc khoá học không thuộc quyền quản lý của bạn.");
-  }
-
-  // Quy tắc STATE-MACHINES §16: Khoá học đang chờ duyệt thì khoá chỉnh sửa (read-only)
-  if (course.status === "pending") {
-    throw new Error("Khoá học đang chờ duyệt — nội dung chỉ đọc.");
-  }
-
-  return { course, user };
-}
-
-export async function requireCourseChapter(courseId: string, chapterId: string, executor: any = db) {
-  const [chapter] = await executor
-    .select({ id: courseChapters.id, courseId: courseChapters.courseId })
-    .from(courseChapters)
-    .where(and(eq(courseChapters.id, chapterId), eq(courseChapters.courseId, courseId)));
-  if (!chapter) throw new Error("Không tìm thấy chương trong khoá học này.");
-  return chapter;
-}
-
-export async function getCourseLesson(courseId: string, lessonId: string, executor: any = db) {
-  const [result] = await executor
-    .select({ lesson: courseLessons })
-    .from(courseLessons)
-    .innerJoin(courseChapters, eq(courseLessons.chapterId, courseChapters.id))
-    .where(and(eq(courseLessons.id, lessonId), eq(courseChapters.courseId, courseId)));
-  return result ? (result.lesson ?? result) : undefined;
-}
-
-export async function requireCourseLesson(courseId: string, lessonId: string, executor: any = db) {
-  const lesson = await getCourseLesson(courseId, lessonId, executor);
-  if (!lesson) throw new Error("Không tìm thấy bài học trong khoá học này.");
-  return lesson;
-}
-
-// Giữ alias cho tương thích ngược
-export const verifyChapterBelongsToCourse = requireCourseChapter;
-export const verifyLessonBelongsToCourse = requireCourseLesson;
-
-/**
- * Đánh dấu bản đồ kiến thức là 'stale' nếu khoá học đã xuất bản bị chỉnh sửa nội dung (D17).
- */
-export async function markKnowledgeMapStaleIfPublished(
-  course: typeof courses.$inferSelect,
-  executor: any = db
-) {
-  if (course.status === "published" && course.knowledgeMapStatus === "confirmed") {
-    await executor
-      .update(courses)
-      .set({ knowledgeMapStatus: "stale" })
-      .where(eq(courses.id, course.id));
-  }
 }
 
 /**
