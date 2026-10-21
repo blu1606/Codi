@@ -20,26 +20,89 @@ const nameSchema = z
   .string()
   .regex(/^[A-Za-z0-9_.-]{1,100}$/)
   .refine((name) => name !== "." && name !== "..");
+const branchSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine(
+    (branch) =>
+      !branch
+        .split("/")
+        .some((part) => !part || part === "." || part === "..") &&
+      !/[\x00-\x1f\x7f]/.test(branch),
+  );
+const identitySchema = z.object({ databaseId: idSchema, login: loginSchema });
 const repoSchema = z.object({
-  id: idSchema,
+  databaseId: idSchema,
   name: nameSchema,
-  owner: z.object({ id: idSchema, login: loginSchema }),
-  private: z.boolean(),
-  visibility: z.string().optional(),
-  fork: z.boolean(),
-  size: z.number().nonnegative().safe(),
-  pushed_at: z.iso.datetime({ offset: true }).nullable(),
-  default_branch: z
-    .string()
+  owner: identitySchema,
+  isPrivate: z.literal(false),
+  visibility: z.literal("PUBLIC"),
+  isFork: z.boolean(),
+  isEmpty: z.boolean(),
+  diskUsage: z.number().int().nonnegative().safe().nullable(),
+  pushedAt: z.iso.datetime({ offset: true }).nullable(),
+  defaultBranchRef: z
+    .object({
+      name: branchSchema,
+      target: z.object({ __typename: z.literal("Commit"), oid: shaSchema }),
+    })
+    .nullable(),
+  // Validate separately so unavailable/truncated languages do not erase safe file evidence.
+  languages: z.unknown(),
+});
+const pageInfoSchema = z.object({
+  hasNextPage: z.boolean(),
+  endCursor: z.string().min(1).max(1024).nullable(),
+});
+const languagesSchema = z.object({
+  edges: z
+    .array(
+      z.object({
+        size: z.number().int().nonnegative().safe(),
+        node: z.object({ name: z.string().min(1).max(80) }),
+      }),
+    )
+    .max(100),
+  pageInfo: z.object({ hasNextPage: z.boolean() }),
+});
+// Only public owned metadata. Never add contribution aggregates or private content here.
+const repositoryQuery = `query CodiPublicProfile($first: Int!, $after: String) {
+  viewer {
+    databaseId login
+    repositories(first: $first, after: $after, privacy: PUBLIC,
+      ownerAffiliations: OWNER, orderBy: {field: PUSHED_AT, direction: DESC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        databaseId name isPrivate visibility isFork isEmpty diskUsage pushedAt
+        owner { login ... on User { databaseId } }
+        defaultBranchRef { name target { __typename ... on Commit { oid } } }
+        languages(first: 100, orderBy: {field: SIZE, direction: DESC}) {
+          edges { size node { name } }
+          pageInfo { hasNextPage }
+        }
+      }
+    }
+  }
+}`;
+const graphqlEnvelopeSchema = z.object({
+  data: z.unknown().optional(),
+  errors: z
+    .array(
+      z.object({
+        message: z.string(),
+        type: z.string().optional(),
+        extensions: z
+          .object({
+            type: z.string().optional(),
+            code: z.string().optional(),
+          })
+          .passthrough()
+          .optional(),
+      }),
+    )
     .min(1)
-    .max(255)
-    .refine(
-      (branch) =>
-        !branch
-          .split("/")
-          .some((part) => !part || part === "." || part === "..") &&
-        !/[\x00-\x1f\x7f]/.test(branch),
-    ),
+    .optional(),
 });
 const directorySchema = z
   .array(
@@ -81,7 +144,7 @@ export interface GithubCollectorInput {
   /** Immutable GitHub numeric subject, NOT the Better Auth local account-row ID. */
   githubUserId: string;
   accessToken: string;
-  /** Trusted server input. Anonymous collection must also be selected explicitly. */
+  /** Trusted public REST access mode; GraphQL always uses the linked-user bearer. */
   publicAccess: GithubPublicAccess;
 }
 
@@ -220,6 +283,8 @@ export async function collectGithubProfile(
     if (
       [
         "rate_limited",
+        "connection_expired",
+        "identity_mismatch",
         "app_auth_failed",
         "request_limit",
         "aggregate_limit",
@@ -229,7 +294,11 @@ export async function collectGithubProfile(
       stopped = true;
     return failure.code;
   };
-  const request = async (path: string, identity = false): Promise<unknown> => {
+  const request = async (
+    path: string,
+    variables?: { first: number; after: string | null },
+  ): Promise<unknown> => {
+    const graphql = variables !== undefined;
     const remainingMs = limits.totalMs - (performance.now() - started);
     if (remainingMs <= 0) throw new ReadFailure("total_timeout");
     if (snapshot.coverage.requests >= limits.requests)
@@ -266,7 +335,16 @@ export async function collectGithubProfile(
         timeout,
         (async () => {
           const response = await transport(url.toString(), {
-            method: "GET",
+            method: graphql ? "POST" : "GET",
+            ...(graphql
+              ? {
+                  body: JSON.stringify({
+                    query: repositoryQuery,
+                    operationName: "CodiPublicProfile",
+                    variables,
+                  }),
+                }
+              : {}),
             redirect: "error",
             credentials: "omit",
             cache: "no-store",
@@ -275,7 +353,8 @@ export async function collectGithubProfile(
               Accept: "application/vnd.github+json",
               "X-GitHub-Api-Version": "2022-11-28",
               "User-Agent": "Codi-GitHub-Profile",
-              ...(identity
+              ...(graphql ? { "Content-Type": "application/json" } : {}),
+              ...(graphql
                 ? { Authorization: `Bearer ${input.accessToken}` }
                 : basic
                   ? { Authorization: `Basic ${basic}` }
@@ -308,7 +387,7 @@ export async function collectGithubProfile(
           if (!response.ok && response.status !== 403)
             throw new ReadFailure(
               response.status === 401
-                ? identity
+                ? graphql
                   ? "connection_expired"
                   : appCredentials
                     ? "app_auth_failed"
@@ -361,6 +440,45 @@ export async function collectGithubProfile(
               response.status,
             );
           }
+          if (graphql) {
+            const validated = graphqlEnvelopeSchema.safeParse(parsed);
+            if (!validated.success) throw new ReadFailure("invalid_response");
+            const envelope = validated.data;
+            if (envelope.errors) {
+              const labels = envelope.errors
+                .flatMap((error) => [
+                  error.type,
+                  error.extensions?.type,
+                  error.extensions?.code,
+                  error.message,
+                ])
+                .filter((label): label is string => typeof label === "string");
+              if (
+                labels.some((label) =>
+                  /rate[_ -]?limit|abuse detection/i.test(label),
+                )
+              )
+                throw new ReadFailure(
+                  "rate_limited",
+                  response.status,
+                  rateLimitTime(response.headers) ??
+                    new Date(Date.now() + 60_000).toISOString(),
+                );
+              if (
+                labels.some((label) =>
+                  /^(?:UNAUTHENTICATED|BAD_CREDENTIALS)$|bad credentials|requires authentication|token (?:has )?expired/i.test(
+                    label,
+                  ),
+                )
+              )
+                throw new ReadFailure("connection_expired", response.status);
+              // Discard the entire errored page, retaining only earlier validated pages.
+              throw new ReadFailure(
+                envelope.data == null ? "graphql_error" : "graphql_partial",
+                response.status,
+              );
+            }
+          }
           if (response.status === 403) {
             const message = z.object({ message: z.string() }).safeParse(parsed);
             if (
@@ -377,7 +495,7 @@ export async function collectGithubProfile(
               );
             }
             throw new ReadFailure(
-              appCredentials && !identity ? "app_auth_failed" : "http_error",
+              appCredentials && !graphql ? "app_auth_failed" : "http_error",
               403,
             );
           }
@@ -417,19 +535,13 @@ export async function collectGithubProfile(
         : "complete";
     return snapshot;
   };
-  try {
-    const identity = z
-      .object({ id: idSchema, login: loginSchema })
-      .parse(await request("/user", true));
-    if (String(identity.id) !== input.githubUserId)
-      throw new ReadFailure("identity_mismatch");
-    snapshot.identity = { id: String(identity.id), login: identity.login };
-  } catch (error) {
-    issue({ operation: "identity" }, error);
-    return finish();
-  }
-
   const seen = new Set<number>();
+  const cursors = new Set<string>();
+  const repositoryLanguages = new Map<
+    number,
+    { value: unknown; collectedAt: string }
+  >();
+  let after: string | null = null;
   for (
     let page = 1;
     !stopped && snapshot.repositories.length < limits.listedRepos;
@@ -439,55 +551,87 @@ export async function collectGithubProfile(
       100,
       limits.listedRepos - snapshot.repositories.length,
     );
-    // A constant per_page avoids shifting page offsets when the listed limit is not a multiple of 100.
     try {
-      const data = z
-        .array(repoSchema)
-        .max(100)
-        .parse(
-          await request(
-            `/users/${snapshot.identity.login}/repos?type=owner&sort=pushed&direction=desc&per_page=100&page=${page}`,
-          ),
-        );
+      const response = z
+        .object({
+          data: z.object({
+            viewer: z.object({
+              databaseId: idSchema,
+              login: loginSchema,
+              repositories: z.unknown(),
+            }),
+          }),
+        })
+        .parse(await request("/graphql", { first: perPage, after }));
+      const viewer = response.data.viewer;
+      if (
+        String(viewer.databaseId) !== input.githubUserId ||
+        (snapshot.identity &&
+          viewer.login.toLowerCase() !== snapshot.identity.login.toLowerCase())
+      )
+        throw new ReadFailure("identity_mismatch");
+      snapshot.identity = {
+        id: String(viewer.databaseId),
+        login: viewer.login,
+      };
+      const connection = z
+        .object({
+          nodes: z.array(repoSchema).max(perPage),
+          pageInfo: pageInfoSchema,
+        })
+        .parse(viewer.repositories);
+      const data = connection.nodes;
       if (
         data.some(
           (repo) =>
-            repo.private ||
-            (repo.visibility && repo.visibility !== "public") ||
-            String(repo.owner.id) !== input.githubUserId ||
-            repo.owner.login.toLowerCase() !==
-              snapshot.identity!.login.toLowerCase(),
-        )
+            String(repo.owner.databaseId) !== input.githubUserId ||
+            repo.owner.login.toLowerCase() !== viewer.login.toLowerCase() ||
+            seen.has(repo.databaseId),
+        ) ||
+        new Set(data.map((repo) => repo.databaseId)).size !== data.length
       )
         throw new ReadFailure("invalid_response");
-      for (const repo of data.slice(0, perPage)) {
-        if (seen.has(repo.id)) continue;
-        seen.add(repo.id);
+      const { hasNextPage, endCursor } = connection.pageInfo;
+      if (hasNextPage && (!data.length || !endCursor || cursors.has(endCursor)))
+        throw new ReadFailure("invalid_response");
+      const collectedAt = new Date().toISOString();
+      for (const repo of data) {
+        seen.add(repo.databaseId);
+        repositoryLanguages.set(repo.databaseId, {
+          value: repo.languages,
+          collectedAt,
+        });
         snapshot.repositories.push({
-          id: repo.id,
+          id: repo.databaseId,
           owner: repo.owner.login,
           name: repo.name,
-          pushedAt: repo.pushed_at,
-          defaultBranch: repo.default_branch,
-          disposition: repo.fork
-            ? "fork"
-            : repo.size === 0
-              ? "empty"
-              : "capped",
-          commitSha: null,
+          pushedAt: repo.pushedAt,
+          // Empty repositories may have no default ref; no branch is invented.
+          defaultBranch: repo.defaultBranchRef?.name ?? "",
+          disposition: repo.isFork ? "fork" : repo.isEmpty ? "empty" : "capped",
+          commitSha: repo.defaultBranchRef?.target.oid ?? null,
           files: [],
         });
       }
-      if (data.length < 100 && data.length <= perPage) {
+      if (!hasNextPage) {
         snapshot.coverage.listingComplete = true;
         break;
       }
-      if (page >= Math.ceil(limits.listedRepos / 100)) break;
+      after = endCursor;
+      cursors.add(endCursor!);
+      if (
+        page >= Math.ceil(limits.listedRepos / 100) ||
+        snapshot.repositories.length >= limits.listedRepos
+      ) {
+        issue({ operation: "listing" }, new ReadFailure("pagination_limit"));
+        break;
+      }
     } catch (error) {
-      issue({ operation: "listing" }, error);
+      issue({ operation: snapshot.identity ? "listing" : "identity" }, error);
       break;
     }
   }
+  if (!snapshot.identity) return finish();
   snapshot.repositories.sort(
     (a, b) =>
       (b.pushedAt ? Date.parse(b.pushedAt) : 0) -
@@ -497,45 +641,45 @@ export async function collectGithubProfile(
     .filter((repo) => repo.disposition === "capped")
     .slice(0, limits.selectedRepos);
   for (const repo of selected) repo.disposition = "selected";
-  const collectRepository = async (repo: GithubRepositorySnapshot) => {
-    if (stopped) return;
-    const scope = { repositoryId: repo.id };
-    const base = `/repos/${repo.owner}/${repo.name}`;
+  // Language observations were batched with metadata, not fetched from repository files.
+  for (const repo of selected) {
     try {
-      const ref = z
-        .object({
-          object: z.object({ type: z.literal("commit"), sha: shaSchema }),
-        })
-        .parse(
-          await request(
-            `${base}/git/ref/heads/${encodeURIComponent(repo.defaultBranch)}`,
-          ),
-        );
-      repo.commitSha = ref.object.sha;
-    } catch (error) {
-      issue({ ...scope, operation: "ref" }, error);
-    }
-    if (stopped) return;
-    try {
-      const bytes = z
-        .record(
-          z.string().min(1).max(80),
-          z.number().int().nonnegative().safe(),
-        )
-        .parse(await request(`${base}/languages`));
-      const collectedAt = new Date().toISOString();
+      const observation = repositoryLanguages.get(repo.id)!;
+      const languages = languagesSchema.parse(observation.value);
+      if (languages.pageInfo.hasNextPage)
+        throw new ReadFailure("language_limit");
+      const names = languages.edges.map((edge) => edge.node.name);
+      if (new Set(names).size !== names.length)
+        throw new ReadFailure("invalid_response");
+      const collectedAt = observation.collectedAt;
       snapshot.evidence.push({
         id: `repo:${repo.id}:languages:${collectedAt}`,
         kind: "languages",
         repositoryId: repo.id,
         collectedAt,
-        sourceUrl: `https://api.github.com${base}/languages`,
-        bytes,
+        // Official equivalent language-byte evidence endpoint, not a claim of REST transport.
+        sourceUrl: `https://api.github.com/repos/${repo.owner}/${repo.name}/languages`,
+        bytes: Object.fromEntries(
+          languages.edges
+            .sort((a, b) => a.node.name.localeCompare(b.node.name, "en"))
+            .map((edge) => [edge.node.name, edge.size]),
+        ),
       });
     } catch (error) {
-      issue({ ...scope, operation: "languages" }, error);
+      issue({ repositoryId: repo.id, operation: "languages" }, error);
     }
-    if (stopped || !repo.commitSha) return;
+  }
+  const collectRepository = async (repo: GithubRepositorySnapshot) => {
+    if (stopped) return;
+    const scope = { repositoryId: repo.id };
+    const base = `/repos/${repo.owner}/${repo.name}`;
+    if (!repo.commitSha) {
+      issue(
+        { ...scope, operation: "ref" },
+        new ReadFailure("invalid_response"),
+      );
+      return;
+    }
     let directory: z.infer<typeof directorySchema>;
     try {
       directory = directorySchema.parse(

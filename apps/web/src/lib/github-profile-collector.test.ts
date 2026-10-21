@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { collectGithubProfile } from "./github-profile-collector";
 import { GITHUB_PROFILE_LIMITS } from "./github-profile-contract";
 import { extractGithubTechnologies } from "./github-profile-extraction";
+import { projectGithubProfile } from "./github-profile-analysis-contract";
 
 const TOKEN = "server-transport-test-credential";
 const input = {
@@ -10,21 +11,59 @@ const input = {
   accessToken: TOKEN,
   publicAccess: { mode: "anonymous" as const },
 };
+const appInput = {
+  ...input,
+  publicAccess: {
+    mode: "oauth_app" as const,
+    clientId: "test-app-id",
+    clientSecret: "test-app-client-secret",
+  },
+};
+const BASIC = Buffer.from("test-app-id:test-app-client-secret").toString(
+  "base64",
+);
 const COMMIT = "a".repeat(40);
 const json = (value: unknown, status = 200, headers?: HeadersInit) =>
   new Response(JSON.stringify(value), { status, headers });
-const repo = (overrides: Record<string, unknown> = {}) => ({
-  id: 10,
-  name: "project",
-  owner: { id: 123, login: "learner" },
-  private: false,
-  visibility: "public",
-  fork: false,
-  size: 10,
-  pushed_at: "2026-10-20T00:00:00Z",
-  default_branch: "main",
+const languages = (overrides: Record<string, unknown> = {}) => ({
+  edges: [
+    { size: 100, node: { name: "TypeScript" } },
+    { size: 50, node: { name: "JavaScript" } },
+  ],
+  pageInfo: { hasNextPage: false },
   ...overrides,
 });
+const repo = (overrides: Record<string, unknown> = {}) => ({
+  databaseId: 10,
+  name: "project",
+  owner: { databaseId: 123, login: "learner" },
+  isPrivate: false,
+  visibility: "PUBLIC",
+  isFork: false,
+  isEmpty: false,
+  diskUsage: 10,
+  pushedAt: "2026-10-20T00:00:00Z",
+  defaultBranchRef: {
+    name: "main",
+    target: { __typename: "Commit", oid: COMMIT },
+  },
+  languages: languages(),
+  ...overrides,
+});
+const page = (
+  nodes: unknown[] = [repo()],
+  hasNextPage = false,
+  endCursor: string | null = null,
+  viewer = { databaseId: 123, login: "learner" },
+) => ({
+  data: {
+    viewer: {
+      ...viewer,
+      repositories: { nodes, pageInfo: { hasNextPage, endCursor } },
+    },
+  },
+});
+const graph = (nodes: unknown[]) => json(page(nodes));
 const manifest = JSON.stringify({
   dependencies: { react: "^19", next: "^16" },
   scripts: { install: "DO NOT EXECUTE" },
@@ -35,7 +74,7 @@ const blob = (text = manifest) => {
     type: "file",
     size: data.length,
     sha: createHash("sha1")
-      .update(`blob ${data.length}\0`)
+      .update("blob " + data.length + "\0")
       .update(data)
       .digest("hex"),
     encoding: "base64",
@@ -51,250 +90,214 @@ function transport(handler?: Handler) {
     const parsed = new URL(String(url));
     const custom = await handler?.(parsed, init!);
     if (custom) return custom;
-    if (parsed.pathname === "/user")
-      return json({
-        id: 123,
-        login: "learner",
-        email: "not-retained@example.test",
-      });
-    if (parsed.pathname === "/users/learner/repos") return json([repo()]);
-    if (parsed.pathname.endsWith("/git/ref/heads/main"))
-      return json({ object: { type: "commit", sha: COMMIT } });
-    if (parsed.pathname.endsWith("/languages"))
-      return json({ TypeScript: 100, JavaScript: 50 });
+    if (parsed.pathname === "/graphql") return graph([repo()]);
     if (parsed.pathname.endsWith("/contents"))
       return json([
         {
           name: "package.json",
           ...blob(),
           download_url: "https://attacker.invalid/secret",
-          html_url: "https://attacker.invalid/",
         },
       ]);
     if (parsed.pathname.endsWith("/contents/package.json")) return json(blob());
-    throw new Error(`Unexpected test request: ${parsed.pathname}`);
+    throw new Error("Unexpected fixture path: " + parsed.pathname);
   });
 }
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
-describe("GitHub public profile collector", () => {
-  const appInput = {
-    ...input,
-    publicAccess: {
-      mode: "oauth_app" as const,
-      clientId: "test-app-id",
-      clientSecret: "test-app-client-secret",
-    },
-  };
-
-  it("routes OAuth-app Basic only to public GETs and user Bearer only to identity", async () => {
-    const fetch = transport();
-    const result = await collectGithubProfile(appInput, { fetch });
-    const encoded = Buffer.from("test-app-id:test-app-client-secret").toString(
-      "base64",
-    );
-    expect(result.status).toBe("complete");
-    expect(result.coverage.publicAccess).toBe("oauth_app");
-    for (const [url, init] of fetch.mock.calls) {
-      expect(new Headers(init?.headers).get("authorization")).toBe(
-        new URL(String(url)).pathname === "/user"
-          ? `Bearer ${TOKEN}`
-          : `Basic ${encoded}`,
-      );
-      expect(init?.redirect).toBe("error");
-      expect(String(url)).not.toContain(TOKEN);
-      expect(String(url)).not.toContain("test-app-client-secret");
-      expect(String(url)).not.toContain(encoded);
-    }
-    expect(JSON.stringify(result)).not.toContain("test-app-client-secret");
-    expect(JSON.stringify(result)).not.toContain(encoded);
-    expect(JSON.stringify(result)).not.toContain(TOKEN);
-  });
-
-  it.each([401, 403])(
-    "stops on failed public app authentication (%i) without any fallback",
-    async (status) => {
-      const fetch = transport((url) =>
-        url.pathname.endsWith("/repos")
-          ? json({ message: "Bad credentials test-app-client-secret" }, status)
-          : undefined,
-      );
-      const result = await collectGithubProfile(appInput, { fetch });
-      expect(result.issues[0]).toMatchObject({
-        operation: "listing",
-        code: "app_auth_failed",
-        httpStatus: status,
-      });
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(result.evidence).toEqual([]);
-      expect(JSON.stringify(result)).not.toContain("test-app-client-secret");
-      expect(
-        new Headers(fetch.mock.calls[1]?.[1]?.headers).get("authorization"),
-      ).toMatch(/^Basic /);
-    },
-  );
-
-  it.each([
-    { mode: "oauth_app", clientId: "test-app-id", clientSecret: "" },
-    {
-      mode: "oauth_app",
-      clientId: "bad:id",
-      clientSecret: "test-app-client-secret",
-    },
-    {
-      mode: "oauth_app",
-      clientId: "test-app-id",
-      clientSecret: "bad\r\nheader",
-    },
-    { mode: "oauth_app", clientId: "test-app-id" },
-    { mode: "anonymous", clientSecret: "supplied-but-invalid-for-mode" },
-    undefined,
-  ])(
-    "rejects malformed or implicit public authentication before any read",
-    async (publicAccess) => {
+describe("GitHub public GraphQL collector", () => {
+  it.each([input, appInput])(
+    "batches public metadata with bearer POST and keeps REST files public and commit-pinned",
+    async (credentials) => {
       const fetch = transport();
-      const result = await collectGithubProfile(
-        { ...input, publicAccess } as typeof appInput,
-        { fetch },
-      );
-      expect(result.issues).toEqual([
-        { operation: "identity", code: "invalid_input" },
-      ]);
-      expect(fetch).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([
-    "test-app-client-secret",
-    Buffer.from("test-app-id:test-app-client-secret").toString("base64"),
-  ])(
-    "does not return reflected app secrets from a successful response",
-    async (secret) => {
-      const fetch = transport((url) =>
-        url.pathname.endsWith("/languages") ? json({ [secret]: 1 }) : undefined,
-      );
-      const result = await collectGithubProfile(appInput, { fetch });
-      expect(result.issues[0]).toMatchObject({
-        operation: "languages",
-        code: "invalid_response",
-      });
-      expect(JSON.stringify(result)).not.toContain(secret);
-    },
-  );
-
-  it("rejects public redirects in app mode and never follows Location", async () => {
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/repos")
-        ? new Response(null, {
-            status: 302,
-            headers: { location: "https://attacker.invalid" },
-          })
-        : undefined,
-    );
-    const result = await collectGithubProfile(appInput, { fetch });
-    expect(result.issues[0]).toMatchObject({
-      operation: "listing",
-      code: "redirect_rejected",
-    });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(
-      fetch.mock.calls.every(
-        ([url]) => new URL(String(url)).origin === "https://api.github.com",
-      ),
-    ).toBe(true);
-  });
-
-  it("rejects JSON-escaped credential reflection before creating evidence", async () => {
-    const secret = "test-app-client-secret";
-    const escaped = [...secret]
-      .map(
-        (character) =>
-          `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
-      )
-      .join("");
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/languages")
-        ? new Response(`{"${escaped}":1}`)
-        : undefined,
-    );
-    const result = await collectGithubProfile(appInput, { fetch });
-    expect(result.issues[0]).toMatchObject({
-      operation: "languages",
-      code: "invalid_response",
-    });
-    expect(JSON.stringify(result)).not.toContain(secret);
-  });
-
-  it("sanitizes app-auth transport exceptions without retrying under another identity", async () => {
-    const fetch = transport((url) => {
-      if (url.pathname.endsWith("/repos"))
-        throw new Error(
-          "Basic " +
-            Buffer.from("test-app-id:test-app-client-secret").toString(
-              "base64",
-            ),
+      const result = await collectGithubProfile(credentials, { fetch });
+      expect(result.status).toBe("complete");
+      expect(result.coverage.requests).toBe(3);
+      expect(result.identity).toEqual({ id: "123", login: "learner" });
+      expect(result.coverage.listingComplete).toBe(true);
+      for (const [url, init] of fetch.mock.calls) {
+        const parsed = new URL(String(url));
+        expect(parsed.origin).toBe("https://api.github.com");
+        const graphql = parsed.pathname === "/graphql";
+        expect(init).toMatchObject({
+          method: graphql ? "POST" : "GET",
+          redirect: "error",
+          credentials: "omit",
+          cache: "no-store",
+        });
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          graphql
+            ? "Bearer " + TOKEN
+            : credentials.publicAccess.mode === "oauth_app"
+              ? "Basic " + BASIC
+              : null,
         );
-    });
-    const result = await collectGithubProfile(appInput, { fetch });
-    expect(result.issues[0]?.code).toBe("network_error");
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(result)).not.toContain("test-app-client-secret");
-    expect(JSON.stringify(result)).not.toContain(
-      Buffer.from("test-app-id:test-app-client-secret").toString("base64"),
-    );
-  });
+        if (!graphql) {
+          expect(parsed.pathname).toContain("/contents");
+          expect(parsed.searchParams.get("ref")).toBe(COMMIT);
+        }
+      }
+      const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+      expect(body).toMatchObject({
+        operationName: "CodiPublicProfile",
+        variables: { first: 100, after: null },
+      });
+      expect(body.query).toMatch(/viewer\s*\{/);
+      expect(body.query).toContain("privacy: PUBLIC");
+      expect(body.query).toContain("ownerAffiliations: OWNER");
+      expect(body.query).toContain("field: PUSHED_AT, direction: DESC");
+      expect(body.query).not.toMatch(
+        /contributionsCollection|email|contents|object\(/,
+      );
+      expect(
+        result.evidence.find((item) => item.kind === "file"),
+      ).toMatchObject({
+        commitSha: COMMIT,
+        blobSha: blob().sha,
+        text: manifest,
+        sourceUrl:
+          "https://github.com/learner/project/blob/" + COMMIT + "/package.json",
+      });
+      const languageEvidence = result.evidence.find(
+        (item) => item.kind === "languages",
+      );
+      expect(languageEvidence).toMatchObject({
+        sourceUrl: "https://api.github.com/repos/learner/project/languages",
+        bytes: { TypeScript: 100, JavaScript: 50 },
+      });
+      expect(languageEvidence).not.toHaveProperty("commitSha");
+      expect(
+        result.repositories[0]?.files.find((file) => file.path === "pom.xml")
+          ?.state,
+      ).toBe("missing");
+      expect(
+        extractGithubTechnologies(result).map((item) => item.technology),
+      ).toContain("React");
+      expect(extractGithubTechnologies(result, [10])).toEqual([]);
+      const citations = projectGithubProfile(result, null)
+        .technologies.flatMap((item) => item.observations)
+        .flatMap((item) => item.citations);
+      expect(citations).toContainEqual(
+        expect.objectContaining({
+          kind: "languages",
+          sourceUrl: languageEvidence!.sourceUrl,
+        }),
+      );
+      for (const forbidden of [
+        TOKEN,
+        BASIC,
+        "test-app-client-secret",
+        "attacker.invalid",
+      ])
+        expect(JSON.stringify(result)).not.toContain(forbidden);
+    },
+  );
 
-  it("uses the bearer only for identity and returns bounded immutable evidence", async () => {
-    const fetch = transport();
-    const result = await collectGithubProfile(input, { fetch });
-    expect(result.status).toBe("complete");
-    expect(result.identity).toEqual({ id: "123", login: "learner" });
-    expect(result.coverage.requests).toBe(6);
+  it("paginates cursor variables and respects a nonmultiple listing ceiling", async () => {
+    const fetch = transport((url, init) => {
+      if (url.pathname !== "/graphql") return;
+      const { first, after } = JSON.parse(String(init.body)).variables;
+      return json(
+        page(
+          Array.from({ length: first }, (_, i) =>
+            repo({ databaseId: (after ? 101 : 1) + i }),
+          ),
+          !after,
+          after ? null : "cursor-1",
+        ),
+      );
+    });
+    const result = await collectGithubProfile(input, {
+      fetch,
+      limits: { listedRepos: 101, selectedRepos: 1 },
+    });
+    expect(result.repositories).toHaveLength(101);
     expect(result.coverage.listingComplete).toBe(true);
     expect(
-      result.repositories[0]?.files.find((file) => file.path === "pom.xml")
-        ?.state,
-    ).toBe("missing");
-    for (const [url, init] of fetch.mock.calls) {
-      expect(new URL(String(url)).origin).toBe("https://api.github.com");
-      expect(init).toMatchObject({
-        method: "GET",
-        redirect: "error",
-        credentials: "omit",
-        cache: "no-store",
-      });
-      expect(new Headers(init?.headers).get("authorization")).toBe(
-        String(url).endsWith("/user") ? `Bearer ${TOKEN}` : null,
-      );
-      if (String(url).includes("/contents"))
-        expect(new URL(String(url)).searchParams.get("ref")).toBe(COMMIT);
-    }
-    const file = result.evidence.find((evidence) => evidence.kind === "file");
-    expect(file).toMatchObject({
-      kind: "file",
-      commitSha: COMMIT,
-      blobSha: blob().sha,
-      text: manifest,
-      sourceUrl: `https://github.com/learner/project/blob/${COMMIT}/package.json`,
-    });
-    const languages = result.evidence.find(
-      (evidence) => evidence.kind === "languages",
-    );
-    expect(languages).not.toHaveProperty("commitSha");
-    expect(languages).toMatchObject({
-      sourceUrl: "https://api.github.com/repos/learner/project/languages",
-      collectedAt: expect.any(String),
-    });
-    expect(JSON.stringify(result)).not.toContain(TOKEN);
-    expect(JSON.stringify(result)).not.toContain("not-retained@example.test");
-    expect(JSON.stringify(result)).not.toContain("attacker.invalid");
-    expect(
-      extractGithubTechnologies(result).map((item) => item.technology),
-    ).toContain("React");
-    expect(extractGithubTechnologies(result, [10])).toEqual([]);
+      JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)).variables,
+    ).toEqual({ first: 1, after: "cursor-1" });
   });
 
-  it("blocks all repo reads on numeric identity mismatch", async () => {
+  it.each([1, 100])(
+    "caps three listing pages with %i nodes per page and ignores Link URLs",
+    async (length) => {
+      let count = 0;
+      const fetch = transport((url) =>
+        url.pathname === "/graphql"
+          ? json(
+              page(
+                Array.from({ length }, () => repo({ databaseId: ++count })),
+                true,
+                "cursor-" + count,
+              ),
+              200,
+              { link: '<https://attacker.invalid/>; rel="next"' },
+            )
+          : undefined,
+      );
+      const result = await collectGithubProfile(input, {
+        fetch,
+        limits: { selectedRepos: 1 },
+      });
+      expect(count).toBe(length * 3);
+      expect(result.coverage.listingComplete).toBe(false);
+      expect(result.issues).toContainEqual({
+        operation: "listing",
+        code: "pagination_limit",
+      });
+      expect(result.status).toBe("partial");
+    },
+  );
+
+  it.each([
+    repo({ isPrivate: true }),
+    repo({ visibility: "PRIVATE" }),
+    repo({ owner: { databaseId: 321, login: "other" } }),
+    repo({ owner: { databaseId: 123, login: "other" } }),
+    repo({ name: ".." }),
+    repo({ databaseId: null }),
+    repo({ databaseId: 1.5 }),
+    repo({
+      defaultBranchRef: {
+        name: "main",
+        target: { __typename: "Tag", oid: COMMIT },
+      },
+    }),
+    repo({
+      defaultBranchRef: {
+        name: "../unsafe",
+        target: { __typename: "Commit", oid: COMMIT },
+      },
+    }),
+    repo({
+      defaultBranchRef: {
+        name: "main",
+        target: { __typename: "Commit", oid: "invalid" },
+      },
+    }),
+  ])(
+    "rejects nonpublic, foreign or malformed repository output atomically",
+    async (entry) => {
+      const fetch = transport((url) =>
+        url.pathname === "/graphql"
+          ? graph([repo({ databaseId: 11 }), entry])
+          : undefined,
+      );
+      const result = await collectGithubProfile(input, { fetch });
+      expect(result.issues[0]).toMatchObject({
+        operation: "listing",
+        code: "invalid_response",
+      });
+      expect(result.repositories).toEqual([]);
+      expect(result.evidence).toEqual([]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("blocks evidence and REST reads on numeric identity mismatch", async () => {
     const fetch = transport();
     const result = await collectGithubProfile(
       { ...input, githubUserId: "124" },
@@ -304,91 +307,182 @@ describe("GitHub public profile collector", () => {
     expect(result.issues).toEqual([
       { operation: "identity", code: "identity_mismatch" },
     ]);
-    expect(fetch).toHaveBeenCalledTimes(1);
     expect(result.evidence).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    "https://attacker.invalid/",
     "../evil",
     "learner?scope=repo",
     "learner#fragment",
-  ])("rejects untrusted identity login %s", async (login) => {
-    const fetch = transport((url) =>
-      url.pathname === "/user" ? json({ id: 123, login }) : undefined,
+    "https://attacker.invalid/",
+  ])("rejects unsafe viewer login %s", async (login) => {
+    const fetch = transport(() =>
+      json(page([], false, null, { databaseId: 123, login })),
     );
-    const result = await collectGithubProfile(input, { fetch });
-    expect(result.issues[0]?.code).toBe("invalid_response");
+    expect((await collectGithubProfile(input, { fetch })).issues[0]?.code).toBe(
+      "invalid_response",
+    );
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["identity", "duplicate", "cursor", "empty"])(
+    "rejects invalid subsequent page %s, retaining only earlier validated data",
+    async (failure) => {
+      let count = 0;
+      const fetch = transport((url) => {
+        if (url.pathname !== "/graphql") return;
+        if (++count === 1) return json(page([repo()], true, "cursor-1"));
+        return json(
+          page(
+            failure === "empty"
+              ? []
+              : [repo({ databaseId: failure === "duplicate" ? 10 : 11 })],
+            true,
+            failure === "cursor" ? "cursor-1" : "cursor-2",
+            {
+              databaseId: failure === "identity" ? 124 : 123,
+              login: "learner",
+            },
+          ),
+        );
+      });
+      const result = await collectGithubProfile(input, { fetch });
+      expect(result.repositories.map((item) => item.id)).toEqual([10]);
+      expect(result.status).toBe("partial");
+      expect(result.coverage.listingComplete).toBe(false);
+      expect(result.issues[0]?.code).toBe(
+        failure === "identity" ? "identity_mismatch" : "invalid_response",
+      );
+    },
+  );
+
+  it.each([
+    [{ errors: [{ message: "private provider detail" }] }, "graphql_error"],
+    [
+      {
+        ...page(),
+        errors: [
+          {
+            message: "private provider detail",
+            path: ["viewer", "repositories"],
+          },
+        ],
+      },
+      "graphql_partial",
+    ],
+    [{ data: null }, "invalid_response"],
+    [{ data: { viewer: null } }, "invalid_response"],
+    [{ ...page(), errors: [] }, "invalid_response"],
+    [{ ...page(), errors: [{ message: 123 }] }, "invalid_response"],
+  ] as const)(
+    "distinguishes errors from malformed envelopes without REST fallback",
+    async (response, code) => {
+      const fetch = transport(() => json(response));
+      const result = await collectGithubProfile(input, { fetch });
+      expect(result.issues[0]?.code).toBe(code);
+      expect(result.evidence).toEqual([]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(result)).not.toContain("private provider detail");
+    },
+  );
+
+  it("retains earlier validated pages but discards all data from partial-error pages", async () => {
+    let count = 0;
+    const fetch = transport((url) =>
+      url.pathname === "/graphql"
+        ? json(
+            ++count === 1
+              ? page([repo()], true, "next")
+              : {
+                  ...page([repo({ databaseId: 11 })]),
+                  errors: [{ message: "resolver unavailable" }],
+                },
+          )
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.repositories.map((item) => item.id)).toEqual([10]);
+    expect(result.evidence.every((item) => item.repositoryId === 10)).toBe(
+      true,
+    );
+    expect(result.issues[0]?.code).toBe("graphql_partial");
+    expect(result.status).toBe("partial");
+  });
+
+  it.each([
+    { type: "RATE_LIMITED", message: "hidden" },
+    { extensions: { type: "RATE_LIMITED" }, message: "hidden" },
+    { extensions: { code: "RATE_LIMITED" }, message: "hidden" },
+    { message: "You have exceeded a secondary rate limit." },
+    { type: "UNAUTHENTICATED", message: "hidden" },
+    { message: "Bad credentials" },
+  ])(
+    "classifies HTTP-200 auth/rate errors without leaking provider text",
+    async (error) => {
+      const fetch = transport(() =>
+        json({ ...page(), errors: [error] }, 200, {
+          "x-ratelimit-reset": "1800000000",
+        }),
+      );
+      const result = await collectGithubProfile(input, { fetch });
+      const code = /UNAUTHENTICATED|Bad credentials/.test(JSON.stringify(error))
+        ? "connection_expired"
+        : "rate_limited";
+      expect(result.issues[0]).toMatchObject({ code, httpStatus: 200 });
+      if (code === "rate_limited")
+        expect(result.issues[0]?.retryAt).toBe("2027-01-15T08:00:00.000Z");
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(result)).not.toContain(error.message);
+    },
+  );
+
+  it.each([401, 403])(
+    "stops on REST app auth failure %i without fallback",
+    async (status) => {
+      const fetch = transport((url) =>
+        url.pathname.endsWith("/contents")
+          ? json({ message: "Bad credentials test-app-client-secret" }, status)
+          : undefined,
+      );
+      const result = await collectGithubProfile(appInput, { fetch });
+      expect(result.issues[0]).toMatchObject({
+        operation: "directory",
+        code: "app_auth_failed",
+        httpStatus: status,
+      });
+      expect(result.evidence.map((item) => item.kind)).toEqual(["languages"]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(result)).not.toContain("test-app-client-secret");
+    },
+  );
+
   it.each([301, 302, 307, 308])(
-    "does not follow an identity redirect (%i)",
+    "rejects GraphQL redirects %i",
     async (status) => {
       const fetch = transport(
         () =>
           new Response(null, {
             status,
-            headers: { location: "https://attacker.invalid/" },
+            headers: { location: "https://attacker.invalid" },
           }),
       );
-      const result = await collectGithubProfile(input, { fetch });
-      expect(result.issues[0]?.code).toBe("redirect_rejected");
+      expect(
+        (await collectGithubProfile(input, { fetch })).issues[0]?.code,
+      ).toBe("redirect_rejected");
       expect(fetch).toHaveBeenCalledTimes(1);
     },
   );
 
-  it("rejects public content redirects without following them", async () => {
+  it("retains fork/empty/capped metadata and selects by pushed time then ID", async () => {
     const fetch = transport((url) =>
-      url.pathname.endsWith("/contents/package.json")
-        ? new Response(null, {
-            status: 302,
-            headers: { location: "https://attacker.invalid" },
-          })
-        : undefined,
-    );
-    const result = await collectGithubProfile(input, { fetch });
-    expect(result.issues).toContainEqual({
-      operation: "file",
-      repositoryId: 10,
-      path: "package.json",
-      code: "redirect_rejected",
-      httpStatus: 302,
-    });
-    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
-    expect(
-      fetch.mock.calls.every(
-        ([url]) => new URL(String(url)).hostname === "api.github.com",
-      ),
-    ).toBe(true);
-  });
-
-  it.each([
-    repo({ private: true }),
-    repo({ visibility: "private" }),
-    repo({ owner: { id: 321, login: "other" } }),
-    repo({ name: ".." }),
-  ])("rejects nonpublic/foreign/unsafe listing entries", async (entry) => {
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/repos") ? json([entry]) : undefined,
-    );
-    const result = await collectGithubProfile(input, { fetch });
-    expect(result.issues[0]).toMatchObject({
-      operation: "listing",
-      code: "invalid_response",
-    });
-    expect(result.repositories).toEqual([]);
-    expect(fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it("retains fork/empty/capped metadata and selects deterministically", async () => {
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/repos")
-        ? json([
-            repo({ id: 13, fork: true }),
-            repo({ id: 12, size: 0 }),
-            repo({ id: 11 }),
-            repo({ id: 10 }),
+      url.pathname === "/graphql"
+        ? graph([
+            repo({ databaseId: 13, isFork: true }),
+            repo({ databaseId: 12, isEmpty: true, defaultBranchRef: null }),
+            repo({ databaseId: 9, pushedAt: null }),
+            repo({ databaseId: 11 }),
+            repo(),
           ])
         : undefined,
     );
@@ -403,54 +497,274 @@ describe("GitHub public profile collector", () => {
       [11, "capped"],
       [12, "empty"],
       [13, "fork"],
+      [9, "capped"],
     ]);
     expect(result.status).toBe("partial");
-    expect(result.coverage.selected).toBe(1);
     expect(result.evidence.every((item) => item.repositoryId === 10)).toBe(
       true,
     );
   });
 
-  it("reports a genuinely empty public account without inventing evidence", async () => {
+  it("does not confuse zero disk size with an empty repository", async () => {
     const result = await collectGithubProfile(input, {
       fetch: transport((url) =>
-        url.pathname.endsWith("/repos") ? json([]) : undefined,
+        url.pathname === "/graphql"
+          ? graph([repo({ diskUsage: 0 })])
+          : undefined,
       ),
     });
+    expect(result.repositories[0]?.disposition).toBe("selected");
     expect(result.status).toBe("complete");
-    expect(result.coverage.listingComplete).toBe(true);
-    expect(result.evidence).toEqual([]);
-    expect(extractGithubTechnologies(result)).toEqual([]);
   });
 
-  it("caps listing at 300, ignores arbitrary Link URLs, and never treats capped coverage as complete", async () => {
+  it("does not invent branches or files when a nonempty repository has no ref", async () => {
     const fetch = transport((url) =>
-      url.pathname.endsWith("/repos")
-        ? json(
-            Array.from({ length: 100 }, (_, i) =>
-              repo({ id: Number(url.searchParams.get("page")) * 1000 + i }),
-            ),
-            200,
-            { link: '<https://attacker.invalid/>; rel="next"' },
-          )
+      url.pathname === "/graphql"
+        ? graph([repo({ defaultBranchRef: null })])
         : undefined,
     );
-    const result = await collectGithubProfile(input, {
-      fetch,
-      limits: { selectedRepos: 1 },
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.issues[0]).toMatchObject({
+      operation: "ref",
+      code: "invalid_response",
     });
-    expect(result.repositories).toHaveLength(300);
-    expect(result.coverage.listingComplete).toBe(false);
+    expect(result.repositories[0]).toMatchObject({
+      defaultBranch: "",
+      commitSha: null,
+    });
+    expect(result.evidence.map((item) => item.kind)).toEqual(["languages"]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an empty account without inventing observations", async () => {
+    const fetch = transport(() => graph([]));
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.status).toBe("complete");
+    expect(extractGithubTechnologies(result)).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [languages({ pageInfo: { hasNextPage: true } }), "language_limit"],
+    [null, "invalid_response"],
+    [
+      languages({ edges: [{ size: -1, node: { name: "TypeScript" } }] }),
+      "invalid_response",
+    ],
+    [
+      languages({
+        edges: [
+          { size: 1, node: { name: "Python" } },
+          { size: 2, node: { name: "Python" } },
+        ],
+      }),
+      "invalid_response",
+    ],
+  ])(
+    "rejects truncated/malformed language totals but keeps files",
+    async (value, code) => {
+      const result = await collectGithubProfile(input, {
+        fetch: transport((url) =>
+          url.pathname === "/graphql"
+            ? graph([repo({ languages: value })])
+            : undefined,
+        ),
+      });
+      expect(result.issues[0]).toMatchObject({ operation: "languages", code });
+      expect(
+        result.evidence.filter((item) => item.kind === "languages"),
+      ).toEqual([]);
+      expect(
+        result.evidence.filter((item) => item.kind === "file"),
+      ).toHaveLength(1);
+      expect(result.status).toBe("partial");
+    },
+  );
+
+  it.each([TOKEN, "test-app-client-secret", BASIC])(
+    "rejects JSON-escaped credential reflection",
+    async (secret) => {
+      const escaped = [...secret]
+        .map(
+          (character) =>
+            "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0"),
+        )
+        .join("");
+      const fetch = transport(
+        () =>
+          new Response(
+            JSON.stringify(page()).replace('"TypeScript"', '"' + escaped + '"'),
+          ),
+      );
+      const result = await collectGithubProfile(appInput, { fetch });
+      expect(result.issues[0]?.code).toBe("invalid_response");
+      expect(JSON.stringify(result)).not.toContain(secret);
+    },
+  );
+
+  it.each([
+    { mode: "oauth_app", clientId: "bad:id", clientSecret: "secret" },
+    { mode: "oauth_app", clientId: "app", clientSecret: "" },
+    { mode: "oauth_app", clientId: "app", clientSecret: "bad\r\nheader" },
+    { mode: "anonymous", clientSecret: "unexpected" },
+    undefined,
+  ])("rejects invalid public access before transport", async (publicAccess) => {
+    const fetch = transport();
+    const result = await collectGithubProfile(
+      { ...input, publicAccess } as typeof input,
+      { fetch },
+    );
+    expect(result.issues[0]?.code).toBe("invalid_input");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("enforces the full 60-request cap across GraphQL and REST", async () => {
+    const fetch = transport((url) => {
+      if (url.pathname === "/graphql")
+        return graph(
+          Array.from({ length: 15 }, (_, i) =>
+            repo({ databaseId: i + 1, name: `project-${i}` }),
+          ),
+        );
+      if (url.pathname.endsWith("/contents"))
+        return json(
+          ["package.json", "requirements.txt", "README.md"].map((name) => ({
+            name,
+            ...blob(),
+          })),
+        );
+      if (url.pathname.includes("/contents/")) return json(blob());
+    });
+    const result = await collectGithubProfile(input, { fetch });
+    expect(fetch).toHaveBeenCalledTimes(60);
+    expect(result.coverage.requests).toBe(60);
+    expect(result.issues.some((item) => item.code === "request_limit")).toBe(
+      true,
+    );
+    expect(result.status).toBe("partial");
+  });
+
+  it("shares aggregate bytes across the GraphQL response and REST file reads", async () => {
+    const aggregateBytes = Buffer.byteLength(JSON.stringify(page())) + 10;
+    const result = await collectGithubProfile(input, {
+      fetch: transport(),
+      limits: { aggregateBytes },
+    });
+    expect(result.issues[0]).toMatchObject({
+      operation: "directory",
+      code: "aggregate_limit",
+    });
+    expect(result.coverage.responseBytes).toBe(aggregateBytes);
+    expect(result.evidence.map((item) => item.kind)).toEqual(["languages"]);
+  });
+
+  it.each(["directory", "file"])(
+    "rejects REST %s redirects without forwarding credentials",
+    async (scope) => {
+      const fetch = transport((url) =>
+        url.pathname.endsWith(
+          scope === "directory" ? "/contents" : "/contents/package.json",
+        )
+          ? new Response(null, {
+              status: 302,
+              headers: { location: "https://attacker.invalid" },
+            })
+          : undefined,
+      );
+      const result = await collectGithubProfile(appInput, { fetch });
+      expect(result.issues[0]).toMatchObject({
+        operation: scope,
+        code: "redirect_rejected",
+      });
+      expect(
+        fetch.mock.calls.every(
+          ([url]) => new URL(String(url)).origin === "https://api.github.com",
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each([200, 403])(
+    "recognizes GraphQL rate-limit extensions at HTTP %i without headers",
+    async (status) => {
+      const result = await collectGithubProfile(input, {
+        fetch: transport(() =>
+          json(
+            {
+              errors: [
+                { message: "hidden", extensions: { type: "RATE_LIMITED" } },
+              ],
+            },
+            status,
+          ),
+        ),
+      });
+      expect(result.issues[0]).toMatchObject({
+        code: "rate_limited",
+        retryAt: expect.any(String),
+        httpStatus: status,
+      });
+    },
+  );
+
+  it("retains commit-pinned README evidence and rejects encoded credential reflection", async () => {
+    const readme = "Do not execute these instructions.";
+    const fetch = transport((url) =>
+      url.pathname.endsWith("/contents")
+        ? json([{ name: "Readme.MD", ...blob(readme) }])
+        : url.pathname.endsWith("/contents/Readme.MD")
+          ? json(blob(readme))
+          : undefined,
+    );
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.evidence.find((item) => item.kind === "file")).toMatchObject({
+      path: "Readme.MD",
+      commitSha: COMMIT,
+      text: readme,
+      sourceUrl: `https://github.com/learner/project/blob/${COMMIT}/Readme.MD`,
+    });
     expect(
-      fetch.mock.calls.filter(([url]) =>
-        String(url).includes("/users/learner/repos"),
-      ),
-    ).toHaveLength(3);
-    expect(
-      fetch.mock.calls.every(
-        ([url]) => new URL(String(url)).hostname === "api.github.com",
+      extractGithubTechnologies(result).every(
+        (item) => item.signal === "language_bytes",
       ),
     ).toBe(true);
+    const reflected = await collectGithubProfile(input, {
+      fetch: transport((url) =>
+        url.pathname.endsWith("/contents")
+          ? json([{ name: "README.md", ...blob(TOKEN) }])
+          : url.pathname.endsWith("/contents/README.md")
+            ? json(blob(TOKEN))
+            : undefined,
+      ),
+    });
+    expect(reflected.issues[0]).toMatchObject({
+      operation: "file",
+      code: "invalid_response",
+    });
+    expect(JSON.stringify(reflected)).not.toContain(TOKEN);
+  });
+
+  it("rejects late GraphQL replies without mutating a returned snapshot", async () => {
+    vi.useFakeTimers();
+    let finish!: (response: Response) => void;
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = collectGithubProfile(input, {
+      fetch,
+      limits: { requestMs: 10 },
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await pending;
+    const frozen = JSON.stringify(result);
+    expect(result.issues[0]?.code).toBe("request_timeout");
+    finish(graph([repo()]));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(JSON.stringify(result)).toBe(frozen);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("does not report absent files as missing at the Contents API directory ceiling", async () => {
@@ -515,7 +829,7 @@ describe("GitHub public profile collector", () => {
       code: "rate_limited",
       operation: "directory",
     });
-    expect(fetch).toHaveBeenCalledTimes(5);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("recognizes a secondary rate limit without reset/retry headers", async () => {
@@ -535,7 +849,7 @@ describe("GitHub public profile collector", () => {
       operation: "directory",
       retryAt: expect.any(String),
     });
-    expect(fetch).toHaveBeenCalledTimes(5);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it.each([404, 500])(
@@ -596,7 +910,7 @@ describe("GitHub public profile collector", () => {
       "file_limit",
       "invalid_response",
     ]);
-    expect(fetch).toHaveBeenCalledTimes(5);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("bounds all requests including identity", async () => {
@@ -620,14 +934,14 @@ describe("GitHub public profile collector", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("does not exceed the full 60-request ceiling or two concurrent requests", async () => {
+  it("uses 31 requests for 15 manifests while retaining the two-worker ceiling", async () => {
     let active = 0;
     let peak = 0;
     const base = transport((url) =>
-      url.pathname.endsWith("/repos")
-        ? json(
+      url.pathname === "/graphql"
+        ? graph(
             Array.from({ length: 15 }, (_, i) =>
-              repo({ id: i + 1, name: `project-${i}` }),
+              repo({ databaseId: i + 1, name: `project-${i}` }),
             ),
           )
         : undefined,
@@ -642,9 +956,9 @@ describe("GitHub public profile collector", () => {
       }
     });
     const result = await collectGithubProfile(input, { fetch });
-    expect(fetch).toHaveBeenCalledTimes(60);
-    expect(result.coverage.requests).toBe(60);
-    expect(result.issues.at(-1)?.code).toBe("request_limit");
+    expect(fetch).toHaveBeenCalledTimes(31);
+    expect(result.coverage.requests).toBe(31);
+    expect(result.issues).toEqual([]);
     expect(peak).toBeLessThanOrEqual(2);
   });
 
@@ -747,15 +1061,15 @@ describe("GitHub public profile collector", () => {
     });
     const pending = collectGithubProfile(input, {
       fetch,
-      limits: { requestMs: 20, totalMs: 25 },
+      limits: { requestMs: 20, totalMs: 17 },
     });
-    await vi.advanceTimersByTimeAsync(25);
+    await vi.advanceTimersByTimeAsync(17);
     const result = await pending;
     expect(result.issues.at(-1)?.code).toBe("total_timeout");
-    expect(result.coverage.elapsedMs).toBe(25);
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(result.coverage.elapsedMs).toBe(17);
+    expect(fetch).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(8);
-    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   it("sanitizes transport exceptions and successful responses that echo credentials", async () => {
@@ -792,9 +1106,11 @@ describe("GitHub public profile collector", () => {
     let active = 0;
     let peak = 0;
     const fetch = transport(async (url) => {
-      if (url.pathname === "/users/learner/repos")
-        return json(
-          [10, 11, 12, 13].map((id) => repo({ id, name: `project-${id}` })),
+      if (url.pathname === "/graphql")
+        return graph(
+          [10, 11, 12, 13].map((id) =>
+            repo({ databaseId: id, name: `project-${id}` }),
+          ),
         );
       if (url.pathname.startsWith("/repos/")) {
         active++;
@@ -823,16 +1139,20 @@ describe("GitHub public profile collector", () => {
 
   it("shares the request ceiling across both workers and starts no extra request after exhaustion", async () => {
     const fetch = transport((url) =>
-      url.pathname === "/users/learner/repos"
-        ? json([10, 11, 12].map((id) => repo({ id, name: `project-${id}` })))
+      url.pathname === "/graphql"
+        ? graph(
+            [10, 11, 12].map((id) =>
+              repo({ databaseId: id, name: `project-${id}` }),
+            ),
+          )
         : undefined,
     );
     const result = await collectGithubProfile(input, {
       fetch,
-      limits: { requests: 5 },
+      limits: { requests: 4 },
     });
-    expect(fetch).toHaveBeenCalledTimes(5);
-    expect(result.coverage.requests).toBe(5);
+    expect(fetch).toHaveBeenCalledTimes(4);
+    expect(result.coverage.requests).toBe(4);
     expect(result.status).toBe("partial");
     expect(result.issues.some((issue) => issue.code === "request_limit")).toBe(
       true,
