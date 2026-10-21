@@ -1117,7 +1117,7 @@ export default function GithubProfilePanel({
         className="flex min-w-0 flex-wrap items-end justify-between gap-4"
         data-mockup="resultPage.header"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex min-w-0 w-full items-center gap-3 sm:w-auto sm:flex-1">
           {profile?.identity && (
             <span
               aria-hidden="true"
@@ -1144,7 +1144,7 @@ export default function GithubProfilePanel({
           </div>
         </div>
         {(profile || linked === true) && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Button
               type="button"
               variant="secondary"
