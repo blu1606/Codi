@@ -19,6 +19,8 @@ This supplements the original fixture-based screenshots in [README.md](README.md
 | Production build | Passed | Production output generated and booted for the browser tests |
 | Real-session browser tests | 4 passed, 0 skipped, 0 flaky | 8 passed, 0 skipped, 0 flaky |
 
+The standalone production-build command exited successfully. The integration build emitted its complete route summary and produced the server used by the eight passing browser cases, but its CLI remained open afterward and was stopped following verification. That integration run is evidence of a usable production artifact, not a zero-exit build-command result.
+
 The integration browser matrix is 1280×800 and 375×844, each in light and dark mode:
 
 - Learner follows the actual #144 dashboard/results entry to the map, expands/collapses the table, selects a locked concept with no lesson link, selects an available concept, and uses #160's accessible “Học bài này” CTA to open the real player.
