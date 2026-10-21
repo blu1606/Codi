@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { BookOpen, GitBranch } from "lucide-react";
+import { BookOpen, GitBranch, Info } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { Input } from "@codi-1/ui/components/input";
 import { Alert, AlertTitle } from "@codi-1/ui/components/alert";
@@ -19,6 +19,7 @@ import {
   GITHUB_CONFIDENCE_LABELS,
   GITHUB_OVERALL_LABELS,
   GITHUB_USAGE_LABELS,
+  GITHUB_USAGE_LEVELS,
   type GithubProfileCitation,
   type GithubProfileProjection,
 } from "@/lib/github-profile-analysis-contract";
@@ -113,8 +114,131 @@ function Citations({ sources }: { sources: GithubProfileCitation[] }) {
   );
 }
 
+function EvidenceButton({
+  label,
+  sources,
+}: {
+  label: string;
+  sources: GithubProfileCitation[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-11 shrink-0"
+        aria-label={`Xem bằng chứng: ${label}`}
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+      >
+        <Info aria-hidden="true" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[80dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bằng chứng: {label}</DialogTitle>
+            <DialogDescription>
+              Nguồn được giữ lại từ lần thu thập này. Suy luận chưa được kiểm
+              chứng về ý nghĩa.
+            </DialogDescription>
+          </DialogHeader>
+          {sources.length ? (
+            <Citations sources={sources} />
+          ) : (
+            <p>Chưa đủ bằng chứng.</p>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+const WAITING_STEPS = [
+  "Đọc hồ sơ công khai",
+  "Tải danh sách repo công khai",
+  "Thống kê ngôn ngữ",
+  "Nhận diện công nghệ",
+  "Tạo hồ sơ năng lực",
+];
+
+function PendingChecklist() {
+  const [highlight, setHighlight] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(
+      () => setHighlight((value) => (value + 1) % WAITING_STEPS.length),
+      2000,
+    );
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <section
+      aria-label="Minh hoạ chờ phân tích"
+      aria-busy="true"
+      className="space-y-3 rounded-lg border border-border p-4"
+    >
+      <h3 className="font-semibold" role="status">
+        Đang phân tích GitHub…
+      </h3>
+      <p className="text-sm text-muted-foreground">
+        Mô phỏng chờ: các bước chỉ minh hoạ trong khi chờ phản hồi cuối từ máy
+        chủ, không phải tiến độ thực tế. Chưa xác nhận bước nào hoàn tất.
+      </p>
+      <ol className="space-y-2 text-sm">
+        {WAITING_STEPS.map((step, index) => (
+          <li
+            key={step}
+            className={
+              index === highlight
+                ? "flex items-center gap-2 font-medium text-primary"
+                : "flex items-center gap-2 text-muted-foreground"
+            }
+          >
+            <span
+              aria-hidden="true"
+              className={`size-2 rounded-full ${index === highlight ? "bg-primary motion-safe:animate-pulse" : "bg-muted"}`}
+            />
+            {step}
+            <span className="sr-only">
+              {" "}
+              · {index === highlight ? "Minh hoạ đang chờ" : "Chưa xác nhận"}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function ProfileResult({ profile }: { profile: GithubProfileProjection }) {
   const { limitations, overall } = profile;
+  const languages = profile.technologies.flatMap((technology) =>
+    technology.observations.filter(
+      (item) =>
+        item.kind === "language" &&
+        item.signal === "language_bytes" &&
+        Number.isFinite(item.languageBytes) &&
+        (item.languageBytes ?? 0) > 0,
+    ),
+  );
+  const totalBytes = languages.reduce(
+    (sum, item) => sum + item.languageBytes!,
+    0,
+  );
+  const supported = profile.technologies.filter(
+    (item) =>
+      item.usageSource === "inference" &&
+      item.inference &&
+      item.inference.citations.length > 0 &&
+      item.inference.confidence !== "low" &&
+      (item.usage === "regular" || item.usage === "deep"),
+  );
+  const uncertain = profile.technologies.filter(
+    (item) =>
+      item.inference &&
+      (item.inference.confidence === "low" || item.usage === "tried"),
+  );
   return (
     <section
       aria-label="Kết quả phân tích"
@@ -171,6 +295,94 @@ function ProfileResult({ profile }: { profile: GithubProfileProjection }) {
           </p>
         )}
       </section>
+      <section className="space-y-3" aria-label="Tỉ lệ byte ngôn ngữ">
+        <h3 className="font-semibold">Ngôn ngữ đã quan sát</h3>
+        <p className="text-sm text-muted-foreground">
+          Tỉ lệ byte ngôn ngữ đã thu thập, không phải tỉ lệ dòng code hay mức
+          thành thạo.
+        </p>
+        {languages.length && Number.isFinite(totalBytes) ? (
+          languages.map((item) => {
+            const share = (item.languageBytes! / totalBytes) * 100;
+            return (
+              <div key={item.id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 break-words">
+                    {item.technology} · {item.languageBytes} byte ·{" "}
+                    {new Intl.NumberFormat("vi-VN", {
+                      maximumFractionDigits: 1,
+                    }).format(share)}
+                    %
+                  </span>
+                  <EvidenceButton
+                    label={`Ngôn ngữ ${item.technology}`}
+                    sources={item.citations}
+                  />
+                </div>
+                <div
+                  role="meter"
+                  aria-label={`Tỉ lệ byte ${item.technology}`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={share}
+                  className="h-2 overflow-hidden rounded-full bg-muted"
+                >
+                  <div
+                    className="h-full bg-primary"
+                    style={{ width: `${share}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <p className="text-sm">
+            Chưa đủ bằng chứng: chưa có số byte ngôn ngữ dương để vẽ biểu đồ.
+          </p>
+        )}
+      </section>
+      <section className="space-y-3" aria-label="Tín hiệu và điều cần xác nhận">
+        <h3 className="font-semibold">Tín hiệu từ GitHub</h3>
+        <p className="text-sm">
+          Không xuất hiện trên GitHub không chứng minh năng lực yếu.
+        </p>
+        <h4 className="text-sm font-medium">
+          Điểm mạnh có bằng chứng hỗ trợ · Ước tính từ GitHub
+        </h4>
+        {supported.length ? (
+          <ul className="list-disc pl-5 text-sm">
+            {supported.map((item) => (
+              <li key={item.technologyId}>
+                {item.observations[0]?.technology} ·{" "}
+                {GITHUB_USAGE_LABELS[item.usage!]}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Chưa đủ bằng chứng cho điểm mạnh.
+          </p>
+        )}
+        <h4 className="text-sm font-medium">Cần xác nhận</h4>
+        {uncertain.length ? (
+          <ul className="list-disc pl-5 text-sm">
+            {uncertain.map((item) => (
+              <li key={item.technologyId}>
+                {item.observations[0]?.technology} · Không phải điểm yếu đã được
+                chứng minh.
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Chưa có suy luận cần xác nhận.
+          </p>
+        )}
+        <p className="text-sm text-muted-foreground">
+          Chưa đủ bằng chứng đối với công nghệ hoặc mảng chưa có suy luận, repo
+          bị bỏ qua hay phạm vi thu thập chưa đầy đủ.
+        </p>
+      </section>
       <section className="space-y-3" aria-label="Công nghệ">
         <h3 className="font-semibold">Công nghệ</h3>
         {(
@@ -188,41 +400,77 @@ function ProfileResult({ profile }: { profile: GithubProfileProjection }) {
               <div key={kind} className="space-y-2">
                 <h4 className="text-sm font-medium">{label}</h4>
                 {technologies.map((technology) => (
-                  <details
-                    key={technology.technologyId}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <summary className="cursor-pointer break-words text-sm">
-                      {technology.observations[0]?.technology} ·{" "}
-                      {technology.usage
-                        ? GITHUB_USAGE_LABELS[technology.usage]
-                        : "Chưa ước tính mức sử dụng"}
-                      {technology.learnerEdited
-                        ? " · Bạn đã sửa"
-                        : technology.usageSource === "inference"
-                          ? " · Ước tính từ GitHub"
-                          : ""}
-                      {technology.inference &&
-                        ` · Độ tin cậy ${GITHUB_CONFIDENCE_LABELS[technology.inference.confidence]}`}
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      {technology.observations.map((observation) => (
-                        <div key={observation.id} className="space-y-2">
-                          <p className="text-sm">{observation.text}</p>
-                          <Citations sources={observation.citations} />
+                  <div key={technology.technologyId} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="break-words text-sm">
+                          {technology.observations[0]?.technology} ·{" "}
+                          {technology.learnerEdited
+                            ? "Bạn đã sửa"
+                            : "Ước tính từ GitHub"}
+                        </p>
+                        <div aria-hidden="true" className="flex gap-1">
+                          {GITHUB_USAGE_LEVELS.map((level, index) => (
+                            <span
+                              key={level}
+                              className={`h-2 flex-1 rounded-sm ${technology.usage && index <= GITHUB_USAGE_LEVELS.indexOf(technology.usage) ? "bg-primary" : "bg-muted"}`}
+                            />
+                          ))}
                         </div>
-                      ))}
-                      {technology.inference && (
-                        <div className="space-y-2">
-                          <p className="whitespace-pre-wrap break-words text-sm">
-                            Suy luận chưa kiểm chứng:{" "}
-                            {technology.inference.explanation}
-                          </p>
-                          <Citations sources={technology.inference.citations} />
-                        </div>
-                      )}
+                        <p className="text-sm">
+                          {technology.usage
+                            ? GITHUB_USAGE_LABELS[technology.usage]
+                            : "Chưa đủ bằng chứng: chưa có suy luận mức sử dụng"}
+                        </p>
+                      </div>
+                      <EvidenceButton
+                        label={`Công nghệ ${technology.observations[0]?.technology}`}
+                        sources={[
+                          ...technology.observations.flatMap(
+                            (item) => item.citations,
+                          ),
+                          ...(technology.inference?.citations ?? []),
+                        ]}
+                      />
                     </div>
-                  </details>
+                    <details
+                      key={technology.technologyId}
+                      className="rounded-lg border border-border p-3"
+                    >
+                      <summary className="cursor-pointer break-words text-sm">
+                        {technology.observations[0]?.technology} ·{" "}
+                        {technology.usage
+                          ? GITHUB_USAGE_LABELS[technology.usage]
+                          : "Chưa ước tính mức sử dụng"}
+                        {technology.learnerEdited
+                          ? " · Bạn đã sửa"
+                          : technology.usageSource === "inference"
+                            ? " · Ước tính từ GitHub"
+                            : ""}
+                        {technology.inference &&
+                          ` · Độ tin cậy ${GITHUB_CONFIDENCE_LABELS[technology.inference.confidence]}`}
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        {technology.observations.map((observation) => (
+                          <div key={observation.id} className="space-y-2">
+                            <p className="text-sm">{observation.text}</p>
+                            <Citations sources={observation.citations} />
+                          </div>
+                        ))}
+                        {technology.inference && (
+                          <div className="space-y-2">
+                            <p className="whitespace-pre-wrap break-words text-sm">
+                              Suy luận chưa kiểm chứng:{" "}
+                              {technology.inference.explanation}
+                            </p>
+                            <Citations
+                              sources={technology.inference.citations}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  </div>
                 ))}
               </div>
             )
@@ -235,23 +483,33 @@ function ProfileResult({ profile }: { profile: GithubProfileProjection }) {
         </h3>
         {profile.areas.length ? (
           profile.areas.map((area) => (
-            <details
-              key={area.areaId}
-              className="rounded-lg border border-border p-3 text-sm"
-            >
-              <summary className="cursor-pointer break-words">
-                {area.label} · Độ tin cậy{" "}
-                {GITHUB_CONFIDENCE_LABELS[area.confidence]}
-              </summary>
-              <p className="my-3 whitespace-pre-wrap break-words">
-                {area.explanation}
-              </p>
-              <Citations sources={area.citations} />
-            </details>
+            <div key={area.areaId} className="space-y-2">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 flex-1 break-words">
+                  {area.label} · Độ tin cậy{" "}
+                  {GITHUB_CONFIDENCE_LABELS[area.confidence]} · Ước tính từ
+                  GitHub
+                </span>
+                <EvidenceButton
+                  label={`Mảng kiến thức ${area.label}`}
+                  sources={area.citations}
+                />
+              </div>
+              <details className="rounded-lg border border-border p-3 text-sm">
+                <summary className="cursor-pointer break-words">
+                  {area.label} · Độ tin cậy{" "}
+                  {GITHUB_CONFIDENCE_LABELS[area.confidence]}
+                </summary>
+                <p className="my-3 whitespace-pre-wrap break-words">
+                  {area.explanation}
+                </p>
+                <Citations sources={area.citations} />
+              </details>
+            </div>
           ))
         ) : (
           <p className="text-sm text-muted-foreground">
-            Chưa có suy luận mảng kiến thức.
+            Chưa đủ bằng chứng: chưa có suy luận mảng kiến thức.
           </p>
         )}
       </section>
@@ -498,17 +756,13 @@ export default function GithubProfilePanel({
         </p>
       </section>
       {pending && (
-        <Alert>
-          <AlertTitle>Đang phân tích GitHub…</AlertTitle>
-          <p>
-            Máy chủ đọc hồ sơ và repo công khai, nhận diện công nghệ rồi tạo kết
-            quả. Chưa có tiến độ từng bước.
-          </p>
-          <p>
+        <div className="space-y-3">
+          <PendingChecklist />
+          <p className="text-sm text-muted-foreground">
             Vui lòng giữ trang mở; tối đa 60 giây chờ. Không tự thử lại.{" "}
             {profile && "Kết quả trước vẫn hiển thị bên dưới."}
           </p>
-        </Alert>
+        </div>
       )}
       {linking && <p role="status">Đang mở GitHub…</p>}
       {note && (

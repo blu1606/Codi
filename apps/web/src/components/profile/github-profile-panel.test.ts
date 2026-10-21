@@ -154,6 +154,240 @@ afterEach(async () => {
 });
 
 describe("GitHub profile consent and request UI", () => {
+  async function show(result = profile()) {
+    await act(async () =>
+      root.render(
+        createElement<{ initialProfile: ReturnType<typeof profile> }>(
+          GithubProfilePanel,
+          { initialProfile: result },
+        ),
+      ),
+    );
+  }
+
+  it("derives language shares from positive observed bytes, retaining row citations", async () => {
+    const result = profile();
+    const original = result.technologies[0]!.observations[0]!;
+    result.technologies[0]!.observations.push({
+      ...original,
+      id: "other",
+      technology: "Python",
+      languageBytes: 300,
+      citations: [
+        {
+          ...original.citations[0]!,
+          evidenceId: "languages-2",
+          repositoryId: 2,
+          sourceUrl: "https://api.github.com/repos/linked-user/other/languages",
+        },
+      ],
+    });
+    await show(result);
+    expect(
+      host
+        .querySelector('[aria-label="Tỉ lệ byte TypeScript"]')
+        ?.getAttribute("aria-valuenow"),
+    ).toBe("25");
+    expect(
+      host
+        .querySelector('[aria-label="Tỉ lệ byte Python"]')
+        ?.getAttribute("aria-valuenow"),
+    ).toBe("75");
+    expect(host.textContent).toContain("100 byte · 25%");
+    const evidence = host.querySelector<HTMLButtonElement>(
+      '[aria-label="Xem bằng chứng: Ngôn ngữ Python"]',
+    )!;
+    expect(evidence.tagName).toBe("BUTTON");
+    expect(evidence.tabIndex).toBe(0);
+    evidence.focus();
+    expect(document.activeElement).toBe(evidence);
+    await act(async () => evidence.click());
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("Repo #2");
+    expect(dialog.textContent).not.toContain("Repo #1");
+    expect(dialog.querySelector("a")?.href).toBe(
+      "https://api.github.com/repos/linked-user/other/languages",
+    );
+    await act(async () =>
+      dialog.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+  });
+
+  it.each([undefined, 0, -1])(
+    "omits the language chart without positive byte observations (%s)",
+    async (bytes) => {
+      const result = profile();
+      result.technologies[0]!.observations[0]!.languageBytes = bytes;
+      await show(result);
+      expect(host.querySelector('[role="meter"]')).toBeNull();
+      expect(host.textContent).toContain("chưa có số byte ngôn ngữ dương");
+      expect(host.textContent).toContain(
+        "Không xuất hiện trên GitHub không chứng minh năng lực yếu",
+      );
+    },
+  );
+
+  it.each(["tried", "regular", "deep"] as const)(
+    "shows categorical usage %s without a numeric mastery score",
+    async (usage) => {
+      const result = profile();
+      result.technologies[0]!.usage = usage;
+      result.technologies[0]!.inference!.confidence = "high";
+      await show(result);
+      const technology = host.querySelector('[aria-label="Công nghệ"]')!;
+      expect(technology.textContent).toContain(
+        { tried: "Đã thử", regular: "Dùng thường xuyên", deep: "Dùng sâu" }[
+          usage
+        ],
+      );
+      expect(technology.textContent).toContain("Ước tính từ GitHub");
+      expect(
+        technology.querySelectorAll('[aria-hidden="true"] > span.bg-primary')
+          .length,
+      ).toBe({ tried: 1, regular: 2, deep: 3 }[usage]);
+      const signals = host.querySelector(
+        '[aria-label="Tín hiệu và điều cần xác nhận"]',
+      )!;
+      expect(signals.textContent).toContain(
+        usage === "tried"
+          ? "Không phải điểm yếu đã được chứng minh"
+          : "TypeScript",
+      );
+      expect(technology.textContent).not.toContain("%");
+      expect(
+        signals.querySelector("h4")!.nextElementSibling!.textContent,
+      ).toContain(
+        usage === "tried" ? "Chưa đủ bằng chứng cho điểm mạnh" : "TypeScript",
+      );
+      expect(
+        host.querySelector('[aria-label="Mảng kiến thức"]')?.textContent,
+      ).toContain("Độ tin cậy Thấp");
+    },
+  );
+
+  it("preserves learner overrides without promoting them to inferred strengths", async () => {
+    const result = profile();
+    result.technologies[0]!.usage = "deep";
+    result.technologies[0]!.usageSource = "learner";
+    result.technologies[0]!.learnerEdited = true;
+    result.technologies[0]!.inference = null;
+    await show(result);
+    expect(
+      host.querySelector('[aria-label="Công nghệ"]')?.textContent,
+    ).toContain("Bạn đã sửa");
+    expect(host.textContent).toContain("Chưa đủ bằng chứng cho điểm mạnh");
+  });
+
+  it("keeps low-confidence deep usage in needs-confirmation, not strengths", async () => {
+    const result = profile();
+    result.technologies[0]!.usage = "deep";
+    await show(result);
+    const signals = host.querySelector(
+      '[aria-label="Tín hiệu và điều cần xác nhận"]',
+    )!;
+    expect(
+      signals.querySelector("h4")!.nextElementSibling!.textContent,
+    ).toContain("Chưa đủ bằng chứng cho điểm mạnh");
+    expect(signals.textContent).toContain(
+      "Không phải điểm yếu đã được chứng minh",
+    );
+  });
+
+  it.each(["Công nghệ TypeScript", "Mảng kiến thức Giao diện"])(
+    "reveals retained evidence for %s",
+    async (label) => {
+      await show();
+      const trigger = host.querySelector<HTMLButtonElement>(
+        `[aria-label="Xem bằng chứng: ${label}"]`,
+      )!;
+      expect(trigger.tabIndex).toBe(0);
+      await act(async () => trigger.click());
+      const dialog = document.querySelector('[role="dialog"]')!;
+      expect(dialog.textContent).toContain(`Bằng chứng: ${label}`);
+      expect(dialog.querySelector("a")?.href).toBe(
+        "https://api.github.com/repos/linked-user/project/languages",
+      );
+    },
+  );
+
+  it.each([200, 502])(
+    "cycles only illustrative pending steps and cleans up after HTTP %i",
+    async (status) => {
+      let finish!: (value: Response) => void;
+      fetcher.mockImplementation(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      await mount();
+      await click("Phân tích GitHub");
+      vi.useFakeTimers();
+      const interval = vi.spyOn(globalThis, "setInterval");
+      const clear = vi.spyOn(globalThis, "clearInterval");
+      await submit();
+      const waiting = () =>
+        host.querySelector('[aria-label="Minh hoạ chờ phân tích"]')!;
+      const first = waiting().textContent;
+      expect(first).toContain("không phải tiến độ thực tế");
+      expect(waiting().querySelectorAll("li")).toHaveLength(5);
+      expect(waiting().querySelector('[role="progressbar"]')).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(waiting().textContent).not.toBe(first);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8000);
+      });
+      expect(waiting().textContent).toBe(first);
+      expect(host.querySelector('[aria-label="Kết quả phân tích"]')).toBeNull();
+      expect(waiting().textContent).not.toMatch(
+        /%|\d+\/\d+|Đã xong|Đã hoàn tất/,
+      );
+      await act(async () =>
+        finish(
+          status === 200
+            ? json({ profile: profile() })
+            : json({ error: "Lỗi cuối", code: "failed" }, status),
+        ),
+      );
+      expect(
+        host.querySelector('[aria-label="Minh hoạ chờ phân tích"]'),
+      ).toBeNull();
+      expect(clear).toHaveBeenCalledWith(interval.mock.results[0]!.value);
+      expect(
+        Boolean(host.querySelector('[aria-label="Kết quả phân tích"]')),
+      ).toBe(status === 200);
+      const terminal = host.textContent;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(host.textContent).toBe(terminal);
+      interval.mockRestore();
+      clear.mockRestore();
+    },
+  );
+
+  it("starts no checklist timer on consent cancellation and clears it on pending unmount", async () => {
+    fetcher.mockImplementation(() => new Promise(() => {}));
+    await mount();
+    vi.useFakeTimers();
+    const interval = vi.spyOn(globalThis, "setInterval");
+    const clear = vi.spyOn(globalThis, "clearInterval");
+    await click("Phân tích GitHub");
+    await click("Để sau");
+    expect(interval).not.toHaveBeenCalled();
+    await click("Phân tích GitHub");
+    await submit();
+    await act(async () => root.render(null));
+    expect(clear).toHaveBeenCalledWith(interval.mock.results[0]!.value);
+    expect(fetcher.mock.calls[0]![1].signal.aborted).toBe(true);
+    interval.mockRestore();
+    clear.mockRestore();
+  });
+
   it("does not read GitHub or start analysis on mount, input, cancel or reopen", async () => {
     await mount();
     await click("Phân tích GitHub");
