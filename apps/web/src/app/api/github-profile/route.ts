@@ -33,7 +33,9 @@ function trustedBudget(): GithubProfileTrustedBudget | undefined {
   if (
     !budgetKey ||
     budgetKey.length > 300 ||
-    (slot !== "pre-integration" && slot !== "integrated") ||
+    (slot !== "pre-integration" &&
+      slot !== "diagnostic-preintegration" &&
+      slot !== "integrated") ||
     !candidateSha ||
     !/^[0-9a-f]{40}$/.test(candidateSha)
   )

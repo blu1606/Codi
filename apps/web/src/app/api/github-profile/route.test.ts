@@ -458,55 +458,59 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
       expect(transport).not.toHaveBeenCalled();
     },
   );
-  it("uses session-owned local row for token access and one trusted budget reservation", async () => {
-    const req = request();
-    const response = await POST(req);
-    const data = await response.json();
-    expect(response.status).toBe(200);
-    expect(mocks.store.getLinkedAccount).toHaveBeenCalledExactlyOnceWith(
-      "owner",
-    );
-    expect(mocks.store.claim).toHaveBeenCalledExactlyOnceWith({
-      userId: "owner",
-      accountId: "local-row",
-      githubUserId: "123",
-      consentVersion: "public-github-v1",
-    });
-    expect(mocks.token).toHaveBeenCalledExactlyOnceWith({
-      headers: req.headers,
-      body: { accountId: "local-row" },
-    });
-    expect(mocks.createStore).toHaveBeenCalledExactlyOnceWith(
-      expect.anything(),
-      {
-        budgetKey: "fixture-budget",
-        slot: "pre-integration",
-        candidateSha: "a".repeat(40),
-      },
-    );
-    expect(mocks.store.reserveGeneration).toHaveBeenCalledExactlyOnceWith(
-      claim,
-      expect.objectContaining({
-        model: "openai/gpt-6-luna",
-        inputTokens: 1000,
-      }),
-    );
-    expect(mocks.store.publish).toHaveBeenCalledTimes(1);
-    expect(mocks.store.release).toHaveBeenCalledWith(claim);
-    expect(Object.keys(data)).toEqual(["profile"]);
-    expect(data.profile.identity).toEqual({ id: "123", login: "learner" });
-    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
-    const text = JSON.stringify(data);
-    for (const hidden of [
-      "fixture-user-token",
-      "fixture-app-secret",
-      "fixture-ai-key",
-      "local-row",
-      "maximumCostMicroUsd",
-      "preflightInputTokens",
-    ])
-      expect(text).not.toContain(hidden);
-  });
+  it.each(["pre-integration", "diagnostic-preintegration", "integrated"])(
+    "uses session-owned local row and trusted %s reservation",
+    async (slot) => {
+      vi.stubEnv("GITHUB_PROFILE_BUDGET_SLOT", slot);
+      const req = request();
+      const response = await POST(req);
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(mocks.store.getLinkedAccount).toHaveBeenCalledExactlyOnceWith(
+        "owner",
+      );
+      expect(mocks.store.claim).toHaveBeenCalledExactlyOnceWith({
+        userId: "owner",
+        accountId: "local-row",
+        githubUserId: "123",
+        consentVersion: "public-github-v1",
+      });
+      expect(mocks.token).toHaveBeenCalledExactlyOnceWith({
+        headers: req.headers,
+        body: { accountId: "local-row" },
+      });
+      expect(mocks.createStore).toHaveBeenCalledExactlyOnceWith(
+        expect.anything(),
+        {
+          budgetKey: "fixture-budget",
+          slot,
+          candidateSha: "a".repeat(40),
+        },
+      );
+      expect(mocks.store.reserveGeneration).toHaveBeenCalledExactlyOnceWith(
+        claim,
+        expect.objectContaining({
+          model: "openai/gpt-6-luna",
+          inputTokens: 1000,
+        }),
+      );
+      expect(mocks.store.publish).toHaveBeenCalledTimes(1);
+      expect(mocks.store.release).toHaveBeenCalledWith(claim);
+      expect(Object.keys(data)).toEqual(["profile"]);
+      expect(data.profile.identity).toEqual({ id: "123", login: "learner" });
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      const text = JSON.stringify(data);
+      for (const hidden of [
+        "fixture-user-token",
+        "fixture-app-secret",
+        "fixture-ai-key",
+        "local-row",
+        "maximumCostMicroUsd",
+        "preflightInputTokens",
+      ])
+        expect(text).not.toContain(hidden);
+    },
+  );
   it("waits for publication before resolving a success response", async () => {
     let finish!: () => void;
     mocks.store.publish.mockImplementation(

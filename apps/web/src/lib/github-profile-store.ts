@@ -48,7 +48,11 @@ const requestSchema = claimInput.extend({
 const budgetSchema = z
   .object({
     budgetKey: id,
-    slot: z.enum(["pre-integration", "integrated"]),
+    slot: z.enum([
+      "pre-integration",
+      "diagnostic-preintegration",
+      "integrated",
+    ]),
     candidateSha: z.string().regex(/^[0-9a-f]{40}$/),
   })
   .strict();
@@ -427,7 +431,7 @@ export function createGithubProfileStore(
             )
               throw new GithubProfileStoreError("store_failed");
             if (
-              usage.attempts >= 2 ||
+              usage.attempts >= 3 ||
               usage.cost + reservation.maximumCostMicroUsd > 20_000
             )
               return false;

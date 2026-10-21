@@ -537,7 +537,7 @@ describe("durable private GitHub profile store", () => {
     );
   });
   it.each([
-    [2, 4346],
+    [3, 4346],
     [1, 19_000],
     [3, 0],
   ])(
@@ -552,15 +552,38 @@ describe("durable private GitHub profile store", () => {
       );
     },
   );
-  it("allows the second attempt exactly at the total cost ceiling", async () => {
+  it("allows the third attempt exactly at the total cost ceiling", async () => {
     const task = fixture([
       owner,
       linked,
       profile(),
-      [[1, 20_000 - reservation.maximumCostMicroUsd]],
+      [[2, 20_000 - reservation.maximumCostMicroUsd]],
       [{ request_id: request.requestId }],
     ]);
     expect(await task.store.reserveGeneration(request, reservation)).toBe(true);
+  });
+  it("keeps the diagnostic slot distinct without changing the budget key", async () => {
+    const task = fixture(
+      [
+        owner,
+        linked,
+        profile(),
+        [[1, 2340]],
+        [{ request_id: request.requestId }],
+      ],
+      { ...budget, slot: "diagnostic-preintegration" },
+    );
+    expect(await task.store.reserveGeneration(request, reservation)).toBe(true);
+    const insert = task.calls.find((call) =>
+      call.sql.startsWith('insert into "github_generation_reservations"'),
+    )!;
+    expect(insert.params.slice(0, 2)).toEqual([
+      budget.budgetKey,
+      "diagnostic-preintegration",
+    ]);
+    expect(task.calls.some((call) => /^(update|delete)/.test(call.sql))).toBe(
+      false,
+    );
   });
   it.each([
     [0, -1],
