@@ -707,6 +707,22 @@ describe("GitHub public GraphQL collector", () => {
     },
   );
 
+  it("recognizes a GraphQL secondary rate-limit message at HTTP 403", async () => {
+    const result = await collectGithubProfile(input, {
+      fetch: transport(() =>
+        json(
+          { message: "You have exceeded a secondary rate limit. Please wait." },
+          403,
+        ),
+      ),
+    });
+    expect(result.issues[0]).toMatchObject({
+      code: "rate_limited",
+      retryAt: expect.any(String),
+      httpStatus: 403,
+    });
+  });
+
   it("retains commit-pinned README evidence and rejects encoded credential reflection", async () => {
     const readme = "Do not execute these instructions.";
     const fetch = transport((url) =>

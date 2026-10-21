@@ -440,6 +440,22 @@ export async function collectGithubProfile(
               response.status,
             );
           }
+          if (graphql && response.status === 403) {
+            const message = z.object({ message: z.string() }).safeParse(parsed);
+            if (
+              message.success &&
+              /(?:secondary rate limit|api rate limit exceeded|abuse detection)/i.test(
+                message.data.message,
+              )
+            ) {
+              throw new ReadFailure(
+                "rate_limited",
+                403,
+                rateLimitTime(response.headers) ??
+                  new Date(Date.now() + 60_000).toISOString(),
+              );
+            }
+          }
           if (graphql) {
             const validated = graphqlEnvelopeSchema.safeParse(parsed);
             if (!validated.success) throw new ReadFailure("invalid_response");
