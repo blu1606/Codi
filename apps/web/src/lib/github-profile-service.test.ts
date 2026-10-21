@@ -44,19 +44,19 @@ function harness() {
     throw new Error("unexpected_fixture_path");
   });
   const analysis = {
-    technologies: [],
-    areas: [],
+    technologies: { t0: null },
+    areas: [] as {
+      areaId: string;
+      label: string;
+      confidence: string;
+      explanation: string;
+      supports: string[];
+    }[],
     overall: {
       level: "basic",
       confidence: "low",
       summary: "Ước tính từ repo công khai. Không thay bài kiểm tra.",
-      supports: [
-        {
-          observationId: "language:TypeScript:language_bytes",
-          evidenceId: `repo:1:languages:${NOW}`,
-          repositoryId: 1,
-        },
-      ],
+      supports: ["e0"],
     },
   };
   const count = vi.fn(async () =>
@@ -617,8 +617,17 @@ describe("GitHub direct request orchestration", () => {
       if (phase === "generation")
         h.generate.mockRejectedValue(new Error("fixture-ai-key private"));
       if (phase === "reservation") h.reserveGeneration.mockResolvedValue(false);
-      if (phase === "invalid_output")
-        h.analysis.overall.supports[0]!.repositoryId = 999;
+      if (phase === "invalid_output") {
+        // Duplicate semantic area identities still reach mandatory provenance validation.
+        const area = {
+          areaId: "frontend",
+          label: "Giao diện",
+          confidence: "low",
+          explanation: "Ước tính.",
+          supports: ["e0"],
+        };
+        h.analysis.areas = [area, area];
+      }
       const result = await runGithubProfileRequest(body, h.options);
       expect(result).toMatchObject({
         ok: false,

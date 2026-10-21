@@ -170,19 +170,13 @@ function providerTransport() {
               {
                 type: "output_text",
                 text: JSON.stringify({
-                  technologies: [],
+                  technologies: { t0: null },
                   areas: [],
                   overall: {
                     level: "basic",
                     confidence: "low",
                     summary: "Ước tính từ repo công khai.",
-                    supports: [
-                      {
-                        observationId: "language:TypeScript:language_bytes",
-                        evidenceId: `repo:1:languages:${NOW}`,
-                        repositoryId: 1,
-                      },
-                    ],
+                    supports: ["e0"],
                   },
                 }),
               },

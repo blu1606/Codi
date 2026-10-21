@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { projectGithubProfile } from "./github-profile-analysis-contract";
 import {
   GITHUB_PROFILE_LIMITS,
   type GithubCollectionSnapshot,
@@ -87,7 +88,22 @@ function json(value: unknown, status = 200) {
     headers: { "Content-Type": "application/json" },
   });
 }
-function generation(value: unknown = analysis(), tokens = 1000) {
+function wireAnalysis(handle = "e0") {
+  const value = analysis();
+  const { technologyId: _technologyId, ...technology } = value.technologies[0]!;
+  return {
+    technologies: { t0: { ...technology, supports: [handle] } },
+    areas: [] as {
+      areaId: string;
+      label: string;
+      confidence: string;
+      explanation: string;
+      supports: string[];
+    }[],
+    overall: { ...value.overall, supports: [handle] },
+  };
+}
+function generation(value: unknown = wireAnalysis(), tokens = 1000) {
   return {
     model: "gpt-6-luna",
     status: "completed",
@@ -120,7 +136,7 @@ function harness(tokens = 1000) {
   const count = vi.fn(async () =>
     json({ object: "response.input_tokens", input_tokens: tokens }),
   );
-  const generate = vi.fn(async () => json(generation(analysis(), tokens)));
+  const generate = vi.fn(async () => json(generation(wireAnalysis(), tokens)));
   const transport = vi.fn<typeof fetch>(async (url, init) => {
     calls.push({
       url: String(url),
@@ -286,8 +302,15 @@ describe("bounded one-call GitHub profile synthesis", () => {
           category = "schema";
         }
         if (failure === "provenance") {
-          const value = analysis();
-          value.technologies[0]!.supports[0]!.evidenceId = "PRIVATE_INVENTED";
+          const value = wireAnalysis();
+          const area = {
+            areaId: "frontend",
+            label: "Giao diện",
+            confidence: "low",
+            explanation: "Ước tính.",
+            supports: ["e0"],
+          };
+          value.areas = [area, area];
           reply.output[0]!.content[0]!.text = JSON.stringify(value);
           phase = failure;
         }
@@ -407,21 +430,26 @@ describe("bounded one-call GitHub profile synthesis", () => {
     }
   });
 
-  it("uses a strict wire subset without optional quote properties, retaining full local validation", async () => {
+  it("constrains whole evidence handles under fixed nullable technology keys", async () => {
     const task = harness();
     await generateGithubProfileAnalysis(snapshot(), task.options);
     const format = (task.calls[0]!.body.text as { format: { schema: Wire } })
       .format;
     const properties = format.schema.properties as Wire;
-    const tech = (properties.technologies as Wire).items as Wire;
-    const ref = ((tech.properties as Wire).supports as Wire).items as Wire;
-    expect(ref.required).toEqual([
-      "observationId",
-      "evidenceId",
-      "repositoryId",
-    ]);
-    expect(ref.properties).not.toHaveProperty("quote");
-    expect(ref.additionalProperties).toBe(false);
+    const techs = properties.technologies as Wire;
+    expect(techs.required).toEqual(["t0"]);
+    expect(techs.additionalProperties).toBe(false);
+    const variants = ((techs.properties as Wire).t0 as Wire).anyOf as Wire[];
+    const tech = variants.find((node) => node.type === "object")!;
+    const supports = (tech.properties as Wire).supports as Wire;
+    expect(supports.items).toMatchObject({
+      type: "string",
+      enum: ["e0", "e1"],
+    });
+    expect(tech.properties).not.toHaveProperty("technologyId");
+    expect(JSON.stringify(format.schema)).not.toMatch(
+      /observationId|evidenceId|repositoryId|quote/,
+    );
   });
 
   it("bounds retained excerpts, labels them untrusted, and sends no identity or repository URLs", async () => {
@@ -443,11 +471,11 @@ describe("bounded one-call GitHub profile synthesis", () => {
     expect(data.untrustedRetainedExcerpts[0].truncated).toBe(true);
     expect(JSON.stringify(data)).not.toContain("https://github.com");
     expect(data).not.toHaveProperty("identity");
-    expect(data.observations[0].supports[0]).toEqual({
-      observationId: "framework:React:declared_dependency",
-      evidenceId: "file-1",
-      repositoryId: 1,
+    expect(data.observations[0]).toMatchObject({
+      technologyKey: "t0",
+      supports: ["e0", "e1"],
     });
+    expect(data.untrustedRetainedExcerpts[0].supports).toEqual(["e0"]);
   });
 
   it("does not use excerpt length as a token safety estimate", async () => {
@@ -615,13 +643,15 @@ describe("bounded one-call GitHub profile synthesis", () => {
     if (failure === "token-mismatch") response.usage.input_tokens = 1001;
     if (failure === "output-cap") response.usage.output_tokens = 4097;
     if (failure === "input-cap") response.usage.input_tokens = 16_001;
-    const proposal = analysis();
+    const proposal = wireAnalysis();
     if (failure === "unknown-evidence")
-      proposal.technologies[0]!.supports[0]!.evidenceId = "invented";
+      proposal.technologies.t0.supports = ["invented"];
     if (failure === "unknown-technology")
-      proposal.technologies[0]!.technologyId = "framework:Django";
+      Object.assign(proposal.technologies, {
+        "framework:Django": proposal.technologies.t0,
+      });
     if (failure === "wrong-repository")
-      proposal.technologies[0]!.supports[0]!.repositoryId = 2;
+      Object.assign(proposal.technologies.t0, { repositoryId: 2 });
     if (failure === "url")
       proposal.overall.summary = "https://example.invalid/proof";
     response.output[0]!.content[0]!.text =
@@ -737,6 +767,8 @@ describe("bounded one-call GitHub profile synthesis", () => {
   it("preprocesses exclusions offline and rejects returned excluded evidence", async () => {
     const task = harness();
     task.options.excludedRepositoryIds = [1];
+    // Raw excluded tuples are no longer expressible through a valid handle.
+    task.generate.mockResolvedValue(json(generation(analysis())));
     await expect(
       generateGithubProfileAnalysis(snapshot(), task.options),
     ).rejects.toMatchObject({
@@ -748,6 +780,199 @@ describe("bounded one-call GitHub profile synthesis", () => {
     }[];
     expect(input[1]!.content[0]!.text).not.toContain('"file-1"');
   });
+
+  it("resolves handles after exclusions only to surviving repository tuples", async () => {
+    const task = harness();
+    task.options.excludedRepositoryIds = [1];
+    const result = await generateGithubProfileAnalysis(
+      snapshot(),
+      task.options,
+    );
+    expect(result.analysis).toEqual(analysis(2));
+  });
+
+  it.each(["e0", "e1"])(
+    "resolves %s to the exact existing analysis and citations",
+    async (handle) => {
+      const task = harness();
+      task.generate.mockResolvedValue(json(generation(wireAnalysis(handle))));
+      const source = snapshot();
+      const result = await generateGithubProfileAnalysis(source, task.options);
+      const expected = analysis(handle === "e0" ? 1 : 2);
+      expect(result.analysis).toEqual(expected);
+      expect(projectGithubProfile(source, result.analysis)).toEqual(
+        projectGithubProfile(source, expected),
+      );
+    },
+  );
+
+  it("supports stable area IDs and mixed legitimate handles without inventing a taxonomy", async () => {
+    const task = harness();
+    const wire = wireAnalysis();
+    const area = {
+      areaId: "frontend-testing",
+      label: "Kiểm thử giao diện",
+      confidence: "low",
+      explanation: "Ước tính từ khai báo.",
+      supports: ["e1", "e0"],
+    };
+    wire.areas = [area];
+    wire.overall.supports = ["e1", "e0"];
+    task.generate.mockResolvedValue(json(generation(wire)));
+    const result = await generateGithubProfileAnalysis(
+      snapshot(),
+      task.options,
+    );
+    expect(result.analysis.areas[0]).toEqual({
+      ...area,
+      supports: [
+        analysis(2).overall.supports[0],
+        analysis().overall.supports[0],
+      ],
+    });
+    expect(result.analysis.overall!.supports).toEqual(
+      result.analysis.areas[0]!.supports,
+    );
+  });
+
+  it("permits null technology and overall estimates without fabricating evidence", async () => {
+    const task = harness();
+    task.generate.mockResolvedValue(
+      json(
+        generation({ technologies: { t0: null }, areas: [], overall: null }),
+      ),
+    );
+    const result = await generateGithubProfileAnalysis(
+      snapshot(),
+      task.options,
+    );
+    expect(result.analysis).toEqual({
+      technologies: [],
+      areas: [],
+      overall: null,
+    });
+  });
+
+  it.each([0, 20, 21])(
+    "retains the 40-observation and 20-estimate ceilings (%s estimates)",
+    async (estimates) => {
+      const task = harness();
+      const source = snapshot();
+      source.evidence = [
+        {
+          id: "languages-1",
+          repositoryId: 1,
+          kind: "languages",
+          collectedAt: source.collectedAt,
+          sourceUrl: "https://api.github.com/repos/learner/project-1/languages",
+          bytes: Object.fromEntries(
+            Array.from({ length: 45 }, (_, index) => [`Language${index}`, 100]),
+          ),
+        },
+      ];
+      task.generate.mockImplementation(async () => {
+        const input = task.calls[0]!.body.input as {
+          content: { text: string }[];
+        }[];
+        const data = JSON.parse(input[1]!.content[0]!.text);
+        expect(data.observations).toHaveLength(40);
+        expect(data.observationCoverageTruncated).toBe(true);
+        return json(
+          generation({
+            technologies: Object.fromEntries(
+              data.observations.map(
+                (
+                  item: { technologyKey: string; supports: string[] },
+                  index: number,
+                ) => [
+                  item.technologyKey,
+                  index < estimates
+                    ? {
+                        ...wireAnalysis().technologies.t0,
+                        supports: item.supports,
+                      }
+                    : null,
+                ],
+              ),
+            ),
+            areas: [],
+            overall: null,
+          }),
+        );
+      });
+      const pending = generateGithubProfileAnalysis(source, task.options);
+      if (estimates > 20)
+        await expect(pending).rejects.toMatchObject({
+          code: "invalid_output",
+          reservationState: "consumed",
+        });
+      else
+        expect((await pending).analysis.technologies).toHaveLength(estimates);
+      expect(task.generate).toHaveBeenCalledOnce();
+      expect(task.calls[1]!.body.text).toEqual(task.calls[0]!.body.text);
+    },
+  );
+
+  it.each([
+    "fabricated",
+    "cross-technology",
+    "raw-tuple",
+    "technologyId",
+    "unknown-key",
+    "array-duplicates",
+    "missing-key",
+    "empty-supports",
+    "area-handle",
+    "overall-handle",
+  ])(
+    "rejects invalid handle or binding: %s without retries",
+    async (failure) => {
+      const task = harness();
+      const source = snapshot();
+      // A real but distinct technology, bound to the same retained files.
+      for (const item of source.evidence)
+        if (item.kind === "file")
+          item.text = '{"dependencies":{"react":"19","vitest":"5"}}';
+      const wire = {
+        ...wireAnalysis(),
+        technologies: { ...wireAnalysis().technologies, t1: null },
+      };
+      const technology = wire.technologies.t0 as Wire;
+      if (failure === "fabricated") technology.supports = ["e999"];
+      if (failure === "cross-technology") technology.supports = ["e2"];
+      if (failure === "raw-tuple")
+        technology.supports = analysis().technologies[0]!.supports;
+      if (failure === "technologyId") technology.technologyId = "tool:Vitest";
+      if (failure === "unknown-key")
+        Object.assign(wire.technologies, { t2: technology });
+      if (failure === "array-duplicates")
+        Object.assign(wire, { technologies: [technology, technology] });
+      if (failure === "missing-key")
+        Reflect.deleteProperty(wire.technologies, "t1");
+      if (failure === "empty-supports") technology.supports = [];
+      if (failure === "area-handle")
+        wire.areas = [
+          {
+            areaId: "frontend",
+            label: "Giao diện",
+            confidence: "low",
+            explanation: "Ước tính.",
+            supports: ["e999"],
+          },
+        ];
+      if (failure === "overall-handle") wire.overall.supports = ["e999"];
+      task.generate.mockResolvedValue(json(generation(wire)));
+      await expect(
+        generateGithubProfileAnalysis(source, task.options),
+      ).rejects.toMatchObject({
+        code: "invalid_output",
+        reservationState: "consumed",
+        diagnostics: { phase: "output_schema", category: "schema" },
+      });
+      expect(task.generate).toHaveBeenCalledOnce();
+      expect(task.reserveGeneration).toHaveBeenCalledOnce();
+    },
+  );
 
   it("does not allow caller mutation during reservation to change validated evidence", async () => {
     const task = harness();
