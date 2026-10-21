@@ -928,7 +928,7 @@ export default function CoursesPage() {
                   className="gap-1.5 cursor-pointer"
                 >
                   <Sparkles className="h-4 w-4" />
-                  Hỏi AI Codi
+                  Hỏi AI Codi gợi ý khóa học
                 </Button>
               </div>
             </CardContent>
