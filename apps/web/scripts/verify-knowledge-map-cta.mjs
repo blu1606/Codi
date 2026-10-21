@@ -34,16 +34,23 @@ const users = ["student", "gv"].map((suffix) => ({
   email: `pr160-${run}+${suffix}@example.invalid`,
 }));
 const courses = [];
+const edgeStates = process.argv.includes("--edge-states");
 let connected = false;
 let committed = false;
 let exitCode = 1;
 
-async function course(label) {
+async function course(label, confirmed = true) {
   const id = `qa-pr160-${run}-${label}`;
   courses.push(id);
   await client.query(
     "insert into courses (id,slug,title,category,level,duration,description,instructor_id,status,knowledge_map_status) values ($1,$1,$2,'QA','beginner','30 phút','Disposable PR160 browser fixture',$3,$4,$5)",
-    [id, `QA bản đồ ${label}`, users[1].id, "published", "confirmed"],
+    [
+      id,
+      `QA bản đồ ${label}`,
+      users[1].id,
+      "published",
+      confirmed ? "confirmed" : "ready",
+    ],
   );
   const chapter = randomUUID();
   await client.query(
@@ -112,6 +119,11 @@ async function course(label) {
         [p.id, lesson, i + 1],
       );
   }
+  if (edgeStates && confirmed)
+    await client.query(
+      "insert into skills (course_id,name,review,source) values ($1,'Khái niệm chưa có bài QA','accepted','lecturer')",
+      [id],
+    );
   return { id, skills, lessons };
 }
 
@@ -134,6 +146,7 @@ try {
     );
   }
   const learner = await course("learner");
+  const unconfirmed = edgeStates ? await course("unconfirmed", false) : null;
   await client.query("commit");
   committed = true;
   console.log(
@@ -145,7 +158,9 @@ try {
       [
         path.join(web, "node_modules/@playwright/test/cli.js"),
         "test",
-        "knowledge-map-cta.spec.ts",
+        edgeStates
+          ? "knowledge-map-edge-states.spec.ts"
+          : "knowledge-map-cta.spec.ts",
         "--project=chromium-desktop",
         "--no-deps",
         "--retries=0",
@@ -164,7 +179,10 @@ try {
           E2E_BASE_URL: process.env.E2E_BASE_URL || "http://localhost:3160",
           SEED_ACCOUNT_TARGETS: `pr160-${run}@example.invalid:QA`,
           SEED_ACCOUNT_PASSWORD: password,
-          E2E_KMAP_CTA_FIXTURE: JSON.stringify(learner),
+          E2E_KMAP_CTA_FIXTURE: JSON.stringify({
+            ...learner,
+            unconfirmedCourseId: unconfirmed?.id,
+          }),
         },
       },
     );

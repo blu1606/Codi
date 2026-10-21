@@ -2,6 +2,8 @@
 
 Đối chiếu [review mới](https://github.com/blu1606/Codi/pull/160#pullrequestreview-5594530942): mã nguồn CTA được chấp nhận, cần chứng minh luồng học sau đăng nhập và giữ CTA khi ghép #165.
 
+**Bổ sung sau review tiếp theo:** [bàn giao snapshot tích hợp, source runner, log gốc và 8 case đăng nhập thật cho trạng thái chưa xác nhận/không có bài liên quan](integration-handoff/README.md). Hồ sơ mới giữ rõ build tích hợp cũ chưa có exit 0 và lỗi type của lần thử webpack; không đổi các kết quả lịch sử dưới đây thành lần chạy mới.
+
 ## Phiên bản và kết quả
 
 | Candidate | Phiên bản sản phẩm đã chạy | E2E mới |

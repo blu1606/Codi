@@ -8,6 +8,8 @@ Không sửa API, schema, quyền truy cập hoặc state machine. Đích bài h
 
 ## Kiểm thử
 
+**Bổ sung hồ sơ tích hợp #165:** [snapshot `c20c4ef`, runner/log gốc, 8 case edge-state mới và giới hạn build](integration-handoff/README.md).
+
 **Cập nhật 21/10/2026 sau review PR #160:** đã ghép develop mới nhất và chạy đăng nhập thật trên bản #160 riêng cùng bản tích hợp #165. Cả hai đạt 4/4 ca desktop/mobile × light/dark, kiểm tra CTA, player và server/API prerequisite guard. [Báo cáo, phiên bản và ảnh chụp](real-session-review.md). Các kết quả bên dưới là lượt kiểm thử ban đầu.
 
 - 129 test liên quan pass.
