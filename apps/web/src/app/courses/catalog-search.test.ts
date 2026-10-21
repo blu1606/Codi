@@ -11,11 +11,11 @@ vi.mock("@/components/auth/auth-modal", () => ({ default: () => null }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const catalog = [
-  { id: "react-free", slug: "react-free", title: "React Basics", category: "Frontend", level: "Beginner", description: "Build interfaces", price: 0, enrollmentCount: 20, rating: 4.4 },
-  { id: "react-paid", slug: "react-paid", title: "React Advanced", category: "Frontend", level: "Advanced", description: "Production interfaces", price: 300000, enrollmentCount: 30, rating: 4.8 },
-  { id: "react-api", slug: "react-api", title: "React API integration", category: "Backend", level: "Beginner", description: "Build services", price: 0, enrollmentCount: 10, rating: 4.2 },
-  { id: "view-layout", slug: "view-layout", title: "Interfaces", category: "Frontend", level: "Beginner", description: "Build views", price: 0, enrollmentCount: 5, rating: 4.1 },
-  { id: "dev-path-internal", slug: "dev-path-internal", title: "React internal fixture", category: "Frontend", level: "Beginner", description: "Internal", price: 0, enrollmentCount: 100, rating: 5 },
+  { id: "react-free", slug: "react-free", title: "React Basics", category: "Frontend", level: "Beginner", description: "Build interfaces", price: 0, enrollmentCount: 20, rating: 4.4, topics: ["React", "Hooks"] },
+  { id: "react-paid", slug: "react-paid", title: "React Advanced", category: "Frontend", level: "Advanced", description: "Production interfaces", price: 300000, enrollmentCount: 30, rating: 4.8, topics: ["React", "Architecture"] },
+  { id: "react-api", slug: "react-api", title: "React API integration", category: "Backend", level: "Beginner", description: "Build services", price: 0, enrollmentCount: 10, rating: 4.2, topics: ["API", "Services"] },
+  { id: "view-layout", slug: "view-layout", title: "Interfaces", category: "Frontend", level: "Beginner", description: "Build views", price: 0, enrollmentCount: 5, rating: 4.1, topics: ["Layout"] },
+  { id: "dev-path-internal", slug: "dev-path-internal", title: "React internal fixture", category: "Frontend", level: "Beginner", description: "Internal", price: 0, enrollmentCount: 100, rating: 5, topics: [] },
 ].map((course) => ({ ...course, status: "published", createdAt: "2026-10-01T00:00:00Z", duration: "1 giờ", instructorId: "lecturer", instructorName: "Lecturer", reviewCount: 0, coverImageUrl: null }));
 
 let root: Root | undefined;
@@ -155,5 +155,37 @@ describe("catalog typeahead destination consistency", () => {
     expect(cards()).toEqual(["course-card-react-free"]);
     expect(footer().textContent).toContain("1 kết quả");
     expect(new URLSearchParams(window.location.search).get("price")).toBe("free");
+  });
+
+  it("renders the 4 Flow L1 sort options in dropdown and handles legacy price-desc/price-asc transparently", async () => {
+    await render("/courses?sort=price-desc");
+    const sortSelect = document.querySelector<HTMLSelectElement>("#f-sort")!;
+    expect(sortSelect).not.toBeNull();
+    const options = [...sortSelect.querySelectorAll("option")].map((o) => o.textContent);
+    expect(options).toContain("Phù hợp nhất");
+    expect(options).toContain("Mới nhất");
+    expect(options).toContain("Đánh giá cao nhất");
+    expect(options).toContain("Học nhiều nhất");
+    expect(options).toContain("Giá: cao → thấp (cũ)");
+    expect(sortSelect.value).toBe("price-desc");
+
+    // Changing to a standard option
+    await act(async () => {
+      sortSelect.value = "enrollment";
+      sortSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(new URLSearchParams(window.location.search).get("sort")).toBe("enrollment");
+  });
+
+  it("renders topics with 'Chủ đề' badge in typeahead topResults and clicking pre-fills search", async () => {
+    await render();
+    await type("Hooks");
+    const listbox = document.querySelector('[role="listbox"]')!;
+    expect(listbox).not.toBeNull();
+    const topicButton = [...listbox.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((btn) => btn.textContent?.includes("Chủ đề") && btn.textContent?.includes("Hooks"));
+    expect(topicButton).toBeDefined();
+    await act(async () => topicButton!.click());
+    expect(search().value).toBe("Hooks");
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
   });
 });

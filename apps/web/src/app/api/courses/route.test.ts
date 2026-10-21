@@ -19,11 +19,11 @@ const course = {
   status: "published",
 };
 
-function row(enrollmentCount = "7", coverImageUrl: string | null = "/images/courses/frontend-react-nextjs.svg", status = "published") {
+function row(enrollmentCount = "7", coverImageUrl: string | null = "/images/courses/frontend-react-nextjs.svg", status = "published", topics: string[] = ["React", "Next.js"]) {
   return [course.id, course.slug, course.title, course.category, course.level,
     course.duration, course.description, course.price, course.instructorId, course.rating, course.reviewCount, course.createdAt,
     status,
-    enrollmentCount, coverImageUrl];
+    enrollmentCount, coverImageUrl, "Lecturer", topics];
 }
 
 function request(query = "") {
@@ -39,7 +39,7 @@ describe("GET /api/courses", () => {
   it.each([""])("sorts by title with a stable ID tie-breaker for %s", async (query) => {
     const response = await request(query);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ courses: [{ ...course, enrollmentCount: 7, coverImageUrl: "/images/courses/frontend-react-nextjs.svg" }] });
+    expect(await response.json()).toEqual({ courses: [{ ...course, enrollmentCount: 7, coverImageUrl: "/images/courses/frontend-react-nextjs.svg", instructorName: "Lecturer", topics: ["React", "Next.js"] }] });
     const [sql, params] = mocks.execute.mock.calls[0];
     expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('order by "courses"."title" asc, "courses"."id" asc');
@@ -65,15 +65,16 @@ describe("GET /api/courses", () => {
     expect(params).toEqual(["published", 4]);
   });
 
-  it("left-joins enrollment counts and covers without dropping courses with no matching rows", async () => {
-    mocks.execute.mockResolvedValue({ rows: [row("0", null)] });
+  it("left-joins enrollment counts, covers and skills without dropping courses with no matching rows", async () => {
+    mocks.execute.mockResolvedValue({ rows: [row("0", null, "published", [])] });
     const response = await request();
-    expect(await response.json()).toEqual({ courses: [{ ...course, enrollmentCount: 0, coverImageUrl: null }] });
+    expect(await response.json()).toEqual({ courses: [{ ...course, enrollmentCount: 0, coverImageUrl: null, instructorName: "Lecturer", topics: [] }] });
     const [sql] = mocks.execute.mock.calls[0];
     expect(sql).toContain('count("student_enrollments"."id")');
     expect(sql).not.toContain("count(*)");
     expect(sql).toContain('left join "student_enrollments" on "student_enrollments"."course_id" = "courses"."id"');
     expect(sql).toContain('left join "course_details" on "course_details"."course_id" = "courses"."id"');
+    expect(sql).toContain('left join "skills" on "skills"."course_id" = "courses"."id"');
     expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('"course_details"."cover_image_url"');
     expect(sql).toContain('group by "courses"."id", "course_details"."cover_image_url"');

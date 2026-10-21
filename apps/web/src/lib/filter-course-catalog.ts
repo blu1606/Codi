@@ -11,7 +11,14 @@ export interface CourseCatalogEntry {
 }
 
 export type CatalogPriceFilter = "all" | "free" | "paid";
-export type CatalogSortOption = "popular" | "newest" | "price-asc" | "price-desc" | "rating";
+export type CatalogSortOption =
+  | "popular"
+  | "newest"
+  | "price-asc"
+  | "price-desc"
+  | "rating"
+  | "enrollment"
+  | "relevant";
 
 export interface ExtendedFilterOptions {
   price?: CatalogPriceFilter;
@@ -78,19 +85,34 @@ export function filterCourseCatalog<T extends CourseCatalogEntry>(
   const result = [...filtered];
   switch (sortOption) {
     case "popular":
+    case "relevant":
+      // Phù hợp nhất (default): ưu tiên theo mức độ khớp từ khóa nếu có query, fallback theo enrollment & rating
+      if (query) {
+        return result.sort((a, b) => {
+          const aTitle = a.title.toLowerCase().includes(query) ? 2 : 0;
+          const bTitle = b.title.toLowerCase().includes(query) ? 2 : 0;
+          if (aTitle !== bTitle) return bTitle - aTitle;
+          return (b.enrollmentCount ?? 0) - (a.enrollmentCount ?? 0);
+        });
+      }
+      return result.sort((a, b) => (b.enrollmentCount ?? 0) - (a.enrollmentCount ?? 0));
+    case "enrollment":
+      // Học nhiều nhất: theo enrollmentCount giảm dần
       return result.sort((a, b) => (b.enrollmentCount ?? 0) - (a.enrollmentCount ?? 0));
     case "newest":
+      // Mới nhất: theo createdAt giảm dần
       return result.sort((a, b) => {
         const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
       });
+    case "rating":
+      // Đánh giá cao nhất: theo rating giảm dần
+      return result.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     case "price-asc":
       return result.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
     case "price-desc":
       return result.sort((a, b) => (b.price ?? 0) - (a.price ?? 0));
-    case "rating":
-      return result.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     default:
       return result;
   }

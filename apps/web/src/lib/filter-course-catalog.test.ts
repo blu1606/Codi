@@ -179,6 +179,20 @@ describe("filterCourseCatalog", () => {
       const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "rating" });
       expect(result.map((c) => c.id)).toEqual(["c3", "c1", "c2"]);
     });
+
+    it("sắp xếp theo học nhiều nhất (enrollment): số học viên giảm dần", () => {
+      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "enrollment" });
+      expect(result.map((c) => c.id)).toEqual(["c2", "c1", "c3"]);
+    });
+
+    it("sắp xếp theo phù hợp nhất (relevant): ưu tiên khớp tiêu đề, fallback theo enrollment", () => {
+      const relevantList = [
+        { id: "c1", title: "Lập trình Web", category: "Frontend", level: "Beginner", description: "Học React cơ bản", price: 100000, enrollmentCount: 500, rating: 4.8 },
+        { id: "c2", title: "React chuyên sâu", category: "Frontend", level: "Beginner", description: "Học chuyên sâu", price: 100000, enrollmentCount: 50, rating: 4.8 },
+      ];
+      const result = filterCourseCatalog(relevantList, "React", "Tất cả", "Tất cả cấp độ", { sort: "relevant" });
+      expect(result.map((c) => c.id)).toEqual(["c2", "c1"]);
+    });
   });
 
   describe("getTypeaheadSuggestions", () => {

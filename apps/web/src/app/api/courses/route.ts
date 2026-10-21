@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, count, desc, eq, inArray } from "drizzle-orm";
+import { asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/services";
-import { courses, courseDetails, studentEnrollments, user } from "@codi-1/db";
+import { courses, courseDetails, skills, studentEnrollments, user } from "@codi-1/db";
 
 export async function GET(request: NextRequest) {
   const sort = request.nextUrl.searchParams.get("sort") ?? "title";
@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
       : eq(courses.status, "published");
 
     // Public catalogue fields only: lifecycle, pricing audit and knowledge-map columns stay internal.
+    // Topics are gathered from accepted / edited skills for each course.
+    const topicsAgg = sql<string[]>`COALESCE(ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN ${skills.review} IN ('accepted', 'edited') THEN ${skills.name} END), NULL), ARRAY[]::text[])`.as("topics");
+
     const query = db
       .select({
         id: courses.id, slug: courses.slug, title: courses.title, category: courses.category,
@@ -33,11 +36,13 @@ export async function GET(request: NextRequest) {
         status: courses.status,
         enrollmentCount, coverImageUrl: courseDetails.coverImageUrl,
         instructorName: user.name,
+        topics: topicsAgg,
       })
       .from(courses)
       .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
       .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))
       .leftJoin(user, eq(courses.instructorId, user.id))
+      .leftJoin(skills, eq(skills.courseId, courses.id))
       .where(statusFilter)
       .groupBy(courses.id, courseDetails.coverImageUrl, user.name)
       .orderBy(...(sort === "popular"
