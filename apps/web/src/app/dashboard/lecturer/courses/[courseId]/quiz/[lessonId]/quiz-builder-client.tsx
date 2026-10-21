@@ -15,13 +15,12 @@ import {
   Loader2,
   Plus,
   Save,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
-import { Button, buttonVariants } from "@codi-1/ui/components/button";
+import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
@@ -29,19 +28,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@codi-1/ui/components/card";
-import { Checkbox } from "@codi-1/ui/components/checkbox";
 import { Input } from "@codi-1/ui/components/input";
-import { Label } from "@codi-1/ui/components/label";
 import { Textarea } from "@codi-1/ui/components/textarea";
 import { cn } from "@codi-1/ui/lib/utils";
 import {
-  generateAiQuizQuestions,
   type QuizQuestionInput,
   saveQuizData,
 } from "../../actions";
 
 interface QuizQuestionState extends QuizQuestionInput {
   id?: number;
+  optionIds?: number[];
+}
+
+interface CourseLessonOption {
+  id: string;
+  title: string;
+  chapterTitle: string;
 }
 
 interface QuizBuilderClientProps {
@@ -54,6 +57,7 @@ interface QuizBuilderClientProps {
     isLocked: boolean;
     passingScore: number;
     questions: QuizQuestionState[];
+    allCourseLessons?: CourseLessonOption[];
   };
 }
 
@@ -63,13 +67,12 @@ export function QuizBuilderClient({
   initialData,
 }: QuizBuilderClientProps) {
   const router = useRouter();
-  const { course, lesson, isEntry: defaultIsEntry, isLocked } = initialData;
+  const { course, lesson, isLocked, allCourseLessons = [] } = initialData;
 
-  const isEntryRoute = lessonId === "entry";
+  const isEntry = lessonId === "entry";
 
   // Trạng thái bài quiz
   const [passingScore, setPassingScore] = useState<number>(initialData.passingScore || 70);
-  const [isEntry, setIsEntry] = useState<boolean>(defaultIsEntry || isEntryRoute);
   const [questions, setQuestions] = useState<QuizQuestionState[]>(
     initialData.questions && initialData.questions.length > 0
       ? initialData.questions
@@ -85,14 +88,6 @@ export function QuizBuilderClient({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-
-  // Trạng thái AI Generator panel
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [aiCount, setAiCount] = useState<number>(3);
-  const [aiDifficulty, setAiDifficulty] = useState<"easy" | "medium" | "hard">("medium");
-
-  // Đếm số câu do AI sinh ra
-  const aiGeneratedCount = questions.filter((q) => q.aiGenerated).length;
 
   // Thêm một câu hỏi mới rỗng
   const handleAddQuestion = () => {
@@ -141,6 +136,16 @@ export function QuizBuilderClient({
     setQuestions((prev) => {
       const copy = [...prev];
       copy[qIndex] = { ...copy[qIndex], text };
+      return copy;
+    });
+    setIsDirty(true);
+  };
+
+  // Gắn bài học cho câu hỏi Diagnostic (Finding 8)
+  const handleQuestionLessonChange = (qIndex: number, lessonIdValue: string | null) => {
+    setQuestions((prev) => {
+      const copy = [...prev];
+      copy[qIndex] = { ...copy[qIndex], lessonId: lessonIdValue };
       return copy;
     });
     setIsDirty(true);
@@ -207,6 +212,7 @@ export function QuizBuilderClient({
         return prev;
       }
       const newOpts = copy[qIndex].options.filter((_, idx) => idx !== optIndex);
+      const newOptIds = copy[qIndex].optionIds?.filter((_, idx) => idx !== optIndex);
       let newCorrect = copy[qIndex].correctIndex;
       if (newCorrect === optIndex) {
         newCorrect = 0;
@@ -216,43 +222,12 @@ export function QuizBuilderClient({
       copy[qIndex] = {
         ...copy[qIndex],
         options: newOpts,
+        optionIds: newOptIds,
         correctIndex: newCorrect,
       };
       return copy;
     });
     setIsDirty(true);
-  };
-
-  // Sinh câu hỏi bằng AI
-  const handleGenerateAi = async () => {
-    if (isLocked) return;
-    try {
-      setIsGeneratingAi(true);
-      const res = await generateAiQuizQuestions(
-        courseId,
-        lessonId,
-        aiCount,
-        aiDifficulty
-      );
-
-      if (res.success && res.questions.length > 0) {
-        setQuestions((prev) => {
-          // Nếu danh sách hiện tại chỉ có 1 câu rỗng thì thay thế
-          const isSingleEmpty =
-            prev.length === 1 &&
-            !prev[0].text.trim() &&
-            prev[0].options.every((o) => !o.trim());
-
-          return isSingleEmpty ? res.questions : [...prev, ...res.questions];
-        });
-        setIsDirty(true);
-        toast.success(`AI đã gợi ý thành công ${res.questions.length} câu hỏi mới!`);
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Không thể sinh câu hỏi bằng AI lúc này.");
-    } finally {
-      setIsGeneratingAi(false);
-    }
   };
 
   // Lưu toàn bộ Quiz
@@ -298,12 +273,13 @@ export function QuizBuilderClient({
         passingScore,
         isEntry,
         questions: questions.map((q) => ({
+          id: q.id,
           text: q.text,
           explanation: q.explanation || undefined,
           correctIndex: q.correctIndex,
           options: q.options,
-          aiGenerated: q.aiGenerated,
-          aiReviewed: true, // Khi giảng viên lưu thì toàn bộ câu hỏi AI đã được review
+          optionIds: q.optionIds,
+          lessonId: isEntry ? q.lessonId || null : undefined,
         })),
       });
 
@@ -403,7 +379,7 @@ export function QuizBuilderClient({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          BỐ CỤC CHÍNH: 2 CỘT (CÂU HỎI & CÔNG CỤ / THIẾT LẬP)
+          BỐ CỤC CHÍNH: 2 CỘT (CÂU HỎI & THIẾT LẬP)
           ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* CỘT TRÁI (2/3): DANH SÁCH CÂU HỎI */}
@@ -429,10 +405,7 @@ export function QuizBuilderClient({
           {questions.map((q, qIndex) => (
             <Card
               key={qIndex}
-              className={cn(
-                "border border-border/80 shadow-xs transition-colors",
-                q.aiGenerated && !q.aiReviewed && "border-primary/40 bg-primary/5"
-              )}
+              className="border border-border/80 shadow-xs transition-colors"
             >
               <CardHeader className="py-3 px-4 sm:px-6 bg-muted/30 border-b border-border/60">
                 <div className="flex items-center justify-between gap-3">
@@ -440,12 +413,6 @@ export function QuizBuilderClient({
                     <span className="font-bold text-sm text-foreground">
                       Câu {qIndex + 1}
                     </span>
-                    {q.aiGenerated && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-primary/10 text-primary border border-primary/20">
-                        <Sparkles className="size-3" />
-                        Gợi ý bởi AI
-                      </span>
-                    )}
                   </div>
 
                   {!isLocked && (
@@ -499,6 +466,31 @@ export function QuizBuilderClient({
                     className="text-sm"
                   />
                 </div>
+
+                {/* Gắn bài học tương ứng cho câu hỏi Diagnostic (Finding 8) */}
+                {isEntry && (
+                  <div className="space-y-1.5 pt-2 border-t border-border/40">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <span>Bài học tương ứng (BKT liên kết kỹ năng)</span>
+                    </label>
+                    <select
+                      value={q.lessonId || ""}
+                      disabled={isLocked}
+                      onChange={(e) => handleQuestionLessonChange(qIndex, e.target.value || null)}
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground"
+                    >
+                      <option value="">-- Chọn bài học để BKT đánh giá kỹ năng --</option>
+                      {allCourseLessons.map((ls) => (
+                        <option key={ls.id} value={ls.id}>
+                          {ls.chapterTitle ? `[${ls.chapterTitle}] ` : ""}{ls.title}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground">
+                      BKT đọc kỹ năng của bài học này để cập nhật mức độ thành thạo khi học viên làm bài kiểm tra đầu vào.
+                    </p>
+                  </div>
+                )}
 
                 {/* Danh sách lựa chọn trả lời */}
                 <div className="space-y-2.5">
@@ -623,7 +615,7 @@ export function QuizBuilderClient({
           )}
         </div>
 
-        {/* CỘT PHẢI (1/3): THIẾT LẬP VÀ CÔNG CỤ AI */}
+        {/* CỘT PHẢI (1/3): THIẾT LẬP */}
         <div className="space-y-6">
           {/* Card: Thiết lập bài trắc nghiệm */}
           <Card className="border border-border/80 shadow-xs">
@@ -659,29 +651,6 @@ export function QuizBuilderClient({
                 </p>
               </div>
 
-              {/* Tuỳ chọn: Bài kiểm tra đầu vào */}
-              {!isEntryRoute && (
-                <div className="flex items-start gap-2.5 pt-2 border-t border-border/60">
-                  <Checkbox
-                    id="is-entry-checkbox"
-                    checked={isEntry}
-                    disabled={isLocked}
-                    onCheckedChange={(checked) => {
-                      setIsEntry(!!checked);
-                      setIsDirty(true);
-                    }}
-                  />
-                  <div className="space-y-0.5">
-                    <Label htmlFor="is-entry-checkbox" className="text-xs font-medium cursor-pointer">
-                      Đặt làm bài kiểm tra đầu vào (Diagnostic)
-                    </Label>
-                    <p className="text-[11px] text-muted-foreground">
-                      Mỗi khoá học có tối đa 1 bài kiểm tra đầu vào.
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {/* Cảnh báo bài kiểm tra đầu vào cần >= 5 câu */}
               {isEntry && questions.length < 5 && (
                 <Alert variant="warning" className="p-3">
@@ -701,87 +670,9 @@ export function QuizBuilderClient({
                   <span>Tổng số câu hỏi:</span>
                   <span className="font-semibold text-foreground">{questions.length}</span>
                 </div>
-                {aiGeneratedCount > 0 && (
-                  <div className="flex justify-between">
-                    <span>Gợi ý bởi AI:</span>
-                    <span className="font-semibold text-primary">{aiGeneratedCount} câu</span>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
-
-          {/* Card: Công cụ Gợi ý câu hỏi bằng AI */}
-          {!isLocked && (
-            <Card className="border border-primary/30 shadow-xs bg-primary/5">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-primary" />
-                  <CardTitle className="text-base text-primary">Gợi ý câu hỏi AI</CardTitle>
-                </div>
-                <CardDescription className="text-xs">
-                  AI sẽ tự động soạn các câu hỏi trắc nghiệm dựa trên chủ đề của bài học.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Số lượng câu */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Số lượng câu hỏi</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[3, 5, 8].map((count) => (
-                      <button
-                        key={count}
-                        type="button"
-                        onClick={() => setAiCount(count)}
-                        className={cn(
-                          "py-1.5 text-xs font-medium rounded-md border text-center transition-all cursor-pointer",
-                          aiCount === count
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background border-border hover:border-primary/40 text-foreground"
-                        )}
-                      >
-                        {count} câu
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Độ khó */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-foreground">Mức độ thử thách</label>
-                  <select
-                    value={aiDifficulty}
-                    onChange={(e) =>
-                      setAiDifficulty(e.target.value as "easy" | "medium" | "hard")
-                    }
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground"
-                  >
-                    <option value="easy">Cơ bản (Khái niệm cốt lõi)</option>
-                    <option value="medium">Trung bình (Ứng dụng & Thực hành)</option>
-                    <option value="hard">Nâng cao (Phân tích & Tình huống)</option>
-                  </select>
-                </div>
-
-                <Button
-                  onClick={handleGenerateAi}
-                  disabled={isGeneratingAi}
-                  className="w-full gap-2 text-xs cursor-pointer shadow-sm"
-                >
-                  {isGeneratingAi ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" />
-                      AI đang soạn câu hỏi...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="size-3.5" />
-                      Tạo câu hỏi bằng AI
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>
