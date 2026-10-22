@@ -1,0 +1,11 @@
+▲ Next.js 16.3.5
+- Local:         http://localhost:3144
+- Network:       http://[local-network-address]:3144
+✓ Ready in 829ms
+✓ Running next.config.ts took 223ms
+2026-10-22T11:58:51.033Z WARN [Better Auth]: [better-auth] Cookie integration plugin "next-cookies" should be placed last in the plugins array. Plugins with `hooks.after` running after it may set cookies that are not forwarded to the framework cookie store. Move your cookie integration plugin to the end of the `plugins` array to avoid missing `Set-Cookie` headers.
+2026-10-22T11:58:52.447Z WARN [Better Auth]: [better-auth] Cookie integration plugin "next-cookies" should be placed last in the plugins array. Plugins with `hooks.after` running after it may set cookies that are not forwarded to the framework cookie store. Move your cookie integration plugin to the end of the `plugins` array to avoid missing `Set-Cookie` headers.
+Command failed with exit code 4294967295
+command [node node_modules/next/dist/bin/next start --port 3144] failed
+try running the same command without varlock
+if you get a different result, varlock may be the problem...

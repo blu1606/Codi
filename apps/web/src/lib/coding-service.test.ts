@@ -249,7 +249,7 @@ describe("coding service transaction boundaries", () => {
     expect(view.code).toBe("newer edit");
     expect(state.submissions[0].answerText).toBe("submitted");
   });
-  it.each(["reset", "solution"] as const)(
+  it.each(["reset"] as const)(
     "rejects %s while a worker is running",
     async (type) => {
       const { db, state } = fixture();

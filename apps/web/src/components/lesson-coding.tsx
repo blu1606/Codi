@@ -30,6 +30,7 @@ import {
 } from "@codi-1/ui/components/dialog";
 import { Sheet } from "@codi-1/ui/components/sheet";
 import { cn } from "@codi-1/ui/lib/utils";
+import { highlightCode } from "./code-highlight";
 import type { CodingCommand, CodingView } from "@/lib/coding-contract";
 
 export default function LessonCoding({
@@ -50,6 +51,8 @@ export default function LessonCoding({
   const [filter, setFilter] = useState<"all" | "pass" | "fail">("all");
   const [help, setHelp] = useState<string | null>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
+  const painted = useRef<HTMLPreElement>(null);
+  const gutter = useRef<HTMLDivElement>(null);
   const value = useRef("");
   const persisted = useRef("");
   const live = useRef(false);
@@ -99,30 +102,33 @@ export default function LessonCoding({
     },
     [endpoint],
   );
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setError(null);
     try {
-      const response = await fetch(endpoint, { cache: "no-store" });
+      const response = await fetch(endpoint, { cache: "no-store", signal });
       const next = await response.json();
       if (!response.ok)
         throw new Error(next.error ?? "Không thể tải bài tập code.");
-      if (live.current) {
+      if (live.current && !signal?.aborted) {
         setData(next);
         setCode(next.code);
         value.current = next.code;
         persisted.current = next.code;
       }
     } catch (e) {
-      if (live.current)
+      if (live.current && !signal?.aborted)
         setError(
           e instanceof Error ? e.message : "Không thể tải bài tập code.",
         );
     }
   }, [endpoint]);
   useEffect(() => {
+    const controller = new AbortController();
     live.current = true;
-    void load();
+    void load(controller.signal);
     return () => {
+      // A late load from a previous effect must never replace the learner's edits.
+      controller.abort();
       live.current = false;
       if (timer.current) clearTimeout(timer.current);
       if (value.current !== persisted.current)
@@ -241,7 +247,7 @@ export default function LessonCoding({
             <Alert variant="destructive">
               <AlertDescription>
                 {error}{" "}
-                <Button variant="outline" onClick={load}>
+                <Button variant="outline" onClick={() => void load()}>
                   Thử lại
                 </Button>
               </AlertDescription>
@@ -258,7 +264,7 @@ export default function LessonCoding({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="@container/coding min-w-0 space-y-5 rounded-xl border bg-card p-4 text-card-foreground sm:p-6"
+      className="@container/coding min-w-0 space-y-4"
     >
       <header className="space-y-3 border-b pb-5">
         <div className="space-y-2">
@@ -329,8 +335,8 @@ export default function LessonCoding({
           </AlertDescription>
         </Alert>
       )}
-      <div className="grid min-w-0 items-start gap-5 @[56rem]/coding:grid-cols-[minmax(15rem,1fr)_minmax(0,2.6fr)] @[56rem]/coding:gap-x-6">
-        <div className="min-w-0 space-y-5 rounded-lg bg-muted/30 p-4 @[56rem]/coding:row-span-2">
+      <div className="grid min-w-0 items-start gap-4 @[42rem]/coding:grid-cols-[minmax(17rem,1fr)_minmax(0,1.4fr)]">
+        <div className="min-w-0 space-y-5 rounded-lg border bg-card p-4 @[42rem]/coding:sticky @[42rem]/coding:top-20 @[42rem]/coding:row-span-2">
           <h3 className="font-semibold">Yêu cầu</h3>
           <ol className="list-decimal space-y-4 pl-5 text-sm leading-relaxed marker:font-medium marker:text-muted-foreground">
             {(data.instructions ?? "Hoàn thành hàm để đạt tất cả kiểm thử.")
@@ -391,17 +397,17 @@ export default function LessonCoding({
           </details>
         </div>
         <div className="min-w-0 space-y-3">
-          <div className="overflow-hidden rounded-lg border">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2 text-sm">
+          <div className="overflow-hidden rounded-lg bg-code-background text-code-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-code-bar px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span className="font-mono">
-                  bai-lam.{data.language === "python" ? "py" : "js"}
+                  {data.language === "python" ? "main.py" : "main.js"}
                 </span>
-                <span role="status" className="text-xs text-muted-foreground">
+                <span role="status" className="text-xs text-code-muted">
                   {saving ? "Đang lưu nháp…" : "Đã lưu nháp"}
                 </span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 text-code-muted [&_button]:text-code-foreground [&_button:hover]:bg-code-background [&_button:hover]:text-code-foreground">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -428,103 +434,129 @@ export default function LessonCoding({
                 </Button>
               </div>
             </div>
-            <div className="flex min-w-0 bg-background">
+            <div className="flex min-w-0">
               <div
+                ref={gutter}
                 aria-hidden="true"
-                className="max-h-96 shrink-0 overflow-hidden border-r bg-muted/40 px-2 py-3 text-right font-mono text-sm leading-6 text-muted-foreground"
+                className="max-h-96 w-11 shrink-0 overflow-hidden border-r border-code-bar px-2 py-3 text-right font-mono text-sm leading-6 text-code-muted"
               >
-                {code.split("\n").map((_, i) => (
-                  <div
-                    key={i}
-                    className={
-                      run?.outcomes.some((o) => o.line === i + 1)
-                        ? "bg-destructive-soft font-bold text-destructive"
-                        : ""
+                {Array.from(
+                  { length: Math.max(12, code.split("\n").length) },
+                  (_, i) => (
+                    <div
+                      key={i}
+                      className={
+                        run?.outcomes.some((o) => o.line === i + 1)
+                          ? "bg-code-bar font-bold text-code-error"
+                          : ""
+                      }
+                    >
+                      {i + 1}
+                    </div>
+                  ),
+                )}
+              </div>
+              <div className="relative min-w-0 flex-1">
+                <pre
+                  ref={painted}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 m-0 overflow-hidden p-3 font-mono text-sm leading-6 [tab-size:2]"
+                >
+                  {highlightCode(code)}
+                  {"\n"}
+                </pre>
+                <textarea
+                  ref={editor}
+                  value={code}
+                  onChange={(e) => change(e.target.value)}
+                  maxLength={65536}
+                  disabled={busy}
+                  aria-label="Code bài làm"
+                  aria-describedby={`${id}-keys`}
+                  spellCheck={false}
+                  wrap="off"
+                  className="relative block min-h-72 w-full min-w-0 resize-y overflow-auto bg-transparent p-3 font-mono text-sm leading-6 text-transparent caret-code-foreground outline-none [tab-size:2] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onScroll={(e) => {
+                    if (painted.current) {
+                      painted.current.scrollTop = e.currentTarget.scrollTop;
+                      painted.current.scrollLeft = e.currentTarget.scrollLeft;
                     }
-                  >
-                    {i + 1}
-                  </div>
-                ))}
+                    if (gutter.current)
+                      gutter.current.scrollTop = e.currentTarget.scrollTop;
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      if (data.available) void execute("run");
+                    } else if (
+                      e.shiftKey &&
+                      e.altKey &&
+                      e.key.toLowerCase() === "f"
+                    ) {
+                      e.preventDefault();
+                      void format();
+                    } else if (e.key === "Escape") tabEscape.current = true;
+                    else if (
+                      e.key === "Tab" &&
+                      !e.shiftKey &&
+                      !tabEscape.current
+                    ) {
+                      e.preventDefault();
+                      const node = e.currentTarget,
+                        start = node.selectionStart,
+                        end = node.selectionEnd;
+                      change(code.slice(0, start) + "  " + code.slice(end));
+                      requestAnimationFrame(() =>
+                        node.setSelectionRange(start + 2, start + 2),
+                      );
+                    } else if (e.key === "Tab") tabEscape.current = false;
+                  }}
+                />
               </div>
-              <textarea
-                ref={editor}
-                value={code}
-                onChange={(e) => change(e.target.value)}
-                maxLength={65536}
-                disabled={busy}
-                aria-label="Code bài làm"
-                aria-describedby={`${id}-keys`}
-                spellCheck={false}
-                wrap="off"
-                className="min-h-72 min-w-0 flex-1 resize-y overflow-auto bg-background p-3 font-mono text-sm leading-6 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring @[56rem]/coding:min-h-80"
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                    e.preventDefault();
-                    if (data.available) void execute("run");
-                  } else if (
-                    e.shiftKey &&
-                    e.altKey &&
-                    e.key.toLowerCase() === "f"
-                  ) {
-                    e.preventDefault();
-                    void format();
-                  } else if (e.key === "Escape") tabEscape.current = true;
-                  else if (
-                    e.key === "Tab" &&
-                    !e.shiftKey &&
-                    !tabEscape.current
-                  ) {
-                    e.preventDefault();
-                    const node = e.currentTarget,
-                      start = node.selectionStart,
-                      end = node.selectionEnd;
-                    change(code.slice(0, start) + "  " + code.slice(end));
-                    requestAnimationFrame(() =>
-                      node.setSelectionRange(start + 2, start + 2),
-                    );
-                  } else if (e.key === "Tab") tabEscape.current = false;
-                }}
-              />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-3 py-3">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  disabled={busy || !data.available}
-                  aria-busy={busy}
-                  onClick={() => execute("run")}
-                >
-                  {busy ? (
-                    <LoaderCircle className="size-4 animate-spin" />
-                  ) : (
-                    <Play className="size-4" />
-                  )}
-                  Chạy{" "}
-                  <kbd className="rounded border px-1 text-xs">Ctrl/⌘ ↵</kbd>
-                </Button>
-                <Button
-                  disabled={busy || !data.available}
-                  onClick={() => execute("submit")}
-                >
-                  Nộp bài
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {data.tests.length} test mẫu · Chấm toàn bộ khi nộp
-              </p>
+            <p
+              id={`${id}-keys`}
+              className="px-3 pb-3 text-xs leading-relaxed text-code-muted"
+            >
+              Tab: thụt lề · Ctrl/⌘ + Enter: chạy · Esc rồi Tab: rời trình soạn
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 py-1">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={busy || !data.available}
+                aria-busy={busy}
+                onClick={() => execute("run")}
+              >
+                {busy ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <Play className="size-4" />
+                )}
+                Chạy <kbd className="rounded border px-1 text-xs">Ctrl/⌘ ↵</kbd>
+              </Button>
+              <Button
+                disabled={busy || !data.available}
+                onClick={() => execute("submit")}
+              >
+                Nộp bài
+              </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {data.tests.length} test mẫu · Chấm toàn bộ khi nộp
+            </p>
           </div>
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
             <p>Chỉ lần nộp gần nhất được tính.</p>
             <details>
               <summary className="cursor-pointer">Phím tắt</summary>
-              <p id={`${id}-keys`} className="pt-2">
+              <p className="pt-2">
                 Tab: thụt lề · Esc rồi Tab: rời editor · Shift+Alt+F: định dạng
               </p>
             </details>
           </div>
         </div>
-        <div className="min-w-0 overflow-hidden rounded-lg border @[56rem]/coding:col-start-2">
+        <div className="min-w-0 overflow-hidden rounded-lg border @[42rem]/coding:col-start-2">
           <div
             className="flex flex-wrap gap-1 border-b bg-muted/20 px-3 py-2"
             role="tablist"

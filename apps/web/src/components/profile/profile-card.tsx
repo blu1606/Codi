@@ -45,6 +45,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
   const [avatarUrl, setAvatarUrl] = useState(user.image || null);
   const [pendingAvatar, setPendingAvatar] = useState<(AvatarSelection & { previewUrl: string }) | null>(null);
   const [saving, setSaving] = useState(false);
+  const isProfileDirty = draftName.trim() !== name || pendingAvatar !== null;
 
   useEffect(() => () => {
     if (pendingAvatar?.kind === "file") URL.revokeObjectURL(pendingAvatar.previewUrl);
@@ -62,6 +63,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
       toast.error("Họ và tên không được để trống");
       return;
     }
+    if (!isProfileDirty) return;
     try {
       setSaving(true);
       let res: Response;
@@ -172,7 +174,7 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
             </div>
 
             <div className="flex items-center gap-2 pt-2">
-              <Button type="submit" disabled={saving} className="gap-1.5">
+              <Button type="submit" disabled={saving || !draftName.trim() || !isProfileDirty} className="gap-1.5">
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -227,8 +229,8 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
             <div className="space-y-1 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-primary" />
-                <span>{user.email}</span>
+                <Mail className="h-4 w-4 shrink-0 text-primary" />
+                <span className="min-w-0 break-all">{user.email}</span>
               </div>
               {user.createdAt && (
                 <div className="flex items-center gap-2 text-xs">

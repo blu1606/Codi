@@ -1,0 +1,30 @@
+{
+  "provenance": "Exact command strings from saved original tool invocations. Includes harness attempts as well as completed runs; success must be read from the corresponding result chunks.",
+  "calls": [
+    {
+      "timestamp": "2026-10-21T14:01:23.435Z",
+      "callId": "call_1f60db939f4841f48d0be9ae6efb26a4",
+      "command": "$env:NODE_ENV = 'production'; $env:BETTER_AUTH_URL = 'http://localhost:3144'; node node_modules/varlock/bin/cli.js run -- node node_modules/next/dist/bin/next build"
+    },
+    {
+      "timestamp": "2026-10-21T14:05:01.168Z",
+      "callId": "call_a8120b05740f45d2815307bdea5bcf20",
+      "command": "$env:NODE_ENV = 'production'; $env:BETTER_AUTH_URL = 'http://localhost:3144'; node node_modules/varlock/bin/cli.js run -- node node_modules/next/dist/bin/next start --port 3144"
+    },
+    {
+      "timestamp": "2026-10-21T14:05:01.168Z",
+      "callId": "call_a8120b05740f45d2815307bdea5bcf20",
+      "command": "node ../../node_modules/tsx/dist/cli.mjs --env-file=.env scripts/verify-study-activity-browser.ts --allow-dev-db"
+    },
+    {
+      "timestamp": "2026-10-21T14:14:02.777Z",
+      "callId": "call_97b904c8d44f471280422fb28f5f9d70",
+      "command": "$env:CHROMIUM_PATH = 'C:/Users/steve/AppData/Local/ms-playwright/chromium-1228/chrome-win64/chrome.exe'; node ../../node_modules/tsx/dist/cli.mjs --env-file=.env scripts/verify-study-activity-browser.ts --allow-dev-db"
+    },
+    {
+      "timestamp": "2026-10-21T14:18:53.628Z",
+      "callId": "call_d4606ab03b124f6981137df07e91357e",
+      "command": "$env:CHROMIUM_PATH = 'C:/Users/steve/AppData/Local/ms-playwright/chromium-1228/chrome-win64/chrome.exe'; node ../../node_modules/tsx/dist/cli.mjs --env-file=.env scripts/verify-study-activity-browser.ts --allow-dev-db --visual-only"
+    }
+  ]
+}

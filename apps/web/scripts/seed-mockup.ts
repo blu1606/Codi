@@ -246,7 +246,7 @@ async function seedCourse(tx: Store, data: MockupSnapshot, course: MockupCourse,
     if (lesson.code) {
       const exercise = codingExerciseFromMockup(lesson.title, lesson.code);
       const assessmentId = await upsertAssessment(tx, { courseId: course.id, lessonId, type: "coding" }, { title: exercise.title, instructions: exercise.instructions, maxScore: 100, status: "published" });
-      const content = { language: exercise.language, starterCode: exercise.starterCode, hints: exercise.hints, solutionCode: exercise.solutionCode, solutionVerifiedAt: exercise.solutionVerifiedAt };
+      const content = { language: exercise.language, fileName: exercise.fileName, tutorialSteps: exercise.tutorialSteps, starterCode: exercise.starterCode, hints: exercise.hints, solutionCode: exercise.solutionCode, solutionVerifiedAt: exercise.solutionVerifiedAt };
       const [row] = await tx.insert(codingExercises).values({ assessmentId, ...content }).onConflictDoUpdate({ target: codingExercises.assessmentId, set: { ...content, updatedAt: new Date() } }).returning({ id: codingExercises.id });
       for (const [position, t] of exercise.tests.entries()) {
         const test = { name: t.name, input: t.input, expectedOutput: t.expectedOutput, isSample: t.isSample };

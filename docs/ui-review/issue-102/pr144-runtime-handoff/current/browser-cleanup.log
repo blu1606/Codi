@@ -1,0 +1,12 @@
+Study QA: stale A start/stop rejected (same lesson); waiting for two real 30s heartbeats.
+Study QA: same lesson heartbeat 1 credited 29s; total 29s.
+Study QA: same lesson heartbeat 2 credited 30s; total 59s.
+Study QA: stale A start/stop rejected (different lesson); waiting for two real 30s heartbeats.
+Study QA: different lesson heartbeat 1 credited 29s; total 29s.
+Study QA: different lesson heartbeat 2 credited 30s; total 59s.
+Study QA: desktop-light reload acquired a new owner, credited 29s on a real heartbeat, and stopped on navigation.
+Study QA: desktop-dark reload acquired a new owner, credited 29s on a real heartbeat, and stopped on navigation.
+Study QA: mobile-light reload acquired a new owner, credited 30s on a real heartbeat, and stopped on navigation.
+Study QA: mobile-dark reload acquired a new owner, credited 29s on a real heartbeat, and stopped on navigation.
+PR144 browser follow-up passed: two real heartbeat renewals in both tab cases; reload/tracking and header/mobile matrix; no AI requests.
+Owned QA user/course/activity removed; zero sessions or study clocks/days remain.
