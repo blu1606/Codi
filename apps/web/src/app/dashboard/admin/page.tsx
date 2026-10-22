@@ -71,14 +71,14 @@ export default async function AdminDashboardPage() {
       icon: ClipboardCheck,
     },
     {
-      href: "/dashboard/admin/orders?status=pending&overdue=1",
+      href: "/dashboard/admin/orders?status=pending&overdue=1&range=all",
       count: data.todo.overdueOrdersCount,
       title: "Đơn chờ thanh toán quá hạn",
       meta: "Đơn chờ thanh toán quá 24 giờ, có thể cần đối soát",
       icon: CreditCard,
     },
     {
-      href: "/dashboard/admin/vouchers",
+      href: "/dashboard/admin/vouchers?filter=expiring",
       count: data.todo.expiringVouchersCount,
       title: "Voucher sắp hết lượt",
       meta: "Đã dùng từ 90% số lượt",
