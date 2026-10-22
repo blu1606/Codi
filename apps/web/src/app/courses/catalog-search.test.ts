@@ -232,6 +232,19 @@ describe("catalog typeahead destination consistency", () => {
     await render(normalizedUrl);
     const sortSelectReload = document.querySelector<HTMLSelectElement>("#f-sort")!;
     expect(sortSelectReload.value).toBe("popular");
+    // Assert controls và chips vẫn giữ nguyên bộ lọc cat & level sau remount
+    const catSelectReload = document.querySelector<HTMLSelectElement>("#f-category")!;
+    expect(catSelectReload.value).toBe("Frontend");
+    const levelSelectReload = document.querySelector<HTMLSelectElement>("#f-level")!;
+    expect(levelSelectReload.value).toBe("Beginner");
+    const reloadedParams = new URLSearchParams(window.location.search);
+    expect(reloadedParams.get("sort")).toBeNull();
+    expect(reloadedParams.get("cat")).toBe("Frontend");
+    expect(reloadedParams.get("level")).toBe("Beginner");
+    const chipsReloaded = [...document.querySelectorAll("span")].map((el) => el.textContent);
+    expect(chipsReloaded.some((text) => text?.includes("Danh mục: Frontend"))).toBe(true);
+    expect(chipsReloaded.some((text) => text?.includes("Trình độ: Cơ bản"))).toBe(true);
+    expect(chipsReloaded.some((text) => text?.includes("Sắp xếp:"))).toBe(false);
     expect(cards()).toEqual(["course-card-B", "course-card-A", "course-card-C"]);
 
     await act(async () => root?.unmount());
