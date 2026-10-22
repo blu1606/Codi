@@ -351,6 +351,7 @@ export function OrdersTableClient({
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
         orders={orders}
+        initialRange={initialFilter.range}
         currentStatus={initialFilter.status}
         currentFilter={{
           status: initialFilter.status,

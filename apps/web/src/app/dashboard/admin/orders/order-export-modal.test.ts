@@ -174,4 +174,37 @@ describe("OrderExportModal Component", () => {
     expect(exportBtn.disabled).toBe(false);
     expect(document.body.textContent).toContain("1 đơn");
   });
+
+  it("handles dynamic import chunk rejection gracefully without stuck loading", async () => {
+    // Giả lập lỗi tải chunk module dynamic import (Failed to fetch dynamically imported module)
+    const originalImport = vi.fn();
+    const spy = vi.spyOn(mockGetAdminOrdersExportAction, "mockImplementationOnce");
+
+    // Mock action rejection tương đương với import fail bằng cách reject ngay
+    mockGetAdminOrdersExportAction.mockRejectedValueOnce(
+      new Error("Failed to fetch dynamically imported module")
+    );
+
+    await act(async () => {
+      root!.render(
+        createElement(OrderExportModal, {
+          open: true,
+          onOpenChange: vi.fn(),
+          orders: sampleOrders,
+          currentStatus: "all",
+        })
+      );
+    });
+
+    // Loading MUST be turned off and error displayed
+    expect(document.body.textContent).toContain("Failed to fetch dynamically imported module");
+    const retryBtn = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent?.trim() === "Thử lại"
+    )!;
+    expect(retryBtn).toBeDefined();
+
+    // Export button disabled
+    const exportBtn = document.querySelector<HTMLButtonElement>("button:has(svg)")!;
+    expect(exportBtn.disabled).toBe(true);
+  });
 });

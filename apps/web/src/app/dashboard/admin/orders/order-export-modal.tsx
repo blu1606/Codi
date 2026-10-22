@@ -28,6 +28,7 @@ export function OrderExportModal({
   orders: fallbackOrders,
   currentStatus,
   currentFilter,
+  initialRange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -39,8 +40,13 @@ export function OrderExportModal({
     overdue?: boolean;
     reconciliation?: boolean;
   };
+  initialRange?: string;
 }) {
-  const [range, setRange] = useState<"7" | "30" | "90" | "all">("30");
+  const [range, setRange] = useState<"7" | "30" | "90" | "all">(
+    initialRange && ["7", "30", "90", "all"].includes(initialRange)
+      ? (initialRange as "7" | "30" | "90" | "all")
+      : "30"
+  );
   const [applyFilter, setApplyFilter] = useState(true);
   const [exportData, setExportData] = useState<AdminOrderSummaryItem[] | null>(null);
   const [loadingData, setLoadingData] = useState(false);
@@ -59,6 +65,15 @@ export function OrderExportModal({
     paidAt: true,
   });
 
+  // Khi modal mở, khởi tạo kỳ xuất mặc định từ trang nếu có
+  useEffect(() => {
+    if (open) {
+      if (initialRange && ["7", "30", "90", "all"].includes(initialRange)) {
+        setRange(initialRange as "7" | "30" | "90" | "all");
+      }
+    }
+  }, [open, initialRange]);
+
   // Query actual orders according to export range and filter preset
   useEffect(() => {
     if (!open) return;
@@ -67,35 +82,40 @@ export function OrderExportModal({
     setLoadingData(true);
     setLoadError(null);
 
-    import("../actions").then(({ getAdminOrdersExportAction }) => {
-      // Khi applyFilter = true: áp dụng đầy đủ bộ lọc hiện tại (status, q, overdue, reconciliation)
-      // Khi applyFilter = false: mockup admin.js giữ nguyên query tìm kiếm/status hiện tại nhưng chỉ thay đổi range
-      // Tuy nhiên theo mockup note, khi không chọn "Áp dụng bộ lọc hiện tại", người dùng muốn xuất toàn bộ trạng thái của kỳ đó
-      const queryFilter = {
-        range,
-        status: applyFilter ? ((currentFilter?.status || currentStatus) as any) : "all",
-        q: applyFilter ? (currentFilter?.q || "") : (currentFilter?.q || ""),
-        overdueOnly: applyFilter ? !!currentFilter?.overdue : false,
-        reconciliationOnly: applyFilter ? !!currentFilter?.reconciliation : false,
-      };
+    // Xử lý bao trùm cả import chunk và gọi server action
+    (async () => {
+      try {
+        const { getAdminOrdersExportAction } = await import("../actions");
+        if (cancelled) return;
 
-      getAdminOrdersExportAction(queryFilter)
-        .then((fetchedOrders) => {
-          if (!cancelled) {
-            setExportData(fetchedOrders);
-            setLoadError(null);
-          }
-        })
-        .catch((err) => {
-          if (!cancelled) {
-            setExportData(null);
-            setLoadError(err?.message || "Không thể tải dữ liệu xuất đơn hàng.");
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoadingData(false);
-        });
-    });
+        // Mockup admin.js (dòng 258, 300):
+        // const expQ = Object.assign({}, Codi.query(), exportState.applyFilter ? {} : { range: exportState.range });
+        // Khi applyFilter = true: giữ nguyên toàn bộ query/filter hiện tại của trang (status, q, overdue, reconciliation)
+        // Khi applyFilter = false: chỉ thay đổi range theo modal, vẫn giữ nguyên query hiện tại (q, status, overdue, reconciliation)
+        const queryFilter = {
+          range,
+          status: (currentFilter?.status || currentStatus || "all") as any,
+          q: currentFilter?.q || "",
+          overdueOnly: !!currentFilter?.overdue,
+          reconciliationOnly: !!currentFilter?.reconciliation,
+        };
+
+        const fetchedOrders = await getAdminOrdersExportAction(queryFilter);
+        if (!cancelled) {
+          setExportData(fetchedOrders);
+          setLoadError(null);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setExportData(null);
+          setLoadError(err?.message || "Không thể tải dữ liệu xuất đơn hàng.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingData(false);
+        }
+      }
+    })();
 
     return () => {
       cancelled = true;
