@@ -6,6 +6,7 @@ export * from "./knowledge-map";
 export * from "./publication";
 export * from "./commerce";
 export * from "./student-profile";
+export * from "./study-activity";
 export * from "./assessments";
 export * from "./coding-exercises";
 export * from "./learning";

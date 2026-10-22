@@ -115,6 +115,9 @@ export async function toggleUserBan(
     }
 
     if (ban) {
+      if (!reason || !reason.trim()) {
+        throw new Error("Lý do vô hiệu hoá là bắt buộc.");
+      }
       const targetIsAdmin = activeAdmins.some(a => a.userId === targetUserId);
 
       if (targetIsAdmin) {
@@ -130,7 +133,7 @@ export async function toggleUserBan(
       .update(user)
       .set({
         banned: ban,
-        banReason: ban ? (reason ?? "Vi pham noi quy nen tang.") : null,
+        banReason: ban ? (reason ? reason.trim() : "Vi pham noi quy nen tang.") : null,
       })
       .where(eq(user.id, targetUserId));
 
@@ -138,4 +141,45 @@ export async function toggleUserBan(
       await tx.delete(session_table).where(eq(session_table.userId, targetUserId));
     }
   });
+}
+
+export type UserImpactCounts = {
+  ownedCourses: number;
+  pendingOrders: number;
+  taughtCourses: number;
+};
+
+export async function getUserImpactCounts(targetUserId: string): Promise<UserImpactCounts> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { studentEnrollments } = await import("@codi-1/db/schema/student-profile");
+  const { courses } = await import("@codi-1/db/schema/courses");
+  const { orders } = await import("@codi-1/db/schema/commerce");
+
+  // 1. owned courses that are published
+  const [ownedRes] = await db
+    .select({ val: count() })
+    .from(studentEnrollments)
+    .innerJoin(courses, eq(studentEnrollments.courseId, courses.id))
+    .where(and(eq(studentEnrollments.userId, targetUserId), eq(courses.status, "published")));
+
+  // 2. pending orders
+  const [ordersRes] = await db
+    .select({ val: count() })
+    .from(orders)
+    .where(and(eq(orders.userId, targetUserId), eq(orders.status, "pending")));
+
+  // 3. taught courses that are published
+  const [taughtRes] = await db
+    .select({ val: count() })
+    .from(courses)
+    .where(and(eq(courses.instructorId, targetUserId), eq(courses.status, "published")));
+
+  return {
+    ownedCourses: Number(ownedRes?.val ?? 0),
+    pendingOrders: Number(ordersRes?.val ?? 0),
+    taughtCourses: Number(taughtRes?.val ?? 0),
+  };
 }
