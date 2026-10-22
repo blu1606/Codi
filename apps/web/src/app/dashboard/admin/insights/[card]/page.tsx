@@ -7,6 +7,7 @@ import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import {
+  FunnelChart,
   Heatmap,
   HorizontalBarChart,
   InlineBar,
@@ -115,16 +116,7 @@ export default async function AdminInsightCardDetailPage({
       title = a3.title;
       question = a3.question;
       table = a3.table;
-      content = (
-        <HorizontalBarChart
-          items={a3.steps.map((s, i) => ({
-            label: `${i + 1}. ${s.label}`,
-            value: s.value,
-            max: a3.steps[0]?.value || 1,
-          }))}
-          sort={false}
-        />
-      );
+      content = <FunnelChart steps={a3.steps} />;
       break;
     }
     case "a4": {

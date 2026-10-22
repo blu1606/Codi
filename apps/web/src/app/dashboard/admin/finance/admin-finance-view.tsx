@@ -10,6 +10,7 @@ import {
   AnalyticsGrid,
   AnalyticsToolbar,
   BarChart,
+  FunnelChart,
   HorizontalBarChart,
   InlineBar,
   KpiGrid,
@@ -338,14 +339,7 @@ export function AdminFinanceView() {
                 note={b5.note}
                 table={b5.table}
               >
-                <HorizontalBarChart
-                  items={b5.steps.map((s, i) => ({
-                    label: `${i + 1}. ${s.label}`,
-                    value: s.value,
-                    max: b5.steps[0]?.value || 1,
-                  }))}
-                  sort={false}
-                />
+                <FunnelChart steps={b5.steps} />
                 <h4 className="text-xs font-semibold mt-4 mb-2">Theo nguồn</h4>
                 <div className="overflow-x-auto rounded border border-border">
                   <table className="w-full text-xs">

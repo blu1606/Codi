@@ -8,6 +8,7 @@ import { auth, db } from "@/services";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import {
   BarChart,
+  FunnelChart,
   HorizontalBarChart,
   InlineBar,
   KpiGrid,
@@ -194,14 +195,7 @@ export default async function AdminFinanceCardDetailPage({
       table = b5.table;
       content = (
         <div className="space-y-4">
-          <HorizontalBarChart
-            items={b5.steps.map((s, i) => ({
-              label: `${i + 1}. ${s.label}`,
-              value: s.value,
-              max: b5.steps[0]?.value || 1,
-            }))}
-            sort={false}
-          />
+          <FunnelChart steps={b5.steps} />
           <h4 className="text-xs font-semibold mt-4 mb-2">Theo nguồn</h4>
           <div className="overflow-x-auto rounded border border-border">
             <table className="w-full text-xs">

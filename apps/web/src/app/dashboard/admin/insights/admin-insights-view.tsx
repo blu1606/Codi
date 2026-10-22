@@ -8,6 +8,7 @@ import {
   AnalyticsCard,
   AnalyticsGrid,
   AnalyticsToolbar,
+  FunnelChart,
   Heatmap,
   HorizontalBarChart,
   InlineBar,
@@ -150,14 +151,7 @@ export function AdminInsightsView() {
             detailHref="/dashboard/admin/insights/a3"
             table={a3.table}
           >
-            <HorizontalBarChart
-              items={a3.steps.map((s, i) => ({
-                label: `${i + 1}. ${s.label}`,
-                value: s.value,
-                max: a3.steps[0]?.value || 1,
-              }))}
-              sort={false}
-            />
+            <FunnelChart steps={a3.steps} />
           </AnalyticsCard>
 
           {/* A7: Course Status Breakdown */}
