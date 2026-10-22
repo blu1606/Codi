@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -8,6 +8,7 @@ import { Menu, ShoppingCart } from "lucide-react";
 import { getRoleHome, ROLE } from "@codi-1/auth/roles";
 import { Button } from "@codi-1/ui/components/button";
 import { Sheet } from "@codi-1/ui/components/sheet";
+import { Skeleton } from "@codi-1/ui/components/skeleton";
 import { cn } from "@codi-1/ui/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import { useActiveRole } from "@/hooks/use-active-role";
@@ -17,13 +18,18 @@ import NotificationMenu from "./notification-menu";
 import BrandLogo from "./brand-logo";
 import CartNavButton from "./cart-nav-button";
 
+const subscribeToHydration = () => () => {};
+const clientHydrated = () => true;
+const serverHydrated = () => false;
+
 export default function Header() {
   const pathname = usePathname();
+  // The session store can resolve before this streamed header hydrates.
+  // Keep its first client markup identical to the server's account placeholder.
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientHydrated, serverHydrated);
   const { data: session, isPending } = authClient.useSession();
-  const { role, loading, error, retry } = useActiveRole(session?.user.id);
+  const { role, loading, error, retry } = useActiveRole(hydrated ? session?.user.id : undefined);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
   const isLesson = /^\/learn\/[^/]+\/(?!onboarding(?:\/|$))[^/]+\/?$/.test(pathname);
   if (pathname === "/settings") return null;
 
@@ -44,13 +50,12 @@ export default function Header() {
       <div className="flex min-w-0 items-center gap-2 md:gap-8">
         <Button variant="ghost" size="icon" className={cn(!isLesson && "md:hidden")} aria-label="Mở menu" onClick={() => setMobileOpen(true)}><Menu aria-hidden="true" /></Button>
         <Link href={getRoleHome(role)} data-codi-logo aria-label="Codi — Trang chính" className="flex min-h-11 shrink-0 items-center font-display text-xl font-semibold"><BrandLogo /></Link>
-        <div data-codi-intro-nav aria-busy={isPending || loading}>{nav(false)}</div>
+        <div data-codi-intro-nav className="hidden md:block" aria-busy={!hydrated || isPending || loading}>{nav(false)}</div>
       </div>
       <div data-codi-intro-account className="flex shrink-0 items-center gap-1 sm:gap-2">
         {role === ROLE.LEARNER && <CartNavButton />}
         <ModeToggle />
-        {mounted && <NotificationMenu />}
-        {mounted && <UserMenu role={role} />}
+        {hydrated ? <><NotificationMenu /><UserMenu role={role} /></> : <Skeleton className="size-11 rounded-full" aria-label="Đang tải tài khoản" />}
       </div>
     </div>
     {error && <div role="status" className="mx-auto flex max-w-[1200px] items-center gap-2 px-4 pb-2 text-xs text-destructive">Không thể tải menu theo vai trò.<Button variant="link" size="sm" onClick={retry}>Thử lại</Button></div>}

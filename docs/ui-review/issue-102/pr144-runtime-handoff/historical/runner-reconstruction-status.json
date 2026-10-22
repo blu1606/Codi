@@ -1,0 +1,6 @@
+{
+  "patchTimestamp": "2026-10-21T14:18:53.628Z",
+  "patchCallId": "call_d4606ab03b124f6981137df07e91357e",
+  "exactHistoricalRunnerBytesAvailable": false,
+  "reason": "No pre-run source copy/hash was captured; preserve the actual patch and original outputs without presenting a later hash as contemporaneous."
+}
