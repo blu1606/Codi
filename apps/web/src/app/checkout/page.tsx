@@ -247,7 +247,7 @@ export default function CheckoutPage({
               setLastCheckedAt(new Date().toLocaleTimeString("vi-VN"));
 
               if (checkData.status === "paid") {
-                router.push(`/checkout/success?order=${order.id}`);
+                router.push(`/checkout/success?order=${order.id}` as import("next").Route);
                 return;
               }
 
@@ -316,7 +316,7 @@ export default function CheckoutPage({
       setLastCheckedAt(new Date().toLocaleTimeString("vi-VN"));
 
       if (data.status === "paid") {
-        router.push(`/checkout/success?order=${order.id}`);
+        router.push(`/checkout/success?order=${order.id}` as import("next").Route);
         return;
       }
 
@@ -491,7 +491,7 @@ export default function CheckoutPage({
             Codi đã nhận đủ tiền lúc {formatDatetime(order.paidAt)}.
           </AlertDescription>
           <div className="pt-3">
-            <Button size="sm" render={<Link href={`/checkout/success?order=${order.id}`} />} nativeButton={false}>
+            <Button size="sm" render={<Link href={`/checkout/success?order=${order.id}` as import("next").Route} />} nativeButton={false}>
               Xem kết quả và bắt đầu học
             </Button>
           </div>
