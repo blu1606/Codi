@@ -229,8 +229,8 @@ export default function ProfileCard({ user, roles = [] }: ProfileCardProps) {
 
             <div className="space-y-1 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-primary" />
-                <span>{user.email}</span>
+                <Mail className="h-4 w-4 shrink-0 text-primary" />
+                <span className="min-w-0 break-all">{user.email}</span>
               </div>
               {user.createdAt && (
                 <div className="flex items-center gap-2 text-xs">

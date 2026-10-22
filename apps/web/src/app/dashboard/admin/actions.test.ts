@@ -239,6 +239,25 @@ describe("toggleUserBan action", () => {
     mockHeaders.mockResolvedValue(new Headers());
   });
 
+  it.each([undefined, "", "   ", "\t\n"])(
+    "rejects a blank deactivation reason (%j) without changing the user or deleting sessions",
+    async (reason) => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+      mockRequireRole.mockResolvedValue(undefined);
+      const { mockTx } = createMockTx([{ id: "role-1", userId: "admin-1" }]);
+      mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
+
+      const result = await toggleUserBan("target-user", true, reason).catch(
+        (error: unknown) => error,
+      );
+
+      expect.soft(result).toBeInstanceOf(Error);
+      expect.soft(mockTx.update).not.toHaveBeenCalled();
+      expect.soft(mockTx.delete).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ message: "Lý do vô hiệu hoá là bắt buộc." });
+    },
+  );
+
   it("ném lỗi Unauthorized khi không có phiên đăng nhập", async () => {
     mockGetSession.mockResolvedValue(null);
     await expect(toggleUserBan("target-1", true)).rejects.toThrow("Unauthorized");
@@ -328,7 +347,7 @@ describe("toggleUserBan action", () => {
 
     mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-    await toggleUserBan(targetUserId, true, "Vi pham");
+    await toggleUserBan(targetUserId, true, "  Vi pham  ");
 
     expect(mockTx.update).toHaveBeenCalled();
     expect(mockSet).toHaveBeenCalledWith({
@@ -390,7 +409,11 @@ describe("toggleUserBan action", () => {
   });
 });
 
+<<<<<<< HEAD
 describe("getUserImpactCounts and getAdminDashboardData actions", () => {
+=======
+describe("getUserImpactCounts action", () => {
+>>>>>>> origin/develop
   beforeEach(() => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());
@@ -402,12 +425,15 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
     await expect(getUserImpactCounts("target-1")).rejects.toThrow("Unauthorized");
   });
 
+<<<<<<< HEAD
   it("getAdminDashboardData ném lỗi Unauthorized khi không có session", async () => {
     mockGetSession.mockResolvedValue(null);
     const { getAdminDashboardData } = await import("./actions");
     await expect(getAdminDashboardData()).rejects.toThrow("Unauthorized");
   });
 
+=======
+>>>>>>> origin/develop
   it("getUserImpactCounts ném lỗi nếu người gọi không phải ADMIN", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-non-admin", email: "student@codi.vn" },
@@ -417,6 +443,7 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
     await expect(getUserImpactCounts("target-1")).rejects.toThrow("Forbidden");
   });
 
+<<<<<<< HEAD
   it("getAdminDashboardData ném lỗi nếu người gọi không phải ADMIN", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-non-admin", email: "student@codi.vn" },
@@ -426,6 +453,8 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
     await expect(getAdminDashboardData()).rejects.toThrow("Forbidden");
   });
 
+=======
+>>>>>>> origin/develop
   it("getUserImpactCounts trả về số liệu tác động chính xác", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "admin-1", email: "admin@codi.vn" },
@@ -727,5 +756,3 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
     expect(data.recentOrders).toEqual([]);
   });
 });
-
-
