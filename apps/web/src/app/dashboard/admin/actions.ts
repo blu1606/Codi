@@ -260,7 +260,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     .from(courses)
     .where(eq(courses.status, "pending"));
 
-  // 2. Don cho thanh toan qua han (> 24h)
+  // 2. Don cho thanh toan qua han (>= 24h)
   const [overdueOrdersRes] = await db
     .select({ count: count() })
     .from(orders)

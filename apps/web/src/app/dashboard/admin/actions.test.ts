@@ -509,6 +509,10 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
     const twoDaysAgo = new Date(now - 48 * 60 * 60 * 1000);
     const oneHourAgo = new Date(now - 60 * 60 * 1000);
 
+    const exactly24hAgo = new Date(now - 24 * 60 * 60 * 1000);
+    const almost24hAgo = new Date(now - (24 * 60 * 60 * 1000 - 60 * 1000)); // 23h59m
+    const over24hAgo = new Date(now - (24 * 60 * 60 * 1000 + 60 * 1000)); // 24h01m
+
     // Call 1: paidOrders30dRes
     // Call 2: allOrders30dRes
     // Call 3: newLearnersRes
@@ -593,6 +597,24 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
                   buyerName: "Tran Van C",
                   buyerEmail: "c@codi.vn",
                 },
+                {
+                  id: 104,
+                  code: "ORD-004",
+                  totalAmount: 400000,
+                  status: "pending",
+                  createdAt: exactly24hAgo,
+                  buyerName: "Le Van D",
+                  buyerEmail: "d@codi.vn",
+                },
+                {
+                  id: 105,
+                  code: "ORD-005",
+                  totalAmount: 450000,
+                  status: "pending",
+                  createdAt: almost24hAgo,
+                  buyerName: "Pham Van E",
+                  buyerEmail: "e@codi.vn",
+                },
               ]),
             }),
           }),
@@ -615,13 +637,16 @@ describe("getUserImpactCounts and getAdminDashboardData actions", () => {
       expiringVouchersCount: 1,
       inactiveUsersCount: 4,
     });
-    expect(data.recentOrders).toHaveLength(3);
+    expect(data.recentOrders).toHaveLength(5);
     expect(data.recentOrders[0].isOverdue).toBe(true);
     expect(data.recentOrders[0].buyerName).toBe("Nguyen Van A");
     expect(data.recentOrders[1].isOverdue).toBe(false);
     expect(data.recentOrders[1].buyerName).toBe("Người dùng");
     expect(data.recentOrders[1].buyerEmail).toBe("");
     expect(data.recentOrders[2].isOverdue).toBe(false);
+    // Boundary tests:
+    expect(data.recentOrders[3].isOverdue).toBe(true); // exactly 24h is overdue (inclusive <=)
+    expect(data.recentOrders[4].isOverdue).toBe(false); // 23h59m is not overdue
   });
 
   it("getAdminDashboardData trả về giá trị mặc định 0 khi các truy vấn rỗng", async () => {
