@@ -409,11 +409,7 @@ describe("toggleUserBan action", () => {
   });
 });
 
-<<<<<<< HEAD
 describe("getUserImpactCounts and getAdminDashboardData actions", () => {
-=======
-describe("getUserImpactCounts action", () => {
->>>>>>> origin/develop
   beforeEach(() => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());
@@ -425,15 +421,12 @@ describe("getUserImpactCounts action", () => {
     await expect(getUserImpactCounts("target-1")).rejects.toThrow("Unauthorized");
   });
 
-<<<<<<< HEAD
   it("getAdminDashboardData ném lỗi Unauthorized khi không có session", async () => {
     mockGetSession.mockResolvedValue(null);
     const { getAdminDashboardData } = await import("./actions");
     await expect(getAdminDashboardData()).rejects.toThrow("Unauthorized");
   });
 
-=======
->>>>>>> origin/develop
   it("getUserImpactCounts ném lỗi nếu người gọi không phải ADMIN", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-non-admin", email: "student@codi.vn" },
@@ -443,7 +436,6 @@ describe("getUserImpactCounts action", () => {
     await expect(getUserImpactCounts("target-1")).rejects.toThrow("Forbidden");
   });
 
-<<<<<<< HEAD
   it("getAdminDashboardData ném lỗi nếu người gọi không phải ADMIN", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-non-admin", email: "student@codi.vn" },
@@ -452,9 +444,6 @@ describe("getUserImpactCounts action", () => {
     const { getAdminDashboardData } = await import("./actions");
     await expect(getAdminDashboardData()).rejects.toThrow("Forbidden");
   });
-
-=======
->>>>>>> origin/develop
   it("getUserImpactCounts trả về số liệu tác động chính xác", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "admin-1", email: "admin@codi.vn" },
