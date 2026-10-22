@@ -1,0 +1,77 @@
+{
+  "provenance": "Original tool result chunks recovered from saved execution history; not reconstructed stdout.",
+  "outputs": [
+    {
+      "timestamp": "2026-10-21T14:14:33.213Z",
+      "callId": "call_97b904c8d44f471280422fb28f5f9d70",
+      "invokedAt": "2026-10-21T14:14:02.777Z",
+      "result": {
+        "chunk_id": "2a2842",
+        "wall_time_seconds": 10.0085196,
+        "session_id": 82935,
+        "original_token_count": 0,
+        "output": ""
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:15:32.955Z",
+      "callId": "call_cb273d7896314403beca881b6250c63b",
+      "invokedAt": "2026-10-21T14:15:23.658Z",
+      "result": {
+        "chunk_id": "53ee26",
+        "wall_time_seconds": 5.0073707,
+        "session_id": 82935,
+        "original_token_count": 38,
+        "output": "Study QA: stale A start/stop rejected (same lesson); waiting for two real 30s heartbeats.\nStudy QA: same lesson heartbeat 1 credited 29s; total 29s.\n"
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:16:08.894Z",
+      "callId": "call_fd81588e9cf74e0fbd442dc4576dac35",
+      "invokedAt": "2026-10-21T14:15:59.707Z",
+      "result": {
+        "chunk_id": "46cc38",
+        "wall_time_seconds": 5.0149918,
+        "session_id": 82935,
+        "original_token_count": 39,
+        "output": "Study QA: same lesson heartbeat 2 credited 30s; total 59s.\nStudy QA: stale A start/stop rejected (different lesson); waiting for two real 30s heartbeats.\n"
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:16:42.449Z",
+      "callId": "call_605705a219a442148d3ae93d0dac4151",
+      "invokedAt": "2026-10-21T14:16:33.484Z",
+      "result": {
+        "chunk_id": "2352be",
+        "wall_time_seconds": 5.0123068,
+        "session_id": 82935,
+        "original_token_count": 16,
+        "output": "Study QA: different lesson heartbeat 1 credited 30s; total 30s.\n"
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:17:18.923Z",
+      "callId": "call_551bd0db13e54bebbe485ecc6e0310c3",
+      "invokedAt": "2026-10-21T14:17:02.320Z",
+      "result": {
+        "chunk_id": "8dea4d",
+        "wall_time_seconds": 5.0091637,
+        "session_id": 82935,
+        "original_token_count": 16,
+        "output": "Study QA: different lesson heartbeat 2 credited 29s; total 59s.\n"
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:17:30.855Z",
+      "callId": "call_488a256f3a584cd0ae2db18e46a8d03b",
+      "invokedAt": "2026-10-21T14:17:26.859Z",
+      "result": {
+        "chunk_id": "590592",
+        "wall_time_seconds": 0.0000107,
+        "exit_code": 0,
+        "original_token_count": 52,
+        "output": "PR144 browser follow-up passed: two real heartbeat renewals in both tab cases; current header/mobile matrix; no AI requests.\nOwned QA user/course/activity removed; zero sessions or study clocks/days remain.\n"
+      }
+    }
+  ]
+}

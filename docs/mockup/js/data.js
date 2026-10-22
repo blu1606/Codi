@@ -30,7 +30,7 @@
  *  enrolments[]       {userId, courseId, enrolledAt}
  *  learnerProgress[]  {userId, courseId, completed[lessonId], quizScores{lessonId:score}, answers{questionId:true|false}, lastActive}
  *  learnerSeed        main learner's study state for owned courses (goal, diagnostic, mastery, assignments...)
- *  codeAttempts[]     {userId, courseId, lessonId, draft, submits, runs, passed, lastScore, solutionViewed,
+ *  codeAttempts[]     {userId, courseId, lessonId, draft, submits, runs, passed, bestScore, solutionViewed,
  *                      failedTests{testId:count}, lastRun, tutorialStep, tutorialVisited[], stepDrafts{}, updatedAt}
  *  notifications[]    {id, userId, title, body, link, read, createdAt}
  */
@@ -698,17 +698,17 @@
   ];
 
   // ---------- coding practice attempts by other learners (lecturer analytics) ----------
-  const CA = (userId, lessonId, extra) => Object.assign({ userId, courseId: 'course-js-001', lessonId, draft: null, submits: 0, failSubmits: 0, runs: 0, passed: false, lastScore: 0, solutionViewed: false, failedTests: {}, lastRun: null, tutorialStep: 0, tutorialVisited: [], stepDrafts: {}, stepRuns: {}, updatedAt: '2026-10-01T10:00:00Z' }, extra || {});
+  const CA = (userId, lessonId, extra) => Object.assign({ userId, courseId: 'course-js-001', lessonId, draft: null, submits: 0, failSubmits: 0, runs: 0, passed: false, bestScore: 0, solutionViewed: false, failedTests: {}, lastRun: null, tutorialStep: 0, tutorialVisited: [], stepDrafts: {}, stepRuns: {}, updatedAt: '2026-10-01T10:00:00Z' }, extra || {});
   const codeAttempts = [
     CA('usr-learner-003', 'lesson-js-p01', { runs: 14, tutorialStep: 6, tutorialVisited: [0, 1, 2, 3, 4, 5, 6], updatedAt: '2026-09-14T20:00:00Z' }),
-    CA('usr-learner-003', 'lesson-js-p02', { runs: 9, submits: 2, passed: true, lastScore: 100, failedTests: { 'ct-8': 1 }, updatedAt: '2026-09-15T21:10:00Z' }),
+    CA('usr-learner-003', 'lesson-js-p02', { runs: 9, submits: 2, passed: true, bestScore: 100, failedTests: { 'ct-8': 1 }, updatedAt: '2026-09-15T21:10:00Z' }),
     CA('usr-learner-007', 'lesson-js-p01', { runs: 11, tutorialStep: 6, tutorialVisited: [0, 1, 2, 3, 4, 5, 6], updatedAt: '2026-10-02T19:00:00Z' }),
-    CA('usr-learner-007', 'lesson-js-p02', { runs: 17, submits: 4, passed: true, lastScore: 100, solutionViewed: true, failedTests: { 'ct-6': 3, 'ct-8': 3, 'ct-5': 1 }, updatedAt: '2026-10-03T22:40:00Z' }),
+    CA('usr-learner-007', 'lesson-js-p02', { runs: 17, submits: 4, passed: true, bestScore: 100, solutionViewed: true, failedTests: { 'ct-6': 3, 'ct-8': 3, 'ct-5': 1 }, updatedAt: '2026-10-03T22:40:00Z' }),
     CA('usr-learner-008', 'lesson-js-p01', { runs: 4, tutorialStep: 3, tutorialVisited: [0, 1, 2, 3], updatedAt: '2026-10-09T08:00:00Z' }),
-    CA('usr-learner-008', 'lesson-js-p02', { runs: 6, submits: 2, passed: false, lastScore: 50, failedTests: { 'ct-4': 2, 'ct-6': 2, 'ct-7': 2, 'ct-8': 2 }, updatedAt: '2026-10-10T07:30:00Z' }),
-    CA('usr-learner-003', 'lesson-react-p01', { courseId: 'course-react-001', runs: 12, submits: 3, passed: true, lastScore: 100, failedTests: { 'rt-4': 2 }, updatedAt: '2026-09-22T20:30:00Z' }),
-    CA('usr-learner-002', 'lesson-react-p01', { courseId: 'course-react-001', runs: 9, submits: 3, failSubmits: 3, passed: false, lastScore: 67, solutionViewed: true, failedTests: { 'rt-4': 3, 'rt-6': 2 }, updatedAt: '2026-10-05T21:00:00Z' }),
-    CA('usr-learner-005', 'lesson-react-p01', { courseId: 'course-react-001', runs: 3, submits: 1, failSubmits: 1, passed: false, lastScore: 33, failedTests: { 'rt-2': 1, 'rt-4': 1, 'rt-5': 1, 'rt-6': 1 }, updatedAt: '2026-10-11T09:00:00Z' }),
+    CA('usr-learner-008', 'lesson-js-p02', { runs: 6, submits: 2, passed: false, bestScore: 50, failedTests: { 'ct-4': 2, 'ct-6': 2, 'ct-7': 2, 'ct-8': 2 }, updatedAt: '2026-10-10T07:30:00Z' }),
+    CA('usr-learner-003', 'lesson-react-p01', { courseId: 'course-react-001', runs: 12, submits: 3, passed: true, bestScore: 100, failedTests: { 'rt-4': 2 }, updatedAt: '2026-09-22T20:30:00Z' }),
+    CA('usr-learner-002', 'lesson-react-p01', { courseId: 'course-react-001', runs: 9, submits: 3, failSubmits: 3, passed: false, bestScore: 67, solutionViewed: true, failedTests: { 'rt-4': 3, 'rt-6': 2 }, updatedAt: '2026-10-05T21:00:00Z' }),
+    CA('usr-learner-005', 'lesson-react-p01', { courseId: 'course-react-001', runs: 3, submits: 1, failSubmits: 1, passed: false, bestScore: 33, failedTests: { 'rt-2': 1, 'rt-4': 1, 'rt-5': 1, 'rt-6': 1 }, updatedAt: '2026-10-11T09:00:00Z' }),
   ];
 
   // ---------- main learner's own study state for the owned JS course ----------

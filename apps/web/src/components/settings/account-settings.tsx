@@ -41,6 +41,7 @@ export default function AccountSettings({ user }: AccountSettingsProps) {
   const [emailOverride, setEmailOverride] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sessionRevision, setSessionRevision] = useState(0);
+  const isNameDirty = draftName.trim() !== name;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -78,7 +79,7 @@ export default function AccountSettings({ user }: AccountSettingsProps) {
   async function saveName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextName = draftName.trim();
-    if (!nextName || saving) return;
+    if (!nextName || !isNameDirty || saving) return;
     setSaving(true);
     try {
       const response = await fetch("/api/user/profile", {
@@ -200,7 +201,7 @@ export default function AccountSettings({ user }: AccountSettingsProps) {
             {dialog === "name" ? (
               <form onSubmit={saveName} className="mt-6 space-y-4">
                 <div className="space-y-2"><Label htmlFor="settings-display-name">Tên hiển thị</Label><Input id="settings-display-name" value={draftName} onChange={(event) => setDraftName(event.target.value)} autoComplete="name" maxLength={100} required disabled={saving} className="h-10 rounded-lg" /></div>
-                <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={saving} onClick={closeDialog} className="rounded-lg">Hủy</Button><Button type="submit" disabled={saving || !draftName.trim()} className="rounded-lg">{saving ? "Đang lưu..." : "Lưu thay đổi"}</Button></div>
+                <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={saving} onClick={closeDialog} className="rounded-lg">Hủy</Button><Button type="submit" disabled={saving || !draftName.trim() || !isNameDirty} className="rounded-lg">{saving ? "Đang lưu..." : "Lưu thay đổi"}</Button></div>
               </form>
             ) : dialog === "email" ? <ChangeEmailForm currentEmail={currentEmail} onBusyChange={setSaving} onSuccess={(email) => { setEmailOverride(email); setEmailVisible(false); setDialog(null); toast.success("Đã xác thực và cập nhật email. Bạn có thể dùng email mới để đăng nhập."); router.refresh(); }} /> : dialog === "password" ? <div className="mt-6 [&_[data-slot=card]]:bg-transparent [&_[data-slot=card]]:ring-0 [&_[data-slot=card]]:py-0 [&_[data-slot=card-header]]:px-0 [&_[data-slot=card-content]]:px-0"><ChangePasswordCard onBusyChange={setSaving} /></div> : null}
           </Dialog.Content>

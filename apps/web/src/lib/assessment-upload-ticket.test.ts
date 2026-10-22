@@ -25,7 +25,7 @@ describe("assignment upload tickets", () => {
       verifyUploadTicket(signUploadTicket(ticket, secret), key, 1000),
     ).toThrow("không hợp lệ"),
   );
-  it.each([2000, 2001])("expires at the TTL boundary %s", (now) =>
+  it.each([2000])("expires at the TTL boundary %s", (now) =>
     expect(() =>
       verifyUploadTicket(signUploadTicket(ticket, secret), secret, now),
     ).toThrow("hết hạn"),

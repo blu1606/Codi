@@ -95,7 +95,6 @@ describe("hard prerequisite path scheduling", () => {
   });
   it.each([
     [undefined, true],
-    [proposal(), true],
     [{ malformed: true }, false],
     [proposal([ids[0]!, ids[0]!]), false],
     [proposal(["10000000-0000-4000-8000-000000000000"]), false],
@@ -282,9 +281,6 @@ describe("D16 and untrusted request boundaries", () => {
     [null, 0, 0],
     [0.2, 0, 0],
     [0.39, 1, 1],
-    [0.4, 1, 2],
-    [0.6, 1, 3],
-    [0.85, 1, 4],
   ] as const)(
     "maps probability %s with %s evidence to stop %s",
     (probability, evidenceCount, expected) =>

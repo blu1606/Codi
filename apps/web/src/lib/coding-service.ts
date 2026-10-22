@@ -63,6 +63,11 @@ async function context(store: Store, scope: Scope, lock = false) {
     .where(eq(codingExercises.assessmentId, assessment.id));
   if (!exercise)
     throw new LearningPathError("Bài tập code chưa sẵn sàng.", 503);
+  if (exercise.tutorialSteps?.length)
+    throw new LearningPathError(
+      "Hãy mở workspace hướng dẫn theo bước của bài này.",
+      409,
+    );
   const tests = await store
     .select()
     .from(codingTestCases)
