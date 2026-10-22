@@ -290,7 +290,7 @@ export function getInsightsA4(w: AnalyticsWindow) {
       if (i === 0) return 100;
       return Math.max(5, Math.round(100 * (0.56 * Math.exp(-0.24 * i) + 0.2) + ((h >> i) % 9) - 4));
     });
-    return { label: "Tuần " + dm(c.start), n, cells };
+    return { label: "Tuần " + dm(c.start), n, cells, pinned: false };
   });
 
   const totalN = rows.reduce((s, r) => s + r.n, 0);
