@@ -226,7 +226,19 @@ describe("catalog typeahead destination consistency", () => {
     root = undefined;
     document.body.innerHTML = "";
 
-    // 2. Kiểm tra với URL price-desc kèm theo reload / remount
+    // 2. Mở lại đúng URL vừa được chuẩn hóa (simulate reload trang sau khi URL đã được replaceState sạch)
+    const normalizedUrl = window.location.pathname + window.location.search;
+    expect(normalizedUrl).toBe("/courses?cat=Frontend&level=Beginner");
+    await render(normalizedUrl);
+    const sortSelectReload = document.querySelector<HTMLSelectElement>("#f-sort")!;
+    expect(sortSelectReload.value).toBe("popular");
+    expect(cards()).toEqual(["course-card-B", "course-card-A", "course-card-C"]);
+
+    await act(async () => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+
+    // 3. Kiểm tra với URL price-desc
     await render("/courses?cat=Frontend&level=Beginner&sort=price-desc");
     const sortSelectDesc = document.querySelector<HTMLSelectElement>("#f-sort")!;
     expect(sortSelectDesc.value).toBe("popular");
