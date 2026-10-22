@@ -34,6 +34,10 @@ Heartbeat/stop payloads remain `{action: "heartbeat" | "stop", trackerId}`. Old 
 
 ## Reproduce validation
 
+### Runtime evidence handoff — 22/10/2026
+
+[The runtime handoff](ui-review/issue-102/pr144-runtime-handoff/README.md) preserves original build/start/heartbeat/cleanup tool output and documents the unavailable historical pre-run snapshot. The follow-up runner freezes its source before fixture creation, records redacted activity/focus/database events, and checks reload acquisition plus a real subsequent heartbeat and the lesson-player header at desktop/375px in both themes. It also retains failed harness attempts and provides an offline checksum/accounting inspector. Product source and schema are unchanged; reviewer acceptance remains separate.
+
 ### Current-develop review follow-up — 21/10/2026
 
 The remaining review checks are recorded in [the current-head browser report](ui-review/issue-102/pr144-current-review/README.md): real tab focus, delayed initial acquisition followed by two real 30-second heartbeats for both same/different lessons, and the settled header/dashboard/progress/profile matrix at 1280px/375px in light/dark. This run uses the merged develop base, avoids goal regeneration/model calls, and cleans up isolated QA data. The new full unit run passes **1,575 tests / 89 files**, with workspace types, standards and production build also passing. Earlier results below retain their original scope and versions.

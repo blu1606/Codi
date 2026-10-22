@@ -2,6 +2,8 @@
 
 Addresses the [latest review](https://github.com/blu1606/Codi/pull/144#pullrequestreview-5594536775): verify the final header/mobile changes on updated develop, and prove that the focused tab continues recording through two subsequent browser heartbeats after a delayed acquisition. The reviewer already verified fresh-goal setup/editing; this follow-up does not repeat goal regeneration or incur model usage through that flow.
 
+**22/10 follow-up:** [runtime evidence handoff](../pr144-runtime-handoff/README.md) addresses the subsequent review's source/log provenance, reload/tracking and lesson-player header requests. Results below retain their original date and scope.
+
 ## Version and validation
 
 - Product candidate: `e53a2486e3dd5208066559546b07917fc48736a6`, merging PR #144 at `dacdad8` with develop `437c1e8df16969a54b1fb96f0ff3e02a09c15e7a`, without conflicts.
@@ -51,8 +53,8 @@ Build/start the product checkout as a production QA server at `http://localhost:
 $env:CHROMIUM_PATH = '<path-to-installed-current-chromium>/chrome.exe'
 node ../../node_modules/tsx/dist/cli.mjs --env-file=.env scripts/verify-study-activity-browser.ts --allow-dev-db
 
-# Optional screenshot iteration; explicitly excludes accounting checks:
-node ../../node_modules/tsx/dist/cli.mjs --env-file=.env scripts/verify-study-activity-browser.ts --allow-dev-db --visual-only
+# The current runner always includes reload/tracking. To exclude only two-tab cases:
+node ../../node_modules/tsx/dist/cli.mjs --env-file=.env scripts/verify-study-activity-browser.ts --allow-dev-db --skip-two-tabs
 ```
 
 `QA_ORIGIN` and `QA_OUTPUT_DIR` can override the server and artifact directory. Without `CHROMIUM_PATH`, the runner uses Playwright's expected Chromium executable. The older installed Chrome 138 reported both headless tabs as focused even with focus emulation disabled; a separate two-empty-tab probe reproduced that tooling limitation. Installed Chromium 149 correctly switched focus and was used for the passing application tests. Initial harness iterations also resolved an ambiguous `header` selector by targeting the global `banner`; application assertions and product guards were not relaxed.
