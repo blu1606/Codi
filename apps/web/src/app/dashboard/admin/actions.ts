@@ -267,7 +267,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     .where(
       and(
         eq(orders.status, "pending"),
-        sql`${orders.createdAt} < ${oneDayAgo}`
+        sql`${orders.createdAt} <= ${oneDayAgo}`
       )
     );
 
@@ -313,7 +313,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     totalAmount: o.totalAmount,
     status: o.status,
     createdAt: o.createdAt,
-    isOverdue: o.status === "pending" && new Date(o.createdAt).getTime() < oneDayAgo.getTime(),
+    isOverdue: o.status === "pending" && new Date(o.createdAt).getTime() <= oneDayAgo.getTime(),
   }));
 
   return {
