@@ -42,8 +42,10 @@ export function OrderExportModal({
 }) {
   const [range, setRange] = useState<"7" | "30" | "90" | "all">("30");
   const [applyFilter, setApplyFilter] = useState(true);
-  const [exportData, setExportData] = useState<AdminOrderSummaryItem[]>(fallbackOrders);
+  const [exportData, setExportData] = useState<AdminOrderSummaryItem[] | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [columns, setColumns] = useState<Record<string, boolean>>({
     code: true,
     buyer: true,
@@ -63,12 +65,16 @@ export function OrderExportModal({
 
     let cancelled = false;
     setLoadingData(true);
+    setLoadError(null);
 
     import("../actions").then(({ getAdminOrdersExportAction }) => {
+      // Khi applyFilter = true: áp dụng đầy đủ bộ lọc hiện tại (status, q, overdue, reconciliation)
+      // Khi applyFilter = false: mockup admin.js giữ nguyên query tìm kiếm/status hiện tại nhưng chỉ thay đổi range
+      // Tuy nhiên theo mockup note, khi không chọn "Áp dụng bộ lọc hiện tại", người dùng muốn xuất toàn bộ trạng thái của kỳ đó
       const queryFilter = {
         range,
         status: applyFilter ? ((currentFilter?.status || currentStatus) as any) : "all",
-        q: applyFilter ? (currentFilter?.q || "") : "",
+        q: applyFilter ? (currentFilter?.q || "") : (currentFilter?.q || ""),
         overdueOnly: applyFilter ? !!currentFilter?.overdue : false,
         reconciliationOnly: applyFilter ? !!currentFilter?.reconciliation : false,
       };
@@ -77,12 +83,13 @@ export function OrderExportModal({
         .then((fetchedOrders) => {
           if (!cancelled) {
             setExportData(fetchedOrders);
+            setLoadError(null);
           }
         })
-        .catch(() => {
+        .catch((err) => {
           if (!cancelled) {
-            // Fallback to local filtering if server action fails
-            setExportData(fallbackOrders);
+            setExportData(null);
+            setLoadError(err?.message || "Không thể tải dữ liệu xuất đơn hàng.");
           }
         })
         .finally(() => {
@@ -93,9 +100,9 @@ export function OrderExportModal({
     return () => {
       cancelled = true;
     };
-  }, [open, range, applyFilter, currentStatus, currentFilter, fallbackOrders]);
+  }, [open, range, applyFilter, currentStatus, currentFilter, reloadKey]);
 
-  const filteredList = exportData;
+  const filteredList = exportData ?? [];
 
   const selectedColCount = Object.values(columns).filter(Boolean).length;
   const totalRevenue = filteredList.reduce((sum, o) => sum + (o.status === "paid" ? o.totalAmount : 0), 0);
@@ -117,6 +124,16 @@ export function OrderExportModal({
   };
 
   const handleExport = () => {
+    if (loadingData) {
+      toast.error("Dữ liệu đang được tải, vui lòng đợi trong giây lát.");
+      return;
+    }
+
+    if (loadError || exportData === null) {
+      toast.error("Không thể xuất dữ liệu do lỗi truy vấn. Vui lòng thử lại.");
+      return;
+    }
+
     if (selectedColCount === 0) {
       toast.error("Vui lòng chọn ít nhất một cột.");
       return;
@@ -264,19 +281,41 @@ export function OrderExportModal({
             </div>
           </div>
 
-          {/* Live summary */}
-          <div className="rounded-lg bg-muted/50 p-2.5 text-center text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{filteredList.length}</span> đơn ·{" "}
-            <span className="font-medium text-foreground">{selectedColCount}</span> cột ·{" "}
-            <span className="font-medium text-foreground">{formatVnd(totalRevenue)}</span> tổng tiền
-          </div>
+          {/* Live summary / loading / error */}
+          {loadingData ? (
+            <div className="rounded-lg bg-muted/50 p-2.5 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+              <span className="inline-block size-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <span>Đang tải dữ liệu kỳ xuất ({range === "all" ? "Tất cả" : `${range} ngày`})...</span>
+            </div>
+          ) : loadError ? (
+            <div className="rounded-lg bg-destructive-soft border border-destructive/20 p-2.5 text-center text-xs text-destructive flex items-center justify-between gap-2">
+              <span>{loadError}</span>
+              <button
+                type="button"
+                onClick={() => setReloadKey((k) => k + 1)}
+                className="font-semibold underline hover:opacity-80 cursor-pointer shrink-0"
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-muted/50 p-2.5 text-center text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{filteredList.length}</span> đơn ·{" "}
+              <span className="font-medium text-foreground">{selectedColCount}</span> cột ·{" "}
+              <span className="font-medium text-foreground">{formatVnd(totalRevenue)}</span> tổng tiền
+            </div>
+          )}
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="cursor-pointer">
             Huỷ
           </Button>
-          <Button onClick={handleExport} className="cursor-pointer gap-1.5">
+          <Button
+            onClick={handleExport}
+            disabled={loadingData || !!loadError || exportData === null}
+            className="cursor-pointer gap-1.5"
+          >
             <Download className="size-4" /> Xuất CSV
           </Button>
         </DialogFooter>
