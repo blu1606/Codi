@@ -78,11 +78,27 @@ test.describe("guest catalog and course detail", () => {
     page,
   }) => {
     await openCatalog(page);
-    await search(page).fill("zzqqxx-khong-co-ket-qua");
+    const queryTerm = "Lập trình Rust & AI nâng cao!";
+    await search(page).fill(queryTerm);
     await search(page).press("Escape");
     await expect(page.getByRole("heading", { name: "Không tìm thấy khóa học phù hợp" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Đặt lại bộ lọc" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Hỏi AI Codi gợi ý khóa học" })).toBeVisible();
+    
+    const aiButton = page.getByRole("button", { name: "Hỏi AI Codi gợi ý khóa học" });
+    await expect(aiButton).toBeVisible();
+
+    // Verify navigation URL without triggering live AI provider calls
+    let routedUrl: string | null = null;
+    await page.route("**/ai?**", (route) => {
+      routedUrl = route.request().url();
+      return route.fulfill({ status: 200, contentType: "text/html", body: "<html><body>AI Mock Target</body></html>" });
+    });
+
+    await aiButton.click();
+    expect(routedUrl).not.toBeNull();
+    const parsedUrl = new URL(routedUrl!);
+    expect(parsedUrl.pathname).toBe("/ai");
+    expect(parsedUrl.searchParams.get("prompt")).toBe(`Gợi ý khóa học ${queryTerm}`);
   });
 
   test("UI-COM-06 course detail syllabus labels each lesson with its type", async ({ page, request }) => {
