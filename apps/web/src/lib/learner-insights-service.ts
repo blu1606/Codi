@@ -69,6 +69,7 @@ export function calculateStreak(days: LearnerStudyDayRecord[]): { cur: number; b
 export function getLearnerStatsData(
   period: "7" | "month" | "30" = "30",
   courseIdFilter: string = "all",
+  _userId?: string | null,
 ) {
   const allEnrolled: CourseAnalyticsMeta[] = SEED_COURSES.filter((c) => c.id === "course-js-001");
   const filteredCourses =

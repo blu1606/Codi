@@ -35,8 +35,10 @@ import { AdminAnalyticsNav } from "../../admin-analytics-nav";
 
 export default async function AdminInsightCardDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ card: string }>;
+  searchParams?: Promise<{ period?: string; compare?: string }>;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/login");
@@ -45,7 +47,10 @@ export default async function AdminInsightCardDetailPage({
   if (!active.includes(ROLE.ADMIN)) redirect("/dashboard");
 
   const { card } = await params;
-  const w = getAnalyticsWindow("30", true);
+  const sp = searchParams ? await searchParams : {};
+  const period = sp.period === "7" || sp.period === "90" || sp.period === "30" ? sp.period : "30";
+  const compare = sp.compare !== "false" && sp.compare !== "0";
+  const w = getAnalyticsWindow(period, compare);
   const rangeText = formatRangeText(w);
 
   let content: React.ReactNode = null;

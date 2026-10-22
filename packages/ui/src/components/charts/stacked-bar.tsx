@@ -49,6 +49,9 @@ export function StackedBar({
 
   const toneBg = (seg: StackedSegment, i: number) => {
     if (seg.tone) {
+      if (seg.tone === "accent") {
+        return "var(--viz-1)";
+      }
       if (seg.tone.startsWith("slot-")) {
         return `var(--viz-${seg.tone.replace("slot-", "")})`;
       }

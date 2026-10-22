@@ -55,6 +55,14 @@ export function AdminInsightsView() {
   const a6 = React.useMemo(() => getInsightsA6(w), [w]);
   const a9 = React.useMemo(() => getInsightsA9(w), [w]);
 
+  const buildDetailHref = (cardId: string) => {
+    const params = new URLSearchParams({
+      period,
+      compare: compare ? "true" : "false",
+    });
+    return `/dashboard/admin/insights/${cardId}?${params.toString()}`;
+  };
+
   const rangeText = formatRangeText(w);
 
   return (
@@ -86,7 +94,7 @@ export function AdminInsightsView() {
           code={a1.code}
           title={a1.title}
           question={a1.question}
-          detailHref="/dashboard/admin/insights/a1"
+          detailHref={buildDetailHref("a1")}
           table={a1.table}
           wide
         >
@@ -114,7 +122,7 @@ export function AdminInsightsView() {
             code={a2.code}
             title={a2.title}
             question={a2.question}
-            detailHref="/dashboard/admin/insights/a2"
+            detailHref={buildDetailHref("a2")}
             table={a2.table}
           >
             <LineChart
@@ -148,7 +156,7 @@ export function AdminInsightsView() {
             code={a3.code}
             title={a3.title}
             question={a3.question}
-            detailHref="/dashboard/admin/insights/a3"
+            detailHref={buildDetailHref("a3")}
             table={a3.table}
           >
             <FunnelChart steps={a3.steps} />
@@ -160,7 +168,7 @@ export function AdminInsightsView() {
             code={a7.code}
             title={a7.title}
             question={a7.question}
-            detailHref="/dashboard/admin/insights/a7"
+            detailHref={buildDetailHref("a7")}
             table={a7.table}
           >
             <StackedBar segments={a7.segs} format={formatNum} />
@@ -189,7 +197,7 @@ export function AdminInsightsView() {
             code={a8.code}
             title={a8.title}
             question={a8.question}
-            detailHref="/dashboard/admin/insights/a8"
+            detailHref={buildDetailHref("a8")}
             note={a8.note}
             table={a8.table}
           >
@@ -253,7 +261,7 @@ export function AdminInsightsView() {
               code={a4.code}
               title={a4.title}
               question={a4.question}
-              detailHref="/dashboard/admin/insights/a4"
+              detailHref={buildDetailHref("a4")}
               note={a4.note}
               table={a4.table}
               wide
@@ -273,7 +281,7 @@ export function AdminInsightsView() {
                 code={a5.code}
                 title={a5.title}
                 question={a5.question}
-                detailHref="/dashboard/admin/insights/a5"
+                detailHref={buildDetailHref("a5")}
                 actions={
                   <div className="inline-flex p-0.5 border border-border rounded bg-muted text-xs">
                     <button
@@ -332,7 +340,7 @@ export function AdminInsightsView() {
                 code={a6.code}
                 title={a6.title}
                 question={a6.question}
-                detailHref="/dashboard/admin/insights/a6"
+                detailHref={buildDetailHref("a6")}
                 table={a6.table}
               >
                 <StackedBar segments={a6.segs} format={formatNum} />
@@ -355,7 +363,7 @@ export function AdminInsightsView() {
               code={a9.code}
               title={a9.title}
               question={a9.question}
-              detailHref="/dashboard/admin/insights/a9"
+              detailHref={buildDetailHref("a9")}
               note={a9.note}
               table={a9.table}
               wide

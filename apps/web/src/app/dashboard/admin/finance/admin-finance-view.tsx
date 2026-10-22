@@ -58,6 +58,15 @@ export function AdminFinanceView() {
   const b6 = React.useMemo(() => getFinanceB6(w), [w]);
   const b7 = React.useMemo(() => getFinanceB7(w), [w]);
 
+  const buildDetailHref = (cardId: string, extra?: Record<string, string>) => {
+    const params = new URLSearchParams({
+      period,
+      compare: compare ? "true" : "false",
+      ...(extra || {}),
+    });
+    return `/dashboard/admin/finance/${cardId}?${params.toString()}`;
+  };
+
   const rangeText = formatRangeText(w);
 
   const handleExportAll = () => {
@@ -108,7 +117,7 @@ export function AdminFinanceView() {
           code={b1.code}
           title={b1.title}
           question={b1.question}
-          detailHref="/dashboard/admin/finance/b1"
+          detailHref={buildDetailHref("b1")}
           table={{
             headers: b1.table.headers,
             rows: b1.tiles.map((t) => [
@@ -141,7 +150,7 @@ export function AdminFinanceView() {
           code={b2.code}
           title={b2.title}
           question={b2.question}
-          detailHref="/dashboard/admin/finance/b2"
+          detailHref={buildDetailHref("b2")}
           table={b2.table}
           wide
         >
@@ -168,7 +177,7 @@ export function AdminFinanceView() {
             code={b4.code}
             title={b4.title}
             question={b4.question}
-            detailHref="/dashboard/admin/finance/b4"
+            detailHref={buildDetailHref("b4")}
             table={b4.table}
           >
             <div className="p-3 rounded bg-muted/60 mb-3">
@@ -204,7 +213,7 @@ export function AdminFinanceView() {
             code={b8.code}
             title={b8.title}
             question={b8.question}
-            detailHref="/dashboard/admin/finance/b8"
+            detailHref={buildDetailHref("b8")}
             note={b8.note}
             table={b8.table}
           >
@@ -224,7 +233,7 @@ export function AdminFinanceView() {
                     <span className="text-[11px] text-muted-foreground">{c.hint}</span>
                     {c.count > 0 && (
                       <Link
-                        href={"/dashboard/admin/orders" as import("next").Route}
+                        href={"/dashboard/admin/orders?status=pending&overdue=1&range=all" as import("next").Route}
                         className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "h-7 text-xs")}
                       >
                         Mở danh sách
@@ -269,7 +278,7 @@ export function AdminFinanceView() {
               code={b3.code}
               title={b3.title}
               question={b3.question}
-              detailHref="/dashboard/admin/finance/b3"
+              detailHref={buildDetailHref("b3", { group: b3Group })}
               actions={
                 <div className="inline-flex p-0.5 border border-border rounded bg-muted text-xs">
                   {(["course", "category", "lecturer"] as const).map((mode) => (
@@ -335,7 +344,7 @@ export function AdminFinanceView() {
                 code={b5.code}
                 title={b5.title}
                 question={b5.question}
-                detailHref="/dashboard/admin/finance/b5"
+                detailHref={buildDetailHref("b5")}
                 note={b5.note}
                 table={b5.table}
               >
@@ -371,7 +380,7 @@ export function AdminFinanceView() {
                 code={b6.code}
                 title={b6.title}
                 question={b6.question}
-                detailHref="/dashboard/admin/finance/b6"
+                detailHref={buildDetailHref("b6")}
                 table={b6.table}
               >
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -403,7 +412,7 @@ export function AdminFinanceView() {
               code={b7.code}
               title={b7.title}
               question={b7.question}
-              detailHref="/dashboard/admin/finance/b7"
+              detailHref={buildDetailHref("b7")}
               note={b7.note}
               table={{
                 headers: b7.table.headers,
