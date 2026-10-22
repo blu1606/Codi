@@ -203,6 +203,15 @@ describe("onboardingService advisor intake hydration", () => {
     });
 
     // In writable execution, context updates studentEnrollments with hydrated intake
-    expect(mockStore.update).toHaveBeenCalled();
+    expect(mockStore.update).toHaveBeenCalledWith(studentEnrollments);
+    expect(mockStore.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        goalDraft: {
+          goal: "finish",
+          level: "new",
+          hours: 5,
+        },
+      }),
+    );
   });
 });
