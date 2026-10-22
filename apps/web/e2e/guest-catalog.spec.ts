@@ -88,15 +88,15 @@ test.describe("guest catalog and course detail", () => {
     await expect(aiButton).toBeVisible();
 
     // Verify navigation URL without triggering live AI provider calls
-    let routedUrl: string | null = null;
     await page.route("**/ai?**", (route) => {
-      routedUrl = route.request().url();
       return route.fulfill({ status: 200, contentType: "text/html", body: "<html><body>AI Mock Target</body></html>" });
     });
 
+    const aiRequestPromise = page.waitForRequest((req) => req.url().includes("/ai?"));
     await aiButton.click();
-    expect(routedUrl).not.toBeNull();
-    const parsedUrl = new URL(routedUrl!);
+    const aiRequest = await aiRequestPromise;
+
+    const parsedUrl = new URL(aiRequest.url());
     expect(parsedUrl.pathname).toBe("/ai");
     expect(parsedUrl.searchParams.get("prompt")).toBe(`Gợi ý khóa học ${queryTerm}`);
   });
