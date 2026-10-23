@@ -7,6 +7,7 @@ export async function PATCH(request: NextRequest) {
     const reqHeaders = await headers();
     const session = await auth.api.getSession({
       headers: reqHeaders,
+      query: { disableCookieCache: true },
     });
 
     if (!session?.user) {
@@ -19,6 +20,13 @@ export async function PATCH(request: NextRequest) {
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json(
         { error: "Họ và tên không được để trống" },
+        { status: 400 }
+      );
+    }
+
+    if (name.trim() === session.user.name) {
+      return NextResponse.json(
+        { error: "Tên hiển thị chưa thay đổi" },
         { status: 400 }
       );
     }
