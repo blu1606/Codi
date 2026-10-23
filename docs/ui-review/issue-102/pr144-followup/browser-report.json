@@ -1,0 +1,140 @@
+{
+  "origin": "http://localhost:3002",
+  "startedAt": "2026-10-20T06:32:40.913Z",
+  "freshGoal": {
+    "initialEditRequests": 0,
+    "requests": [
+      {
+        "status": 200,
+        "command": {
+          "type": "goal-skip"
+        }
+      }
+    ]
+  },
+  "mobileResultsScroll": {
+    "left": 329,
+    "lastColumnVisible": true
+  },
+  "heatmap": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "count": 362,
+      "visible": true,
+      "fill": "rgb(241, 245, 249)",
+      "background": "rgb(255, 255, 255)",
+      "legend": "rgb(241, 245, 249)",
+      "active": [
+        {
+          "title": "1 contribution on Monday, February 2, 2026",
+          "width": 8.875,
+          "fill": "rgb(155, 233, 168)"
+        },
+        {
+          "title": "2 contributions on Tuesday, February 3, 2026",
+          "width": 8.875,
+          "fill": "rgb(64, 196, 99)"
+        },
+        {
+          "title": "4 contributions on Wednesday, February 4, 2026",
+          "width": 8.875,
+          "fill": "rgb(33, 110, 57)"
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "count": 362,
+      "visible": true,
+      "fill": "rgb(51, 65, 85)",
+      "background": "rgb(30, 41, 59)",
+      "legend": "rgb(51, 65, 85)",
+      "active": [
+        {
+          "title": "1 contribution on Monday, February 2, 2026",
+          "width": 8.875,
+          "fill": "rgb(155, 233, 168)"
+        },
+        {
+          "title": "2 contributions on Tuesday, February 3, 2026",
+          "width": 8.875,
+          "fill": "rgb(64, 196, 99)"
+        },
+        {
+          "title": "4 contributions on Wednesday, February 4, 2026",
+          "width": 8.875,
+          "fill": "rgb(33, 110, 57)"
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "theme": "light",
+      "count": 362,
+      "visible": true,
+      "fill": "rgb(241, 245, 249)",
+      "background": "rgb(255, 255, 255)",
+      "legend": "rgb(241, 245, 249)",
+      "active": [
+        {
+          "title": "1 contribution on Monday, February 2, 2026",
+          "width": 7.40625,
+          "fill": "rgb(155, 233, 168)"
+        },
+        {
+          "title": "2 contributions on Tuesday, February 3, 2026",
+          "width": 7.40625,
+          "fill": "rgb(64, 196, 99)"
+        },
+        {
+          "title": "4 contributions on Wednesday, February 4, 2026",
+          "width": 7.40625,
+          "fill": "rgb(33, 110, 57)"
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "theme": "dark",
+      "count": 362,
+      "visible": true,
+      "fill": "rgb(51, 65, 85)",
+      "background": "rgb(30, 41, 59)",
+      "legend": "rgb(51, 65, 85)",
+      "active": [
+        {
+          "title": "1 contribution on Monday, February 2, 2026",
+          "width": 7.40625,
+          "fill": "rgb(155, 233, 168)"
+        },
+        {
+          "title": "2 contributions on Tuesday, February 3, 2026",
+          "width": 7.40625,
+          "fill": "rgb(64, 196, 99)"
+        },
+        {
+          "title": "4 contributions on Wednesday, February 4, 2026",
+          "width": 7.40625,
+          "fill": "rgb(33, 110, 57)"
+        }
+      ]
+    }
+  ],
+  "delayedInitialStart": [
+    {
+      "sameLesson": true,
+      "delayedStartRecorded": false,
+      "ownerPreserved": true
+    },
+    {
+      "sameLesson": false,
+      "delayedStartRecorded": false,
+      "ownerPreserved": true
+    }
+  ],
+  "passed": true,
+  "errors": [],
+  "finishedAt": "2026-10-20T06:34:57.147Z"
+}

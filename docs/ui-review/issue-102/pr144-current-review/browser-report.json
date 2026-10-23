@@ -1,0 +1,97 @@
+{
+  "startedAt": "2026-10-21T14:19:09.623Z",
+  "origin": "http://localhost:3144",
+  "scope": "header/mobile only",
+  "browserVersion": "149.0.7827.55",
+  "passed": true,
+  "cleanup": "Owned QA user/course/activity removed; zero sessions or study clocks/days remain.",
+  "accounting": [],
+  "visual": [
+    {
+      "route": "dashboard",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "dashboard",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    }
+  ],
+  "errors": [],
+  "finishedAt": "2026-10-21T14:19:42.875Z"
+}

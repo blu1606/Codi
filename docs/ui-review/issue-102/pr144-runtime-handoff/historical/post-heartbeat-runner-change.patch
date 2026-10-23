@@ -1,0 +1,41 @@
+*** Begin Patch
+*** Update File: E:/Code/AI Study/Codi-102-dashboard-progress/apps/web/scripts/verify-study-activity-browser.ts
+@@
+   const accounting: unknown[] = [],
+     visual: unknown[] = [];
++  const visualOnly = process.argv.includes("--visual-only");
+   const report: Record<string, unknown> = {
+     startedAt: new Date().toISOString(),
+     origin,
++    scope: visualOnly ? "header/mobile only" : "heartbeats and header/mobile",
+@@
+-    for (const sameLesson of [true, false]) {
++    for (const sameLesson of visualOnly ? [] : [true, false]) {
+@@
+-    const screenshot = async (page: Page, name: string) => {
++    const screenshot = async (page: Page, name: string, fullPage = true) => {
+@@
+-        fullPage: true,
++        fullPage,
+@@
+-          if (route === "profile")
++          if (route === "profile") {
+             await expect(
+               page.getByText("QA Học viên", { exact: true }).first(),
+             ).toBeVisible();
++            await expect(page.getByRole("region", { name: /^Contribution heatmap for / })).toBeVisible();
++            await expect(page.getByText(/^\d+ contributions in \d{4}$/)).toBeVisible();
++          }
++          await expect(page.locator("[data-codi-intro-nav]")).toHaveAttribute("aria-busy", "false");
++          await expect(page.getByRole("button", { name: "Mở menu tài khoản của QA Học viên", exact: true })).toBeVisible();
+@@
+             headerWithinViewport: true,
++            roleMenuReady: true,
+@@
+-          await screenshot(page, `header-menu-${variant}`);
++          await screenshot(page, `header-menu-${variant}`, false);
+@@
+     console.log(
+-      "PR144 browser follow-up passed: two real heartbeat renewals in both tab cases; current header/mobile matrix; no AI requests.",
++      `PR144 browser follow-up passed: ${visualOnly ? "settled header/mobile matrix" : "two real heartbeat renewals in both tab cases; header/mobile matrix"}; no AI requests.`,
+*** End Patch
