@@ -278,14 +278,20 @@ export function ConceptDetails({
                   {lesson.title} · Bị khoá, cần hoàn thành bài tiên quyết
                 </span>
               ) : (
-                <Link
-                  href={
-                    `/learn/${encodeURIComponent(data.courseId!)}/${encodeURIComponent(lesson.id)}` as Route
-                  }
-                  className="text-primary hover:underline"
-                >
-                  {lesson.title}
-                </Link>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 flex-1 break-words text-sm">
+                    {lesson.title}
+                  </span>
+                  <Link
+                    href={
+                      `/learn/${encodeURIComponent(data.courseId!)}/${encodeURIComponent(lesson.id)}` as Route
+                    }
+                    className={cn(buttonVariants({ size: "sm" }), "shrink-0")}
+                    aria-label={`Học bài này: ${lesson.title}`}
+                  >
+                    Học bài này <ArrowRight aria-hidden="true" className="size-4" />
+                  </Link>
+                </div>
               )}
             </li>
           ))}

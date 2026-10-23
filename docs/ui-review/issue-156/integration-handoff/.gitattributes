@@ -1,0 +1,5 @@
+# Preserve evidence bytes, historical encoding and published checksums.
+* -text
+# Raw logs/source snapshots retain original CRLF, terminal padding and EOF bytes.
+historical/** -whitespace
+current/** -whitespace

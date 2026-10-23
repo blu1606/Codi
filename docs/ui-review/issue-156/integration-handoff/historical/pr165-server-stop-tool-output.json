@@ -1,0 +1,11 @@
+[
+  {
+    "time": "2026-10-21T11:15:14.376Z",
+    "callId": "call_5ec5a1a62f504513b356d8a01449dcbd",
+    "chunk_id": "2d7ec4",
+    "wall_time_seconds": 0.0138628,
+    "exit_code": 1,
+    "original_token_count": 184,
+    "output": "2026-10-21T11:08:45.659Z WARN [Better Auth]: [better-auth] Cookie integration plugin \"next-cookies\" should be placed last in the plugins array. Plugins with `hooks.after` running after it may set cookies that are not forwarded to the framework cookie store. Move your cookie integration plugin to the end of the `plugins` array to avoid missing `Set-Cookie` headers.\n2026-10-21T11:08:47.592Z WARN [Better Auth]: [better-auth] Cookie integration plugin \"next-cookies\" should be placed last in the plugins array. Plugins with `hooks.after` running after it may set cookies that are not forwarded to the framework cookie store. Move your cookie integration plugin to the end of the `plugins` array to avoid missing `Set-Cookie` headers.\n"
+  }
+]
