@@ -1,0 +1,7 @@
+▲ Next.js 16.3.5
+- Local:         http://localhost:3265
+- Network:       http://26.2.39.192:3265
+✓ Ready in 994ms
+✓ Running next.config.ts took 278ms
+2026-10-21T15:20:16.432Z WARN [Better Auth]: [better-auth] Cookie integration plugin "next-cookies" should be placed last in the plugins array. Plugins with `hooks.after` running after it may set cookies that are not forwarded to the framework cookie store. Move your cookie integration plugin to the end of the `plugins` array to avoid missing `Set-Cookie` headers.
+2026-10-21T15:20:18.155Z WARN [Better Auth]: [better-auth] Cookie integration plugin "next-cookies" should be placed last in the plugins array. Plugins with `hooks.after` running after it may set cookies that are not forwarded to the framework cookie store. Move your cookie integration plugin to the end of the `plugins` array to avoid missing `Set-Cookie` headers.
