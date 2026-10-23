@@ -1,0 +1,34 @@
+{
+  "baseHead": "159f34fe1d4d2f2c33bcd6c002bcaed8e48f6a35",
+  "uncommitted": true,
+  "files": [
+    {
+      "path": "apps/web/src/components/learner-workspace.tsx",
+      "sha256": "2f08046e55007c22ff9209f356a1b846bf363952fa5c4637e5b696a838df6902"
+    },
+    {
+      "path": "apps/web/src/lib/learner-overview-contract.ts",
+      "sha256": "8c980d686fbafbdf2d9d870524d42084428ee07eabb1208d31696b5032718fa7"
+    },
+    {
+      "path": "apps/web/src/lib/learner-overview-service.ts",
+      "sha256": "d01e370d9c21044d717bddbddf9628d30abbd01eb2137ec9d36ca07070b2bf68"
+    },
+    {
+      "path": "apps/web/src/components/header.tsx",
+      "sha256": "a0b41d558a79b79884c611a0f36aa30fb1759a5598b8de5dc26c9a2ef46a2dfa"
+    },
+    {
+      "path": "apps/web/src/app/profile/page.tsx",
+      "sha256": "b36fb3494e064bf86e4e3e66f3cae276c09e6c9c4f1a8d17eba88d3c4784afba"
+    },
+    {
+      "path": "apps/web/src/components/profile/profile-card.tsx",
+      "sha256": "d72cebd13cab2f660b1001b2f33f6525525f43931b9eb9174a71d085ef352ea4"
+    },
+    {
+      "path": "apps/web/src/components/profile/student-profile-overview.tsx",
+      "sha256": "e9cffe4ecedd6668fd6290ab23a5401fb562085cc8017a2186e128294c34d1b0"
+    }
+  ]
+}
