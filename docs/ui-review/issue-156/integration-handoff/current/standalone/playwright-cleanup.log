@@ -1,0 +1,13 @@
+Created isolated QA accounts and 2 courses; no email sent.
+
+Running 4 tests using 1 worker
+
+(node:32548) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 [chromium-desktop] › e2e\knowledge-map-edge-states.spec.ts:21:11 › UI-LRN-25 real-session map edge states › unconfirmed map and concept without lessons desktop-light (44.7s)
+  ok 2 [chromium-desktop] › e2e\knowledge-map-edge-states.spec.ts:21:11 › UI-LRN-25 real-session map edge states › unconfirmed map and concept without lessons desktop-dark (20.9s)
+  ok 3 [chromium-desktop] › e2e\knowledge-map-edge-states.spec.ts:21:11 › UI-LRN-25 real-session map edge states › unconfirmed map and concept without lessons mobile-light (38.4s)
+  ok 4 [chromium-desktop] › e2e\knowledge-map-edge-states.spec.ts:21:11 › UI-LRN-25 real-session map edge states › unconfirmed map and concept without lessons mobile-dark (20.3s)
+
+  4 passed (2.3m)
+Removed owned QA courses/accounts; zero remaining sessions, credentials, enrollments and skills.

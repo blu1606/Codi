@@ -7,9 +7,10 @@ import Dashboard, { type DashboardNavItem } from "../dashboard";
 
 const NAV_ITEMS: DashboardNavItem[] = [
   { label: "Quản lý tài khoản người dùng", href: "/dashboard/admin/users" },
+  { label: "Khóa học đã xuất bản", href: "/dashboard/admin/courses" },
   { label: "Duyệt yêu cầu xuất bản khoá học", disabled: true },
-  { label: "Đơn hàng & giao dịch", disabled: true },
-  { label: "Voucher", disabled: true },
+  { label: "Đơn hàng & giao dịch", href: "/dashboard/admin/orders" },
+  { label: "Voucher", href: "/dashboard/admin/vouchers" },
   { label: "Quan sát hệ thống (Insights)", href: "/dashboard/admin/insights" },
   { label: "Tài chính (Finance)", href: "/dashboard/admin/finance" },
 ];

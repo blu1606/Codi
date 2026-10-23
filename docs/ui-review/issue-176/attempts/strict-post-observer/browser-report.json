@@ -1,0 +1,214 @@
+{
+  "capturedBeforeFixtureAt": "2026-10-22T12:42:31.146Z",
+  "sourceHead": "ab43d4e2c0b03050d37116b3bfda6caa2b3e8cb3",
+  "buildId": "6jDF2oji0k3ANJGIgIe4b",
+  "node": "v22.23.3",
+  "origin": "http://localhost:3144",
+  "sources": [
+    {
+      "path": "apps/web/scripts/verify-dashboard-enrollment-browser.ts",
+      "sha256": "2cf04535dc916a830776e706c54625de9ad3dcf8179b3f53c11af9827fbe50b8"
+    },
+    {
+      "path": "apps/web/scripts/onboarding-fixture.ts",
+      "sha256": "ba06b9c51d3e3d8b2258ef4f42e97babb1dcf707b56050a64fc7f568cc81c656"
+    },
+    {
+      "path": "apps/web/src/app/dashboard/page.tsx",
+      "sha256": "16c721d0cc553d2709922cac30639ea0fa239b86c10a1451bb1953f7c18c7090"
+    },
+    {
+      "path": "apps/web/src/app/dashboard/learner/page.tsx",
+      "sha256": "fde6699b8a97254aec14990f42a5aa9b0c5e589badbe0a36bb01f78e7528a225"
+    },
+    {
+      "path": "apps/web/src/components/learner-workspace.tsx",
+      "sha256": "2f08046e55007c22ff9209f356a1b846bf363952fa5c4637e5b696a838df6902"
+    },
+    {
+      "path": "apps/web/src/lib/learner-overview-service.ts",
+      "sha256": "d01e370d9c21044d717bddbddf9628d30abbd01eb2137ec9d36ca07070b2bf68"
+    }
+  ],
+  "fixture": {
+    "lessons": 3,
+    "completed": 1,
+    "percent": 33,
+    "studySeconds": 5400
+  },
+  "passed": false,
+  "failure": {
+    "stage": "empty 375 dark reload",
+    "message": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   'profile and course-home comparison: unexpected POST /api/learn/qa-course/path',\n+   'continue learning navigation: unexpected POST /api/learn/qa-course/lessons/8e9fcb60-aebd-4f2e-ac92-1d4e3331dc45'\n+ ]\n- []\n"
+  },
+  "cleanup": {
+    "users": 0,
+    "accounts": 0,
+    "sessions": 0,
+    "enrollments": 0,
+    "activities": 0,
+    "clocks": 0,
+    "days": 0,
+    "courses": 0
+  },
+  "checks": [
+    {
+      "stage": "profile and course-home comparison",
+      "profilePercent": 33,
+      "courseHomePercent": 33
+    },
+    {
+      "stage": "enrolled 1280 light initial",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "enrolled 1280 light reload",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "enrolled 1280 dark initial",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "enrolled 1280 dark reload",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "enrolled 375 light initial",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "enrolled 375 light reload",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "enrolled 375 dark initial",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "enrolled 375 dark reload",
+      "courses": 1,
+      "active": 1,
+      "lessons": 1,
+      "weeklyMinutes": 90,
+      "percent": 33,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "continue learning navigation",
+      "openedExpectedLesson": true
+    },
+    {
+      "stage": "empty 1280 light initial",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "empty 1280 light reload",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "empty 1280 dark initial",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "empty 1280 dark reload",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "empty 375 light initial",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "empty 375 light reload",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "empty 375 dark initial",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    },
+    {
+      "stage": "empty 375 dark reload",
+      "courses": 0,
+      "active": 0,
+      "lessons": 0,
+      "weeklyMinutes": 0,
+      "percent": null,
+      "continueLessonCorrect": true
+    }
+  ],
+  "errors": [
+    "profile and course-home comparison: unexpected POST /api/learn/qa-course/path",
+    "continue learning navigation: unexpected POST /api/learn/qa-course/lessons/8e9fcb60-aebd-4f2e-ac92-1d4e3331dc45"
+  ],
+  "finishedAt": "2026-10-22T12:43:19.369Z"
+}

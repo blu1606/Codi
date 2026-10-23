@@ -1,0 +1,45 @@
+{
+  "capturedBeforeFixtureAt": "2026-10-22T11:58:43.941Z",
+  "head": "f92c73e4b8a5bee0f60bc96ba634e26fad6a6638",
+  "tree": "00ffec5b0a325d5e9aacdab8cc480f13fc775e43",
+  "base": "437c1e8df16969a54b1fb96f0ff3e02a09c15e7a",
+  "buildId": "6jDF2oji0k3ANJGIgIe4b",
+  "node": "v22.23.3",
+  "args": [
+    "--allow-dev-db"
+  ],
+  "sources": [
+    {
+      "path": "apps/web/scripts/verify-study-activity-browser.ts",
+      "sha256": "37d5d21bed77fa58f1663615869ec5b0ec68dd479ab4191519bc59ec796eaffe"
+    },
+    {
+      "path": "apps/web/scripts/assessment-fixture.ts",
+      "sha256": "195e0844a01f3322fb33141c4b7f032d9d8f4344cad9645800be5f4dd91e4b01"
+    },
+    {
+      "path": "apps/web/scripts/onboarding-fixture.ts",
+      "sha256": "ba06b9c51d3e3d8b2258ef4f42e97babb1dcf707b56050a64fc7f568cc81c656"
+    },
+    {
+      "path": "apps/web/src/components/header.tsx",
+      "sha256": "80d54996f7f02de866b8339ee2a9e66cbd6008f1f7e17a7a1bc0b9474421cc2c"
+    },
+    {
+      "path": "apps/web/src/components/study-activity-tracker.tsx",
+      "sha256": "67bcbe002a45a1c2d8bc0c5ce9c243cf5290b7b03955b0315bc93601b00d0d50"
+    },
+    {
+      "path": "apps/web/src/lib/study-activity-service.ts",
+      "sha256": "e5affae90ead7f83eb2027e3cae99b34a6a9e5b09454cb3be9786a8ab73584ee"
+    },
+    {
+      "path": "apps/web/src/lib/learner-overview-contract.ts",
+      "sha256": "8c980d686fbafbdf2d9d870524d42084428ee07eabb1208d31696b5032718fa7"
+    },
+    {
+      "path": "apps/web/src/app/learn/[courseId]/[lessonId]/lesson-player.tsx",
+      "sha256": "073bb6e9c0deb128521cd6a2c06e1ea672123f324082f02db1862c9a868a0233"
+    }
+  ]
+}

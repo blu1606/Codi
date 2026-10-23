@@ -1,0 +1,17 @@
+{
+  "startedUtc": "2026-10-21T15:06:12.368Z",
+  "finishedUtc": "2026-10-21T15:11:28.848Z",
+  "cwd": "E:\\Code\\AI Study\\Codi-165-integration\\apps\\web",
+  "command": [
+    "node",
+    "node_modules/varlock/bin/cli.js",
+    "run",
+    "--",
+    "node",
+    "node_modules/next/dist/bin/next",
+    "build",
+    "--webpack"
+  ],
+  "exitCode": 1,
+  "signal": null
+}
