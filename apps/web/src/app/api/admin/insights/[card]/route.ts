@@ -2,59 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
-import {
-  getAnalyticsWindow,
-  getInsightsA1,
-  getInsightsA2,
-  getInsightsA3,
-  getInsightsA4,
-  getInsightsA5,
-  getInsightsA6,
-  getInsightsA7,
-  getInsightsA8,
-  getInsightsA9,
-} from "@/lib/admin-analytics-service";
+import { getAdminCount } from "@/lib/admin-analytics-service";
+import { ANALYTICS_UNAVAILABLE, analyticsWindow, type AdminMetric } from "@/lib/analytics-contract";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ card: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ card: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const active = await getActiveRoles(db, session.user.id);
-  if (!active.includes(ROLE.ADMIN)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
+  if (!active.includes(ROLE.ADMIN)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { card } = await params;
-  const url = request.nextUrl;
-  const period = url.searchParams.get("period") || "30";
-  const compare = url.searchParams.get("compare") !== "false";
-  const w = getAnalyticsWindow(period, compare);
-
-  switch (card.toLowerCase()) {
-    case "a1":
-      return NextResponse.json(getInsightsA1(w));
-    case "a2":
-      return NextResponse.json(getInsightsA2(w));
-    case "a3":
-      return NextResponse.json(getInsightsA3(w));
-    case "a4":
-      return NextResponse.json(getInsightsA4(w));
-    case "a5":
-      return NextResponse.json(getInsightsA5((url.searchParams.get("sort") as "rate" | "n") || "rate"));
-    case "a6":
-      return NextResponse.json(getInsightsA6(w));
-    case "a7":
-      return NextResponse.json(getInsightsA7());
-    case "a8":
-      return NextResponse.json(getInsightsA8());
-    case "a9":
-      return NextResponse.json(getInsightsA9(w));
-    default:
-      return NextResponse.json({ error: "Card not found" }, { status: 404 });
+  if (!["users", "courses", "orders"].includes(card)) {
+    return NextResponse.json({ status: "unavailable", message: ANALYTICS_UNAVAILABLE }, { status: 404 });
+  }
+  const period = request.nextUrl.searchParams.get("period") || "30";
+  try { analyticsWindow(period); } catch {
+    return NextResponse.json({ error: "Invalid period" }, { status: 400 });
+  }
+  try {
+    return NextResponse.json(await getAdminCount(db, card as AdminMetric, period), { headers: { "Cache-Control": "private, no-store" } });
+  } catch {
+    return NextResponse.json({ error: "Không tải được thống kê." }, { status: 500 });
   }
 }
