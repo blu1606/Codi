@@ -1,0 +1,29 @@
+[
+  {
+    "time": "2026-10-21T11:10:27.959Z",
+    "callId": "call_549e11048e2c4095b36bb8b4d7b46c8f",
+    "chunk_id": "df14ba",
+    "wall_time_seconds": 5.0035262,
+    "session_id": 12526,
+    "original_token_count": 48,
+    "output": "  ok 4 [chromium-desktop] › e2e\\knowledge-map-review.spec.ts:171:11 › PR165 real-session knowledge map review › lecturer #133 cycle, minimap and declined endpoint desktop-dark (17.2s)\n"
+  },
+  {
+    "time": "2026-10-21T11:11:11.400Z",
+    "callId": "call_4262342f11f04b0e818f6a25b1aa9b81",
+    "chunk_id": "d1aea4",
+    "wall_time_seconds": 5.0044002,
+    "session_id": 12526,
+    "original_token_count": 94,
+    "output": "  ok 5 [chromium-desktop] › e2e\\knowledge-map-review.spec.ts:30:11 › PR165 real-session knowledge map review › learner locked/unlocked, real lesson navigation mobile-light (24.5s)\n  ok 6 [chromium-desktop] › e2e\\knowledge-map-review.spec.ts:171:11 › PR165 real-session knowledge map review › lecturer #133 cycle, minimap and declined endpoint mobile-light (17.4s)\n"
+  },
+  {
+    "time": "2026-10-21T11:11:35.488Z",
+    "callId": "call_9e7db406a810460ca0190f74435d479d",
+    "chunk_id": "16c573",
+    "wall_time_seconds": 0.0000138,
+    "exit_code": 0,
+    "original_token_count": 123,
+    "output": "  ok 7 [chromium-desktop] › e2e\\knowledge-map-review.spec.ts:30:11 › PR165 real-session knowledge map review › learner locked/unlocked, real lesson navigation mobile-dark (24.4s)\n  ok 8 [chromium-desktop] › e2e\\knowledge-map-review.spec.ts:171:11 › PR165 real-session knowledge map review › lecturer #133 cycle, minimap and declined endpoint mobile-dark (16.9s)\n\n  8 passed (3.0m)\nRemoved owned QA courses/accounts; zero remaining sessions, credentials, enrollments and skills.\n"
+  }
+]

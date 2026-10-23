@@ -1,0 +1,28 @@
+▲ Next.js 16.3.5 (webpack)
+✓ Running next.config.ts took 250ms
+
+  Creating an optimized production build ...
+⚠ Compiled with warnings in 4.1min
+
+../../node_modules/.pnpm/@varlock+nextjs-integration_f17f14fb2439b8c938855cf6d1407638/node_modules/@varlock/nextjs-integration/dist/dynamic-access.cjs
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+../../node_modules/.pnpm/@varlock+nextjs-integration_f17f14fb2439b8c938855cf6d1407638/node_modules/@varlock/nextjs-integration/dist/dynamic-access.cjs
+
+../../node_modules/.pnpm/@varlock+nextjs-integration_f17f14fb2439b8c938855cf6d1407638/node_modules/@varlock/nextjs-integration/dist/dynamic-access.cjs
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+../../node_modules/.pnpm/@varlock+nextjs-integration_f17f14fb2439b8c938855cf6d1407638/node_modules/@varlock/nextjs-integration/dist/dynamic-access.cjs
+./src/app/api/avatar/route.ts
+
+  Running TypeScript ...
+.next/types/app/profile/github/page.ts(39,29): error TS2344: Type '{ searchParams?: Promise<Record<string, string | string[] | undefined>> | undefined; } | undefined' does not satisfy the constraint 'PageProps'.
+  Type 'undefined' is not assignable to type 'PageProps'.
+Failed to type check.
+
+Command failed with exit code 1
+command [node node_modules/next/dist/bin/next build --webpack] failed
+try running the same command without varlock
+if you get a different result, varlock may be the problem...
