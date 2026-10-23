@@ -43,6 +43,10 @@ describe("OrderExportModal Component", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetAdminOrdersExportAction.mockReset();
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:order-export");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -56,6 +60,72 @@ describe("OrderExportModal Component", () => {
     container?.remove();
     container = null;
     document.body.innerHTML = "";
+    vi.restoreAllMocks();
+  });
+
+  it("uses the dialog period and toggles all current filters in action arguments and downloaded CSV", async () => {
+    const otherOrder = {
+      ...sampleOrders[0], id: 2, code: "ORD-002", buyerName: "Tran Van B",
+      buyerEmail: "b@example.test", status: "pending", paidAt: null,
+    };
+    mockGetAdminOrdersExportAction
+      .mockResolvedValueOnce(sampleOrders)
+      .mockResolvedValueOnce(sampleOrders)
+      .mockResolvedValueOnce([...sampleOrders, otherOrder])
+      .mockResolvedValueOnce(sampleOrders);
+    const onOpenChange = vi.fn();
+    await act(async () => {
+      root!.render(createElement(OrderExportModal, {
+        open: true, onOpenChange, orders: [{ ...sampleOrders[0], code: "FALLBACK" }],
+        initialRange: "90", currentStatus: "all",
+        currentFilter: { status: "paid", q: "Nguyen Van A", overdue: true, reconciliation: true },
+      }));
+    });
+    const filteredQuery = {
+      range: "90", status: "paid", q: "Nguyen Van A", overdueOnly: true, reconciliationOnly: true,
+    };
+    expect(mockGetAdminOrdersExportAction).toHaveBeenLastCalledWith(filteredQuery);
+    const rangeButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.trim() === "7 ngày")!;
+    await act(async () => { rangeButton.click(); });
+    expect(mockGetAdminOrdersExportAction).toHaveBeenLastCalledWith({ ...filteredQuery, range: "7" });
+
+    const exportButton = document.querySelector<HTMLButtonElement>("button:has(svg)")!;
+    const download = vi.mocked(HTMLAnchorElement.prototype.click);
+    const expectDownload = async (codes: string[]) => {
+      expect(exportButton.disabled).toBe(false);
+      await act(async () => { exportButton.click(); });
+      const blob = vi.mocked(URL.createObjectURL).mock.lastCall![0] as Blob;
+      expect(blob.type).toBe("text/csv;charset=utf-8");
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      expect([...bytes.slice(0, 3)]).toEqual([239, 187, 191]);
+      const csv = new TextDecoder().decode(bytes);
+      expect(csv.split("\r\n")).toHaveLength(codes.length + 1);
+      expect(csv).toContain('"Mã giao dịch","Người mua","Email"');
+      for (const code of codes) expect(csv).toContain(`"${code}"`);
+      expect(csv).toContain('"Nguyen Van A","a@codi.vn","React Pro"');
+      expect(csv).toContain('"500000","Đã thanh toán"');
+      expect(csv).not.toContain("FALLBACK");
+      expect(csv.includes('"Tran Van B","b@example.test"')).toBe(codes.includes("ORD-002"));
+      const anchor = download.mock.instances.at(-1)! as HTMLAnchorElement;
+      expect(anchor.href).toBe("blob:order-export");
+      expect(anchor.download).toMatch(/^codi-don-hang-\d{4}-\d{2}-\d{2}\.csv$/);
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    };
+    await expectDownload(["ORD-001"]);
+
+    const filterCheckbox = document.getElementById("exp-filter")!;
+    await act(async () => { filterCheckbox.click(); });
+    expect(mockGetAdminOrdersExportAction).toHaveBeenLastCalledWith({
+      range: "7", status: "all", q: "", overdueOnly: false, reconciliationOnly: false,
+    });
+    await expectDownload(["ORD-001", "ORD-002"]);
+
+    await act(async () => { filterCheckbox.click(); });
+    expect(mockGetAdminOrdersExportAction).toHaveBeenLastCalledWith({ ...filteredQuery, range: "7" });
+    await expectDownload(["ORD-001"]);
+    expect(download).toHaveBeenCalledTimes(3);
+    expect(mockGetAdminOrdersExportAction).toHaveBeenCalledTimes(4);
   });
 
   it("blocks CSV export while query is pending, and only exports when latest selected range data is ready", async () => {
@@ -162,6 +232,11 @@ describe("OrderExportModal Component", () => {
     const exportBtn = document.querySelector<HTMLButtonElement>("button:has(svg)")!;
     expect(exportBtn.disabled).toBe(true);
 
+    await act(async () => { exportBtn.click(); });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain("500.000 ₫");
+
     // Click retry with successful response
     mockGetAdminOrdersExportAction.mockResolvedValueOnce(sampleOrders);
 
@@ -175,12 +250,8 @@ describe("OrderExportModal Component", () => {
     expect(document.body.textContent).toContain("1 đơn");
   });
 
-  it("handles dynamic import chunk rejection gracefully without stuck loading", async () => {
-    // Giả lập lỗi tải chunk module dynamic import (Failed to fetch dynamically imported module)
-    const originalImport = vi.fn();
-    const spy = vi.spyOn(mockGetAdminOrdersExportAction, "mockImplementationOnce");
-
-    // Mock action rejection tương đương với import fail bằng cách reject ngay
+  it("handles an action rejection carrying a chunk-error message without stuck loading", async () => {
+    // The actions module is already mocked; this does not simulate module loading failure.
     mockGetAdminOrdersExportAction.mockRejectedValueOnce(
       new Error("Failed to fetch dynamically imported module")
     );

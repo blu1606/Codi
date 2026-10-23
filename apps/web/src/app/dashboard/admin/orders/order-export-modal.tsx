@@ -88,16 +88,13 @@ export function OrderExportModal({
         const { getAdminOrdersExportAction } = await import("../actions");
         if (cancelled) return;
 
-        // Mockup admin.js (dòng 258, 300):
-        // const expQ = Object.assign({}, Codi.query(), exportState.applyFilter ? {} : { range: exportState.range });
-        // Khi applyFilter = true: giữ nguyên toàn bộ query/filter hiện tại của trang (status, q, overdue, reconciliation)
-        // Khi applyFilter = false: chỉ thay đổi range theo modal, vẫn giữ nguyên query hiện tại (q, status, overdue, reconciliation)
+        // The dialog always controls the period; current page filters are optional.
         const queryFilter = {
           range,
-          status: (currentFilter?.status || currentStatus || "all") as any,
-          q: currentFilter?.q || "",
-          overdueOnly: !!currentFilter?.overdue,
-          reconciliationOnly: !!currentFilter?.reconciliation,
+          status: (applyFilter ? currentFilter?.status || currentStatus || "all" : "all") as any,
+          q: applyFilter ? currentFilter?.q || "" : "",
+          overdueOnly: applyFilter && !!currentFilter?.overdue,
+          reconciliationOnly: applyFilter && !!currentFilter?.reconciliation,
         };
 
         const fetchedOrders = await getAdminOrdersExportAction(queryFilter);
