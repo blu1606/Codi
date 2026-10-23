@@ -1,0 +1,47 @@
+[
+  {
+    "time": "2026-10-21T13:43:52.134Z",
+    "callId": "call_20718c98d6b04d8198f66a8502f50717",
+    "chunk_id": "4f61af",
+    "wall_time_seconds": 10.01225,
+    "session_id": 61713,
+    "original_token_count": 64,
+    "output": "Created isolated QA accounts and 1 courses; no email sent.\n\nRunning 4 tests using 1 worker\n\n(node:1476) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "time": "2026-10-21T13:44:43.668Z",
+    "callId": "call_0381ae6a58e145799599e3a49d4b2926",
+    "chunk_id": "575c34",
+    "wall_time_seconds": 5.0118269,
+    "session_id": 61713,
+    "original_token_count": 46,
+    "output": "  ok 1 [chromium-desktop] › e2e\\knowledge-map-cta.spec.ts:22:11 › UI-LRN-25 real-session lesson CTA › available CTA opens player; locked lesson is denied desktop-light (32.3s)\n"
+  },
+  {
+    "time": "2026-10-21T13:45:04.086Z",
+    "callId": "call_a288738397454cd8bf8e7d2abac00ee2",
+    "chunk_id": "76ec97",
+    "wall_time_seconds": 5.016265,
+    "session_id": 61713,
+    "original_token_count": 46,
+    "output": "  ok 2 [chromium-desktop] › e2e\\knowledge-map-cta.spec.ts:22:11 › UI-LRN-25 real-session lesson CTA › available CTA opens player; locked lesson is denied desktop-dark (27.0s)\n"
+  },
+  {
+    "time": "2026-10-21T13:45:37.273Z",
+    "callId": "call_db46962bb5324f2ebb14c169f7662e15",
+    "chunk_id": "da5828",
+    "wall_time_seconds": 5.0049515,
+    "session_id": 61713,
+    "original_token_count": 46,
+    "output": "  ok 3 [chromium-desktop] › e2e\\knowledge-map-cta.spec.ts:22:11 › UI-LRN-25 real-session lesson CTA › available CTA opens player; locked lesson is denied mobile-light (29.1s)\n"
+  },
+  {
+    "time": "2026-10-21T13:45:54.244Z",
+    "callId": "call_d74252e5e58d444dbbc5fe684cef860d",
+    "chunk_id": "9ffb0c",
+    "wall_time_seconds": 0.000015,
+    "exit_code": 0,
+    "original_token_count": 74,
+    "output": "  ok 4 [chromium-desktop] › e2e\\knowledge-map-cta.spec.ts:22:11 › UI-LRN-25 real-session lesson CTA › available CTA opens player; locked lesson is denied mobile-dark (27.4s)\n\n  4 passed (2.0m)\nRemoved owned QA courses/accounts; zero remaining sessions, credentials, enrollments and skills.\n"
+  }
+]
