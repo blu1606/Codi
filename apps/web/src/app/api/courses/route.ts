@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/services";
 import { courses, courseDetails, skills, studentEnrollments, user } from "@codi-1/db";
 
@@ -24,8 +24,14 @@ export async function GET(request: NextRequest) {
       : eq(courses.status, "published");
 
     // Public catalogue fields only: lifecycle, pricing audit and knowledge-map columns stay internal.
-    // Topics are gathered from accepted / edited skills for each course.
-    const topicsAgg = sql<string[]>`COALESCE(ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN ${skills.review} IN ('accepted', 'edited') THEN ${skills.name} END), NULL), ARRAY[]::text[])`.as("topics");
+    // Suppress topic names until the published course's current map is confirmed.
+    // Keep this gate inside the aggregate so other courses and their counts remain visible.
+    const topicEligibility = and(
+      eq(courses.status, "published"),
+      eq(courses.knowledgeMapStatus, "confirmed"),
+      inArray(skills.review, ["accepted", "edited"]),
+    );
+    const topicsAgg = sql<string[]>`COALESCE(ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN ${topicEligibility} THEN ${skills.name} END), NULL), ARRAY[]::text[])`.as("topics");
 
     const query = db
       .select({
