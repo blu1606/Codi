@@ -2,6 +2,8 @@
 
 Implements [#102](https://github.com/blu1606/Codi/issues/102), under epic #94: mockup S12 `/dashboard`, S13 `/progress`, Flow L10. The explicit `/dashboard/learner` entry uses the same dashboard. Admin/lecturer routing priority is preserved.
 
+The baseline defect in [#176](https://github.com/blu1606/Codi/issues/176) is covered by this implementation. A [dedicated production-browser regression](ui-review/issue-176/README.md) compares profile/course-home/dashboard data, checks the next-lesson CTA, and verifies populated/empty states survive reload at desktop/375px in light/dark. PR #144 must still be merged and deployed before this fix reaches develop users.
+
 ## Behaviour and boundaries
 
 | Mockup state / transition | Implementation | Verification |

@@ -1,0 +1,2 @@
+Issue176 passed: profile/course home/dashboard agree at 33%; real 1-course/90-minute data and next-lesson CTA survive reload; separate empty learner stays empty (desktop/375px, light/dark). No page errors, failing app HTTP or unexpected POSTs.
+Cleanup verified: zero QA users/accounts/sessions/enrollments/activities/clocks/days/courses remain.
