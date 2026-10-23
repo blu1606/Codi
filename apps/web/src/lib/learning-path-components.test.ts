@@ -35,7 +35,7 @@ afterEach(async () => {
 });
 const button = (label: string) =>
   [...document.querySelectorAll("button")].find(
-    (el) => el.textContent === label,
+    (el) => el.textContent === label || el.getAttribute("aria-label") === label,
   )!;
 function home(): CoursePathView {
   const input: PathInput = {
