@@ -65,6 +65,7 @@ interface SetupDbOptions {
   exercise?: any;
   testCases?: any[];
   submissionUsageCount?: number;
+  enforceLease?: boolean;
 }
 
 let insertedRows: Array<{ table: any; values: any }>;
@@ -92,10 +93,14 @@ function setupDb({
   exercise = null,
   testCases = [],
   submissionUsageCount = 0,
+  enforceLease = false,
 }: SetupDbOptions = {}) {
   insertedRows = [];
   updatedRows = [];
   deletedRows = [];
+  let lastStartedAt = 0;
+  let running = false;
+  let nextTestId = 1000;
 
   mockSelect.mockImplementation((selection?: any) => {
     const query: any = {
@@ -116,7 +121,7 @@ function setupDb({
         } else if (table === codingTestResults) {
           rows = [{ count: submissionUsageCount }];
         } else if (table === codingRunLeases) {
-          rows = [];
+          rows = enforceLease ? [{ runningUntil: new Date(running ? Date.now() + 20000 : 0) }] : [];
         }
 
         const chain: any = {};
@@ -134,10 +139,17 @@ function setupDb({
   const mockInsertChain = (table: any) => ({
     values: vi.fn().mockImplementation((val) => {
       insertedRows.push({ table, values: val });
-      const record = { id: val.id ?? 101, ...val };
+      const record = { id: val.id ?? (table === codingTestCases ? nextTestId++ : 101), ...val };
       const chain: any = {};
       chain.onConflictDoUpdate = vi.fn().mockImplementation(() => chain);
-      chain.returning = vi.fn().mockResolvedValue([record]);
+      chain.returning = vi.fn().mockImplementation(async () => {
+        if (table === codingRunLeases && enforceLease) {
+          if (running || Date.now() - lastStartedAt < 2000) return [];
+          lastStartedAt = Date.now();
+          running = true;
+        }
+        return [record];
+      });
       chain.then = (resolve: any, reject?: any) => Promise.resolve([record]).then(resolve, reject);
       return chain;
     }),
@@ -146,6 +158,7 @@ function setupDb({
   const mockUpdateChain = (table: any) => ({
     set: vi.fn().mockImplementation((val) => {
       updatedRows.push({ table, values: val });
+      if (table === codingRunLeases && enforceLease) running = false;
       const chain: any = {};
       chain.where = vi.fn().mockImplementation(() => chain);
       chain.then = (resolve: any, reject?: any) => Promise.resolve().then(resolve, reject);
@@ -254,6 +267,24 @@ describe("Coding Exercise Builder Actions", () => {
   });
 
   describe("verifySolutionCode", () => {
+    it.each([
+      [777, 777],
+      [2, "new-test"],
+      [2, undefined],
+      [2, "2"],
+    ])("grades each expression independently for caller IDs %s and %s", async (first, second) => {
+      const result = await verifySolutionCode("c-1", "ls-1", {
+        solutionCode: "function f(x) { return x; }",
+        language: "javascript",
+        tests: [
+          { id: first, name: "A", call: "f(1)", expected: 1 },
+          { id: second, name: "B", call: "f(2)", expected: 1 },
+        ],
+      });
+      expect(result.ok).toBe(false);
+      expect(result.passed).toBe(1);
+      expect(result.outcomes.map((o) => o.actual)).toEqual(["1", "2"]);
+    });
     it("ném lỗi khi khoá học không thuộc quyền quản lý của giảng viên", async () => {
       setupDb({ course: null });
 
@@ -392,6 +423,71 @@ describe("Coding Exercise Builder Actions", () => {
   });
 
   describe("saveCodingExercise guard & execution", () => {
+    it("returns canonical IDs for existing and newly inserted tests", async () => {
+      setupDb({ assessment: { id: 10 }, exercise: { id: 20 }, testCases: [{ id: 501 }] });
+      const result = await saveCodingExercise("c-1", "ls-1", {
+        title: "Identity", language: "javascript", instructions: ["Return input"],
+        starterCode: "", solutionCode: "function f(x) { return x; }",
+        tests: [
+          { id: "501", name: "Existing", call: "f(1)", expected: 1 },
+          { id: "draft-new", name: "New", call: "f(2)", expected: 2 },
+          { name: "No ID", call: "f(3)", expected: 3 },
+        ],
+      });
+      expect(result).toMatchObject({ testIds: [501, 1000, 1001] });
+    });
+
+    it("preserves saved IDs on a title-only second save after student results exist", async () => {
+      setupDb({ assessment: { id: 10 }, exercise: { id: 20 }, testCases: [{ id: 501 }] });
+      const input = {
+        title: "Identity", language: "javascript", instructions: ["Return input"],
+        starterCode: "", solutionCode: "function f(x) { return x; }",
+        tests: [
+          { id: "501", name: "Existing", call: "f(1)", expected: 1 },
+          { id: "draft-new", name: "New", call: "f(2)", expected: 2 },
+        ],
+      };
+      const saved = await saveCodingExercise("c-1", "ls-1", input);
+      setupDb({
+        assessment: { id: 10 }, exercise: { id: 20 },
+        testCases: saved.testIds.map((id: number) => ({ id })), submissionUsageCount: 2,
+      });
+      const second = await saveCodingExercise("c-1", "ls-1", {
+        ...input, title: "Title only",
+        tests: input.tests.map((test, index) => ({ ...test, id: saved.testIds[index] })),
+      });
+      expect(second.testIds).toEqual(saved.testIds);
+      expect(deletedRows.filter((r) => r.table === codingTestCases)).toHaveLength(0);
+      expect(insertedRows.filter((r) => r.table === codingTestCases)).toHaveLength(0);
+      expect(updatedRows.filter((r) => r.table === codingTestCases)).toHaveLength(2);
+    });
+
+    it.each([[777, 777], [501, "501"], [501, "0501"], ["draft-new", "draft-new"]])(
+      "rejects repeated persistence IDs %s and %s before writing",
+      async (first, second) => {
+        await expect(saveCodingExercise("c-1", "ls-1", {
+          title: "Identity", language: "javascript", instructions: ["Return input"],
+          starterCode: "", solutionCode: "function f(x) { return x; }",
+          tests: [
+            { id: first, name: "A", call: "f(1)", expected: 1 },
+            { id: second, name: "B", call: "f(2)", expected: 2 },
+          ],
+        })).rejects.toThrow("ID test case không được trùng nhau");
+        expect(mockTransaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it("cannot stamp verification or persist the duplicate-ID false-positive payload", async () => {
+      await expect(saveCodingExercise("c-1", "ls-1", {
+        title: "Identity", language: "javascript", instructions: ["Return input"],
+        starterCode: "", solutionCode: "function f(x) { return x; }",
+        tests: [
+          { id: 777, name: "A", call: "f(1)", expected: 1 },
+          { id: 777, name: "B", call: "f(2)", expected: 1 },
+        ],
+      })).rejects.toThrow("ID test case không được trùng nhau");
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
     it("chặn không cho lưu khi khoá học đang chờ duyệt", async () => {
       setupDb({
         course: { id: "c-1", instructorId: "lecturer-1", status: "pending" },
@@ -680,6 +776,35 @@ describe("Coding Exercise Builder Actions", () => {
   });
 
   describe("generateAiCodingTestCases", () => {
+    it("releases the lease on infrastructure rejection without fabricating suggestions", async () => {
+      setupDb({ enforceLease: true });
+      await expect(generateAiCodingTestCases("c-1", "ls-1", {
+        solutionCode: "x".repeat(65537), instructions: [], existingTests: [],
+      })).rejects.toThrow("Invalid sandbox input");
+      expect(updatedRows.filter((r) => r.table === codingRunLeases)).toHaveLength(1);
+    });
+
+    it("does not acquire a lease when all candidate calls already exist", async () => {
+      const calls = ["solution([])", "solution(0)", 'solution("")', "solution(-1)", "solution([1, 2, 3])", "solution(null)"];
+      const result = await generateAiCodingTestCases("c-1", "ls-1", {
+        solutionCode: "function solution(x) { return x; }", instructions: [],
+        existingTests: calls.map((call) => ({ name: call, call })),
+      });
+      expect(result.tests).toEqual([]);
+      expect(insertedRows.filter((r) => r.table === codingRunLeases)).toHaveLength(0);
+    });
+    it("uses one lease for fast suggestions and retains the cross-request cooldown", async () => {
+      setupDb({ enforceLease: true });
+      const input = {
+        solutionCode: "function solution(x) { return x; }",
+        instructions: ["Return input"], existingTests: [],
+      };
+      const result = await generateAiCodingTestCases("c-1", "ls-1", input);
+      expect(result.tests.map((t) => t.expected)).toEqual([[], 0, ""]);
+      expect(insertedRows.filter((r) => r.table === codingRunLeases)).toHaveLength(1);
+      expect(updatedRows.filter((r) => r.table === codingRunLeases)).toHaveLength(1);
+      await expect(generateAiCodingTestCases("c-1", "ls-1", input)).rejects.toThrow("chờ 2 giây");
+    });
     it("chặn khi khoá học không thuộc quyền quản lý", async () => {
       setupDb({ course: null });
 

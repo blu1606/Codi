@@ -235,7 +235,7 @@ export async function getCodingExerciseData(courseId: string, lessonId: string) 
       hints: ["Đọc kỹ kiểu dữ liệu đầu vào và giá trị trả về mong đợi."],
       tests: [
         {
-          id: 1,
+          id: "draft-default",
           name: "Kiểm tra cơ bản",
           call: 'giaiThuat("Codi")',
           expected: "Codi",
@@ -286,7 +286,8 @@ export async function verifySolutionCode(
   const preparedTests = input.tests.map((t, idx) => {
     const { parsed, canonicalJson } = normalizeExpectedValue(t.expectedText, t.expected);
     return {
-      id: typeof t.id === "number" ? t.id : idx + 1,
+      // Execution identity is independent of untrusted persistence/draft IDs.
+      id: idx + 1,
       name: t.name || `Test #${idx + 1}`,
       call: t.call.trim(),
       input: t.call.trim(),
@@ -384,7 +385,15 @@ export async function saveCodingExercise(
   }
 
   // 2. Chuẩn hoá test cases và áp dụng hợp đồng kiểm thử của #128
+  const seenIds = new Set<string>();
   const preparedTests = input.tests.map((t, idx) => {
+    if (t.id !== undefined) {
+      // Persistence accepts numeric strings, so aliases must not update the same row twice.
+      const numericId = Number(t.id);
+      const key = Number.isNaN(numericId) ? `draft:${t.id}` : `row:${numericId}`;
+      if (seenIds.has(key)) throw new Error("ID test case không được trùng nhau.");
+      seenIds.add(key);
+    }
     if (!t.name || !t.name.trim()) {
       throw new Error(`Test ${idx + 1}: chưa có tên hiển thị.`);
     }
@@ -394,7 +403,7 @@ export async function saveCodingExercise(
     const { canonicalJson } = normalizeExpectedValue(t.expectedText, t.expected);
     const isSample = t.isSample !== undefined ? !!t.isSample : !t.hidden;
     return {
-      id: typeof t.id === "number" ? t.id : idx + 1,
+      id: idx + 1,
       rawId: t.id,
       name: t.name.trim(),
       input: t.call.trim(),
@@ -422,7 +431,7 @@ export async function saveCodingExercise(
 
   const verifiedAt = new Date();
 
-  await db.transaction(async (tx) => {
+  const testIds = await db.transaction(async (tx) => {
     // 4. Tìm hoặc tạo assessment coding
     const [existingAssessment] = await tx
       .select()
@@ -541,6 +550,7 @@ export async function saveCodingExercise(
     }
 
     // Cập nhật tại chỗ hoặc thêm mới
+    const savedTestIds: number[] = [];
     for (const t of preparedTests) {
       const testId = typeof t.rawId === "number" ? t.rawId : Number(t.rawId);
       if (!isNaN(testId) && existingTestMap.has(testId)) {
@@ -554,24 +564,28 @@ export async function saveCodingExercise(
             position: t.position,
           })
           .where(eq(codingTestCases.id, testId));
+        savedTestIds.push(testId);
       } else {
-        await tx.insert(codingTestCases).values({
+        const [inserted] = await tx.insert(codingTestCases).values({
           exerciseId,
           name: t.name,
           input: t.input,
           expectedOutput: t.expectedOutput,
           isSample: t.isSample,
           position: t.position,
-        });
+        }).returning({ id: codingTestCases.id });
+        savedTestIds.push(inserted.id);
       }
     }
 
     // 7. Đánh dấu bản đồ kiến thức là stale nếu khoá học đã xuất bản
     await markKnowledgeMapStaleIfPublished(course, tx);
+    return savedTestIds;
   });
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
-  return { success: true, verifiedAt };
+  // IDs follow submitted test order, not execution order (samples run first).
+  return { success: true, verifiedAt, testIds };
 }
 
 /**
@@ -741,17 +755,17 @@ export async function generateAiCodingTestCases(
 
   const suggestedTests: CodingTestCaseInput[] = [];
 
-  for (let i = 0; i < Math.min(uniqueCandidates.length, 3); i++) {
-    const callExpr = uniqueCandidates[i];
-
-    const runRes = await withRunLease(user.id, async () => {
-      return await runJavaScript({
-        code: input.solutionCode,
-        tests: [{ id: i + 1, input: callExpr, isSample: false }],
-      });
+  const candidates = uniqueCandidates.slice(0, 3);
+  if (candidates.length === 0) return { success: true, tests: suggestedTests };
+  const runRes = await withRunLease(user.id, async () => {
+    return await runJavaScript({
+      code: input.solutionCode,
+      tests: candidates.map((call, i) => ({ id: i + 1, input: call, isSample: false })),
     });
+  });
 
-    const outcome = runRes.outcomes[0];
+  for (const [i, callExpr] of candidates.entries()) {
+    const outcome = runRes.outcomes.find((out) => out.id === i + 1);
     if (outcome && outcome.phase === "done" && outcome.actual !== null) {
       let parsedVal: unknown;
       try {
@@ -761,7 +775,7 @@ export async function generateAiCodingTestCases(
       }
 
       suggestedTests.push({
-        id: `ai-test-${Date.now()}-${i}`,
+        id: `ai-test-${randomUUID()}`,
         name: `Trường hợp biên: ${callExpr}`,
         call: callExpr,
         expected: parsedVal,
