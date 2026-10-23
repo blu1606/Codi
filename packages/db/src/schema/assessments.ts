@@ -24,6 +24,7 @@ export const assessments = pgTable.withRLS("assessments", {
   maxScore: numeric("max_score", { precision: 6, scale: 2, mode: "number" }).default(100).notNull(),
   // Percent needed to pass. Passing the latest quiz attempt gates lesson completion (decision D6).
   passingScore: integer("passing_score"),
+  currentQuizRevision: integer("current_quiz_revision").default(1).notNull(),
   timeLimitMinutes: integer("time_limit_minutes"),
   dueDays: integer("due_days"),
   shuffleQuestions: boolean("shuffle_questions"),
@@ -39,6 +40,7 @@ export const assessments = pgTable.withRLS("assessments", {
   index("assessments_lesson_idx").on(table.lessonId),
   uniqueIndex("assessments_diagnostic_per_course_idx").on(table.courseId).where(sql`${table.isDiagnostic}`),
   check("assessments_max_score_check", sql`${table.maxScore} > 0`),
+  check("assessments_quiz_revision_check", sql`${table.currentQuizRevision} > 0`),
   check("assessments_passing_score_check", sql`${table.passingScore} IS NULL OR ${table.passingScore} BETWEEN 0 AND 100`),
   check("assessments_diagnostic_shape_check", sql`NOT ${table.isDiagnostic} OR (${table.type} = 'quiz' AND ${table.lessonId} IS NULL)`),
   check("assessments_assignment_format_check", sql`${table.type} <> 'assignment' OR ${table.submissionFormat} IS NOT NULL`),
@@ -48,6 +50,7 @@ export const assessments = pgTable.withRLS("assessments", {
 export const quizQuestions = pgTable.withRLS("quiz_questions", {
   id: bigint("id", { mode: "number" }).generatedByDefaultAsIdentity().primaryKey(),
   assessmentId: bigint("assessment_id", { mode: "number" }).notNull().references(() => assessments.id, { onDelete: "cascade" }),
+  quizRevision: integer("quiz_revision").default(1).notNull(),
   // For the diagnostic: which lesson this question is evidence for (BKT reads the lesson's skills).
   lessonId: uuid("lesson_id").references(() => courseLessons.id, { onDelete: "set null" }),
   text: text("text").notNull(),
@@ -57,9 +60,10 @@ export const quizQuestions = pgTable.withRLS("quiz_questions", {
   position: integer("position").notNull(),
   explanation: text("explanation"),
 }, (table) => [
-  uniqueIndex("quiz_questions_position_idx").on(table.assessmentId, table.position),
+  uniqueIndex("quiz_questions_revision_position_idx").on(table.assessmentId, table.quizRevision, table.position),
   index("quiz_questions_lesson_idx").on(table.lessonId),
   check("quiz_questions_points_check", sql`${table.points} > 0`),
+  check("quiz_questions_revision_check", sql`${table.quizRevision} > 0`),
 ]);
 
 export const quizOptions = pgTable.withRLS("quiz_options", {
@@ -80,6 +84,8 @@ export const submissionMode = pgEnum("submission_mode", ["run", "submit"]);
 export const assessmentSubmissions = pgTable.withRLS("assessment_submissions", {
   id: bigint("id", { mode: "number" }).generatedByDefaultAsIdentity().primaryKey(),
   assessmentId: bigint("assessment_id", { mode: "number" }).notNull().references(() => assessments.id),
+  // Quiz attempts pin their immutable question set, including before the first answer.
+  quizRevision: integer("quiz_revision"),
   // Bound to the enrollment: a submission only exists inside a course the learner owns.
   enrollmentId: bigint("enrollment_id", { mode: "number" }).notNull().references(() => studentEnrollments.id, { onDelete: "cascade" }),
   attempt: integer("attempt").notNull(),
@@ -110,6 +116,7 @@ export const assessmentSubmissions = pgTable.withRLS("assessment_submissions", {
   index("submissions_enrollment_idx").on(table.enrollmentId),
   index("submissions_grading_queue_idx").on(table.status, table.submittedAt),
   check("submissions_attempt_check", sql`${table.attempt} > 0`),
+  check("submissions_quiz_revision_check", sql`${table.quizRevision} IS NULL OR ${table.quizRevision} > 0`),
   check("submissions_quiz_percent_check", sql`${table.quizPercent} IS NULL OR ${table.quizPercent} BETWEEN 0 AND 100`),
   check("submissions_submitted_check", sql`${table.status} = 'draft' OR ${table.submittedAt} IS NOT NULL`),
   check("submissions_graded_check", sql`${table.status} <> 'graded' OR ${table.score} IS NOT NULL`),

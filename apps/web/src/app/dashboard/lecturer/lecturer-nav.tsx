@@ -105,7 +105,7 @@ export function LecturerNav({ counts }: LecturerNavProps) {
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href as any}
                 className={cn(
                   "flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                   item.isActive
