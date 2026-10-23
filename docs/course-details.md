@@ -28,6 +28,19 @@ published lesson metadata, and counts/duration calculated from those lessons.
 Unknown slugs return 404; database failures return 500. No sample curriculum,
 ratings, certificates, or learner counts are generated.
 
+### Catalog topics
+
+`GET /api/courses` exposes skill names as topics only when the course is
+`published`, its current `knowledgeMapStatus` is `confirmed`, and the skill's
+review is `accepted` or `edited`. Other map states retain their course rows and
+enrollment counts with `topics: []`; hidden courses requested through the existing
+`include_hidden=true` option also receive no topics. Counts use distinct enrollment
+IDs so multiple skills do not inflate learner totals or popularity ordering.
+
+This is a current-state disclosure gate, not an immutable confirmed-map snapshot
+or a concurrency guarantee. Draft/confirmed graph publication and invalidation
+remain the knowledge-map writer's responsibility; category is not a topic fallback.
+
 ## Set up an existing database
 
 From the repository root, with `apps/web/.env` configured:
