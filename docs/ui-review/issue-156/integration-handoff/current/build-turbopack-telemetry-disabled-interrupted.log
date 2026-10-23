@@ -1,0 +1,88 @@
+▲ Next.js 16.3.5 (Turbopack)
+✓ Running next.config.ts took 260ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.7min
+  Running TypeScript ...
+  Finished TypeScript in 54s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/44) ...
+  Generating static pages using 7 workers (11/44) 
+  Generating static pages using 7 workers (22/44) 
+  Generating static pages using 7 workers (33/44) 
+✓ Generating static pages using 7 workers (44/44) in 1531ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /ai
+├ ƒ /api/ai
+├ ƒ /api/auth/[...all]
+├ ƒ /api/avatar
+├ ƒ /api/courses
+├ ƒ /api/courses/[slug]
+├ ƒ /api/courses/enroll-free
+├ ƒ /api/courses/ownership
+├ ƒ /api/github-profile
+├ ƒ /api/insights/knowledge-map
+├ ƒ /api/learn/[courseId]/access/[lessonId]
+├ ƒ /api/learn/[courseId]/lessons/[lessonId]
+├ ƒ /api/learn/[courseId]/lessons/[lessonId]/activity
+├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]
+├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]/coding
+├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]/file
+├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]/tutorial
+├ ƒ /api/learn/[courseId]/onboarding
+├ ƒ /api/learn/[courseId]/path
+├ ƒ /api/learner/overview
+├ ƒ /api/notifications
+├ ƒ /api/orders/buy-now
+├ ƒ /api/orders/cancel
+├ ƒ /api/orders/checkout
+├ ƒ /api/payments/check-transaction/[id]
+├ ƒ /api/payments/create-transaction
+├ ƒ /api/payments/sepay/callback
+├ ƒ /api/student/cart
+├ ƒ /api/student/profile
+├ ƒ /api/user/avatar
+├ ƒ /api/user/profile
+├ ƒ /api/user/roles
+├ ƒ /api/vouchers/validate
+├ ○ /cart
+├ ƒ /checkout
+├ ○ /courses
+├ ƒ /courses/[slug]
+├ ƒ /courses/[slug]/checkout
+├ ƒ /dashboard
+├ ƒ /dashboard/admin
+├ ƒ /dashboard/admin/users
+├ ƒ /dashboard/learner
+├ ƒ /dashboard/lecturer
+├ ƒ /dashboard/lecturer/courses
+├ ƒ /dashboard/lecturer/courses/[courseId]
+├ ƒ /dashboard/lecturer/courses/[courseId]/[tab]
+├ ƒ /dashboard/lecturer/courses/[courseId]/code/[lessonId]
+├ ƒ /dashboard/lecturer/courses/[courseId]/code/[lessonId]/preview
+├ ƒ /dashboard/lecturer/courses/[courseId]/quiz/[lessonId]
+├ ƒ /dashboard/lecturer/new
+├ ○ /dev/foundation
+├ ƒ /dev/lesson-player/[filename]
+├ ○ /forgot-password
+├ ƒ /insights/knowledge-map
+├ ƒ /learn/[courseId]
+├ ƒ /learn/[courseId]/[lessonId]
+├ ƒ /learn/[courseId]/onboarding
+├ ○ /login
+├ ƒ /profile
+├ ƒ /profile/github
+├ ƒ /progress
+├ ○ /reset-password
+└ ƒ /settings
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

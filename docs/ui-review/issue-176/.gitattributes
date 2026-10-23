@@ -1,0 +1,3 @@
+# Preserve captured process output and report checksums across Windows checkouts.
+*.log -text -whitespace
+*.json -text

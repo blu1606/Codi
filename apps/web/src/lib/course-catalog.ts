@@ -5,6 +5,7 @@ export type CatalogCourse = Omit<typeof courses.$inferSelect, "createdAt"> & {
   enrollmentCount: number;
   coverImageUrl?: string | null;
   instructorName?: string | null;
+  topics?: string[];
 };
 
 export async function fetchCourses(signal: AbortSignal, query = ""): Promise<CatalogCourse[]> {

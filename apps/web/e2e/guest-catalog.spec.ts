@@ -68,10 +68,20 @@ test.describe("guest catalog and course detail", () => {
     await expect(resultCount(page)).toHaveText(total);
   });
 
-  test("UI-COM-04 sort dropdown offers the four spec options", async ({ page }) => {
+  test("UI-COM-04 sort dropdown offers the four spec options and normalizes legacy price sort URLs", async ({ page }) => {
     await openCatalog(page);
     const sort = page.getByLabel("Sắp xếp danh sách khóa học");
     await expect(sort.locator("option")).toHaveText(["Phù hợp nhất", "Mới nhất", "Đánh giá cao nhất", "Học nhiều nhất"]);
+
+    // Test legacy sort URL: price-asc should normalize to supported option without broken dropdown or mismatch
+    await page.goto("/courses?sort=price-asc");
+    await page.waitForLoadState("domcontentloaded");
+    const sortDropdown = page.getByLabel("Sắp xếp danh sách khóa học");
+    await expect(sortDropdown).toBeVisible();
+    await expect(sortDropdown.locator("option")).toHaveText(["Phù hợp nhất", "Mới nhất", "Đánh giá cao nhất", "Học nhiều nhất"]);
+    await expect(sortDropdown).toHaveValue("popular");
+    // URL is normalized and no broken/stale sort chip is left
+    await expect(page.getByText("Sắp xếp: Giá:")).toHaveCount(0);
   });
 
   test("UI-COM-05 a search with no results offers 'Đặt lại bộ lọc' and 'Hỏi AI Codi gợi ý khóa học'", async ({
