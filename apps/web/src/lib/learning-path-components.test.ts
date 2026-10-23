@@ -248,9 +248,10 @@ describe("read-only learner knowledge map", () => {
     await act(async () => button("Mảng").click());
     expect(document.body.textContent).toContain("Bài Mảng · Bị khoá");
     expect(document.querySelector('a[href="/learn/owned/locked"]')).toBeNull();
+    expect(document.querySelector('a[aria-label^="Học bài này"]')).toBeNull();
     await act(async () => button("Chuỗi").click());
-    expect(
-      document.querySelector('a[href="/learn/owned/first"]'),
-    ).not.toBeNull();
+    const lessonCta = document.querySelector('a[href="/learn/owned/first"]');
+    expect(lessonCta?.textContent).toContain("Học bài này");
+    expect(lessonCta?.getAttribute("aria-label")).toBe("Học bài này: Bài Chuỗi");
   });
 });
