@@ -1,0 +1,17 @@
+{
+  "provenance": "Original tool result chunks recovered from saved execution history; not reconstructed stdout.",
+  "outputs": [
+    {
+      "timestamp": "2026-10-21T14:05:28.208Z",
+      "callId": "call_a8120b05740f45d2815307bdea5bcf20",
+      "invokedAt": "2026-10-21T14:05:01.168Z",
+      "result": {
+        "chunk_id": "f2a9db",
+        "wall_time_seconds": 10.0136411,
+        "session_id": 66713,
+        "original_token_count": 39,
+        "output": "▲ Next.js 16.3.5\n- Local:         http://localhost:3144\n- Network:       http://[local-network-address]:3144\n✓ Ready in 590ms\n✓ Running next.config.ts took 185ms\n"
+      }
+    }
+  ]
+}
