@@ -73,6 +73,7 @@ export async function POST(req: Request) {
           id: orders.id,
           code: orders.code,
           status: orders.status,
+          receivedAmount: orders.receivedAmount,
         })
         .from(orders)
         .where(eq(orders.id, orderToCancel.id))
@@ -90,6 +91,8 @@ export async function POST(req: Request) {
           failReason: "Người mua đã huỷ",
           cancelledAt: new Date(),
           updatedAt: new Date(),
+          // Keep received money visible for refund disposition after cancellation.
+          needsReconciliation: lockedOrder.receivedAmount > 0 ? true : undefined,
         })
         .where(and(eq(orders.id, lockedOrder.id), eq(orders.status, "pending")))
         .returning({ id: orders.id, code: orders.code });
