@@ -50,6 +50,13 @@ const PRICE_OPTIONS: { value: CatalogPriceFilter; label: string }[] = [
   { value: "paid", label: "Trả phí" },
 ];
 
+const SORT_OPTIONS: { value: CatalogSortOption; label: string }[] = [
+  { value: "popular", label: "Phù hợp nhất" },
+  { value: "newest", label: "Mới nhất" },
+  { value: "rating", label: "Đánh giá cao nhất" },
+  { value: "enrollment", label: "Học nhiều nhất" },
+];
+
 function CatalogSkeleton() {
   return (
     <div className={cardStyles.grid} aria-busy="true">
@@ -187,11 +194,14 @@ export default function CoursesPage() {
     const sortParam = params.get("sort");
     if (
       sortParam === "popular" ||
+      sortParam === "relevant" ||
       sortParam === "newest" ||
-      sortParam === "price-asc" ||
-      sortParam === "price-desc" ||
-      sortParam === "rating"
+      sortParam === "rating" ||
+      sortParam === "enrollment"
     ) {
+      setSelectedSort(sortParam === "relevant" ? "popular" : sortParam);
+    } else if (sortParam === "price-asc" || sortParam === "price-desc") {
+      // Legacy price sort is preserved in selection for backwards-compatible order, with visible chip
       setSelectedSort(sortParam);
     }
     isHydratedRef.current = true;
@@ -246,15 +256,43 @@ export default function CoursesPage() {
     return () => controller.abort();
   }, [courses, session?.user?.id]);
 
+  // Share the current catalog destination with typeahead, including active filters and sort.
+  const filteredCourses = useMemo(() => {
+    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel, {
+      price: selectedPrice,
+      sort: selectedSort,
+    });
+  }, [courses, searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
+
   // 3. Typeahead suggestions
   const typeaheadResult = useMemo(() => {
-    return getTypeaheadSuggestions(courses, searchTerm);
-  }, [courses, searchTerm]);
+    return getTypeaheadSuggestions(filteredCourses, searchTerm);
+  }, [filteredCourses, searchTerm]);
 
-  // Build flat list matching the exact rendering group order
-  const flatSuggestions = useMemo(() => {
-    return Object.values(typeaheadResult.grouped).flat();
-  }, [typeaheadResult.grouped]);
+  useEffect(() => {
+    setActiveSuggestionIndex(-1);
+  }, [typeaheadResult]);
+
+  // Build unified flat list for accessible keyboard navigation (ArrowDown/Up, Enter)
+  // across Query Suggestions, Top Results, and "Xem tất cả kết quả"
+  type NavigableItem =
+    | { kind: "query"; text: string }
+    | { kind: "topResult"; item: typeof typeaheadResult.topResults[number] }
+    | { kind: "seeAll"; count: number };
+
+  const navigableItems = useMemo<NavigableItem[]>(() => {
+    const items: NavigableItem[] = [];
+    for (const q of typeaheadResult.querySuggestions) {
+      items.push({ kind: "query", text: q });
+    }
+    for (const top of typeaheadResult.topResults) {
+      items.push({ kind: "topResult", item: top });
+    }
+    if (typeaheadResult.matches.length > 0 || typeaheadResult.topResults.length > 0) {
+      items.push({ kind: "seeAll", count: typeaheadResult.matches.length });
+    }
+    return items;
+  }, [typeaheadResult]);
 
   // Close typeahead on click outside
   useEffect(() => {
@@ -275,30 +313,32 @@ export default function CoursesPage() {
     if (e.key === "Escape") {
       setShowTypeahead(false);
       setActiveSuggestionIndex(-1);
-    } else if (e.key === "ArrowDown" && showTypeahead && flatSuggestions.length > 0) {
+    } else if (e.key === "ArrowDown" && showTypeahead && navigableItems.length > 0) {
       e.preventDefault();
-      setActiveSuggestionIndex((prev) => (prev < flatSuggestions.length - 1 ? prev + 1 : 0));
-    } else if (e.key === "ArrowUp" && showTypeahead && flatSuggestions.length > 0) {
+      setActiveSuggestionIndex((prev) => (prev < navigableItems.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp" && showTypeahead && navigableItems.length > 0) {
       e.preventDefault();
-      setActiveSuggestionIndex((prev) => (prev > 0 ? prev - 1 : flatSuggestions.length - 1));
+      setActiveSuggestionIndex((prev) => (prev > 0 ? prev - 1 : navigableItems.length - 1));
     } else if (e.key === "Enter") {
-      if (showTypeahead && activeSuggestionIndex >= 0 && activeSuggestionIndex < flatSuggestions.length) {
+      if (showTypeahead && activeSuggestionIndex >= 0 && activeSuggestionIndex < navigableItems.length) {
         e.preventDefault();
-        const selected = flatSuggestions[activeSuggestionIndex];
+        const selected = navigableItems[activeSuggestionIndex];
         setShowTypeahead(false);
         setActiveSuggestionIndex(-1);
-        router.push(`/courses/${encodeURIComponent(selected.slug)}`);
+        if (selected.kind === "query") {
+          setSearchTerm(selected.text);
+        } else if (selected.kind === "topResult") {
+          if (selected.item.course) {
+            router.push(`/courses/${encodeURIComponent(selected.item.course.slug)}`);
+          } else {
+            setSearchTerm(selected.item.title);
+          }
+        } else if (selected.kind === "seeAll") {
+          // Keep current searchTerm and submit/close
+        }
       }
     }
   };
-
-  // 4. Filtered & Sorted courses
-  const filteredCourses = useMemo(() => {
-    return filterCourseCatalog(courses, searchTerm, selectedCategory, selectedLevel, {
-      price: selectedPrice,
-      sort: selectedSort,
-    });
-  }, [courses, searchTerm, selectedCategory, selectedLevel, selectedPrice, selectedSort]);
 
   // 5. Active filter chips
   const activeChips = useMemo(() => {
@@ -334,15 +374,17 @@ export default function CoursesPage() {
     }
     if (selectedSort !== "popular") {
       const sortLabels: Record<CatalogSortOption, string> = {
-        popular: "Phổ biến nhất",
+        popular: "Phù hợp nhất",
+        relevant: "Phù hợp nhất",
         newest: "Mới nhất",
-        "price-asc": "Giá: thấp → cao",
-        "price-desc": "Giá: cao → thấp",
         rating: "Đánh giá cao nhất",
+        enrollment: "Học nhiều nhất",
+        "price-asc": "Giá: thấp → cao (cũ)",
+        "price-desc": "Giá: cao → thấp (cũ)",
       };
       chips.push({
         key: "sort",
-        label: `Sắp xếp: ${sortLabels[selectedSort]}`,
+        label: `Sắp xếp: ${sortLabels[selectedSort] ?? selectedSort}`,
         onRemove: () => setSelectedSort("popular"),
       });
     }
@@ -488,7 +530,7 @@ export default function CoursesPage() {
                   type="text"
                   role="combobox"
                   aria-autocomplete="list"
-                  aria-expanded={showTypeahead && flatSuggestions.length > 0}
+                  aria-expanded={showTypeahead && navigableItems.length > 0}
                   aria-controls="typeahead-suggestions"
                   aria-activedescendant={
                     activeSuggestionIndex >= 0 ? `suggestion-${activeSuggestionIndex}` : undefined
@@ -532,54 +574,149 @@ export default function CoursesPage() {
               </Button>
             </div>
 
-            {/* Typeahead Suggestions Dropdown */}
+            {/* Typeahead Suggestions Dropdown matching Flow L1 */}
             {showTypeahead && searchTerm.trim().length > 0 && (
               <div
                 id="typeahead-suggestions"
                 role="listbox"
-                className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-80 overflow-y-auto rounded-xl border border-border bg-card shadow-lg p-2 text-sm"
+                className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-border bg-card shadow-lg p-2 text-sm divide-y divide-border/50"
               >
-                {flatSuggestions.length === 0 ? (
+                {navigableItems.length === 0 ? (
                   <div className="py-4 text-center text-xs text-muted-foreground">
                     Không tìm thấy gợi ý nào cho &ldquo;{searchTerm}&rdquo;
                   </div>
                 ) : (
-                  Object.entries(typeaheadResult.grouped).map(([category, items]) => (
-                    <div key={category} role="group" aria-label={category} className="mb-2 last:mb-0">
-                      <div className="px-2.5 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        {category}
+                  <>
+                    {/* Section 1: Query suggestions (if any) */}
+                    {typeaheadResult.querySuggestions.length > 0 && (
+                      <div role="group" aria-label="Gợi ý tìm kiếm" className="pb-2">
+                        <div className="px-2.5 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Gợi ý tìm kiếm
+                        </div>
+                        {typeaheadResult.querySuggestions.map((qText) => {
+                          const itemIndex = navigableItems.findIndex(
+                            (item) => item.kind === "query" && item.text === qText
+                          );
+                          const isSelected = itemIndex === activeSuggestionIndex;
+                          return (
+                            <button
+                              key={`query-${qText}`}
+                              id={`suggestion-${itemIndex}`}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onMouseEnter={() => setActiveSuggestionIndex(itemIndex)}
+                              onClick={() => {
+                                setSearchTerm(qText);
+                                setShowTypeahead(false);
+                                setActiveSuggestionIndex(-1);
+                              }}
+                              className={`w-full flex items-center gap-2 text-left px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
+                                isSelected
+                                  ? "bg-accent text-accent-foreground font-medium"
+                                  : "text-foreground hover:bg-muted"
+                              }`}
+                            >
+                              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="truncate">{qText}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                      {items.map((item) => {
-                        const itemIndex = flatSuggestions.findIndex((s) => s.id === item.id);
-                        const isSelected = itemIndex === activeSuggestionIndex;
+                    )}
+
+                    {/* Section 2: Kết quả hàng đầu (badge: Khóa học, Chủ đề) */}
+                    {typeaheadResult.topResults.length > 0 && (
+                      <div role="group" aria-label="Kết quả hàng đầu" className="py-2">
+                        <div className="px-2.5 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Kết quả hàng đầu
+                        </div>
+                        {typeaheadResult.topResults.map((top) => {
+                          const itemIndex = navigableItems.findIndex(
+                            (item) => item.kind === "topResult" && item.item.id === top.id
+                          );
+                          const isSelected = itemIndex === activeSuggestionIndex;
+                          return (
+                            <button
+                              key={top.id}
+                              id={`suggestion-${itemIndex}`}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onMouseEnter={() => setActiveSuggestionIndex(itemIndex)}
+                              onClick={() => {
+                                setShowTypeahead(false);
+                                setActiveSuggestionIndex(-1);
+                                if (top.course) {
+                                  router.push(`/courses/${encodeURIComponent(top.course.slug)}`);
+                                } else {
+                                  setSearchTerm(top.title);
+                                }
+                              }}
+                              className={`w-full flex items-center justify-between text-left px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+                                isSelected
+                                  ? "bg-accent text-accent-foreground font-medium"
+                                  : "text-foreground hover:bg-muted"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 pr-2">
+                                <span
+                                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+                                    top.type === "Khóa học"
+                                      ? "bg-primary/10 text-primary border border-primary/20"
+                                      : "bg-secondary text-secondary-foreground"
+                                  }`}
+                                >
+                                  {top.badgeLabel}
+                                </span>
+                                <span className="truncate font-medium">{top.title}</span>
+                              </div>
+                              {top.course ? (
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {LEVELS.find((l) => l.value === top.course?.level)?.label ?? top.course.level}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {top.category}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Section 3: Xem tất cả kết quả */}
+                    <div className="pt-2">
+                      {(() => {
+                        const seeAllIndex = navigableItems.findIndex((item) => item.kind === "seeAll");
+                        const isSelected = seeAllIndex === activeSuggestionIndex;
                         return (
                           <button
-                            key={item.id}
-                            id={`suggestion-${itemIndex}`}
+                            id={`suggestion-${seeAllIndex}`}
                             type="button"
                             role="option"
                             aria-selected={isSelected}
-                            onMouseEnter={() => setActiveSuggestionIndex(itemIndex)}
+                            onMouseEnter={() => setActiveSuggestionIndex(seeAllIndex)}
                             onClick={() => {
                               setShowTypeahead(false);
                               setActiveSuggestionIndex(-1);
-                              router.push(`/courses/${encodeURIComponent(item.slug)}`);
                             }}
-                            className={`w-full flex items-center justify-between text-left px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+                            className={`w-full flex items-center justify-between text-left px-2.5 py-2 rounded-lg cursor-pointer transition-colors font-medium ${
                               isSelected
-                                ? "bg-accent text-accent-foreground font-medium"
-                                : "text-foreground hover:bg-muted"
+                                ? "bg-accent text-accent-foreground"
+                                : "text-primary hover:bg-muted"
                             }`}
                           >
-                            <span className="truncate pr-2">{item.title}</span>
-                            <span className="text-xs text-muted-foreground shrink-0">
-                              {LEVELS.find((l) => l.value === item.level)?.label ?? item.level}
+                            <span>Xem tất cả kết quả</span>
+                            <span className="text-xs text-muted-foreground">
+                              {typeaheadResult.matches.length} kết quả
                             </span>
                           </button>
                         );
-                      })}
+                      })()}
                     </div>
-                  ))
+                  </>
                 )}
               </div>
             )}
@@ -721,11 +858,17 @@ export default function CoursesPage() {
               onChange={(e) => setSelectedSort(e.target.value as CatalogSortOption)}
               className="h-9 px-2.5 rounded-lg bg-card border border-border text-xs text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
             >
-              <option value="popular">Phổ biến nhất</option>
-              <option value="newest">Mới nhất</option>
-              <option value="price-asc">Giá: thấp → cao</option>
-              <option value="price-desc">Giá: cao → thấp</option>
-              <option value="rating">Đánh giá cao nhất</option>
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+              {selectedSort === "price-asc" && (
+                <option value="price-asc">Giá: thấp → cao (cũ)</option>
+              )}
+              {selectedSort === "price-desc" && (
+                <option value="price-desc">Giá: cao → thấp (cũ)</option>
+              )}
             </select>
           </div>
         </div>
@@ -785,7 +928,7 @@ export default function CoursesPage() {
                   className="gap-1.5 cursor-pointer"
                 >
                   <Sparkles className="h-4 w-4" />
-                  Hỏi AI Codi
+                  Hỏi AI Codi gợi ý khóa học
                 </Button>
               </div>
             </CardContent>
