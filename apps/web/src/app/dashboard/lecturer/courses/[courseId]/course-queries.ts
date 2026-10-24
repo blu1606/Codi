@@ -1,15 +1,17 @@
 import { and, eq } from "drizzle-orm";
+import { lockKnowledgeMap } from "@/lib/confirmed-knowledge-map";
+import { revalidatePath } from "next/cache";
 import { courseChapters, courseLessons, courses } from "@codi-1/db";
 import { db } from "@/services";
-import { verifyLecturerSession } from "@/lib/lecturer-auth";
+import { readLecturerIdentity, verifyLecturerSession, type LecturerIdentity } from "@/lib/lecturer-auth";
 
 /**
  * Lấy khoá học thuộc quyền sở hữu của giảng viên (kể cả pending).
  */
-export async function getOwnedCourse(courseId: string) {
-  const user = await verifyLecturerSession();
+export async function getOwnedCourse(courseId: string, executor: Pick<typeof db, "select"> = db, identity?: LecturerIdentity) {
+  const user = await verifyLecturerSession(executor, identity);
 
-  const [course] = await db
+  const [course] = await executor
     .select()
     .from(courses)
     .where(and(eq(courses.id, courseId), eq(courses.instructorId, user.id)));
@@ -25,8 +27,8 @@ export async function getOwnedCourse(courseId: string) {
  * Xác minh quyền chỉnh sửa của giảng viên đối với khoá học.
  * Chặn chỉnh sửa nếu khoá học đang chờ duyệt (pending).
  */
-export async function getEditableCourse(courseId: string) {
-  const { course, user } = await getOwnedCourse(courseId);
+export async function getEditableCourse(courseId: string, executor: Pick<typeof db, "select"> = db, identity?: LecturerIdentity) {
+  const { course, user } = await getOwnedCourse(courseId, executor, identity);
 
   if (course.status === "pending") {
     throw new Error("Khoá học đang chờ duyệt — nội dung chỉ đọc.");
@@ -73,17 +75,40 @@ export const verifyChapterBelongsToCourse = requireCourseChapter;
 export const verifyLessonBelongsToCourse = requireCourseLesson;
 
 /**
- * Đánh dấu bản đồ kiến thức là 'stale' nếu khoá học đã xuất bản bị chỉnh sửa nội dung (D17).
+ * Advance authored content inside the exclusive graph/course transaction (D17).
  * Đây là internal helper, KHÔNG được export qua Server Action ("use server").
  */
 export async function markKnowledgeMapStaleIfPublished(
   course: typeof courses.$inferSelect,
-  executor: any = db
+  executor: Pick<typeof db, "update">
 ) {
-  if (course.status === "published" && course.knowledgeMapStatus === "confirmed") {
-    await executor
-      .update(courses)
-      .set({ knowledgeMapStatus: "stale" })
-      .where(eq(courses.id, course.id));
+  await executor
+    .update(courses)
+    .set({
+      ...(course.knowledgeMapStatus === "confirmed" ? { knowledgeMapStatus: "stale" as const } : {}),
+      knowledgeMapContentGeneration: course.knowledgeMapContentGeneration + 1,
+    })
+    .where(eq(courses.id, course.id));
+}
+
+type CourseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function withCourseContentWrite<T>(
+  courseId: string,
+  write: (store: CourseTransaction) => Promise<T>,
+) {
+  const identity = await readLecturerIdentity();
+  const result = await db.transaction(async (store) => {
+    await lockKnowledgeMap(store, courseId, "write");
+    const editable = await getEditableCourse(courseId, store, identity);
+    const result = await write(store);
+    if (!(result && typeof result === "object" && "success" in result && result.success === false)) {
+      await markKnowledgeMapStaleIfPublished(editable.course, store);
+    }
+    return result;
+  });
+  if (!(result && typeof result === "object" && "success" in result && result.success === false)) {
+    revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   }
+  return result;
 }

@@ -15,6 +15,10 @@ vi.mock("./actions", () => ({
   moveChapter: vi.fn(), moveLesson: vi.fn(), renameChapter: vi.fn(), renameLesson: vi.fn(),
   restoreLesson: vi.fn(), updateCourseInfo: vi.fn(),
 }));
+vi.mock("./kmap/actions", () => ({
+  acceptAllKnowledgeMap: vi.fn(), addKnowledgeMapEdge: vi.fn(), confirmKnowledgeMap: vi.fn(),
+  renameKnowledgeMapConcept: vi.fn(), reviewKnowledgeMapItem: vi.fn(), runKnowledgeMapAnalysis: vi.fn(),
+}));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root;

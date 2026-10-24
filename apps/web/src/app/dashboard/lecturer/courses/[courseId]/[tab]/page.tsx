@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
 import { getCourseEditorData } from "../actions";
+import { getKnowledgeMapData } from "../kmap/actions";
 import { CourseEditor } from "../course-editor";
 
 interface CourseTabProps {
@@ -28,7 +29,11 @@ export default async function CourseTabEditorPage({ params }: CourseTabProps) {
 
   try {
     const data = await getCourseEditorData(courseId);
-    return <CourseEditor courseId={courseId} activeTab={activeTab} data={data} />;
+    let kmapData = null;
+    if (activeTab === "kmap") {
+      kmapData = await getKnowledgeMapData(courseId);
+    }
+    return <CourseEditor courseId={courseId} activeTab={activeTab} data={{ ...data, kmapData }} />;
   } catch {
     notFound();
   }

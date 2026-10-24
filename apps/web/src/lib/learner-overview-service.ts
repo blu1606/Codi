@@ -29,11 +29,7 @@ import {
   pathItems,
   personalizedLearningPaths,
 } from "@codi-1/db/schema/learning";
-import {
-  lessonSkills,
-  skillPrerequisites,
-  skills,
-} from "@codi-1/db/schema/knowledge-map";
+import { readConfirmedKnowledgeMap } from "./confirmed-knowledge-map";
 import {
   assessments,
   assessmentSubmissions,
@@ -180,19 +176,6 @@ export function createLearnerOverviewService(
                 .from(lessonProgress)
                 .where(inArray(lessonProgress.enrollmentId, enrollmentIds))
             : [];
-          const concepts = courseIds.length
-            ? await tx
-                .select()
-                .from(skills)
-                .where(
-                  and(
-                    inArray(skills.courseId, courseIds),
-                    inArray(skills.review, ["accepted", "edited"]),
-                  ),
-                )
-                .orderBy(asc(skills.id))
-            : [];
-          const conceptIds = concepts.map((x) => x.id);
           const mastery = enrollmentIds.length
             ? await tx
                 .select()
@@ -200,24 +183,6 @@ export function createLearnerOverviewService(
                 .where(
                   inArray(enrollmentSkillMastery.enrollmentId, enrollmentIds),
                 )
-            : [];
-          const edges = conceptIds.length
-            ? await tx
-                .select()
-                .from(skillPrerequisites)
-                .where(
-                  and(
-                    inArray(skillPrerequisites.skillId, conceptIds),
-                    inArray(skillPrerequisites.prerequisiteSkillId, conceptIds),
-                    inArray(skillPrerequisites.review, ["accepted", "edited"]),
-                  ),
-                )
-            : [];
-          const links = lessonIds.length
-            ? await tx
-                .select()
-                .from(lessonSkills)
-                .where(inArray(lessonSkills.lessonId, lessonIds))
             : [];
           const paths = enrollmentIds.length
             ? await tx
@@ -356,7 +321,12 @@ export function createLearnerOverviewService(
                   isSkippable: i.isSkippable,
                   reason: i.reason ?? "Theo thứ tự bài học tiên quyết.",
                 }));
+              const publication = readConfirmedKnowledgeMap(c,
+                lessons.filter((row) => row.courseId === c.id).map((row) => row.lesson.id));
+              const links = publication?.links ?? [];
               const input: PathInput = {
+                publicationId: publication?.publicationId ?? null,
+                contentGeneration: c.knowledgeMapContentGeneration,
                 goal: e.learningGoal,
                 hours: e.weeklyGoalMinutes ? e.weeklyGoalMinutes / 60 : null,
                 level: e.selfAssessedLevel,
@@ -380,8 +350,7 @@ export function createLearnerOverviewService(
                       studied: !!p?.studiedAt,
                     };
                   }),
-                concepts: concepts
-                  .filter((s) => s.courseId === c.id)
+                concepts: (publication?.skills ?? [])
                   .map((s) => {
                     const m = mastery.find(
                       (m) => m.enrollmentId === e.id && m.skillId === s.id,
@@ -393,16 +362,7 @@ export function createLearnerOverviewService(
                       evidenceCount: m?.evidenceCount ?? 0,
                     };
                   }),
-                edges: edges
-                  .filter(
-                    (edge) =>
-                      concepts.find((s) => s.id === edge.skillId)?.courseId ===
-                      c.id,
-                  )
-                  .map((edge) => ({
-                    from: edge.prerequisiteSkillId,
-                    to: edge.skillId,
-                  })),
+                edges: publication?.edges ?? [],
               };
               const path = selectPath(
                 input,

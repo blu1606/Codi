@@ -87,6 +87,9 @@ import {
   updateLesson,
 } from "./actions";
 
+import { KnowledgeMapClient } from "./kmap/knowledge-map-client";
+import type { KnowledgeMapDataDto } from "./kmap/actions";
+
 interface CourseEditorProps {
   courseId: string;
   activeTab: "content" | "info" | "kmap" | "publish";
@@ -96,6 +99,7 @@ interface CourseEditorProps {
     chapters: any[];
     entryTest: { id: number; count: number } | null;
     isLocked: boolean;
+    kmapData?: KnowledgeMapDataDto | null;
   };
 }
 
@@ -1003,7 +1007,9 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
       {/* ─────────────────────────────────────────────────────────────
           TAB 3 & 4: Placeholders cho Task #116 & #117
           ───────────────────────────────────────────────────────────── */}
-      {activeTab === "kmap" && (
+      {activeTab === "kmap" && data.kmapData ? (
+        <KnowledgeMapClient courseId={courseId} initialData={data.kmapData} />
+      ) : activeTab === "kmap" && (
         <Card className="border border-dashed border-border/80">
           <CardContent className="p-0">
             <Empty>

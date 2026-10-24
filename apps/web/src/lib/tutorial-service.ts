@@ -25,7 +25,7 @@ type Scope = {
   lessonId: string;
   assessmentId: number;
 };
-type Store = Pick<Database, "select" | "insert" | "update">;
+type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 async function context(store: Store, scope: Scope, lock = false) {
   const { enrollment } = await loadLearningLessonAccess(
     store,

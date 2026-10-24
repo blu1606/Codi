@@ -5,11 +5,10 @@ import {
   requireCourseChapter,
   requireCourseLesson,
   getCourseLesson,
-  markKnowledgeMapStaleIfPublished,
+  withCourseContentWrite,
 } from "./course-queries";
 
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 
 import {
   aiContentDrafts,
@@ -178,7 +177,7 @@ export async function updateCourseInfo(
   courseId: string,
   input: UpdateCourseInfoInput
 ) {
-  const { course } = await getEditableCourse(courseId);
+  return withCourseContentWrite(courseId, async (db) => {
 
   const errors: Record<string, string> = {};
   if (!input.title || input.title.trim().length < 5) {
@@ -219,18 +218,18 @@ export async function updateCourseInfo(
         },
       });
 
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
   });
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
  * Thêm một chương mới vào khoá học.
  */
 export async function addChapter(courseId: string, title?: string) {
-  const { course } = await getEditableCourse(courseId);
+  return withCourseContentWrite(courseId, async (db) => {
 
   const [lastChapter] = await db
     .select({ position: courseChapters.position })
@@ -251,9 +250,9 @@ export async function addChapter(courseId: string, title?: string) {
     })
     .returning();
 
-  await markKnowledgeMapStaleIfPublished(course);
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
+
   return { success: true, chapter: inserted };
+  });
 }
 
 /**
@@ -264,8 +263,8 @@ export async function renameChapter(
   chapterId: string,
   title: string
 ) {
-  const { course } = await getEditableCourse(courseId);
-  await requireCourseChapter(courseId, chapterId);
+  return withCourseContentWrite(courseId, async (db) => {
+  await requireCourseChapter(courseId, chapterId, db);
 
   const cleanTitle = title.trim();
   if (!cleanTitle) throw new Error("Tên chương không được để trống.");
@@ -275,8 +274,8 @@ export async function renameChapter(
     .set({ title: cleanTitle })
     .where(and(eq(courseChapters.id, chapterId), eq(courseChapters.courseId, courseId)));
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
@@ -287,7 +286,7 @@ export async function moveChapter(
   chapterId: string,
   direction: -1 | 1
 ) {
-  const { course } = await getEditableCourse(courseId);
+  return withCourseContentWrite(courseId, async (db) => {
 
   const chapters = await db
     .select()
@@ -315,19 +314,19 @@ export async function moveChapter(
       .set({ position: currentCh.position })
       .where(and(eq(courseChapters.id, targetCh.id), eq(courseChapters.courseId, courseId)));
 
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
   });
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
  * Xoá một chương.
  */
 export async function deleteChapter(courseId: string, chapterId: string) {
-  const { course } = await getEditableCourse(courseId);
-  await requireCourseChapter(courseId, chapterId);
+  return withCourseContentWrite(courseId, async (db) => {
+  await requireCourseChapter(courseId, chapterId, db);
 
   await db.transaction(async (tx) => {
     // Lock the parent before the child check so FK inserts/moves cannot race deletion.
@@ -344,10 +343,10 @@ export async function deleteChapter(courseId: string, chapterId: string) {
 
     await tx.delete(courseChapters)
       .where(and(eq(courseChapters.id, chapterId), eq(courseChapters.courseId, courseId)));
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
   });
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
@@ -358,8 +357,8 @@ export async function addLesson(
   chapterId: string,
   title?: string
 ) {
-  const { course } = await getEditableCourse(courseId);
-  await requireCourseChapter(courseId, chapterId);
+  return withCourseContentWrite(courseId, async (db) => {
+  await requireCourseChapter(courseId, chapterId, db);
 
   const [lastLesson] = await db
     .select({ position: courseLessons.position })
@@ -381,9 +380,9 @@ export async function addLesson(
     })
     .returning();
 
-  await markKnowledgeMapStaleIfPublished(course);
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
+
   return { success: true, lesson: inserted };
+  });
 }
 
 /**
@@ -394,18 +393,18 @@ export async function renameLesson(
   lessonId: string,
   title: string
 ) {
-  const { course } = await getEditableCourse(courseId);
+  return withCourseContentWrite(courseId, async (db) => {
   const cleanTitle = title.trim();
   if (!cleanTitle) throw new Error("Tên bài học không được để trống.");
-  const lesson = await requireCourseLesson(courseId, lessonId);
+  const lesson = await requireCourseLesson(courseId, lessonId, db);
 
   await db
     .update(courseLessons)
     .set({ title: cleanTitle })
     .where(and(eq(courseLessons.id, lessonId), eq(courseLessons.chapterId, lesson.chapterId)));
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
@@ -416,8 +415,8 @@ export async function moveLesson(
   lessonId: string,
   direction: -1 | 1
 ) {
-  const { course } = await getEditableCourse(courseId);
-  const current = await requireCourseLesson(courseId, lessonId);
+  return withCourseContentWrite(courseId, async (db) => {
+  const current = await requireCourseLesson(courseId, lessonId, db);
 
   const siblingLessons = await db
     .select()
@@ -444,19 +443,19 @@ export async function moveLesson(
       .set({ position: current.position })
       .where(and(eq(courseLessons.id, targetLs.id), eq(courseLessons.chapterId, targetLs.chapterId)));
 
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
   });
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
  * Chỉ xoá bài học khi snapshot Hoàn tác có thể phục hồi mà không mất quan hệ.
  */
 export async function deleteLesson(courseId: string, lessonId: string) {
-  const { course } = await getEditableCourse(courseId);
-  await requireCourseLesson(courseId, lessonId);
+  return withCourseContentWrite(courseId, async (db) => {
+  await requireCourseLesson(courseId, lessonId, db);
 
   const snapshot = await db.transaction(async (tx) => {
     // FOR UPDATE conflicts with FK KEY SHARE checks: new dependents cannot slip
@@ -533,15 +532,15 @@ export async function deleteLesson(courseId: string, lessonId: string) {
       and(eq(courseLessons.id, lessonId), eq(courseLessons.chapterId, deletedLesson.chapterId))
     );
 
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
     return snapshot;
   });
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
 
   return {
     success: true,
     deletedLesson: snapshot,
   };
+  });
 }
 
 /**
@@ -551,7 +550,7 @@ export async function restoreLesson(
   courseId: string,
   snapshot: LessonSnapshot | { id: string; chapterId: string; title: string; position: number }
 ) {
-  const { course } = await getEditableCourse(courseId);
+  return withCourseContentWrite(courseId, async (db) => {
 
   const isFull = "lesson" in snapshot;
   const targetId = isFull ? snapshot.lesson.id : snapshot.id;
@@ -559,7 +558,7 @@ export async function restoreLesson(
   const targetTitle = isFull ? snapshot.lesson.title : snapshot.title;
   const targetPosition = isFull ? snapshot.lesson.position : snapshot.position;
 
-  await requireCourseChapter(courseId, targetChapterId);
+  await requireCourseChapter(courseId, targetChapterId, db);
 
   await db.transaction(async (tx) => {
     // 1. Phục hồi bài học với toàn bộ thuộc tính
@@ -640,11 +639,11 @@ export async function restoreLesson(
       }
     }
 
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
   });
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
@@ -674,8 +673,8 @@ export async function updateLesson(
   lessonId: string,
   input: UpdateLessonInput
 ) {
-  const { course } = await getEditableCourse(courseId);
-  const lesson = await requireCourseLesson(courseId, lessonId);
+  return withCourseContentWrite(courseId, async (db) => {
+  const lesson = await requireCourseLesson(courseId, lessonId, db);
 
   const cleanTitle = input.title?.trim();
   if (!cleanTitle || cleanTitle.length < 2) {
@@ -746,11 +745,11 @@ export async function updateLesson(
       }
     }
 
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
   });
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -889,12 +888,12 @@ export async function saveQuizData(
   lessonId: string,
   input: SaveQuizInput
 ) {
-  const { course } = await getEditableCourse(courseId);
+  return withCourseContentWrite(courseId, async (db) => {
 
   const isEntry = lessonId === "entry" || input.isEntry;
 
   if (lessonId !== "entry") {
-    await requireCourseLesson(courseId, lessonId);
+    await requireCourseLesson(courseId, lessonId, db);
   }
 
   // 1. Validation chuẩn theo STATE-MACHINES §10 & S23
@@ -926,7 +925,7 @@ export async function saveQuizData(
 
     // Nếu là câu hỏi diagnostic và có gắn bài học, kiểm tra bài học thuộc khoá học
     if (isEntry && q.lessonId) {
-      await requireCourseLesson(courseId, q.lessonId);
+      await requireCourseLesson(courseId, q.lessonId, db);
     }
   }
 
@@ -1008,11 +1007,11 @@ export async function saveQuizData(
         .where(and(eq(assessments.id, assessmentId), eq(assessments.courseId, courseId)));
     }
 
-    await markKnowledgeMapStaleIfPublished(course, tx);
+
   });
 
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
+  });
 }
 
 /**
