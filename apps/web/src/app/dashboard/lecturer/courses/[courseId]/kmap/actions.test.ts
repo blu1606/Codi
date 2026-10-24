@@ -468,6 +468,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
 
       const res = await confirmKnowledgeMap("c-1");
       expect(res.success).toBe(true);
+      expect(mockTransaction).toHaveBeenCalled();
       expect(updateSet).toHaveBeenCalledWith(
         expect.objectContaining({
           knowledgeMapStatus: "confirmed",

@@ -575,59 +575,66 @@ export async function acceptAllKnowledgeMap(courseId: string) {
 export async function confirmKnowledgeMap(courseId: string) {
   const { course } = await getEditableCourse(courseId);
 
-  const allSkills = await db
-    .select()
-    .from(skills)
-    .where(eq(skills.courseId, courseId));
+  await db.transaction(async (tx) => {
+    const allSkills = await tx
+      .select()
+      .from(skills)
+      .where(eq(skills.courseId, courseId));
 
-  const skillIds = allSkills.map((s) => s.id);
-  const allEdges =
-    skillIds.length > 0
-      ? await db
-          .select()
-          .from(skillPrerequisites)
-          .where(inArray(skillPrerequisites.skillId, skillIds))
-      : [];
+    const skillIds = allSkills.map((s) => s.id);
+    const allEdges =
+      skillIds.length > 0
+        ? await tx
+            .select()
+            .from(skillPrerequisites)
+            .where(
+              and(
+                inArray(skillPrerequisites.skillId, skillIds),
+                inArray(skillPrerequisites.prerequisiteSkillId, skillIds)
+              )
+            )
+        : [];
 
-  const liveSkills = allSkills.filter((s) => s.review !== "declined");
-  if (liveSkills.length === 0) {
-    throw new Error("Cần ít nhất một khái niệm để xác nhận bản đồ kiến thức.");
-  }
+    const liveSkills = allSkills.filter((s) => s.review !== "declined");
+    if (liveSkills.length === 0) {
+      throw new Error("Cần ít nhất một khái niệm để xác nhận bản đồ kiến thức.");
+    }
 
-  const pendingConcepts = allSkills.filter((s) => s.review === "suggested").length;
-  const pendingEdges = allEdges.filter((e) => e.review === "suggested").length;
-  const pendingTotal = pendingConcepts + pendingEdges;
+    const pendingConcepts = allSkills.filter((s) => s.review === "suggested").length;
+    const pendingEdges = allEdges.filter((e) => e.review === "suggested").length;
+    const pendingTotal = pendingConcepts + pendingEdges;
 
-  if (pendingTotal > 0) {
-    throw new Error(`Còn ${pendingTotal} đề xuất chưa xem lại. Hãy chấp nhận hoặc bỏ từng đề xuất trước khi xác nhận.`);
-  }
+    if (pendingTotal > 0) {
+      throw new Error(`Còn ${pendingTotal} đề xuất chưa xem lại. Hãy chấp nhận hoặc bỏ từng đề xuất trước khi xác nhận.`);
+    }
 
-  if (course.knowledgeMapStatus === "stale") {
-    throw new Error("Nội dung khoá học đã thay đổi. Hãy phân tích lại trước khi xác nhận.");
-  }
+    if (course.knowledgeMapStatus === "stale") {
+      throw new Error("Nội dung khoá học đã thay đổi. Hãy phân tích lại trước khi xác nhận.");
+    }
 
-  const liveSkillIds = new Set(liveSkills.map((s) => s.id));
-  const activeEdges = allEdges
-    .filter(
-      (e) =>
-        e.review !== "declined" &&
-        liveSkillIds.has(e.prerequisiteSkillId) &&
-        liveSkillIds.has(e.skillId)
-    )
-    .map((e) => ({ from: e.prerequisiteSkillId, to: e.skillId }));
+    const liveSkillIds = new Set(liveSkills.map((s) => s.id));
+    const activeEdges = allEdges
+      .filter(
+        (e) =>
+          e.review !== "declined" &&
+          liveSkillIds.has(e.prerequisiteSkillId) &&
+          liveSkillIds.has(e.skillId)
+      )
+      .map((e) => ({ from: e.prerequisiteSkillId, to: e.skillId }));
 
-  const cycle = findCycle([...liveSkillIds], activeEdges);
-  if (cycle) {
-    throw new Error("Bản đồ còn chứa vòng lặp. Cần phá vòng lặp trước khi xác nhận.");
-  }
+    const cycle = findCycle([...liveSkillIds], activeEdges);
+    if (cycle) {
+      throw new Error("Bản đồ còn chứa vòng lặp. Cần phá vòng lặp trước khi xác nhận.");
+    }
 
-  await db
-    .update(courses)
-    .set({
-      knowledgeMapStatus: "confirmed",
-      updatedAt: new Date(),
-    })
-    .where(eq(courses.id, courseId));
+    await tx
+      .update(courses)
+      .set({
+        knowledgeMapStatus: "confirmed",
+        updatedAt: new Date(),
+      })
+      .where(eq(courses.id, courseId));
+  });
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   revalidatePath(`/dashboard/lecturer/courses/${courseId}/kmap`);

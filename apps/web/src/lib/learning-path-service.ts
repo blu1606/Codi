@@ -141,42 +141,48 @@ async function context(
       asc(courseLessons.position),
       asc(courseLessons.id),
     );
-  const concepts = await store
-    .select({ skill: skills, mastery: enrollmentSkillMastery })
-    .from(skills)
-    .leftJoin(
-      enrollmentSkillMastery,
-      and(
-        eq(enrollmentSkillMastery.skillId, skills.id),
-        eq(enrollmentSkillMastery.enrollmentId, enrollment.id),
-      ),
-    )
-    .where(
-      and(
-        eq(skills.courseId, courseId),
-        inArray(skills.review, ["accepted", "edited"]),
-      ),
-    )
-    .orderBy(asc(skills.id));
-  const conceptIds = concepts.map((c) => c.skill.id);
-  const edges = conceptIds.length
+  // PO Policy: Chỉ sử dụng đồ thị kỹ năng khi bản đồ kiến thức đã được xác nhận rõ ràng.
+  // Tuyệt đối không đọc draft skills/edges khi chưa confirmed, tránh rò rỉ đề xuất nháp sang learner.
+  const isMapConfirmed = course.knowledgeMapStatus === "confirmed";
+  const concepts = isMapConfirmed
     ? await store
-        .select()
-        .from(skillPrerequisites)
-        .where(
+        .select({ skill: skills, mastery: enrollmentSkillMastery })
+        .from(skills)
+        .leftJoin(
+          enrollmentSkillMastery,
           and(
-            inArray(skillPrerequisites.skillId, conceptIds),
-            inArray(skillPrerequisites.prerequisiteSkillId, conceptIds),
-            inArray(skillPrerequisites.review, ["accepted", "edited"]),
+            eq(enrollmentSkillMastery.skillId, skills.id),
+            eq(enrollmentSkillMastery.enrollmentId, enrollment.id),
           ),
         )
-        .orderBy(
-          asc(skillPrerequisites.skillId),
-          asc(skillPrerequisites.prerequisiteSkillId),
+        .where(
+          and(
+            eq(skills.courseId, courseId),
+            inArray(skills.review, ["accepted", "edited"]),
+          ),
         )
+        .orderBy(asc(skills.id))
     : [];
+  const conceptIds = concepts.map((c) => c.skill.id);
+  const edges =
+    isMapConfirmed && conceptIds.length
+      ? await store
+          .select()
+          .from(skillPrerequisites)
+          .where(
+            and(
+              inArray(skillPrerequisites.skillId, conceptIds),
+              inArray(skillPrerequisites.prerequisiteSkillId, conceptIds),
+              inArray(skillPrerequisites.review, ["accepted", "edited"]),
+            ),
+          )
+          .orderBy(
+            asc(skillPrerequisites.skillId),
+            asc(skillPrerequisites.prerequisiteSkillId),
+          )
+      : [];
   const links =
-    lessons.length && conceptIds.length
+    isMapConfirmed && lessons.length && conceptIds.length
       ? await store
           .select()
           .from(lessonSkills)
