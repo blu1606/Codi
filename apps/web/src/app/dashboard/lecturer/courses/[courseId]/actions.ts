@@ -386,11 +386,23 @@ export async function deleteChapter(courseId: string, chapterId: string) {
   const { course } = await getEditableCourse(courseId);
   await requireCourseChapter(courseId, chapterId);
 
-  await db
-    .delete(courseChapters)
-    .where(and(eq(courseChapters.id, chapterId), eq(courseChapters.courseId, courseId)));
+  await db.transaction(async (tx) => {
+    // Lock the parent before the child check so FK inserts/moves cannot race deletion.
+    const [chapter] = await tx.select({ id: courseChapters.id }).from(courseChapters)
+      .where(and(eq(courseChapters.id, chapterId), eq(courseChapters.courseId, courseId)))
+      .for("update");
+    if (!chapter) throw new Error("Không tìm thấy chương trong khoá học này.");
 
-  await markKnowledgeMapStaleIfPublished(course);
+    const [lesson] = await tx.select({ id: courseLessons.id }).from(courseLessons)
+      .where(eq(courseLessons.chapterId, chapterId)).limit(1);
+    if (lesson) {
+      throw new Error("Không thể xoá chương còn bài học. Hãy xoá từng bài học đủ điều kiện trước, rồi xoá chương trống.");
+    }
+
+    await tx.delete(courseChapters)
+      .where(and(eq(courseChapters.id, chapterId), eq(courseChapters.courseId, courseId)));
+    await markKnowledgeMapStaleIfPublished(course, tx);
+  });
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
 }

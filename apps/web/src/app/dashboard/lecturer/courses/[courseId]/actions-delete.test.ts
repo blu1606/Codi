@@ -7,7 +7,7 @@ const boundary = vi.hoisted(() => ({ db: { select: vi.fn(), delete: vi.fn(), upd
 vi.mock("@/services", () => ({ db: boundary.db }));
 vi.mock("@/lib/lecturer-auth", () => ({ verifyLecturerSession: async () => ({ id: "lecturer" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: boundary.revalidate }));
-import { deleteLesson } from "./actions";
+import { deleteChapter, deleteLesson } from "./actions";
 
 type Row = Record<string, unknown>;
 const dialect = new PgDialect();
@@ -74,6 +74,75 @@ beforeEach(() => {
     events.push(`update:${table}`);
     for (const row of tables[table] ?? []) if (matches(predicate, row, table)) Object.assign(row, patch);
   } }) }));
+});
+
+describe("chapter deletion only permits empty owned chapters", () => {
+  it("refuses a nonempty chapter without deletion or knowledge-map mutation", async () => {
+    tables.lesson_progress = [{ lessonId: "lesson", studied: true }];
+    const before = structuredClone(tables);
+    await expect(deleteChapter("course", "chapter")).rejects.toThrow("Hãy xoá từng bài học");
+    expect(tables).toEqual(before);
+    expect(events.filter((event) => /^(delete|update):/.test(event))).toEqual([]);
+    expect(boundary.revalidate).not.toHaveBeenCalled();
+  });
+
+  it("locks before checking lessons and deletes an empty chapter transactionally", async () => {
+    tables.course_lessons = [];
+    await expect(deleteChapter("course", "chapter")).resolves.toEqual({ success: true });
+    const ordered = ["begin", "lock:course_chapters:update", "read:course_lessons", "delete:course_chapters", "update:courses", "commit"];
+    for (const event of ordered) expect(events).toContain(event);
+    for (let index = 1; index < ordered.length; index++) {
+      expect(events.indexOf(ordered[index - 1]!)).toBeLessThan(events.indexOf(ordered[index]!));
+    }
+    expect(tables.course_chapters).toEqual([]);
+    expect(tables.courses![0]!.knowledgeMapStatus).toBe("stale");
+    expect(boundary.revalidate).toHaveBeenCalledOnce();
+  });
+
+  it.each(["foreign", "missing"])("rejects %s chapter with no writes", async (id) => {
+    tables.course_chapters!.push({ id: "foreign", courseId: "other-course" });
+    const before = structuredClone(tables);
+    await expect(deleteChapter("course", id)).rejects.toThrow("Không tìm thấy chương");
+    expect(tables).toEqual(before);
+    expect(events.filter((event) => /^(delete|update):/.test(event))).toEqual([]);
+    expect(boundary.revalidate).not.toHaveBeenCalled();
+  });
+
+  it("revalidates scoped membership under the chapter lock", async () => {
+    tables.course_lessons = [];
+    afterLock = () => { tables.course_chapters![0]!.courseId = "other-course"; };
+    await expect(deleteChapter("course", "chapter")).rejects.toThrow("Không tìm thấy chương");
+    expect(events).toContain("lock:course_chapters:update");
+    expect(events.filter((event) => /^(delete|update):/.test(event))).toEqual([]);
+    expect(boundary.revalidate).not.toHaveBeenCalled();
+  });
+
+  it("checks for lessons after the lock rather than trusting an earlier empty read", async () => {
+    tables.course_lessons = [];
+    afterLock = () => { tables.course_lessons!.push({ id: "new-lesson", chapterId: "chapter" }); };
+    await expect(deleteChapter("course", "chapter")).rejects.toThrow("Hãy xoá từng bài học");
+    expect(events).toContain("lock:course_chapters:update");
+    expect(events.filter((event) => /^(delete|update):/.test(event))).toEqual([]);
+  });
+
+  it.each(["pending", "foreign-owner"])("retains the %s course guard", async (mode) => {
+    if (mode === "pending") tables.courses![0]!.status = "pending";
+    else tables.courses![0]!.instructorId = "another-lecturer";
+    await expect(deleteChapter("course", "chapter")).rejects.toThrow(mode === "pending" ? "chỉ đọc" : "quản lý");
+    expect(events.filter((event) => /^(delete|update):/.test(event))).toEqual([]);
+    expect(boundary.revalidate).not.toHaveBeenCalled();
+  });
+
+  it("rolls back empty chapter deletion if knowledge-map invalidation fails", async () => {
+    tables.course_lessons = [];
+    const before = structuredClone(tables);
+    boundary.db.update.mockImplementationOnce(() => ({ set: () => ({ where: async () => { throw new Error("Write failed"); } }) }));
+    await expect(deleteChapter("course", "chapter")).rejects.toThrow("Write failed");
+    expect(tables).toEqual(before);
+    expect(events).toContain("rollback");
+    expect(events).not.toContain("commit");
+    expect(boundary.revalidate).not.toHaveBeenCalled();
+  });
 });
 
 const dependents = [

@@ -163,6 +163,9 @@ describe("course-editor child membership", () => {
       await expectMembershipRejection(() => operation(id));
     });
     it(`${name} retains the own-course path`, async () => {
+      if (name === "delete chapter") {
+        tables.course_lessons = tables.course_lessons!.filter((lesson) => lesson.chapterId !== "own-chapter");
+      }
       await expect(operation("own-chapter")).resolves.toMatchObject({ success: true });
       expect(writes.length).toBeGreaterThan(0);
     });
