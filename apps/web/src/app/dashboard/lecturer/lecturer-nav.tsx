@@ -64,18 +64,18 @@ export function LecturerNav({ counts }: LecturerNavProps) {
       disabled: false,
     },
     {
-      href: "/dashboard/lecturer" as const,
+      href: "/dashboard/lecturer/progress" as const,
       label: "Tiến độ học viên",
       icon: BarChart,
-      isActive: false,
-      disabled: true,
+      isActive: pathname.startsWith("/dashboard/lecturer/progress"),
+      disabled: false,
     },
     {
-      href: "/dashboard/lecturer" as const,
+      href: "/dashboard/lecturer/insights" as const,
       label: "Doanh thu",
       icon: TrendingUp,
-      isActive: false,
-      disabled: true,
+      isActive: pathname.startsWith("/dashboard/lecturer/insights"),
+      disabled: false,
     },
   ];
 
