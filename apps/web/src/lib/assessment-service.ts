@@ -10,6 +10,7 @@ import {
 } from "@codi-1/db/schema/assessments";
 import { loadLearningLessonAccess } from "./learning-path-service";
 import { LearningPathError } from "./learning-path-contract";
+import { learnerVisibleFeedback } from "./grading-feedback-frame";
 import {
   assessmentCommand,
   assignmentFileLimit,
@@ -208,7 +209,7 @@ function project(ctx: Context, scope: Scope): AssessmentView {
           isPassed: s.isPassed,
           submittedAt: s.submittedAt?.toISOString() ?? null,
           gradedAt: s.gradedAt?.toISOString() ?? null,
-          feedback: s.feedback,
+          feedback: learnerVisibleFeedback(s.feedback),
           fileName: s.fileName,
           fileUrl: s.fileUrl ? fileUrl(scope) : null,
           linkUrl: s.linkUrl,

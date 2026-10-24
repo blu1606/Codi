@@ -40,12 +40,12 @@ export function LecturerNav({ counts }: LecturerNavProps) {
       disabled: false,
     },
     {
-      href: "/dashboard/lecturer" as const,
+      href: "/dashboard/lecturer/grading" as any,
       label: "Chấm bài",
       icon: ClipboardCheck,
       count: counts?.grading,
-      isActive: false,
-      disabled: true,
+      isActive: pathname.startsWith("/dashboard/lecturer/grading"),
+      disabled: false,
     },
     {
       href: "/dashboard/lecturer" as const,

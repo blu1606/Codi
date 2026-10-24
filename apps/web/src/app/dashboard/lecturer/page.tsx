@@ -92,12 +92,13 @@ export default async function LecturerDashboardPage() {
               <ClipboardCheck className="size-4 text-primary" />
             </div>
             <div className="text-3xl font-bold tracking-tight">{counts.grading}</div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Hàng chờ chấm</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground">
-                Sắp ra mắt
-              </span>
-            </div>
+            <Link
+              href={"/dashboard/lecturer/grading" as any}
+              className="flex items-center justify-between text-xs font-medium text-primary hover:underline transition-colors pt-1"
+            >
+              <span>Mở hàng chờ</span>
+              <ArrowRight className="size-3" />
+            </Link>
           </CardContent>
         </Card>
 
