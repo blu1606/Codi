@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import {
   isVoucherExpired,
   validateVoucherForm,
@@ -6,9 +7,18 @@ import {
   updateAdminVoucher,
   toggleAdminVoucherActive,
   getAdminVouchers,
+  nearLimitVoucherPredicate,
 } from "./admin-vouchers-service";
 
 describe("admin-vouchers-service unit tests", () => {
+  it("compiles the exact active positive-cap usage predicate without division or calendar conditions", () => {
+    const query = new PgDialect().sqlToQuery(nearLimitVoucherPredicate()!);
+    expect(query.sql).toBe('(("vouchers"."is_active" = $1) and ("vouchers"."usage_limit" > $2) and ("vouchers"."used_count"::numeric * 10 >= "vouchers"."usage_limit"::numeric * 9))');
+    expect(query.params).toEqual([true, 0]);
+    // Integer caps are finite by schema. SQL NULL > 0 is unknown (excluded);
+    // zero/negative caps fail > 0, inactive fails = true. No expiry/start filter.
+  });
+
   describe("isVoucherExpired", () => {
     it("returns false for vouchers without expiry", () => {
       expect(isVoucherExpired(null)).toBe(false);

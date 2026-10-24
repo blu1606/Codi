@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { vouchers } from "@codi-1/db";
 
 export type AdminVoucherItem = {
@@ -84,10 +84,20 @@ export function validateVoucherForm(data: VoucherFormData, isUpdate: boolean = f
   };
 }
 
-export async function getAdminVouchers(db: any): Promise<AdminVoucherItem[]> {
+// The legacy URL name denotes usage exhaustion, not calendar expiry.
+export function nearLimitVoucherPredicate() {
+  return and(
+    eq(vouchers.isActive, true),
+    gt(vouchers.usageLimit, 0),
+    sql`${vouchers.usedCount}::numeric * 10 >= ${vouchers.usageLimit}::numeric * 9`,
+  );
+}
+
+export async function getAdminVouchers(db: any, filter?: string): Promise<AdminVoucherItem[]> {
   const rows = await db
     .select()
     .from(vouchers)
+    .where(filter === "expiring" ? nearLimitVoucherPredicate() : undefined)
     .orderBy(desc(vouchers.createdAt));
 
   return rows.map((v: any) => {
