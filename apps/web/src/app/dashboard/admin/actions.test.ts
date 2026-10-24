@@ -14,6 +14,37 @@ vi.mock("@codi-1/auth", () => ({
 }));
 
 const mockTransaction = vi.fn();
+const mockDbSelect = vi.fn();
+
+const mockAdminHideCourse = vi.fn().mockResolvedValue({ success: true, title: "Lập trình React" });
+const mockAdminUnhideCourse = vi.fn().mockResolvedValue({ success: true, title: "Lập trình React" });
+const mockAdminUpdateCoursePrice = vi.fn().mockResolvedValue({ success: true, title: "Lập trình React", oldPrice: 100, newPrice: 200 });
+
+vi.mock("@/lib/admin-courses-service", () => ({
+  adminHideCourse: (...args: any[]) => mockAdminHideCourse(...args),
+  adminUnhideCourse: (...args: any[]) => mockAdminUnhideCourse(...args),
+  adminUpdateCoursePrice: (...args: any[]) => mockAdminUpdateCoursePrice(...args),
+}));
+
+const mockAdminCancelOrder = vi.fn().mockResolvedValue({ success: true, orderCode: "ORD-123" });
+const mockGetAdminOrderDetail = vi.fn().mockResolvedValue({ id: 123, code: "ORD-123" });
+const mockGetAdminOrders = vi.fn().mockResolvedValue({ orders: [], stats: {} });
+
+vi.mock("@/lib/admin-orders-service", () => ({
+  adminCancelOrder: (...args: any[]) => mockAdminCancelOrder(...args),
+  getAdminOrderDetail: (...args: any[]) => mockGetAdminOrderDetail(...args),
+  getAdminOrders: (...args: any[]) => mockGetAdminOrders(...args),
+}));
+
+const mockCreateAdminVoucher = vi.fn().mockResolvedValue({ success: true, id: 1 });
+const mockUpdateAdminVoucher = vi.fn().mockResolvedValue({ success: true, id: 1 });
+const mockToggleAdminVoucherActive = vi.fn().mockResolvedValue({ success: true, id: 1, active: true });
+
+vi.mock("@/lib/admin-vouchers-service", () => ({
+  createAdminVoucher: (...args: any[]) => mockCreateAdminVoucher(...args),
+  updateAdminVoucher: (...args: any[]) => mockUpdateAdminVoucher(...args),
+  toggleAdminVoucherActive: (...args: any[]) => mockToggleAdminVoucherActive(...args),
+}));
 
 vi.mock("@/services", () => ({
   auth: {
@@ -23,16 +54,24 @@ vi.mock("@/services", () => ({
   },
   db: {
     transaction: (cb: any) => mockTransaction(cb),
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({}),
-      }),
-    }),
+    select: (...args: any[]) => mockDbSelect(...args),
   },
 }));
 
 import { ROLE } from "@codi-1/auth";
-import { updateUserRole, toggleUserBan } from "./actions";
+import {
+  updateUserRole,
+  toggleUserBan,
+  hideCourseAction,
+  unhideCourseAction,
+  updateCoursePriceAction,
+  cancelAdminOrderAction,
+  getAdminOrderDetailAction,
+  getAdminOrdersExportAction,
+  createVoucherAction,
+  updateVoucherAction,
+  toggleVoucherActiveAction,
+} from "./actions";
 
 function createMockTx(
   activeAdmins: any[],
@@ -242,6 +281,25 @@ describe("toggleUserBan action", () => {
     mockHeaders.mockResolvedValue(new Headers());
   });
 
+  it.each([undefined, "", "   ", "\t\n"])(
+    "rejects a blank deactivation reason (%j) without changing the user or deleting sessions",
+    async (reason) => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+      mockRequireRole.mockResolvedValue(undefined);
+      const { mockTx } = createMockTx([{ id: "role-1", userId: "admin-1" }]);
+      mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
+
+      const result = await toggleUserBan("target-user", true, reason).catch(
+        (error: unknown) => error,
+      );
+
+      expect.soft(result).toBeInstanceOf(Error);
+      expect.soft(mockTx.update).not.toHaveBeenCalled();
+      expect.soft(mockTx.delete).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ message: "Lý do vô hiệu hoá là bắt buộc." });
+    },
+  );
+
   it("ném lỗi Unauthorized khi không có phiên đăng nhập", async () => {
     mockGetSession.mockResolvedValue(null);
     await expect(toggleUserBan("target-1", true)).rejects.toThrow("Unauthorized");
@@ -288,7 +346,7 @@ describe("toggleUserBan action", () => {
     const { mockTx } = createMockTx(fakeAdmins);
     mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-    await expect(toggleUserBan(targetUserId, true)).rejects.toThrow(
+    await expect(toggleUserBan(targetUserId, true, "Lý do")).rejects.toThrow(
       "Khong the khoa Admin dang hoat dong duy nhat."
     );
   });
@@ -307,7 +365,7 @@ describe("toggleUserBan action", () => {
 
     mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-    await toggleUserBan(targetUserId, true, "Vi pham");
+    await toggleUserBan(targetUserId, true, "  Vi pham  ");
 
     expect(mockTx.update).toHaveBeenCalled();
     expect(mockSet).toHaveBeenCalledWith({
@@ -358,7 +416,7 @@ describe("toggleUserBan action", () => {
 
     mockTransaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-    await toggleUserBan(targetUserId, true);
+    await toggleUserBan(targetUserId, true, "Vi pham noi quy nen tang.");
 
     expect(mockTx.update).toHaveBeenCalled();
     expect(mockSet).toHaveBeenCalledWith({
@@ -366,5 +424,235 @@ describe("toggleUserBan action", () => {
       banReason: "Vi pham noi quy nen tang.",
     });
     expect(mockTx.delete).toHaveBeenCalled();
+  });
+});
+
+describe("Admin Courses Actions (S33)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHeaders.mockResolvedValue(new Headers());
+  });
+
+  it("hideCourseAction requires auth and calls adminHideCourse", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(hideCourseAction("c-1", "Lý do")).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await hideCourseAction("c-1", "Lý do");
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+
+  it("unhideCourseAction requires auth and calls adminUnhideCourse", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(unhideCourseAction("c-1")).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await unhideCourseAction("c-1");
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+
+  it("updateCoursePriceAction requires auth and calls adminUpdateCoursePrice", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(updateCoursePriceAction("c-1", 500000)).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await updateCoursePriceAction("c-1", 500000);
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+});
+
+describe("Admin Orders Actions (S34)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHeaders.mockResolvedValue(new Headers());
+  });
+
+  it("cancelAdminOrderAction requires auth and calls adminCancelOrder", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(cancelAdminOrderAction(123, "Khách yêu cầu")).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    // Omitted or whitespace reason is rejected on server
+    await expect(cancelAdminOrderAction(123, "")).rejects.toThrow("Lý do huỷ đơn hàng là bắt buộc.");
+    await expect(cancelAdminOrderAction(123, "   ")).rejects.toThrow("Lý do huỷ đơn hàng là bắt buộc.");
+
+    const res = await cancelAdminOrderAction(123, "Khách yêu cầu");
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+
+  it("getAdminOrderDetailAction requires auth and calls getAdminOrderDetail", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(getAdminOrderDetailAction(123)).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await getAdminOrderDetailAction(123);
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+
+  it("getAdminOrdersExportAction requires auth and calls getAdminOrders", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(getAdminOrdersExportAction({ range: "30" })).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await getAdminOrdersExportAction({ range: "30" });
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+});
+
+describe("Admin Vouchers Actions (S35)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHeaders.mockResolvedValue(new Headers());
+  });
+
+  it("createVoucherAction requires auth and calls createAdminVoucher", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(
+      createVoucherAction({ code: "CODI50", type: "percent", value: 50 })
+    ).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await createVoucherAction({ code: "CODI50", type: "percent", value: 50 });
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+
+  it("updateVoucherAction requires auth and calls updateAdminVoucher", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(updateVoucherAction(1, { value: 30 })).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await updateVoucherAction(1, { value: 30 });
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+
+  it("toggleVoucherActiveAction requires auth and calls toggleAdminVoucherActive", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    await expect(toggleVoucherActiveAction(1, false)).rejects.toThrow("Unauthorized");
+
+    mockGetSession.mockResolvedValue({ user: { id: "admin-1" } });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    const res = await toggleVoucherActiveAction(1, false);
+    expect(mockRequireRole).toHaveBeenCalledWith(expect.anything(), "admin-1", ROLE.ADMIN);
+    expect(res).toBeDefined();
+  });
+});
+
+describe("getUserImpactCounts action", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockHeaders.mockResolvedValue(new Headers());
+  });
+
+  it("getUserImpactCounts ném lỗi Unauthorized khi không có session", async () => {
+    mockGetSession.mockResolvedValue(null);
+    const { getUserImpactCounts } = await import("./actions");
+    await expect(getUserImpactCounts("target-1")).rejects.toThrow("Unauthorized");
+  });
+
+  it("getUserImpactCounts ném lỗi nếu người gọi không phải ADMIN", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-non-admin", email: "student@codi.vn" },
+    });
+    mockRequireRole.mockRejectedValue(new Error("Forbidden"));
+    const { getUserImpactCounts } = await import("./actions");
+    await expect(getUserImpactCounts("target-1")).rejects.toThrow("Forbidden");
+  });
+
+  it("getUserImpactCounts trả về số liệu tác động chính xác", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "admin-1", email: "admin@codi.vn" },
+    });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    // Call 1: ownedRes -> [{ val: 5 }]
+    // Call 2: ordersRes -> [{ val: 2 }]
+    // Call 3: taughtRes -> [{ val: 3 }]
+    mockDbSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([{ val: 5 }]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ val: 2 }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ val: 3 }]),
+        }),
+      });
+
+    const { getUserImpactCounts } = await import("./actions");
+    const res = await getUserImpactCounts("target-user-123");
+
+    expect(res).toEqual({
+      ownedCourses: 5,
+      pendingOrders: 2,
+      taughtCourses: 3,
+    });
+  });
+
+  it("getUserImpactCounts trả về 0 khi kết quả truy vấn rỗng", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "admin-1", email: "admin@codi.vn" },
+    });
+    mockRequireRole.mockResolvedValue(undefined);
+
+    mockDbSelect
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+    const { getUserImpactCounts } = await import("./actions");
+    const res = await getUserImpactCounts("target-user-empty");
+
+    expect(res).toEqual({
+      ownedCourses: 0,
+      pendingOrders: 0,
+      taughtCourses: 0,
+    });
   });
 });

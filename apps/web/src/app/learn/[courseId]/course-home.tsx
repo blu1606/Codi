@@ -258,7 +258,7 @@ export default function CourseHome({
       ? GOAL_LABELS[data.goal as keyof typeof GOAL_LABELS]
       : "Chưa đặt mục tiêu";
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
+    <main className="mx-auto min-w-0 w-full max-w-6xl space-y-6 p-4 sm:p-6">
       <nav className="text-sm text-muted-foreground" aria-label="Đường dẫn">
         <Link href="/dashboard">Bàn làm việc</Link> / {data.course.title}
       </nav>

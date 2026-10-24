@@ -42,6 +42,8 @@ export type ChecklistAssessment = {
   title: string;
   passingScore: number | null;
   maxScore: number;
+  isTutorial?: boolean;
+  tutorialDone?: boolean;
 };
 export type ChecklistSubmission = {
   assessmentId: number;
@@ -49,6 +51,7 @@ export type ChecklistSubmission = {
   mode: "run" | "submit" | null;
   status: "draft" | "pending" | "graded";
   score: number | null;
+  quizPercent?: number | null;
   isPassed: boolean | null;
   submittedAt: Date | string | null;
 };
@@ -58,6 +61,7 @@ export type ChecklistItem = {
   done: boolean;
   note: string;
   assessmentId?: number;
+  tutorial?: boolean;
 };
 
 // D6/D7: latest quiz attempt and latest coding *submission*, never best score or a run.
@@ -73,6 +77,17 @@ export function lessonChecklist(
   const code = assessments.filter((a) => a.type === "coding");
   const items: ChecklistItem[] = code.length
     ? code.map((a) => {
+        if (a.isTutorial)
+          return {
+            key: "code" as const,
+            assessmentId: a.id,
+            tutorial: true,
+            label: "Đi hết các bước hướng dẫn",
+            done: a.tutorialDone === true,
+            note: a.tutorialDone
+              ? "Đã đi hết hướng dẫn"
+              : "Đi tới bước cuối để hoàn thành hướng dẫn",
+          };
         const s = latest(a.id, true);
         return {
           key: "code",
@@ -99,7 +114,9 @@ export function lessonChecklist(
       ];
   for (const a of assessments.filter((a) => a.type === "quiz")) {
     const s = latest(a.id);
-    const percent = s?.score == null ? null : (s.score / a.maxScore) * 100;
+    const percent =
+      s?.quizPercent ??
+      (s?.score == null ? null : (s.score / a.maxScore) * 100);
     const done =
       s?.status === "graded" &&
       !!s.submittedAt &&

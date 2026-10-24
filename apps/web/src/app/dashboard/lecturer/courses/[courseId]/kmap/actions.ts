@@ -20,7 +20,7 @@ import {
 } from "@/lib/knowledge-map-runner";
 import { createNotificationService } from "@/lib/notification-service";
 import { db } from "@/services";
-import { getEditableCourse } from "../actions";
+import { getEditableCourse } from "../course-queries";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
 
 export interface KnowledgeMapConceptDto {

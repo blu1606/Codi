@@ -1,0 +1,41 @@
+{
+  "provenance": "Original tool result chunks recovered from saved execution history; not reconstructed stdout.",
+  "outputs": [
+    {
+      "timestamp": "2026-10-21T14:19:13.903Z",
+      "callId": "call_d4606ab03b124f6981137df07e91357e",
+      "invokedAt": "2026-10-21T14:18:53.628Z",
+      "result": {
+        "chunk_id": "d14719",
+        "wall_time_seconds": 10.0138961,
+        "session_id": 47007,
+        "original_token_count": 0,
+        "output": ""
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:19:50.384Z",
+      "callId": "call_3533d4e8d1d348acbc57faf1035a6f05",
+      "invokedAt": "2026-10-21T14:19:33.833Z",
+      "result": {
+        "chunk_id": "0cf293",
+        "wall_time_seconds": 5.0072374,
+        "session_id": 47007,
+        "original_token_count": 0,
+        "output": ""
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:20:14.867Z",
+      "callId": "call_095c84d5b79246a6a0390732bd1110b8",
+      "invokedAt": "2026-10-21T14:20:14.746Z",
+      "result": {
+        "chunk_id": "5bf56f",
+        "wall_time_seconds": 0.0000109,
+        "exit_code": 0,
+        "original_token_count": 40,
+        "output": "PR144 browser follow-up passed: settled header/mobile matrix; no AI requests.\nOwned QA user/course/activity removed; zero sessions or study clocks/days remain.\n"
+      }
+    }
+  ]
+}

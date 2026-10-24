@@ -9,6 +9,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "apps/web/src/**/*.test.ts",
+      "apps/web/scripts/**/*.test.ts",
       "packages/auth/src/**/*.test.ts",
     ],
     coverage: {

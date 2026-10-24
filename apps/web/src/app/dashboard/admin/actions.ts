@@ -115,6 +115,9 @@ export async function toggleUserBan(
     }
 
     if (ban) {
+      if (!reason || !reason.trim()) {
+        throw new Error("Lý do vô hiệu hoá là bắt buộc.");
+      }
       const targetIsAdmin = activeAdmins.some(a => a.userId === targetUserId);
 
       if (targetIsAdmin) {
@@ -130,7 +133,7 @@ export async function toggleUserBan(
       .update(user)
       .set({
         banned: ban,
-        banReason: ban ? (reason ?? "Vi pham noi quy nen tang.") : null,
+        banReason: ban ? (reason ? reason.trim() : "Vi pham noi quy nen tang.") : null,
       })
       .where(eq(user.id, targetUserId));
 
@@ -138,4 +141,165 @@ export async function toggleUserBan(
       await tx.delete(session_table).where(eq(session_table.userId, targetUserId));
     }
   });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin Published Courses Actions (S33)
+// ─────────────────────────────────────────────────────────────
+
+export async function hideCourseAction(
+  courseId: string,
+  reason: string
+): Promise<{ success: boolean; title: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { adminHideCourse } = await import("@/lib/admin-courses-service");
+  return await adminHideCourse(db, courseId, reason, session.user.id);
+}
+
+export async function unhideCourseAction(
+  courseId: string
+): Promise<{ success: boolean; title: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { adminUnhideCourse } = await import("@/lib/admin-courses-service");
+  return await adminUnhideCourse(db, courseId, session.user.id);
+}
+
+export async function updateCoursePriceAction(
+  courseId: string,
+  newPrice: number
+): Promise<{ success: boolean; title: string; oldPrice: number; newPrice: number }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { adminUpdateCoursePrice } = await import("@/lib/admin-courses-service");
+  return await adminUpdateCoursePrice(db, courseId, newPrice, session.user.id);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin Orders Actions (S34)
+// ─────────────────────────────────────────────────────────────
+
+export async function cancelAdminOrderAction(
+  orderId: number,
+  reason?: string
+): Promise<{ success: boolean; orderCode: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) {
+    throw new Error("Lý do huỷ đơn hàng là bắt buộc.");
+  }
+
+  const { adminCancelOrder } = await import("@/lib/admin-orders-service");
+  return await adminCancelOrder(db, orderId, session.user.id, trimmedReason);
+}
+
+export async function getAdminOrderDetailAction(
+  orderIdOrCode: number | string
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { getAdminOrderDetail } = await import("@/lib/admin-orders-service");
+  return await getAdminOrderDetail(db, orderIdOrCode);
+}
+
+export async function getAdminOrdersExportAction(
+  filter: import("@/lib/admin-orders-service").AdminOrdersFilter
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { getAdminOrders } = await import("@/lib/admin-orders-service");
+  const result = await getAdminOrders(db, filter);
+  return result.orders;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin Vouchers Actions (S35)
+// ─────────────────────────────────────────────────────────────
+
+export async function createVoucherAction(data: import("@/lib/admin-vouchers-service").VoucherFormData) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { createAdminVoucher } = await import("@/lib/admin-vouchers-service");
+  return await createAdminVoucher(db, session.user.id, data);
+}
+
+export async function updateVoucherAction(
+  voucherId: number,
+  data: Partial<import("@/lib/admin-vouchers-service").VoucherFormData>
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { updateAdminVoucher } = await import("@/lib/admin-vouchers-service");
+  return await updateAdminVoucher(db, voucherId, data);
+}
+
+export async function toggleVoucherActiveAction(
+  voucherId: number,
+  active: boolean
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { toggleAdminVoucherActive } = await import("@/lib/admin-vouchers-service");
+  return await toggleAdminVoucherActive(db, voucherId, active);
+}
+
+export type UserImpactCounts = {
+  ownedCourses: number;
+  pendingOrders: number;
+  taughtCourses: number;
+};
+
+export async function getUserImpactCounts(targetUserId: string): Promise<UserImpactCounts> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { studentEnrollments } = await import("@codi-1/db/schema/student-profile");
+  const { courses } = await import("@codi-1/db/schema/courses");
+  const { orders } = await import("@codi-1/db/schema/commerce");
+
+  // 1. owned courses that are published
+  const [ownedRes] = await db
+    .select({ val: count() })
+    .from(studentEnrollments)
+    .innerJoin(courses, eq(studentEnrollments.courseId, courses.id))
+    .where(and(eq(studentEnrollments.userId, targetUserId), eq(courses.status, "published")));
+
+  // 2. pending orders
+  const [ordersRes] = await db
+    .select({ val: count() })
+    .from(orders)
+    .where(and(eq(orders.userId, targetUserId), eq(orders.status, "pending")));
+
+  // 3. taught courses that are published
+  const [taughtRes] = await db
+    .select({ val: count() })
+    .from(courses)
+    .where(and(eq(courses.instructorId, targetUserId), eq(courses.status, "published")));
+
+  return {
+    ownedCourses: Number(ownedRes?.val ?? 0),
+    pendingOrders: Number(ordersRes?.val ?? 0),
+    taughtCourses: Number(taughtRes?.val ?? 0),
+  };
 }

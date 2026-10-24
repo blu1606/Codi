@@ -21,6 +21,10 @@ import type {
   LessonPlayerCommand,
   MediaProgress,
 } from "@/lib/lesson-player-contract";
+import { youtubeVideoId, youtubeWatchUrl } from "@/lib/youtube";
+import YouTubeMaterial, {
+  type VideoSnapshot,
+} from "@/components/youtube-material";
 
 export default function LessonMaterialView({
   material,
@@ -73,16 +77,22 @@ export default function LessonMaterialView({
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const youtubeId =
+    material.type === "video" && material.url
+      ? youtubeVideoId(material.url)
+      : null;
+  const [untracked, setUntracked] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
+  const snapshot = useRef<VideoSnapshot | null>(null);
   const restored = useRef(false);
   const lastSaved = useRef(0);
   const savedPosition = useRef(progress?.seconds ?? 0);
   const persist = useCallback(
-    (element: HTMLVideoElement, ended = false) => {
-      if (!Number.isFinite(element.currentTime) || !restored.current) return;
-      const seconds = Math.floor(element.currentTime);
+    (position: number, ended: boolean) => {
+      if (!Number.isFinite(position) || !restored.current) return;
+      const seconds = Math.max(0, Math.floor(position));
       lastSaved.current = Date.now();
-      const key = `${seconds}:${ended || element.ended}`;
+      const key = `${seconds}:${ended}`;
       if (
         signature.current === key ||
         (signature.current === `${seconds}:true` && !ended)
@@ -93,16 +103,40 @@ export default function LessonMaterialView({
         type: "video",
         materialId: material.id,
         seconds,
-        ended: ended || element.ended,
+        ended,
       });
     },
     [material.id, saveProgress],
   );
+  const persistElement = useCallback(
+    (element: HTMLVideoElement, ended = false) =>
+      persist(element.currentTime, ended || element.ended),
+    [persist],
+  );
+  const startTracking = useCallback(() => {
+    restored.current = true;
+    lastSaved.current = Date.now();
+    setStatus("ready");
+  }, []);
+  const stopTracking = useCallback(() => {
+    restored.current = false;
+    setUntracked(true);
+    setStatus("ready");
+  }, []);
+  const loaded = useCallback(() => setStatus("ready"), []);
+  const failed = useCallback(() => setStatus("error"), []);
   useEffect(() => {
     if (material.type !== "video") return;
-    const element = video.current;
+    // The YouTube player registers its own snapshot once its API is attached.
+    const element = youtubeId ? null : video.current;
+    if (element)
+      snapshot.current = () => ({
+        seconds: element.currentTime,
+        ended: element.ended,
+      });
     const savePosition = () => {
-      if (element) persist(element);
+      const position = snapshot.current?.();
+      if (position) persist(position.seconds, position.ended);
     };
     const visibility = () => {
       if (document.visibilityState === "hidden") savePosition();
@@ -114,7 +148,7 @@ export default function LessonMaterialView({
       window.removeEventListener("pagehide", savePosition);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [material.type, attempt, persist]);
+  }, [material.type, attempt, persist, youtubeId]);
   useEffect(() => {
     if (
       status !== "loading" ||
@@ -136,6 +170,7 @@ export default function LessonMaterialView({
           className="mt-3"
           onClick={() => {
             restored.current = false;
+            setUntracked(false);
             setAttempt((n) => n + 1);
             setStatus("loading");
           }}
@@ -143,6 +178,20 @@ export default function LessonMaterialView({
           <RefreshCw className="size-4" />
           Thử lại
         </Button>
+        {youtubeId && (
+          <a
+            className={buttonVariants({
+              variant: "link",
+              className: "mt-3 ml-2",
+            })}
+            href={youtubeWatchUrl(youtubeId)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Mở video trên YouTube
+            <ExternalLink className="size-4" />
+          </a>
+        )}
       </Alert>
     );
   if (material.type === "pdf" || material.type === "slide")
@@ -189,49 +238,72 @@ export default function LessonMaterialView({
           Đang tải video…
         </p>
       )}
-      <video
-        key={attempt}
-        ref={video}
-        src={material.url}
-        controls
-        playsInline
-        preload="metadata"
-        aria-label={material.title}
-        className="aspect-video w-full rounded-lg bg-muted"
-        onError={() => setStatus("error")}
-        onLoadedMetadata={(event) => {
-          const element = event.currentTarget;
-          if (!restored.current) {
-            element.currentTime = Math.min(
-              savedPosition.current,
-              Math.max(0, element.duration - 0.1),
-            );
-            restored.current = true;
-            lastSaved.current = Date.now();
-          }
-          setStatus("ready");
-        }}
-        onTimeUpdate={(event) => {
-          if (Date.now() - lastSaved.current >= 10_000)
-            persist(event.currentTarget);
-        }}
-        onPause={(event) => {
-          const element = event.currentTarget;
-          if (
-            !element.ended &&
-            (!Number.isFinite(element.duration) ||
-              element.currentTime < element.duration)
-          )
-            persist(element);
-        }}
-        onEnded={(event) => persist(event.currentTarget, true)}
-      />
-      <p className="text-sm text-muted-foreground">
-        Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.
-        {savedPosition.current > 0
-          ? ` Tiếp tục từ giây ${savedPosition.current}.`
-          : ""}
-      </p>
+      {youtubeId ? (
+        <YouTubeMaterial
+          key={attempt}
+          videoId={youtubeId}
+          title={material.title}
+          startSeconds={savedPosition.current}
+          snapshot={snapshot}
+          onTracked={startTracking}
+          onUntracked={stopTracking}
+          onLoaded={loaded}
+          onPosition={persist}
+          onError={failed}
+        />
+      ) : (
+        <video
+          key={attempt}
+          ref={video}
+          src={material.url}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={material.title}
+          className="aspect-video w-full rounded-lg bg-muted"
+          onError={() => setStatus("error")}
+          onLoadedMetadata={(event) => {
+            const element = event.currentTarget;
+            if (!restored.current) {
+              element.currentTime = Math.min(
+                savedPosition.current,
+                Math.max(0, element.duration - 0.1),
+              );
+            }
+            startTracking();
+          }}
+          onTimeUpdate={(event) => {
+            if (Date.now() - lastSaved.current >= 10_000)
+              persistElement(event.currentTarget);
+          }}
+          onPause={(event) => {
+            const element = event.currentTarget;
+            if (
+              !element.ended &&
+              (!Number.isFinite(element.duration) ||
+                element.currentTime < element.duration)
+            )
+              persistElement(element);
+          }}
+          onEnded={(event) => persistElement(event.currentTarget, true)}
+        />
+      )}
+      {untracked ? (
+        <Alert variant="warning">
+          <AlertTitle>Không theo dõi được tiến độ video</AlertTitle>
+          <AlertDescription>
+            Video vẫn xem được nhưng vị trí xem sẽ không được lưu. Xem xong,
+            hãy bấm “Đánh dấu đã học xong”.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.
+          {savedPosition.current > 0
+            ? ` Tiếp tục từ giây ${savedPosition.current}.`
+            : ""}
+        </p>
+      )}
     </section>
   );
 }

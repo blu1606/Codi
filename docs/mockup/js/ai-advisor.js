@@ -39,7 +39,12 @@
   // cards → guest sign-in line. Conversation: one 720px column, compact header, "Codi đang hiểu về bạn"
   // chip row, the thread, and a composer pinned to the bottom of the viewport.
   function suggestions(user, currentCourse) {
-    return [
+    // The GitHub card triggers an action (connect/view analysis) instead of sending a chat prompt.
+    const ghConnected = user && Codi.github && Codi.github.isConnected();
+    const ghCard = user ? (ghConnected
+      ? { icon: 'github', title: 'Xem lại phân tích GitHub của mình', desc: 'Codi gợi ý khoá dựa trên repo và ngôn ngữ của bạn', action: 'advisor-github-view' }
+      : { icon: 'github', title: 'Phân tích GitHub của mình', desc: 'Kết nối GitHub để Codi gợi ý khoá sát với kỹ năng', action: 'advisor-github-connect' }) : null;
+    const base = [
       currentCourse
         ? { icon: 'route', title: `Học gì sau “${currentCourse.title}”?`, desc: 'Gợi ý khoá tiếp theo dựa trên khoá bạn đang học', prompt: `Sau ${currentCourse.title} nên học gì tiếp?` }
         : { icon: 'book-open', title: 'Mới bắt đầu học lập trình', desc: 'Nên học ngôn ngữ và khoá nào trước', prompt: 'Mình mới bắt đầu học lập trình, nên học gì trước?' },
@@ -49,6 +54,8 @@
         ? { icon: 'clock', title: 'Mình bị chậm tiến độ', desc: 'Cách lấy lại nhịp học mỗi tuần', prompt: 'Mình bị chậm tiến độ, nên làm gì?' }
         : { icon: 'git-branch', title: 'Lên lộ trình học', desc: 'Thứ tự các khoá để đi từ cơ bản đến dự án', prompt: 'Lộ trình học để trở thành fullstack developer theo thứ tự nào?' },
     ];
+    if (ghCard) { base.splice(1, 0, ghCard); base.length = 4; }
+    return base;
   }
 
   function composer(busy, big) {
@@ -84,7 +91,7 @@
         ${intakeRow()}
         <section aria-labelledby="ai-suggest-title" class="ai-suggest-wrap">
           <h2 id="ai-suggest-title" class="ai-suggest-title">Thử hỏi</h2>
-          <ul class="ai-suggest">${suggestions(user, currentCourse).map((s) => html`<li><button type="button" class="ai-suggest-card" data-action="advisor-prompt" data-prompt="${s.prompt}">
+          <ul class="ai-suggest">${suggestions(user, currentCourse).map((s) => html`<li><button type="button" class="ai-suggest-card" ${s.action ? Codi.raw(`data-action="${s.action}"`) : Codi.raw(`data-action="advisor-prompt" data-prompt="${s.prompt}"`)}>
             ${icon(s.icon, { cls: 'icon-sm' })}<span class="ai-suggest-text"><span class="ai-suggest-name">${s.title}</span><span class="ai-suggest-desc">${s.desc}</span></span></button></li>`)}</ul>
         </section>
         <p class="ai-disclaimer">AI có thể trả lời sai. Hãy xem kỹ trang chi tiết khoá học trước khi mua.</p>
@@ -237,6 +244,10 @@
     const prompt = el.getAttribute('data-prompt');
     if (prompt) askAI(prompt);
   });
+
+  // GitHub-analysis entry points surfaced from the advisor landing.
+  Codi.action('advisor-github-connect', () => { if (Codi.github) Codi.github.openConnect({ returnTo: '/ai' }); });
+  Codi.action('advisor-github-view', () => Codi.go('/github/analysis'));
 
   Codi.action('advisor-send', (form) => {
     const text = form.querySelector('[name="text"]').value.trim();
