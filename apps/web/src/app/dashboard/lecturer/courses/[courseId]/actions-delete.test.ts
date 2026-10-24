@@ -152,6 +152,23 @@ const dependents = [
   ["publication_review_flags", "lessonId"], ["ai_interaction_logs", "lessonId"], ["ai_content_drafts", "lessonId"],
 ] as const;
 describe("lesson deletion preserves non-restorable state", () => {
+  it.each([true, false])("refuses a clock-only lesson with active clock %s without losing accounting or ownership state", async (active) => {
+    tables.student_study_clocks = [{
+      userId: "learner", courseId: "course", lessonId: "lesson",
+      trackerId: "retained-owner", lastSeenAt: active ? new Date("2026-10-24T00:00:00Z") : null,
+    }];
+    tables.student_study_days = [{ userId: "learner", date: "2026-10-24", seconds: 120 }];
+    const before = structuredClone(tables);
+    await expect(deleteLesson("course", "lesson")).rejects.toThrow("Không thể xoá bài học");
+    expect(tables).toEqual(before);
+    expect(events).toContain("lock:course_lessons:update");
+    expect(events).toContain("read:student_study_clocks");
+    expect(events.indexOf("lock:course_lessons:update")).toBeLessThan(events.indexOf("read:student_study_clocks"));
+    expect(events.filter((event) => /^(delete|update):/.test(event))).toEqual([]);
+    expect(events).toContain("rollback");
+    expect(boundary.revalidate).not.toHaveBeenCalled();
+  });
+
   it.each(dependents)("refuses %s without submissions and without partial mutation", async (table, column) => {
     tables[table] = [{ id: 10, [column]: "lesson" }];
     const before = structuredClone(tables);

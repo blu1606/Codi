@@ -25,6 +25,7 @@ import {
   quizOptions,
   quizQuestions,
   studentEnrollments,
+  studentStudyClocks,
 } from "@codi-1/db";
 import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
@@ -548,6 +549,7 @@ export async function deleteLesson(courseId: string, lessonId: string) {
       [quizQuestions, quizQuestions.lessonId],
       [learningPathJobs, learningPathJobs.afterLessonId],
       [studentEnrollments, studentEnrollments.lastLessonId],
+      [studentStudyClocks, studentStudyClocks.lessonId],
       [courseDiscussions, courseDiscussions.lessonId],
       [courseConversations, courseConversations.lessonId],
       [publicationReviewFlags, publicationReviewFlags.lessonId],
