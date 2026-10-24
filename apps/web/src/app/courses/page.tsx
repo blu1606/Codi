@@ -201,8 +201,8 @@ export default function CoursesPage() {
     ) {
       setSelectedSort(sortParam === "relevant" ? "popular" : sortParam);
     } else if (sortParam === "price-asc" || sortParam === "price-desc") {
-      // Legacy price sort is preserved in selection for backwards-compatible order, with visible chip
-      setSelectedSort(sortParam);
+      // Chuẩn hóa URL cũ (price-asc, price-desc) về lựa chọn hỗ trợ mặc định 'popular' (Phù hợp nhất)
+      setSelectedSort("popular");
     }
     isHydratedRef.current = true;
   }, []);
@@ -272,7 +272,6 @@ export default function CoursesPage() {
   useEffect(() => {
     setActiveSuggestionIndex(-1);
   }, [typeaheadResult]);
-
   // Build unified flat list for accessible keyboard navigation (ArrowDown/Up, Enter)
   // across Query Suggestions, Top Results, and "Xem tất cả kết quả"
   type NavigableItem =
@@ -379,8 +378,8 @@ export default function CoursesPage() {
         newest: "Mới nhất",
         rating: "Đánh giá cao nhất",
         enrollment: "Học nhiều nhất",
-        "price-asc": "Giá: thấp → cao (cũ)",
-        "price-desc": "Giá: cao → thấp (cũ)",
+        "price-asc": "Giá: thấp → cao",
+        "price-desc": "Giá: cao → thấp",
       };
       chips.push({
         key: "sort",
@@ -863,12 +862,7 @@ export default function CoursesPage() {
                   {opt.label}
                 </option>
               ))}
-              {selectedSort === "price-asc" && (
-                <option value="price-asc">Giá: thấp → cao (cũ)</option>
-              )}
-              {selectedSort === "price-desc" && (
-                <option value="price-desc">Giá: cao → thấp (cũ)</option>
-              )}
+
             </select>
           </div>
         </div>
