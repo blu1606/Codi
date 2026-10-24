@@ -3,6 +3,7 @@ import type { Database } from "@codi-1/db";
 import { orderEvents, orderItems, orders, studentCart, vouchers } from "@codi-1/db";
 import { studentEnrollments, studentTransactions } from "@codi-1/db/schema/student-profile";
 import { getCartSummary } from "./cart-service";
+import { getSepayConfig } from "./sepay-config";
 
 function generateOrderCode(): string {
   const num = 10000 + Math.floor(Math.random() * 90000);
@@ -54,30 +55,54 @@ export async function createOrderFromCart(
     }
   }
 
+  // Guard against missing payment gateway config for orders with total > 0
+  if (summary.total > 0 && !getSepayConfig()) {
+    throw new CheckoutError(503, "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.");
+  }
+
   return await db.transaction(async (tx) => {
     // Acquire PostgreSQL transaction-level advisory lock per user to prevent concurrent checkout race condition
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}))`);
 
     // 3. Guard against concurrent or existing pending order
-    const [existingPending] = await tx
-      .select({ id: orders.id, code: orders.code, paymentDeadline: orders.paymentDeadline })
+    const [resolvedPending] = await tx
+      .select({ id: orders.id, code: orders.code })
       .from(orders)
       .where(and(eq(orders.userId, userId), eq(orders.status, "pending")))
       .orderBy(desc(orders.createdAt))
       .limit(1);
 
-    if (existingPending) {
+    if (resolvedPending) {
+      // Checkout always acquires user -> code; code-locked payment/cancellation
+      // paths never acquire the user lock. Do not hold row writes while waiting.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${resolvedPending.code}))`);
+      const [existingPending] = await tx
+        .select({
+          id: orders.id,
+          code: orders.code,
+          status: orders.status,
+          receivedAmount: orders.receivedAmount,
+          paymentDeadline: orders.paymentDeadline,
+        })
+        .from(orders)
+        .where(and(eq(orders.id, resolvedPending.id), eq(orders.userId, userId)))
+        .limit(1);
+
+      if (!existingPending || existingPending.status !== "pending") {
+        throw new CheckoutError(409, "Đơn hàng cũ đã thay đổi trạng thái hoặc đã được thanh toán.");
+      }
       const isExpired =
         existingPending.paymentDeadline &&
         new Date(existingPending.paymentDeadline) <= new Date();
 
       if (isExpired) {
         // Automatically mark expired pending order as failed
-        await tx
+        const updated = await tx
           .update(orders)
           .set({
             status: "failed",
             failReason: "expired",
+            needsReconciliation: existingPending.receivedAmount > 0 ? true : undefined,
             updatedAt: new Date(),
           })
           .where(
@@ -86,7 +111,12 @@ export async function createOrderFromCart(
               eq(orders.userId, userId),
               eq(orders.status, "pending"),
             ),
-          );
+          )
+          .returning({ id: orders.id });
+
+        if (updated.length === 0) {
+          throw new CheckoutError(409, "Đơn hàng cũ đã thay đổi trạng thái hoặc đã được thanh toán.");
+        }
 
         await tx
           .update(studentTransactions)
@@ -114,6 +144,7 @@ export async function createOrderFromCart(
           .set({
             status: "cancelled",
             failReason: "Huỷ để tạo đơn mới",
+            needsReconciliation: existingPending.receivedAmount > 0 ? true : undefined,
             cancelledAt: new Date(),
             updatedAt: new Date(),
           })

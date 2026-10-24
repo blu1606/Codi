@@ -42,9 +42,19 @@ describe("admin-orders-service unit tests", () => {
         id: 101,
         code: "ORD-101",
         userId: "user-1",
+        status: "pending",
+        receivedAmount: 0,
       };
 
       const mockTx = {
+        execute: vi.fn().mockResolvedValue(undefined),
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([mockCancelledOrder]),
+            }),
+          }),
+        }),
         update: vi.fn().mockReturnValue({
           set: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
@@ -77,6 +87,7 @@ describe("admin-orders-service unit tests", () => {
       };
 
       const mockTx = {
+        execute: vi.fn().mockResolvedValue(undefined),
         update: vi.fn().mockReturnValue({
           set: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
@@ -100,6 +111,7 @@ describe("admin-orders-service unit tests", () => {
       await expect(
         adminCancelOrder(mockDb as any, 102, "admin-1", "Hết hạn")
       ).rejects.toThrow("Chỉ có thể huỷ đơn đang chờ thanh toán (trạng thái hiện tại: paid).");
+      expect(mockTx.update).not.toHaveBeenCalled();
     });
   });
 });

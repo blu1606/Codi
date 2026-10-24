@@ -309,6 +309,32 @@ export async function adminCancelOrder(
   }
 
   return await db.transaction(async (tx: any) => {
+    const [resolvedOrder] = await tx
+      .select({ code: orders.code })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!resolvedOrder) {
+      throw new Error("Không tìm thấy đơn hàng.");
+    }
+
+    // Match callback/learner cancellation lock ordering: canonical code before
+    // any row writes, then re-read money/status after an in-flight receipt.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${resolvedOrder.code}))`);
+    const [lockedOrder] = await tx
+      .select({ status: orders.status, receivedAmount: orders.receivedAmount })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!lockedOrder) {
+      throw new Error("Không tìm thấy đơn hàng.");
+    }
+    if (lockedOrder.status !== "pending") {
+      throw new Error(`Chỉ có thể huỷ đơn đang chờ thanh toán (trạng thái hiện tại: ${lockedOrder.status}).`);
+    }
+
     // 1. Atomically UPDATE order only if status is currently 'pending'
     const failReason = `Quản trị viên huỷ: ${trimmedReason}`;
     const now = new Date();
@@ -319,6 +345,8 @@ export async function adminCancelOrder(
         status: "cancelled",
         failReason,
         cancelledAt: now,
+        // Prior partial receipts require refund disposition; never clear a flag.
+        needsReconciliation: lockedOrder.receivedAmount > 0 ? true : undefined,
       })
       .where(and(eq(orders.id, orderId), eq(orders.status, "pending")))
       .returning({ id: orders.id, code: orders.code, userId: orders.userId });
