@@ -15,6 +15,7 @@
     "test:onboarding:db": "tsx --env-file=.env scripts/verify-onboarding.ts",
     "test:learning-path:db": "tsx --env-file=.env scripts/verify-learning-path.ts",
     "db:seed-learning-path": "tsx --env-file=.env scripts/seed-learning-path-dev.ts",
+    "db:seed-knowledge-map": "tsx --env-file=.env scripts/seed-knowledge-map-dev.ts",
     "db:seed-lesson-player": "tsx --env-file=.env scripts/seed-lesson-player-dev.ts",
     "test:lesson-player:db": "tsx --env-file=.env scripts/verify-lesson-player.ts",
     "test:assessments:db": "tsx --env-file=.env scripts/verify-assessments.ts",

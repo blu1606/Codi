@@ -41,7 +41,7 @@ export async function seedLessonPlayerFixture(tx: Pick<Database, "select" | "ins
       await tx.insert(learningPathCompletions).values(completed.map((lessonId) => ({ enrollmentId: e.id, lessonId }))).onConflictDoNothing();
     } else if (checks.length) {
       await tx.insert(lessonProgress).values({ enrollmentId: e.id, lessonId: first, status: "in_progress", studiedAt: state === "checklist" ? new Date() : null });
-      for (const a of checks) await tx.insert(assessmentSubmissions).values({ enrollmentId: e.id, assessmentId: a.id, attempt: 1, status: a.type === "assignment" ? "pending" : "graded", score: a.type === "assignment" ? null : a.type === "coding" ? 0 : 50, isPassed: a.type === "assignment" ? null : false, mode: a.type === "coding" ? "submit" : null, submittedAt: new Date(), ...(a.type === "assignment" ? { linkUrl: "https://example.invalid/development-assignment" } : {}) });
+      for (const a of checks) await tx.insert(assessmentSubmissions).values({ enrollmentId: e.id, assessmentId: a.id, quizRevision: a.type === "quiz" ? a.currentQuizRevision : null, attempt: 1, status: a.type === "assignment" ? "pending" : "graded", score: a.type === "assignment" ? null : a.type === "coding" ? 0 : 50, isPassed: a.type === "assignment" ? null : false, mode: a.type === "coding" ? "submit" : null, submittedAt: new Date(), ...(a.type === "assignment" ? { linkUrl: "https://example.invalid/development-assignment" } : {}) });
     }
   }
   return { courseId, first, locked: fixture.lessonIds[1]! };

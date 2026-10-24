@@ -40,10 +40,49 @@ function makePostRequest(body: unknown, contentType: string = "application/json"
   });
 }
 
+import { afterEach } from "vitest";
+
 describe("POST /api/orders/checkout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "test-secret");
+    vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "12345678");
+    vi.stubEnv("SEPAY_BANK_CODE", "VCB");
     mocks.headers.mockResolvedValue(new Headers());
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns 503 when createOrderFromCart rejects due to missing payment gateway config", async () => {
+    mocks.getSession.mockResolvedValueOnce({ user: { id: "u-1" } });
+    mocks.requireRole.mockResolvedValueOnce(undefined);
+    mocks.createOrderFromCart.mockRejectedValueOnce(
+      new CheckoutError(503, "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán."),
+    );
+
+    const res = await POST(makePostRequest({}));
+    expect(res.status).toBe(503);
+    const data = await res.json();
+    expect(data.error).toBe("Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.");
+  });
+
+  it("allows zero-total order to proceed even when payment gateway config is missing", async () => {
+    mocks.getSession.mockResolvedValueOnce({ user: { id: "u-1" } });
+    mocks.requireRole.mockResolvedValueOnce(undefined);
+    mocks.createOrderFromCart.mockResolvedValueOnce({
+      orderId: 101,
+      orderCode: "CODI99999",
+      totalAmount: 0,
+    });
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "");
+
+    const res = await POST(makePostRequest({ voucherCode: "FREE100" }));
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.totalAmount).toBe(0);
+    expect(data.orderCode).toBe("CODI99999");
   });
 
   it("returns 401 when user is not authenticated", async () => {

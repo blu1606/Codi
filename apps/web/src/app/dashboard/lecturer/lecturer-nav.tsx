@@ -40,28 +40,28 @@ export function LecturerNav({ counts }: LecturerNavProps) {
       disabled: false,
     },
     {
-      href: "/dashboard/lecturer" as const,
+      href: "/dashboard/lecturer/grading" as any,
       label: "Chấm bài",
       icon: ClipboardCheck,
       count: counts?.grading,
-      isActive: false,
-      disabled: true,
+      isActive: pathname.startsWith("/dashboard/lecturer/grading"),
+      disabled: false,
     },
     {
-      href: "/dashboard/lecturer" as const,
+      href: "/dashboard/lecturer/questions" as any,
       label: "Hỏi đáp",
       icon: MessageCircle,
       count: counts?.questions,
-      isActive: false,
-      disabled: true,
+      isActive: pathname.startsWith("/dashboard/lecturer/questions"),
+      disabled: false,
     },
     {
-      href: "/dashboard/lecturer" as const,
+      href: "/dashboard/lecturer/reviews" as any,
       label: "Đánh giá",
       icon: Star,
       count: counts?.reviews,
-      isActive: false,
-      disabled: true,
+      isActive: pathname.startsWith("/dashboard/lecturer/reviews"),
+      disabled: false,
     },
     {
       href: "/dashboard/lecturer" as const,
@@ -105,7 +105,7 @@ export function LecturerNav({ counts }: LecturerNavProps) {
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href as any}
                 className={cn(
                   "flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                   item.isActive

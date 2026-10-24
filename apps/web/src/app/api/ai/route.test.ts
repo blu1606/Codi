@@ -42,7 +42,8 @@ const mockCatalog = [
   },
 ];
 
-vi.mock("@/lib/ai-advisor-service", () => ({
+vi.mock("@/lib/ai-advisor-service", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/ai-advisor-service")>(),
   getPublishedCatalog: vi.fn(async () => mockCatalog),
   getLearnerProgressContext: vi.fn(async () => ({
     currentCourse: mockSession.current
@@ -56,28 +57,7 @@ vi.mock("@/lib/ai-advisor-service", () => ({
       : null,
     ownedCourseIds: mockSession.current ? ["course-react-001"] : [],
   })),
-  buildAdvisorAnswer: vi.fn((params: any) => ({
-    text: `Gợi ý cho ${params.prompt}`,
-    courses: [
-      {
-        id: "course-node-002",
-        slug: "nodejs-backend",
-        title: "Node.js & Express",
-        level: "Trung cấp",
-        lessonCount: 16,
-        price: 790000,
-        rating: 4.9,
-        learnersCount: 85,
-        isBestMatch: true,
-      },
-    ],
-    table: null,
-    order: [],
-    followups: ["Nên học gì tiếp?"],
-    noMatch: false,
-  })),
   logAdvisorInteraction: vi.fn(async () => 101),
-  generateGuestFeedbackToken: vi.fn(() => "mock-guest-token-101"),
   syncLearnerIntakeGoalDraft: vi.fn(async () => {}),
 }));
 
@@ -88,10 +68,12 @@ vi.mock("@/env", () => ({
 }));
 
 import { GET, POST } from "./route";
+import { getPublishedCatalog, logAdvisorInteraction, syncLearnerIntakeGoalDraft, verifyGuestFeedbackToken } from "@/lib/ai-advisor-service";
 
 describe("GET /api/ai advisor context", () => {
   beforeEach(() => {
     mockSession.current = null;
+    vi.clearAllMocks();
   });
 
   it("returns guest context when not logged in", async () => {
@@ -122,6 +104,7 @@ describe("GET /api/ai advisor context", () => {
 describe("POST /api/ai advisor answers", () => {
   beforeEach(() => {
     mockSession.current = null;
+    vi.clearAllMocks();
   });
 
   it("rejects empty prompt with 400", async () => {
@@ -148,9 +131,56 @@ describe("POST /api/ai advisor answers", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.text).toContain("Gợi ý cho Tôi muốn học làm backend");
-    expect(data.courses).toHaveLength(1);
+    expect(data.text).toContain("Làm được dự án, Có kinh nghiệm cơ bản");
+    expect(data.courses).toHaveLength(2);
     expect(data.courses[0].id).toBe("course-node-002");
     expect(data.logId).toBe(101);
+    expect(verifyGuestFeedbackToken(101, data.feedbackToken, "test-secret")).toBe(true);
+    expect(syncLearnerIntakeGoalDraft).not.toHaveBeenCalled();
+    expect(logAdvisorInteraction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      userId: null, isSuccess: true, aiResponse: JSON.stringify({
+        text: data.text, courses: data.courses, table: data.table,
+        order: data.order, followups: data.followups, noMatch: data.noMatch,
+      }),
+    }));
+  });
+
+  it("binds intake persistence and logging to the authenticated session rather than a supplied owner", async () => {
+    mockSession.current = { user: { id: "session-owner" } };
+    const intake = { goal: "Hoàn thành khoá học", level: "Mới bắt đầu", hoursPerWeek: "5-10 giờ", skipped: [] };
+    const res = await POST(new NextRequest("http://localhost/api/ai", {
+      method: "POST", body: JSON.stringify({ prompt: "Nên học gì tiếp?", intake, userId: "other-owner" }),
+    }));
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.feedbackToken).toBeNull();
+    expect(data.order.map((course: { id: string }) => course.id)).toEqual(["course-node-002"]);
+    expect(syncLearnerIntakeGoalDraft).toHaveBeenCalledWith(expect.anything(), "session-owner", intake);
+    expect(logAdvisorInteraction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ userId: "session-owner" }));
+  });
+
+  it("returns explicit absent-subject alternatives using the real catalog answer builder", async () => {
+    const res = await POST(new NextRequest("http://localhost/api/ai", {
+      method: "POST", body: JSON.stringify({ prompt: "Có khoá Elixir không?" }),
+    }));
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.noMatch).toBe(true);
+    expect(data.text).toContain("Codi chưa có khoá");
+    expect(data.courses.map((course: { id: string }) => course.id)).toEqual(mockCatalog.map(course => course.id));
+  });
+
+  it("does not fabricate a successful answer when catalog retrieval fails", async () => {
+    vi.mocked(getPublishedCatalog).mockRejectedValueOnce(new Error("catalog unavailable"));
+    const res = await POST(new NextRequest("http://localhost/api/ai", {
+      method: "POST", body: JSON.stringify({ prompt: "Nên học gì?" }),
+    }));
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data.error).toBeTruthy();
+    expect(data.courses).toBeUndefined();
+    expect(logAdvisorInteraction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      isSuccess: false, aiResponse: "", errorMessage: "catalog unavailable",
+    }));
   });
 });

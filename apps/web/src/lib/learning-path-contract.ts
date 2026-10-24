@@ -96,6 +96,8 @@ export type PathItem = {
   reason: string;
 };
 export type PathInput = {
+  publicationId?: string | null;
+  contentGeneration?: number;
   lessons: PathLesson[];
   concepts: PathConcept[];
   edges: PathEdge[];

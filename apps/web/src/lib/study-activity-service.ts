@@ -25,7 +25,7 @@ export function createStudyActivityService(
     ) {
       return db.transaction(async (tx) => {
         // All metrics stay behind exactly the same access guard as the player.
-        await loadLearningLessonAccess(tx, userId, courseId, lessonId);
+        await loadLearningLessonAccess(tx, userId, courseId, lessonId, true);
         await tx.execute(
           sql`select pg_advisory_xact_lock(hashtext(${`study:${userId}`}))`,
         );

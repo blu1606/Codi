@@ -438,9 +438,14 @@ export function ResultScreen({
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Mức thành thạo theo khái niệm</CardTitle>
+          <CardTitle>Mức thành thạo hiện tại theo khái niệm</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Điểm kiểm tra vẫn được lưu nếu chưa có bản đồ đã xác nhận. Khi đó,
+            bài kiểm tra không cập nhật mức thành thạo và không được áp dụng lại
+            sau khi giảng viên xác nhận bản đồ.
+          </p>
           {result.concepts.length ? (
             result.concepts.map((concept) => (
               <div

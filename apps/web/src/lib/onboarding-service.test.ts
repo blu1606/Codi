@@ -17,6 +17,7 @@ describe("onboardingService advisor intake hydration", () => {
       update: vi.fn(),
       insert: vi.fn(),
       set: vi.fn(),
+      execute: vi.fn().mockResolvedValue([]),
     };
 
     mockStore.from.mockReturnValue(mockStore);
@@ -113,6 +114,7 @@ describe("onboardingService advisor intake hydration", () => {
 
     // Context must NOT invoke store.update during read-only get()
     expect(mockStore.update).not.toHaveBeenCalled();
+    expect(mockStore.execute).not.toHaveBeenCalled();
 
     // The returned view must reflect the hydrated draft
     expect(view.enrollment.goalDraft).toEqual({
@@ -165,7 +167,9 @@ describe("onboardingService advisor intake hydration", () => {
           return {
             where: vi.fn().mockImplementation(() => {
               const chain = {
-                for: vi.fn().mockResolvedValue([enrollmentRow]),
+                for: vi.fn().mockImplementation(() =>
+                  Promise.resolve(table === studentEnrollments ? [enrollmentRow] : []),
+                ),
                 orderBy: vi.fn().mockReturnValue({
                   limit: vi.fn().mockResolvedValue([advisorActivity]),
                 }),
@@ -204,6 +208,7 @@ describe("onboardingService advisor intake hydration", () => {
 
     // In writable execution, context updates studentEnrollments with hydrated intake
     expect(mockStore.update).toHaveBeenCalledWith(studentEnrollments);
+    expect(mockStore.execute).toHaveBeenCalledTimes(1);
     expect(mockStore.set).toHaveBeenCalledWith(
       expect.objectContaining({
         goalDraft: {

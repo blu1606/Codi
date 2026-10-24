@@ -51,6 +51,7 @@ import { POST } from "./route";
 
 describe("POST /api/ai/feedback", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mockSession.current = null;
     mockDb.existingLog.id = 101;
     mockDb.existingLog.userId = null;
@@ -76,6 +77,7 @@ describe("POST /api/ai/feedback", () => {
     expect(res.status).toBe(403);
     const data = await res.json();
     expect(data.error).toContain("không có quyền");
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
   it("rejects feedback on non-advisor interaction types", async () => {
@@ -95,6 +97,7 @@ describe("POST /api/ai/feedback", () => {
     expect(res.status).toBe(403);
     const data = await res.json();
     expect(data.error).toContain("Không được phép gửi phản hồi");
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
   it("preserves diagnostic errorMessage when appending feedback", async () => {
@@ -154,6 +157,7 @@ describe("POST /api/ai/feedback", () => {
     expect(res.status).toBe(403);
     const data = await res.json();
     expect(data.error).toContain("Mã xác thực");
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
   it("rejects guest feedback with forged or mismatched feedbackToken", async () => {
@@ -174,6 +178,7 @@ describe("POST /api/ai/feedback", () => {
     expect(res.status).toBe(403);
     const data = await res.json();
     expect(data.error).toContain("Mã xác thực");
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
   it("accepts guest feedback with valid cryptographic feedbackToken", async () => {
@@ -198,5 +203,26 @@ describe("POST /api/ai/feedback", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(mockDb.existingLog.errorMessage).toBe("[Feedback: down - Sai trình độ]");
+  });
+
+  it("rejects a valid token for a different interaction without writing", async () => {
+    const { generateGuestFeedbackToken } = await import("@/lib/ai-advisor-service");
+    const res = await POST(new NextRequest("http://localhost/api/ai/feedback", {
+      method: "POST", body: JSON.stringify({ logId: 101, vote: "up",
+        feedbackToken: generateGuestFeedbackToken(102, "test-better-auth-secret-super-secure-key") }),
+    }));
+    expect(res.status).toBe(403);
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects expired guest capability even when its HMAC is valid", async () => {
+    mockDb.existingLog.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    const { generateGuestFeedbackToken } = await import("@/lib/ai-advisor-service");
+    const res = await POST(new NextRequest("http://localhost/api/ai/feedback", {
+      method: "POST", body: JSON.stringify({ logId: 101, vote: "up",
+        feedbackToken: generateGuestFeedbackToken(101, "test-better-auth-secret-super-secure-key") }),
+    }));
+    expect(res.status).toBe(400);
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 });

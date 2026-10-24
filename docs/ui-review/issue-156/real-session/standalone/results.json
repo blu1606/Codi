@@ -1,0 +1,13 @@
+﻿{
+    "candidate":  "4981058b64c3ee861c488b74ff38decf2e2651c7",
+    "base":  "437c1e8df16969a54b1fb96f0ff3e02a09c15e7a",
+    "stats":  {
+                  "startTime":  "2026-10-21T13:46:18.233Z",
+                  "duration":  114701.36,
+                  "expected":  4,
+                  "skipped":  0,
+                  "unexpected":  0,
+                  "flaky":  0
+              },
+    "cleanup":  "owned QA data removed; zero remaining sessions, credentials, enrollments and skills"
+}

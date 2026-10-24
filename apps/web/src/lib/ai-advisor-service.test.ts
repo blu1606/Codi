@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { studentActivities, studentEnrollments } from "@codi-1/db";
+import { PgDialect } from "drizzle-orm/pg-core";
 import {
   buildAdvisorAnswer,
   formatVnd,
   levelLabel,
+  getLearnerProgressContext,
+  syncLearnerIntakeGoalDraft,
   type AdvisorCourseItem,
 } from "./ai-advisor-service";
 import type { IntakeState } from "./ai-advisor-contract";
@@ -208,5 +212,44 @@ describe("ai-advisor-service business logic", () => {
     expect(verifyGuestFeedbackToken(42, "tampered-token", secret)).toBe(false);
     expect(verifyGuestFeedbackToken(99, token, secret)).toBe(false);
     expect(verifyGuestFeedbackToken(42, token, "wrong-secret")).toBe(false);
+  });
+});
+
+describe("advisor intake owner storage", () => {
+  it("records intake for the session owner even before any enrollment exists", async () => {
+    const values = vi.fn().mockResolvedValue([]);
+    const insert = vi.fn(() => ({ values }));
+    const where = vi.fn().mockResolvedValue([]);
+    const db: any = { insert, select: () => ({ from: () => ({ where }) }), update: vi.fn() };
+    await syncLearnerIntakeGoalDraft(db, "owner-before-enrollment", {
+      goal: "Hoàn thành khoá học", level: "Trung cấp", hoursPerWeek: "5-10 giờ", skipped: [],
+    });
+    expect(insert).toHaveBeenCalledWith(studentActivities);
+    const activity = values.mock.calls[0][0];
+    expect(activity.userId).toBe("owner-before-enrollment");
+    expect(JSON.parse(activity.metadata)).toMatchObject({
+      type: "advisor_intake", draft: { goal: "finish", level: "solid", hours: 5 },
+    });
+    const predicate = new PgDialect().sqlToQuery(where.mock.calls[0][0]);
+    expect(predicate.params).toEqual(["owner-before-enrollment", "active"]);
+    expect(predicate.sql).toContain('"student_enrollments"."user_id"');
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it("loads only the requested owner's saved activity when there are no enrollments", async () => {
+    const intake = { goal: "Làm được dự án", level: "Mới bắt đầu", hoursPerWeek: "< 5 giờ" };
+    const predicates: unknown[] = [];
+    const db: any = { select: () => ({ from: (table: unknown) => ({
+      innerJoin() { return this; },
+      where(predicate: unknown) { predicates.push(predicate); return this; },
+      orderBy() { return table === studentEnrollments ? Promise.resolve([]) : this; },
+      limit: async () => [{ metadata: JSON.stringify({ type: "advisor_intake", intake }) }],
+    }) }) };
+    expect(await getLearnerProgressContext(db, "saved-owner")).toEqual({
+      currentCourse: null, ownedCourseIds: [], savedIntake: intake,
+    });
+    const activityQuery = new PgDialect().sqlToQuery(predicates[1] as any);
+    expect(activityQuery.params).toEqual(["saved-owner", "course_view", "%advisor_intake%"]);
+    expect(activityQuery.sql).toContain('"student_activities"."user_id"');
   });
 });
