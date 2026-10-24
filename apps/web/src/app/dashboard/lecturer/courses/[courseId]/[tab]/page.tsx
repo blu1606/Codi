@@ -5,6 +5,7 @@ import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
 import { getCourseEditorData } from "../actions";
 import { getKnowledgeMapData } from "../kmap/actions";
+import { getPublicationData } from "../publish/actions";
 import { CourseEditor } from "../course-editor";
 
 interface CourseTabProps {
@@ -30,10 +31,21 @@ export default async function CourseTabEditorPage({ params }: CourseTabProps) {
   try {
     const data = await getCourseEditorData(courseId);
     let kmapData = null;
+    let publicationData = null;
+
     if (activeTab === "kmap") {
       kmapData = await getKnowledgeMapData(courseId);
+    } else if (activeTab === "publish") {
+      publicationData = await getPublicationData(courseId);
     }
-    return <CourseEditor courseId={courseId} activeTab={activeTab} data={{ ...data, kmapData }} />;
+
+    return (
+      <CourseEditor
+        courseId={courseId}
+        activeTab={activeTab}
+        data={{ ...data, kmapData, publicationData }}
+      />
+    );
   } catch {
     notFound();
   }

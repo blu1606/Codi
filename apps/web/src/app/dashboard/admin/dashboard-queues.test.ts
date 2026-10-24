@@ -42,10 +42,10 @@ describe("admin dashboard destination contracts", () => {
     expect(html).toContain('href="/dashboard/admin/orders?status=pending&amp;overdue=1&amp;range=all"');
     expect(html).toContain('href="/dashboard/admin/vouchers?filter=expiring"');
     expect(html).toContain('href="/dashboard/admin/users?status=inactive"');
-    for (const route of ["courses", "orders", "vouchers", "users", "insights"]) {
+    expect(html).toContain('href="/dashboard/admin/publication?tab=pending"');
+    for (const route of ["courses", "orders", "vouchers", "users", "insights", "publication"]) {
       expect(html).toContain(`href="/dashboard/admin/${route}"`);
     }
-    expect(html).not.toContain('href="/dashboard/admin/publication"');
     expect(html).not.toContain('href="/dashboard/admin/finance"');
     expect(html).toContain("Chưa khả dụng");
     expect(html).toContain("7</span>");

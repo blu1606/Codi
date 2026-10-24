@@ -20,7 +20,7 @@ import { getAdminDashboardData } from "./actions";
 const NAV_ITEMS = [
   { label: "Quản lý tài khoản người dùng", href: "/dashboard/admin/users", icon: Users },
   { label: "Khóa học đã xuất bản", href: "/dashboard/admin/courses", icon: BookOpen },
-  { label: "Duyệt yêu cầu xuất bản khoá học", disabled: true, icon: ClipboardCheck },
+  { label: "Duyệt yêu cầu xuất bản khoá học", href: "/dashboard/admin/publication", icon: ClipboardCheck },
   { label: "Đơn hàng & giao dịch", href: "/dashboard/admin/orders", icon: Receipt },
   { label: "Voucher", href: "/dashboard/admin/vouchers", icon: Ticket },
   { label: "Quan sát hệ thống (Insights)", href: "/dashboard/admin/insights", icon: TrendingUp },
@@ -67,11 +67,11 @@ export default async function AdminDashboardPage() {
 
   const todo = [
     {
-      href: "#",
-      disabled: true,
+      href: "/dashboard/admin/publication?tab=pending",
+      disabled: false,
       count: data.todo.pendingCoursesCount,
       title: "Khoá học chờ duyệt",
-      meta: "Chưa khả dụng · chờ tích hợp duyệt xuất bản",
+      meta: "Xem và duyệt yêu cầu xuất bản",
       icon: ClipboardCheck,
     },
     {

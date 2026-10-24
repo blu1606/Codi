@@ -186,6 +186,10 @@ export async function updateCourseInfo(
   if (!input.summary || input.summary.trim().length < 20) {
     errors.summary = "Mô tả cần ít nhất 20 ký tự.";
   }
+  if (input.proposedPrice !== undefined && input.proposedPrice !== null &&
+    (!Number.isSafeInteger(input.proposedPrice) || input.proposedPrice < 0 || input.proposedPrice > 2147483647)) {
+    errors.price = "Giá đề xuất phải là số nguyên không âm, không vượt quá 2.147.483.647 VND.";
+  }
 
   if (Object.keys(errors).length > 0) {
     return { success: false, errors };
@@ -199,6 +203,9 @@ export async function updateCourseInfo(
         description: input.summary.trim(),
         category: input.category,
         level: input.level,
+        ...(input.proposedPrice !== undefined
+          ? { proposedPrice: input.proposedPrice }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(courses.id, courseId));
