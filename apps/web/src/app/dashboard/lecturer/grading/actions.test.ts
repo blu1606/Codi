@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getTableName } from "drizzle-orm";
 
 const mockGetSession = vi.fn();
 const mockRequireRole = vi.fn();
@@ -23,6 +24,7 @@ const mockInsert = vi.fn();
 const mockUpdate = vi.fn();
 const mockTransaction = vi.fn();
 const mockNotify = vi.fn().mockResolvedValue({ id: 1 });
+const mockNotificationContext = vi.fn();
 const mockGenerateText = vi.fn();
 
 vi.mock("@/services", () => ({
@@ -40,9 +42,9 @@ vi.mock("@/services", () => ({
 }));
 
 vi.mock("@/lib/notification-service", () => ({
-  createNotificationService: () => ({
+  createNotificationService: (tx: unknown) => { mockNotificationContext(tx); return ({
     notify: (...args: any[]) => mockNotify(...args),
-  }),
+  }); },
 }));
 
 vi.mock("@/lib/ai", () => ({
@@ -55,6 +57,8 @@ vi.mock("ai", () => ({
   generateText: (...args: any[]) => mockGenerateText(...args),
 }));
 
+import { submissionIdentity } from "./submission-identity";
+import { parseFeedbackAndHistory, serializeFeedbackAndHistory } from "@/lib/grading-service";
 import {
   getAiGradingDraft,
   getGradingQueueData,
@@ -175,308 +179,190 @@ describe("Lecturer Grading Server Actions", () => {
     });
   });
 
-  describe("gradeSubmission", () => {
-    it("fails when submission does not exist or does not belong to lecturer's course", async () => {
-      mockSelect.mockReturnValue(createMockQuery([]));
+  describe("manual grading integrity", () => {
+    let row: any;
+    let assessment: any;
+    let course: any;
+    let failClaim: boolean;
+    let active: boolean;
+    let lastTx: unknown;
+    let locks: string[];
+    let tail: Promise<void>;
 
-      const res = await gradeSubmission({ submissionId: 999, score: 8 });
-      expect(res.success).toBe(false);
-      expect(res.error).toContain("không tồn tại");
+    beforeEach(() => {
+      row = { id: 10, assessmentId: 101, enrollmentId: 21, attempt: 1, status: "graded",
+        score: 7, feedback: serializeFeedbackAndHistory("previous", []), gradedAt: new Date("2026-10-20"),
+        gradedBy: "lecturer-1", answerText: "solution", fileName: null, fileUrl: null, linkUrl: null,
+        submittedAt: new Date("2026-10-19"), savedAt: new Date("2026-10-19") };
+      assessment = { id: 101, courseId: "c1", title: "Assignment", type: "assignment",
+        rubric: null, instructions: "Solve", maxScore: 10, passingScore: 60 };
+      course = { id: "c1", instructorId: "lecturer-1", title: "Course" };
+      failClaim = false;
+      active = true;
+      locks = [];
+      tail = Promise.resolve();
+      mockSelect.mockImplementation((fields: any) => createMockQuery(fields?.status ? [{ ...row, ...assessment, id: row.id, studentUserId: "student", courseTitle: "Course", lessonTitle: "Assignment" }] : fields?.id && getTableName(fields.id.table) === "courses" ? [{ id: "c1" }] : []));
+      mockNotify.mockResolvedValue({ id: 1 });
+      // Controlled persistence double: serialized transactions + staged writes/rollback.
+      // Lock order is asserted separately; this is not PostgreSQL execution.
+      mockTransaction.mockImplementation(async (callback: any) => {
+        const previous = tail;
+        let release!: () => void;
+        tail = new Promise<void>(resolve => { release = resolve; });
+        await previous;
+        let staged = { ...row };
+        let step = 0;
+        const results = () => {
+          step++;
+          if (step === 1) return [{ enrollmentId: 21, assessmentId: 101 }];
+          if (step === 2) return [{ id: 21, userId: "student", courseId: "c1" }];
+          if (step === 3) return [course];
+          if (step === 4) return [assessment];
+          return [staged];
+        };
+        const tx = {
+          select: (fields: any) => {
+            let table: any;
+            const q: any = { from: (value: any) => { table = value; return q; },
+              where: () => q,
+              innerJoin: () => q,
+              limit: () => Promise.resolve(active ? [{ id: 1 }] : []),
+              for: (mode: string) => {
+                locks.push(`${getTableName(table)}:${mode}`);
+                return Promise.resolve(results());
+              },
+              then: (resolve: any, reject: any) => Promise.resolve(fields?.status ? [staged] : results()).then(resolve, reject),
+            };
+            return q;
+          },
+          update: () => ({ set: (values: any) => ({ where: () => ({ returning: async () => {
+            if (failClaim) return [];
+            staged = { ...staged, ...values };
+            return [{ id: staged.id }];
+          } }) }) }),
+          insert: vi.fn(),
+        };
+        lastTx = tx;
+        try {
+          const result = await callback(tx);
+          row = staged;
+          return result;
+        } finally { release(); }
+      });
     });
 
-    it("fails when submission is draft", async () => {
-      const mockDraftSub = {
-        id: 10,
-        status: "draft",
-        score: null,
-        feedback: null,
-        maxScore: 10,
-        passingScore: 60,
-        studentUserId: "user-student-1",
-        courseId: "c1",
-        courseTitle: "React",
-        lessonTitle: "Bài 1",
-        rubric: null,
-        type: "assignment",
-      };
+    const token = () => submissionIdentity({ ...row, maxScore: assessment.maxScore,
+      passingScore: assessment.passingScore, rubric: assessment.rubric, instructions: assessment.instructions,
+      type: assessment.type, courseId: assessment.courseId });
+    const save = (viewToken = token(), extra: Record<string, unknown> = {}) =>
+      gradeSubmission({ submissionId: 10, viewToken, score: 8, feedback: "new", reason: "Rechecked", ...extra });
 
-      mockSelect.mockReturnValue(createMockQuery([mockDraftSub]));
-
-      const res = await gradeSubmission({ submissionId: 10, score: 8 });
-      expect(res.success).toBe(false);
-      expect(res.error).toContain("bản nháp");
+    it("serializes graded edits and rejects the losing viewed identity without notification", async () => {
+      const viewed = token();
+      const results = await Promise.all([save(viewed), save(viewed, { score: 9 })]);
+      expect(results.map(result => result.success)).toEqual([true, false]);
+      expect(row.score).toBe(8);
+      expect(parseFeedbackAndHistory(row.feedback).history).toHaveLength(1);
+      expect(mockNotify).toHaveBeenCalledTimes(1);
+      expect(locks.slice(0, 4)).toEqual(["student_enrollments:update", "courses:share", "assessments:share", "assessment_submissions:update"]);
     });
 
-    it("validates rubric criteria on server and derives total", async () => {
-      const mockRubricSub = {
-        id: 10,
-        status: "pending",
-        score: null,
-        feedback: null,
-        maxScore: 10,
-        passingScore: 60,
-        studentUserId: "user-student-1",
-        courseId: "c1",
-        courseTitle: "React",
-        lessonTitle: "Bài 1",
-        type: "assignment",
-        rubric: JSON.stringify([
-          { id: "ui", name: "Giao diện", points: 4 },
-          { id: "logic", name: "Logic", points: 6 },
-        ]),
-      };
-
-      mockSelect.mockReturnValue(createMockQuery([mockRubricSub]));
-
-      // Missing rubric scores
-      const missingRes = await gradeSubmission({
-        submissionId: 10,
-        score: 8,
-      });
-      expect(missingRes.success).toBe(false);
-      expect(missingRes.error).toContain("thang điểm (rubric)");
-
-      // Out of bounds rubric score
-      const outOfBoundsRes = await gradeSubmission({
-        submissionId: 10,
-        score: 11,
-        rubricScores: { ui: 5, logic: 6 }, // ui max is 4
-      });
-      expect(outOfBoundsRes.success).toBe(false);
-      expect(outOfBoundsRes.error).toContain("từ 0 đến 4");
-
-      // Score sum mismatch
-      const mismatchRes = await gradeSubmission({
-        submissionId: 10,
-        score: 7,
-        rubricScores: { ui: 4, logic: 6 }, // sum is 10 != 7
-      });
-      expect(mismatchRes.success).toBe(false);
-      expect(mismatchRes.error).toContain("không khớp");
+    it("fences same-score feedback edits and retains earlier score history", async () => {
+      row.feedback = serializeFeedbackAndHistory("previous", [{ oldScore: 6, newScore: 7, at: "2026-10-20" }]);
+      const viewed = token();
+      expect((await save(viewed, { score: 7, reason: undefined })).success).toBe(true);
+      expect((await save(viewed, { score: 7, feedback: "stale", reason: undefined })).success).toBe(false);
+      expect(parseFeedbackAndHistory(row.feedback).history).toHaveLength(1);
+      expect(parseFeedbackAndHistory(row.feedback).feedback).toBe("new");
+      expect(mockNotify).toHaveBeenCalledTimes(1);
     });
 
-    it("grades pending submission successfully and notifies learner atomically (pending -> graded)", async () => {
-      const mockSub = {
-        id: 10,
-        status: "pending",
-        score: null,
-        feedback: null,
-        maxScore: 10,
-        passingScore: 60,
-        studentUserId: "user-student-1",
-        courseId: "c1",
-        courseTitle: "React",
-        lessonTitle: "Bài 1",
-        rubric: null,
-        type: "assignment",
-      };
-
-      let queryCall = 0;
-      mockSelect.mockImplementation(() => {
-        queryCall++;
-        if (queryCall === 1) return createMockQuery([mockSub]); // initial check
-        if (queryCall === 2) return createMockQuery([mockSub]); // transaction fresh check
-        if (queryCall === 3) return createMockQuery([{ id: "c1" }]); // myCourseRows
-        if (queryCall === 4) return createMockQuery([{ id: 11 }]); // nextPendingId
-        return createMockQuery([]);
-      });
-
-      mockUpdate.mockReturnValue({
-        set: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([{ id: 10 }]),
-          }),
-        }),
-      });
-
-      const res = await gradeSubmission({
-        submissionId: 10,
-        score: 8.5,
-        feedback: "Làm tốt lắm em!",
-        courseFilter: "c1",
-      });
-
-      expect(res.success).toBe(true);
-      expect(res.submissionId).toBe(10);
-      expect(res.nextPendingId).toBe(11);
-      expect(mockNotify).toHaveBeenCalledWith(
-        "user-student-1",
-        "Bài tập đã được chấm",
-        expect.stringContaining("8,5/10"),
-        "/dashboard/learner"
-      );
-      expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard/lecturer/grading");
+    it("allows only one first grade for the same pending view", async () => {
+      row.status = "pending"; row.score = null;
+      const viewed = token();
+      const results = await Promise.all([save(viewed), save(viewed)]);
+      expect(results.map(result => result.success)).toEqual([true, false]);
+      expect(parseFeedbackAndHistory(row.feedback).history).toEqual([]);
+      expect(mockNotify).toHaveBeenCalledTimes(1);
     });
 
-    it("requires reason when modifying score of already graded submission (graded -> graded)", async () => {
-      const mockSub = {
-        id: 10,
-        status: "graded",
-        score: 7,
-        feedback: "Bài cũ",
-        maxScore: 10,
-        passingScore: 60,
-        studentUserId: "user-student-1",
-        courseId: "c1",
-        courseTitle: "React",
-        lessonTitle: "Bài 1",
-        rubric: null,
-        type: "assignment",
-      };
-
-      mockSelect.mockImplementation(() => createMockQuery([mockSub]));
-
-      // Thay đổi điểm từ 7 lên 9 mà không có lý do -> thất bại
-      const failRes = await gradeSubmission({
-        submissionId: 10,
-        score: 9,
-        feedback: "Cập nhật",
-        reason: "",
-      });
-      expect(failRes.success).toBe(false);
-      expect(failRes.error).toContain("lý do điều chỉnh");
-
-      // Thay đổi điểm từ 7 lên 9 kèm lý do hợp lệ -> thành công và lưu lịch sử
-      let queryCall = 0;
-      mockSelect.mockImplementation(() => {
-        queryCall++;
-        if (queryCall === 1) return createMockQuery([mockSub]);
-        if (queryCall === 2) return createMockQuery([mockSub]);
-        if (queryCall === 3) return createMockQuery([{ id: "c1" }]);
-        if (queryCall === 4) return createMockQuery([]);
-        return createMockQuery([]);
-      });
-
-      mockUpdate.mockReturnValue({
-        set: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([{ id: 10 }]),
-          }),
-        }),
-      });
-
-      const okRes = await gradeSubmission({
-        submissionId: 10,
-        score: 9,
-        feedback: "Cập nhật",
-        reason: "Phúc khảo phần bổ sung câu 2",
-      });
-      expect(okRes.success).toBe(true);
-      expect(mockNotify).toHaveBeenCalledWith(
-        "user-student-1",
-        "Điểm bài tập đã được cập nhật",
-        expect.stringContaining("9/10"),
-        "/dashboard/learner"
-      );
+    it("rejects resubmitted pending content even when row ID and status do not change", async () => {
+      row.status = "pending"; row.score = null;
+      const viewed = token();
+      row.answerText = "resubmitted solution";
+      row.submittedAt = new Date("2026-10-24");
+      expect((await save(viewed)).success).toBe(false);
+      expect(row.status).toBe("pending");
+      expect(mockNotify).not.toHaveBeenCalled();
     });
 
-    it("rejects concurrent modification when submission was altered in another session", async () => {
-      const initialSub = {
-        id: 10,
-        status: "pending",
-        score: null,
-        feedback: null,
-        maxScore: 10,
-        passingScore: 60,
-        studentUserId: "user-student-1",
-        courseId: "c1",
-        courseTitle: "React",
-        lessonTitle: "Bài 1",
-        rubric: null,
-        type: "assignment",
-      };
+    it("requires a viewed token and freshly checks owner, type and rubric under the fence", async () => {
+      expect((await save("")).success).toBe(false);
+      const viewed = token();
+      course.instructorId = "other";
+      expect((await save(viewed)).success).toBe(false);
+      course.instructorId = "lecturer-1"; assessment.type = "quiz";
+      expect((await save(viewed)).success).toBe(false);
+      assessment.type = "assignment"; assessment.rubric = "broken";
+      expect((await save(token())).success).toBe(false);
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
 
-      const concurrentAlteredSub = {
-        ...initialSub,
-        status: "graded", // already graded by another lecturer
-        score: 9,
-      };
+    it("checks the conditional claim result before notification", async () => {
+      failClaim = true;
+      expect((await save()).success).toBe(false);
+      expect(row.score).toBe(7);
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
 
-      let queryCall = 0;
-      mockSelect.mockImplementation(() => {
-        queryCall++;
-        if (queryCall === 1) return createMockQuery([initialSub]);
-        if (queryCall === 2) return createMockQuery([concurrentAlteredSub]); // conflict!
-        return createMockQuery([]);
-      });
+    it("rejects a revoked lecturer after obtaining the submission fence", async () => {
+      active = false;
+      expect((await save()).success).toBe(false);
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
 
-      const res = await gradeSubmission({
-        submissionId: 10,
-        score: 8,
-      });
+    it("enforces draft, rubric bounds and changed-score reason on the action path", async () => {
+      row.status = "draft";
+      expect((await save()).success).toBe(false);
+      row.status = "graded";
+      expect((await save(token(), { reason: "" })).success).toBe(false);
+      assessment.rubric = JSON.stringify([{ id: "logic", points: 10 }]);
+      expect((await save()).success).toBe(false);
+      expect((await save(token(), { rubricScores: { logic: 11 } })).success).toBe(false);
+      expect((await save(token(), { rubricScores: { logic: 7 } })).success).toBe(false);
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
 
-      expect(res.success).toBe(false);
-      expect(res.error).toContain("phiên làm việc khác");
+    it("rolls back grade and history when transactional notification fails", async () => {
+      const previous = row.feedback;
+      mockNotify.mockRejectedValueOnce(new Error("notification unavailable"));
+      expect((await save()).success).toBe(false);
+      expect(row.score).toBe(7);
+      expect(row.feedback).toBe(previous);
+      expect(mockNotificationContext).toHaveBeenCalledWith(lastTx);
+    });
+
+    it("does not overwrite malformed persisted history", async () => {
+      row.feedback = "previous\\n\\n<!--grading_meta_b64:broken-->";
+      expect((await save()).success).toBe(false);
+      expect(row.feedback).toContain("broken");
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it("grades pending work, persists rubric and preserves next-item filter inputs", async () => {
+      row.status = "pending"; row.score = null;
+      assessment.rubric = JSON.stringify([{ id: "logic", points: 10 }]);
+      const result = await save(token(), { rubricScores: { logic: 8 }, courseFilter: "c1", assignmentFilter: "101", dateFilter: "today" });
+      expect(result.success).toBe(true);
+      expect(parseFeedbackAndHistory(row.feedback).rubricScores).toEqual({ logic: 8 });
     });
   });
 
-  describe("getAiGradingDraft", () => {
-    it("returns error when submission has no content or link", async () => {
-      const mockEmptySub = {
-        id: 10,
-        answerText: "",
-        fileName: null,
-        linkUrl: null,
-        maxScore: 10,
-        instructions: "Viết component",
-        type: "assignment",
-        status: "pending",
-      };
-
-      mockSelect.mockReturnValue(createMockQuery([mockEmptySub]));
-
-      const res = await getAiGradingDraft(10);
-      expect(res.success).toBe(false);
-      expect(res.error).toContain("chưa nộp nội dung");
-    });
-
-    it("evaluates genuine submission with LLM and returns suggested score and constructive feedback", async () => {
-      const mockSub = {
-        id: 10,
-        answerText: "Em đã hoàn thành bài tập với React hooks.",
-        fileName: "code.zip",
-        linkUrl: "https://github.com/student/app",
-        maxScore: 10,
-        instructions: "Viết component",
-        rubric: null,
-        type: "assignment",
-        status: "pending",
-      };
-
-      mockSelect.mockReturnValue(createMockQuery([mockSub]));
-
-      mockGenerateText.mockResolvedValue({
-        text: JSON.stringify({
-          suggestedScore: 8.5,
-          feedback: "Bài làm hoàn thành tốt các yêu cầu React hooks. Cần lưu ý thêm useCallback.",
-        }),
-      });
-
-      const res = await getAiGradingDraft(10);
-      expect(res.success).toBe(true);
-      expect(res.suggestedScore).toBe(8.5);
-      expect(res.feedback).toContain("React hooks");
-    });
-
-    it("returns clear unavailable error when AI service is not configured or fails", async () => {
-      const mockSub = {
-        id: 10,
-        answerText: "Em nộp bài.",
-        fileName: null,
-        linkUrl: null,
-        maxScore: 10,
-        instructions: "Làm bài",
-        rubric: null,
-        type: "assignment",
-        status: "pending",
-      };
-
-      mockSelect.mockReturnValue(createMockQuery([mockSub]));
-      mockGenerateText.mockRejectedValue(new Error("AI service error"));
-
-      const res = await getAiGradingDraft(10);
-      expect(res.success).toBe(false);
-      expect(res.error).toContain("chưa khả dụng");
-    });
+  it("denies direct AI requests without selecting submissions or invoking a provider", async () => {
+    const result = await getAiGradingDraft(10);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("chưa khả dụng");
+    expect(mockSelect).not.toHaveBeenCalled();
+    expect(mockGenerateText).not.toHaveBeenCalled();
   });
 });

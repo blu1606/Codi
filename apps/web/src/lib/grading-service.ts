@@ -35,95 +35,72 @@ export function getCriterionMaxScore(c: RubricCriterion): number {
  * Tách nội dung nhận xét, lịch sử sửa điểm và điểm rubric từ chuỗi feedback lưu trong database.
  * Hỗ trợ định dạng Base64 hiện đại (miễn nhiễm với ký tự "-->" trong reason) và fallback định dạng cũ.
  */
-export function parseFeedbackAndHistory(rawFeedback: string | null | undefined): {
+export function parseFeedbackAndHistory(rawFeedback: string | null | undefined, strict = false): {
   feedback: string;
   history: GradingHistoryEntry[];
   rubricScores: Record<string, number> | null;
 } {
-  if (!rawFeedback) {
-    return { feedback: "", history: [], rubricScores: null };
-  }
-
-  // 1. Kiểm tra định dạng Base64 an toàn mới
-  const b64Marker = "<!--grading_meta_b64:";
-  const b64Idx = rawFeedback.indexOf(b64Marker);
-  if (b64Idx !== -1) {
-    const cleanFeedback = rawFeedback.slice(0, b64Idx).trim();
-    const rest = rawFeedback.slice(b64Idx + b64Marker.length);
-    const endIdx = rest.indexOf("-->");
-    const b64Str = (endIdx !== -1 ? rest.slice(0, endIdx) : rest).trim();
-
-    try {
-      const jsonStr = Buffer.from(b64Str, "base64").toString("utf8");
-      const parsed = JSON.parse(jsonStr);
-      if (Array.isArray(parsed)) {
-        return { feedback: cleanFeedback, history: parsed, rubricScores: null };
+  const raw = rawFeedback || "";
+  const empty = { feedback: raw.trim(), history: [] as GradingHistoryEntry[], rubricScores: null };
+  const marker = "<!--grading_record_v2:";
+  let feedback = raw.trim();
+  try {
+    let payload: any;
+    const recordIndex = raw.lastIndexOf("\n\n" + marker);
+    if (recordIndex >= 0) {
+      const match = raw.slice(recordIndex + 2).match(/^<!--grading_record_v2:([A-Za-z0-9+/=]+)-->\s*$/);
+      if (!match) throw new Error("invalid envelope");
+      const encoded = match[1]!;
+      const decoded = Buffer.from(encoded, "base64");
+      if (decoded.toString("base64") !== encoded) throw new Error("invalid encoding");
+      payload = JSON.parse(decoded.toString("utf8"));
+      if (typeof payload.feedback !== "string") throw new Error("invalid feedback");
+      if (payload.feedback !== raw.slice(0, recordIndex).trim()) throw new Error("feedback mismatch");
+      feedback = payload.feedback;
+    } else {
+      // Legacy metadata was a suffix; choose the final appended envelope, not a literal in visible text.
+      const b64 = raw.lastIndexOf("\n\n<!--grading_meta_b64:");
+      const legacy = raw.lastIndexOf("\n\n<!--grading_history:");
+      const index = Math.max(b64, legacy);
+      if (index < 0) {
+        if (strict && /<!--grading_(?:record_v2|meta_b64|history):/.test(raw)) throw new Error("ambiguous legacy metadata");
+        return empty;
       }
-      return {
-        feedback: cleanFeedback,
-        history: Array.isArray(parsed?.history) ? parsed.history : [],
-        rubricScores:
-          parsed?.rubricScores && typeof parsed.rubricScores === "object"
-            ? parsed.rubricScores
-            : null,
-      };
-    } catch {
-      return { feedback: cleanFeedback, history: [], rubricScores: null };
+      const isB64 = index === b64;
+      const prefix = isB64 ? "\n\n<!--grading_meta_b64:" : "\n\n<!--grading_history:";
+      const tail = raw.slice(index + prefix.length).trimEnd();
+      if (!tail.endsWith("-->")) throw new Error("invalid suffix");
+      const value = tail.slice(0, -3);
+      payload = JSON.parse(isB64 ? Buffer.from(value, "base64").toString("utf8") : value);
+      if (Array.isArray(payload)) payload = { history: payload };
+      feedback = raw.slice(0, index).trim();
     }
-  }
-
-  // 2. Fallback định dạng cũ: <!--grading_history:
-  const legacyMarker = "<!--grading_history:";
-  const legacyIdx = rawFeedback.indexOf(legacyMarker);
-  if (legacyIdx !== -1) {
-    const cleanFeedback = rawFeedback.slice(0, legacyIdx).trim();
-    const rest = rawFeedback.slice(legacyIdx + legacyMarker.length);
-    const lastEndIdx = rest.lastIndexOf("-->");
-    const jsonStr = (lastEndIdx !== -1 ? rest.slice(0, lastEndIdx) : rest).trim();
-
-    try {
-      const parsed = JSON.parse(jsonStr);
-      return {
-        feedback: cleanFeedback,
-        history: Array.isArray(parsed) ? parsed : [],
-        rubricScores: null,
-      };
-    } catch {
-      return { feedback: cleanFeedback, history: [], rubricScores: null };
+    if (!Array.isArray(payload?.history) || !payload.history.every((entry: any) =>
+      entry && Number.isFinite(entry.oldScore) && Number.isFinite(entry.newScore) &&
+      typeof entry.at === "string" &&
+      ["feedback", "reason", "gradedBy"].every(key => entry[key] == null || typeof entry[key] === "string")
+    )) throw new Error("invalid history");
+    const scores = payload.rubricScores;
+    if (scores != null && (typeof scores !== "object" || Array.isArray(scores) ||
+      !Object.values(scores).every(value => typeof value === "number" && Number.isFinite(value)))) {
+      throw new Error("invalid rubric scores");
     }
+    return { feedback, history: payload.history, rubricScores: scores ?? null };
+  } catch {
+    if (strict) throw new Error("Lịch sử chấm điểm không hợp lệ. Không thể ghi đè; vui lòng liên hệ hỗ trợ.");
+    // Reading does not erase the stored value. Mutations must use strict mode.
+    return { ...empty, feedback: raw.split("\n\n<!--grading_")[0]!.trim() };
   }
-
-  return { feedback: rawFeedback.trim(), history: [], rubricScores: null };
 }
 
-/**
- * Đóng gói nhận xét cùng mảng lịch sử sửa điểm và điểm rubric thành chuỗi lưu database.
- * Mã hoá Base64 bên trong HTML comment để không bị ngắt khi nội dung chứa chuỗi "-->".
- */
+/** Append a versioned final envelope; literal markers in feedback cannot shadow the suffix. */
 export function serializeFeedbackAndHistory(
   feedback: string,
   history: GradingHistoryEntry[],
   rubricScores?: Record<string, number> | null
 ): string {
-  const clean = (feedback || "").trim();
-  const hasHistory = Array.isArray(history) && history.length > 0;
-  const hasRubric =
-    rubricScores !== undefined &&
-    rubricScores !== null &&
-    typeof rubricScores === "object" &&
-    Object.keys(rubricScores).length > 0;
-
-  if (!hasHistory && !hasRubric) {
-    return clean;
-  }
-
-  const payload = {
-    history: hasHistory ? history : [],
-    rubricScores: hasRubric ? rubricScores : undefined,
-  };
-
-  const b64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
-  return `${clean}\n\n<!--grading_meta_b64:${b64}-->`;
+  const payload = { feedback: (feedback || "").trim(), history, rubricScores: rubricScores ?? null };
+  return `${payload.feedback}\n\n<!--grading_record_v2:${Buffer.from(JSON.stringify(payload), "utf8").toString("base64")}-->`;
 }
 
 /**
@@ -164,10 +141,10 @@ export function computeRubricTotal(
     const max = getCriterionMaxScore(criterion);
     const val = scores[criterion.id];
 
-    if (val === undefined || val === null || isNaN(val)) {
+    if (typeof val !== "number" || !Number.isFinite(val)) {
       isValid = false;
       errors[criterion.id] = `Vui lòng nhập điểm cho "${name}".`;
-    } else if (val < 0 || val > max) {
+    } else if (!Number.isFinite(max) || max < 0 || val < 0 || val > max) {
       isValid = false;
       errors[criterion.id] = `Điểm "${name}" phải từ 0 đến ${max}.`;
     } else {

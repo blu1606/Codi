@@ -7,7 +7,6 @@ import { toast } from "sonner";
 
 import { Button } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
-import { ConfirmDialog } from "@codi-1/ui/components/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +49,7 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
   const [formError, setFormError] = useState<string | null>(null);
 
   // Dialog delete state
-  const [snippetToDelete, setSnippetToDelete] = useState<FeedbackSnippetItem | null>(null);
+
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenCreate = () => {
@@ -129,14 +128,14 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    if (!snippetToDelete) return;
+  const handleDelete = async (snippetToDelete: FeedbackSnippetItem) => {
     setIsDeleting(true);
     try {
-      await deleteFeedbackSnippet(snippetToDelete.id);
+      const deleted = await deleteFeedbackSnippet(snippetToDelete.id);
+      if (!deleted.success || !deleted.deletedSnippet) throw new Error("Không thể xoá mẫu nhận xét.");
       setSnippets((prev) => prev.filter((item) => item.id !== snippetToDelete.id));
-      const targetSnippet = snippetToDelete;
-      toast("Đã xoá mẫu nhận xét.", {
+      const targetSnippet = deleted.deletedSnippet;
+      toast(`Đã xoá mẫu "${targetSnippet.title}".`, {
         action: {
           label: "Hoàn tác",
           onClick: async () => {
@@ -155,7 +154,7 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
           },
         },
       });
-      setSnippetToDelete(null);
+
     } catch (cause) {
       toast.error(
         cause instanceof Error
@@ -262,7 +261,8 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setSnippetToDelete(snippet)}
+                          disabled={isDeleting}
+                          onClick={() => handleDelete(snippet)}
                           className="h-8 gap-1.5 text-xs text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="size-3.5" />
@@ -344,19 +344,7 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Delete Dialog */}
-      <ConfirmDialog
-        open={!!snippetToDelete}
-        onOpenChange={(open) => {
-          if (!open) setSnippetToDelete(null);
-        }}
-        title="Xoá mẫu nhận xét"
-        consequence={`Mẫu "${snippetToDelete?.title || ""}" sẽ bị xoá khỏi danh sách.`}
-        reversible="Bạn có thể hoàn tác ngay sau khi xoá qua thông báo toast."
-        danger={true}
-        confirmLabel={isDeleting ? "Đang xoá..." : "Xoá"}
-        onConfirm={handleDeleteConfirm}
-      />
+
     </div>
   );
 }

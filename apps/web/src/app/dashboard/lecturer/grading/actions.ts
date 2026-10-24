@@ -1,7 +1,11 @@
 "use server";
 
+import { submissionIdentity } from "./submission-identity";
+
 import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { ROLE } from "@codi-1/auth";
+import { userRoles } from "@codi-1/db/schema/roles";
 
 import {
   assessments,
@@ -63,6 +67,7 @@ export interface SubmissionDetailDto {
   score: number | null;
   feedback: string;
   history: GradingHistoryEntry[];
+  viewToken: string;
   nextPendingId: number | null;
 }
 
@@ -83,6 +88,7 @@ export type GradingSubmissionDetail = SubmissionDetailDto;
 
 export interface GradeSubmissionInput {
   submissionId: number;
+  viewToken: string;
   score: number;
   feedback?: string;
   reason?: string;
@@ -307,6 +313,13 @@ export async function getGradingQueueData(filters?: {
     const detailRes = await db
       .select({
         id: assessmentSubmissions.id,
+        assessmentId: assessmentSubmissions.assessmentId,
+        enrollmentId: assessmentSubmissions.enrollmentId,
+        attempt: assessmentSubmissions.attempt,
+        savedAt: assessmentSubmissions.savedAt,
+        gradedAt: assessmentSubmissions.gradedAt,
+        gradedBy: assessmentSubmissions.gradedBy,
+        type: assessments.type,
         studentUserId: studentEnrollments.userId,
         studentName: userTable.name,
         studentEmail: userTable.email,
@@ -406,6 +419,7 @@ export async function getGradingQueueData(filters?: {
         score: row.score !== null ? Number(row.score) : null,
         feedback: cleanFeedback,
         history,
+        viewToken: submissionIdentity(row),
         nextPendingId,
       };
     }
@@ -440,212 +454,82 @@ export async function gradeSubmission(
 ): Promise<GradeSubmissionResult> {
   const user = await verifyLecturerSession();
 
-  // 1. Kiểm tra quyền sở hữu và loại bài nộp (phải là assignment)
-  const [sub] = await db
-    .select({
-      id: assessmentSubmissions.id,
-      status: assessmentSubmissions.status,
-      score: assessmentSubmissions.score,
-      feedback: assessmentSubmissions.feedback,
-      maxScore: assessments.maxScore,
-      passingScore: assessments.passingScore,
-      rubric: assessments.rubric,
-      type: assessments.type,
-      studentUserId: studentEnrollments.userId,
-      courseId: assessments.courseId,
-      courseTitle: courses.title,
-      lessonTitle: sql<string>`coalesce(${courseLessons.title}, ${assessments.title})`,
-    })
-    .from(assessmentSubmissions)
-    .innerJoin(assessments, eq(assessmentSubmissions.assessmentId, assessments.id))
-    .innerJoin(courses, eq(assessments.courseId, courses.id))
-    .innerJoin(studentEnrollments, eq(assessmentSubmissions.enrollmentId, studentEnrollments.id))
-    .leftJoin(courseLessons, eq(assessments.lessonId, courseLessons.id))
-    .where(
-      and(
-        eq(assessmentSubmissions.id, input.submissionId),
-        eq(courses.instructorId, user.id),
-        eq(assessments.type, "assignment")
-      )
-    );
-
-  if (!sub) {
-    return {
-      success: false,
-      error: "Bài nộp không tồn tại hoặc không thuộc quyền chấm của bạn.",
-    };
-  }
-
-  if (sub.status === "draft") {
-    return {
-      success: false,
-      error: "Không thể chấm bài nộp ở trạng thái bản nháp (chưa nộp).",
-    };
-  }
-
-  const maxScore = Number(sub.maxScore) || 10;
-  const wasGraded = sub.status === "graded";
-  const oldScore = sub.score !== null ? Number(sub.score) : null;
-  let newScore = Math.round(Number(input.score) * 10) / 10;
-
-  // 2. Kiểm tra thang điểm Rubric trên server (STATE-MACHINES §20)
-  let parsedRubric: RubricCriterion[] | null = null;
-  if (sub.rubric) {
-    try {
-      const parsed = typeof sub.rubric === "string" ? JSON.parse(sub.rubric) : sub.rubric;
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        parsedRubric = parsed;
-      }
-    } catch {
-      parsedRubric = null;
-    }
-  }
-
-  const rubricValidation = validateRubricScores(parsedRubric, input.rubricScores, newScore);
-  if (!rubricValidation.isValid) {
-    return {
-      success: false,
-      error: rubricValidation.error || "Dữ liệu điểm theo thang điểm rubric không hợp lệ.",
-    };
-  }
-  if (rubricValidation.derivedTotal !== undefined) {
-    newScore = rubricValidation.derivedTotal;
-  }
-
-  // 3. Kiểm tra ràng buộc chuyển trạng thái & sửa điểm
-  const validation = validateGradeInput({
-    score: newScore,
-    maxScore,
-    wasGraded,
-    oldScore,
-    reason: input.reason,
-  });
-
-  if (!validation.isValid) {
-    return {
-      success: false,
-      error: validation.error || "Dữ liệu chấm điểm không hợp lệ.",
-    };
-  }
-
-  // Ngưỡng đạt: theo passingScore (phần trăm) hoặc mặc định 50% maxScore
-  const threshold = sub.passingScore
-    ? (maxScore * sub.passingScore) / 100
-    : maxScore * 0.5;
-  const isPassed = newScore >= threshold;
-
-  // 4. Cập nhật bài nộp và thông báo trong transaction an toàn đồng thời (concurrency-safe)
   try {
-    const txExecutor = db.transaction ? db.transaction.bind(db) : async (cb: any) => cb(db);
-    await txExecutor(async (tx: any) => {
-      const qTx = "select" in tx ? tx : db;
-
-      // Re-verify submission under transaction to prevent concurrent grade overwrite
-      const [freshSub] = await qTx
-        .select({
-          id: assessmentSubmissions.id,
-          status: assessmentSubmissions.status,
-          score: assessmentSubmissions.score,
-          feedback: assessmentSubmissions.feedback,
-        })
-        .from(assessmentSubmissions)
-        .where(eq(assessmentSubmissions.id, input.submissionId));
-
-      if (!freshSub) {
-        throw new Error("Bài nộp không tồn tại.");
+    await db.transaction(async tx => {
+      // Resolve IDs without acquiring locks, then use the learner writer's order:
+      // enrollment -> course -> assessment -> submission. Re-read and authorize after locking.
+      const [ids] = await tx.select({
+        enrollmentId: assessmentSubmissions.enrollmentId,
+        assessmentId: assessmentSubmissions.assessmentId,
+      }).from(assessmentSubmissions).where(eq(assessmentSubmissions.id, input.submissionId));
+      if (!ids) throw new Error("Bài nộp không tồn tại.");
+      const [enrollment] = await tx.select().from(studentEnrollments)
+        .where(eq(studentEnrollments.id, ids.enrollmentId)).for("update");
+      if (!enrollment) throw new Error("Bài nộp không tồn tại.");
+      const [course] = await tx.select().from(courses)
+        .where(eq(courses.id, enrollment.courseId)).for("share");
+      if (!course || course.instructorId !== user.id) throw new Error("Bài nộp không thuộc quyền chấm của bạn.");
+      const [assessment] = await tx.select().from(assessments)
+        .where(and(eq(assessments.id, ids.assessmentId), eq(assessments.courseId, course.id))).for("share");
+      if (!assessment || assessment.type !== "assignment") throw new Error("Chỉ có thể chấm bài tự luận (assignment).");
+      const [submission] = await tx.select().from(assessmentSubmissions)
+        .where(and(eq(assessmentSubmissions.id, input.submissionId),
+          eq(assessmentSubmissions.enrollmentId, enrollment.id),
+          eq(assessmentSubmissions.assessmentId, assessment.id))).for("update");
+      if (!submission || !["pending", "graded"].includes(submission.status)) {
+        throw new Error("Không thể chấm bài nộp ở trạng thái bản nháp (chưa nộp).");
       }
-
-      // Check state consistency
-      if (wasGraded) {
-        if (
-          freshSub.status !== "graded" ||
-          (oldScore !== null && Number(freshSub.score) !== oldScore)
-        ) {
-          throw new Error(
-            "Bài nộp đã được thay đổi hoặc chấm bởi một phiên làm việc khác. Vui lòng tải lại trang."
-          );
-        }
-      } else {
-        if (freshSub.status !== "pending") {
-          throw new Error(
-            "Bài nộp đã được chấm hoặc cập nhật bởi một phiên làm việc khác. Vui lòng tải lại trang."
-          );
+      const [activeRole] = await tx.select({ id: userRoles.id }).from(userRoles)
+        .innerJoin(userTable, eq(userRoles.userId, userTable.id))
+        .where(and(eq(userRoles.userId, user.id), eq(userRoles.roleId, ROLE.LECTURER),
+          isNull(userRoles.revokedAt), eq(userTable.banned, false))).limit(1);
+      if (!activeRole) throw new Error("Bạn không còn quyền chấm bài.");
+      const observed = { ...submission, maxScore: assessment.maxScore, passingScore: assessment.passingScore,
+        rubric: assessment.rubric, instructions: assessment.instructions, type: assessment.type, courseId: assessment.courseId };
+      if (!input.viewToken || input.viewToken !== submissionIdentity(observed)) {
+        throw new Error("Bài nộp đã được thay đổi bởi một phiên làm việc khác. Vui lòng tải lại trang.");
+      }
+      const { feedback: previousFeedback, history } = parseFeedbackAndHistory(submission.feedback, true);
+      let rubric: RubricCriterion[] | null = null;
+      if (assessment.rubric) {
+        try {
+          const parsed: unknown = JSON.parse(assessment.rubric);
+          if (!Array.isArray(parsed) || !parsed.every(criterion => criterion && typeof criterion.id === "string" &&
+            criterion.id.length > 0 && Number.isFinite(Number(criterion.points ?? criterion.maxScore)) &&
+            Number(criterion.points ?? criterion.maxScore) >= 0) ||
+            new Set(parsed.map(criterion => criterion.id)).size !== parsed.length) throw new Error();
+          rubric = parsed;
+        } catch {
+          throw new Error("Thang điểm rubric không hợp lệ; không thể lưu điểm.");
         }
       }
-
-      // Xử lý lưu lịch sử điểm số khi có thay đổi điểm
-      const { history } = parseFeedbackAndHistory(freshSub.feedback);
-
+      const maxScore = Number(assessment.maxScore);
+      const newScore = Math.round(Number(input.score) * 10) / 10;
+      const rubricValidation = validateRubricScores(rubric, input.rubricScores, newScore);
+      if (!rubricValidation.isValid) throw new Error(rubricValidation.error);
+      const wasGraded = submission.status === "graded";
+      const oldScore = submission.score;
+      const validation = validateGradeInput({ score: newScore, maxScore, wasGraded, oldScore, reason: input.reason });
+      if (!validation.isValid) throw new Error(validation.error);
       if (wasGraded && oldScore !== null && newScore !== oldScore) {
-        history.unshift({
-          oldScore,
-          newScore,
-          feedback: freshSub.feedback ? parseFeedbackAndHistory(freshSub.feedback).feedback : null,
-          reason: input.reason?.trim() || "Giảng viên điều chỉnh điểm số",
-          at: new Date().toISOString(),
-          gradedBy: user.id,
-        });
+        history.unshift({ oldScore, newScore, feedback: previousFeedback, reason: input.reason!.trim(),
+          at: new Date().toISOString(), gradedBy: user.id });
       }
-
-      const cleanFeedback = (input.feedback || "").trim();
-      const serializedFeedback = serializeFeedbackAndHistory(
-        cleanFeedback,
-        history,
-        input.rubricScores
-      );
-
-      // Guarded update condition
-      const whereCondition = wasGraded
-        ? and(
-            eq(assessmentSubmissions.id, input.submissionId),
-            eq(assessmentSubmissions.status, "graded")
-          )
-        : and(
-            eq(assessmentSubmissions.id, input.submissionId),
-            eq(assessmentSubmissions.status, "pending")
-          );
-
-      const updateOp = tx.update ? tx.update(assessmentSubmissions) : db.update(assessmentSubmissions);
-      const setOp = updateOp.set({
-        status: "graded",
-        score: newScore,
-        feedback: serializedFeedback,
-        isPassed,
-        gradedBy: user.id,
-        gradedAt: new Date(),
-      }).where(whereCondition);
-
-      if (setOp.returning) {
-        const res = await setOp.returning();
-        if (res && res.length === 0) {
-          throw new Error(
-            "Xung đột phiên làm việc: Bài nộp đã được cập nhật bởi một thao tác khác."
-          );
-        }
-      } else {
-        await setOp;
-      }
-
-      // 5. Gửi thông báo đến học viên một cách nguyên tử trong transaction
-      const notifService = createNotificationService((tx.insert ? tx : db) as any);
-      const notifTitle = wasGraded
-        ? "Điểm bài tập đã được cập nhật"
-        : "Bài tập đã được chấm";
-      const formattedScore = String(newScore).replace(".", ",");
-      const notifBody = `${sub.lessonTitle || sub.courseTitle} — ${formattedScore}/${maxScore} điểm`;
-
-      await notifService.notify(
-        sub.studentUserId,
-        notifTitle,
-        notifBody,
-        `/dashboard/learner`
-      );
+      const threshold = maxScore * (assessment.passingScore ?? 50) / 100;
+      const [updated] = await tx.update(assessmentSubmissions).set({
+        status: "graded", score: newScore,
+        feedback: serializeFeedbackAndHistory((input.feedback || "").trim(), history, input.rubricScores),
+        isPassed: newScore >= threshold, gradedBy: user.id, gradedAt: new Date(),
+      }).where(and(eq(assessmentSubmissions.id, submission.id), eq(assessmentSubmissions.status, submission.status)))
+        .returning({ id: assessmentSubmissions.id });
+      if (!updated) throw new Error("Xung đột phiên làm việc: Bài nộp đã được cập nhật.");
+      await createNotificationService(tx).notify(enrollment.userId,
+        wasGraded ? "Điểm bài tập đã được cập nhật" : "Bài tập đã được chấm",
+        `${assessment.title || course.title} — ${String(newScore).replace(".", ",")}/${maxScore} điểm`,
+        "/dashboard/learner");
     });
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err.message || "Có lỗi xảy ra khi lưu điểm bài nộp.",
-    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Có lỗi xảy ra khi lưu điểm bài nộp." };
   }
 
   // 6. Tìm bài chờ chấm tiếp theo tuân theo đúng scope bộ lọc của người dùng (FIFO)
@@ -696,9 +580,7 @@ export async function gradeSubmission(
 }
 
 /**
- * Trợ lý AI gợi ý điểm và nhận xét cho bài nộp tự luận (tc-grade-ai).
- * Đánh giá chân thực nội dung học viên đã nộp theo yêu cầu đề bài;
- * báo lỗi rõ ràng nếu không khả dụng, tuyệt đối không trả kết quả đánh giá giả lập.
+ * AI grading is unavailable in the manual-only prototype, including direct action calls.
  */
 export async function getAiGradingDraft(submissionId: number): Promise<{
   success: boolean;
@@ -706,123 +588,6 @@ export async function getAiGradingDraft(submissionId: number): Promise<{
   feedback?: string;
   error?: string;
 }> {
-  const user = await verifyLecturerSession();
-
-  const [sub] = await db
-    .select({
-      id: assessmentSubmissions.id,
-      answerText: assessmentSubmissions.answerText,
-      fileName: assessmentSubmissions.fileName,
-      linkUrl: assessmentSubmissions.linkUrl,
-      maxScore: assessments.maxScore,
-      instructions: assessments.instructions,
-      rubric: assessments.rubric,
-      type: assessments.type,
-      status: assessmentSubmissions.status,
-    })
-    .from(assessmentSubmissions)
-    .innerJoin(assessments, eq(assessmentSubmissions.assessmentId, assessments.id))
-    .innerJoin(courses, eq(assessments.courseId, courses.id))
-    .where(
-      and(
-        eq(assessmentSubmissions.id, submissionId),
-        eq(courses.instructorId, user.id),
-        eq(assessments.type, "assignment")
-      )
-    );
-
-  if (!sub) {
-    return {
-      success: false,
-      error: "Bài nộp không tồn tại hoặc không phải bài tập tự luận.",
-    };
-  }
-
-  if (sub.status === "draft") {
-    return {
-      success: false,
-      error: "Bài nộp đang ở trạng thái bản nháp.",
-    };
-  }
-
-  const hasContent = Boolean(
-    sub.answerText?.trim() || sub.fileName || sub.linkUrl
-  );
-
-  if (!hasContent) {
-    return {
-      success: false,
-      error: "Học viên chưa nộp nội dung bài làm hoặc tệp đính kèm để AI đánh giá.",
-    };
-  }
-
-  const max = Number(sub.maxScore) || 10;
-
-  // Thực hiện đánh giá thực tế qua LLM Provider
-  try {
-    const { getLlmProvider } = await import("@/lib/ai");
-    const { generateText } = await import("ai");
-    const model = getLlmProvider().getModel();
-
-    const prompt = `Bạn là trợ lý giảng viên chấm bài tập tự luận lập trình. Đánh giá bài nộp thực tế của học viên dựa trên yêu cầu đề bài và tiêu chí chấm.
-
-Đề bài:
-${sub.instructions || "Không có hướng dẫn đặc biệt"}
-
-Thang điểm rubric:
-${sub.rubric || `Điểm tối đa: ${max}`}
-
-Bài nộp của học viên:
-${sub.answerText ? `Nội dung: ${sub.answerText}` : ""}
-${sub.fileName ? `Tệp đính kèm: ${sub.fileName}` : ""}
-${sub.linkUrl ? `Liên kết: ${sub.linkUrl}` : ""}
-
-Yêu cầu:
-1. Đánh giá trung thực dựa trên nội dung được cung cấp; không khẳng định đã kiểm thử hay triển khai chạy thử liên kết ngoài nếu không có kết quả test.
-2. Trả về JSON đúng cấu trúc:
-{
-  "suggestedScore": <số từ 0 đến ${max}>,
-  "feedback": "<nhận xét xây dựng, chỉ ra ưu điểm và điểm cần cải thiện>"
-}`;
-
-    const res = await generateText({
-      model,
-      system:
-        "Bạn là trợ lý chấm bài lập trình chuyên nghiệp. Luôn trả về JSON hợp lệ theo yêu cầu, không bịa đặt bằng chứng kiểm thử.",
-      prompt,
-    });
-
-    // Trích xuất JSON từ phản hồi của model
-    let parsed: any = null;
-    const jsonMatch = res.text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      parsed = JSON.parse(jsonMatch[0]);
-    } else {
-      parsed = JSON.parse(res.text);
-    }
-
-    const rawScore = Number(parsed?.suggestedScore);
-    const suggestedScore =
-      !isNaN(rawScore) && rawScore >= 0 && rawScore <= max
-        ? Math.round(rawScore * 10) / 10
-        : Math.round(max * 0.7 * 10) / 10;
-
-    const feedback =
-      typeof parsed?.feedback === "string" && parsed.feedback.trim()
-        ? parsed.feedback.trim()
-        : "Bài làm đã được AI rà soát theo yêu cầu đề bài.";
-
-    return {
-      success: true,
-      suggestedScore,
-      feedback,
-    };
-  } catch (err: any) {
-    // Khi AI không khả dụng hoặc chưa cấu hình API key, báo lỗi trung thực
-    return {
-      success: false,
-      error:
-        "Dịch vụ AI chấm bài hiện chưa khả dụng. Vui lòng chấm bài thủ công theo thang điểm.",
-    };
-  }
+  await verifyLecturerSession();
+  return { success: false, error: "AI chấm bài chưa khả dụng. Vui lòng chấm bài thủ công theo thang điểm." };
 }
