@@ -68,21 +68,47 @@ test.describe("guest catalog and course detail", () => {
     await expect(resultCount(page)).toHaveText(total);
   });
 
-  test("UI-COM-04 sort dropdown offers the four spec options", async ({ page }) => {
+  test("UI-COM-04 sort dropdown offers the four spec options and normalizes legacy price sort URLs", async ({ page }) => {
     await openCatalog(page);
     const sort = page.getByLabel("Sắp xếp danh sách khóa học");
     await expect(sort.locator("option")).toHaveText(["Phù hợp nhất", "Mới nhất", "Đánh giá cao nhất", "Học nhiều nhất"]);
+
+    // Test legacy sort URL: price-asc should normalize to supported option without broken dropdown or mismatch
+    await page.goto("/courses?sort=price-asc");
+    await page.waitForLoadState("domcontentloaded");
+    const sortDropdown = page.getByLabel("Sắp xếp danh sách khóa học");
+    await expect(sortDropdown).toBeVisible();
+    await expect(sortDropdown.locator("option")).toHaveText(["Phù hợp nhất", "Mới nhất", "Đánh giá cao nhất", "Học nhiều nhất"]);
+    await expect(sortDropdown).toHaveValue("popular");
+    // URL is normalized and no broken/stale sort chip is left
+    await expect(page.getByText("Sắp xếp: Giá:")).toHaveCount(0);
   });
 
   test("UI-COM-05 a search with no results offers 'Đặt lại bộ lọc' and 'Hỏi AI Codi gợi ý khóa học'", async ({
     page,
   }) => {
     await openCatalog(page);
-    await search(page).fill("zzqqxx-khong-co-ket-qua");
+    const queryTerm = "Lập trình Rust & AI nâng cao!";
+    await search(page).fill(queryTerm);
     await search(page).press("Escape");
     await expect(page.getByRole("heading", { name: "Không tìm thấy khóa học phù hợp" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Đặt lại bộ lọc" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Hỏi AI Codi gợi ý khóa học" })).toBeVisible();
+    
+    const aiButton = page.getByRole("button", { name: "Hỏi AI Codi gợi ý khóa học" });
+    await expect(aiButton).toBeVisible();
+
+    // Verify navigation URL without triggering live AI provider calls
+    await page.route("**/ai?**", (route) => {
+      return route.fulfill({ status: 200, contentType: "text/html", body: "<html><body>AI Mock Target</body></html>" });
+    });
+
+    const aiRequestPromise = page.waitForRequest((req) => req.url().includes("/ai?"));
+    await aiButton.click();
+    const aiRequest = await aiRequestPromise;
+
+    const parsedUrl = new URL(aiRequest.url());
+    expect(parsedUrl.pathname).toBe("/ai");
+    expect(parsedUrl.searchParams.get("prompt")).toBe(`Gợi ý khóa học ${queryTerm}`);
   });
 
   test("UI-COM-06 course detail syllabus labels each lesson with its type", async ({ page, request }) => {
