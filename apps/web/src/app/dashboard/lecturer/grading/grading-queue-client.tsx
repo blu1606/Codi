@@ -275,7 +275,11 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
       }
 
       if (formView.current.id !== savedId) return;
-      if (formView.current.revision === savedRevision) formView.current.dirty = false;
+      if (formView.current.revision !== savedRevision) {
+        toast.success("Đã lưu bản trước đó. Các chỉnh sửa mới vẫn chưa được lưu.");
+        return;
+      }
+      formView.current.dirty = false;
       router.refresh();
       toast.success("Đã lưu điểm và gửi thông báo cho học viên.");
 

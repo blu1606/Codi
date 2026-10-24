@@ -5,11 +5,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GradingQueueClient } from "./grading-queue-client";
 import { SnippetsClient } from "../snippets/snippets-client";
 
-const boundary = vi.hoisted(() => ({ save: vi.fn(), ai: vi.fn(), remove: vi.fn(), restore: vi.fn(), toast: vi.fn(), refresh: vi.fn() }));
+const boundary = vi.hoisted(() => ({ save: vi.fn(), ai: vi.fn(), remove: vi.fn(), restore: vi.fn(), toast: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
 vi.mock("./actions", () => ({ gradeSubmission: boundary.save, getAiGradingDraft: boundary.ai }));
 vi.mock("../snippets/actions", () => ({ deleteFeedbackSnippet: boundary.remove, restoreFeedbackSnippet: boundary.restore,
   createFeedbackSnippet: vi.fn(), updateFeedbackSnippet: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: boundary.refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: boundary.push, refresh: boundary.refresh }) }));
 vi.mock("sonner", () => ({ toast: Object.assign(boundary.toast, { success: vi.fn(), error: vi.fn() }) }));
 
 let root: Root;
@@ -27,9 +27,9 @@ const detail = (token: string, scores = { logic: 7 }) => ({ id: 10, viewToken: t
   studentEmail: "student@example.test", courseId: "c1", courseTitle: "Course", lessonTitle: "Assignment",
   status: "graded", score: 7, maxScore: 10, feedback: "previous", history: [],
   rubric: [{ id: "logic", name: "Logic", points: 10 }], rubricScores: scores });
-async function render(token: string, scores = { logic: 7 }) {
+async function render(token: string, scores = { logic: 7 }, id = 10) {
   const data: any = { courses: [], assignments: [], submissions: [], counts: { pending: 0, graded: 1 },
-    currentStatus: "graded", selectedCourseId: "all", selectedAssignmentId: "all", selectedDate: "all", selectedSubmission: detail(token, scores) };
+    currentStatus: "graded", selectedCourseId: "all", selectedAssignmentId: "all", selectedDate: "all", selectedSubmission: { ...detail(token, scores), id, nextPendingId: 11 } };
   await act(async () => root.render(createElement(GradingQueueClient, { data, snippets: [] })));
 }
 
@@ -57,6 +57,68 @@ it("preserves dirty same-ID drafts and their viewed identity on server refresh",
   expect(host.querySelector<HTMLInputElement>('input[type="number"]')!.value).toBe("7");
   await act(async () => button("Cập nhật điểm").click());
   expect(boundary.save).toHaveBeenCalledWith(expect.objectContaining({ viewToken: "view-a", feedback: "unsaved" }));
+});
+
+function deferSave() {
+  let resolve!: (result: { success: boolean; nextPendingId: number }) => void;
+  boundary.save.mockReturnValueOnce(new Promise(result => { resolve = result; }));
+  return () => resolve({ success: true, nextPendingId: 11 });
+}
+
+it("retains edits made during save-and-next without advancing or rebasing their viewed identity", async () => {
+  const finishSave = deferSave();
+  await render("view-a");
+  await act(async () => button("Lưu và chấm bài tiếp theo").click());
+  expect(boundary.save).toHaveBeenCalledWith(expect.objectContaining({ feedback: "previous", viewToken: "view-a" }));
+  const textarea = host.querySelector<HTMLTextAreaElement>("#feedback-input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "newer draft");
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => finishSave());
+  expect(boundary.push).not.toHaveBeenCalled();
+  expect(boundary.refresh).not.toHaveBeenCalled();
+  expect(textarea.value).toBe("newer draft");
+  await render("view-b");
+  expect(textarea.value).toBe("newer draft");
+  await act(async () => button("Cập nhật điểm").click());
+  expect(boundary.save).toHaveBeenLastCalledWith(expect.objectContaining({ feedback: "newer draft", viewToken: "view-a" }));
+});
+
+it("retains rubric edits made while save-and-next is pending", async () => {
+  const finishSave = deferSave();
+  await render("view-a");
+  await act(async () => button("Lưu và chấm bài tiếp theo").click());
+  const criterion = host.querySelector<HTMLInputElement>('input[type="number"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(criterion, "8");
+    criterion.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => finishSave());
+  expect(boundary.push).not.toHaveBeenCalled();
+  expect(boundary.refresh).not.toHaveBeenCalled();
+  await render("view-b", { logic: 9 });
+  expect(criterion.value).toBe("8");
+});
+
+it("advances after a deferred save-and-next when its form snapshot is unchanged", async () => {
+  const finishSave = deferSave();
+  await render("view-a");
+  await act(async () => button("Lưu và chấm bài tiếp theo").click());
+  expect(boundary.push).not.toHaveBeenCalled();
+  await act(async () => finishSave());
+  expect(boundary.refresh).toHaveBeenCalledTimes(1);
+  expect(boundary.push).toHaveBeenCalledExactlyOnceWith("/dashboard/lecturer/grading?status=pending&submissionId=11");
+});
+
+it("does not navigate away from another selection when an older save resolves", async () => {
+  const finishSave = deferSave();
+  await render("view-a");
+  await act(async () => button("Lưu và chấm bài tiếp theo").click());
+  await render("other-view", { logic: 7 }, 12);
+  await act(async () => finishSave());
+  expect(boundary.push).not.toHaveBeenCalled();
+  expect(boundary.refresh).not.toHaveBeenCalled();
 });
 
 it("deletes immediately and Undo restores the server-deleted snapshot, not stale client text", async () => {
