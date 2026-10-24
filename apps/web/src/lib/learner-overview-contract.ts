@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { learnerVisibleFeedback } from "./grading-feedback-frame";
 import type { MasteryLevel } from "@codi-1/ui/lib/mastery";
 import type { LessonPathState } from "./learning-path-contract";
 import type {
@@ -107,7 +108,7 @@ export function resultView(
         ? (s.quizPercent ?? Math.round((s.score / a.maxScore) * 100))
         : null,
     passed: s?.status === "graded" ? s.isPassed : null,
-    feedback: s?.status === "graded" ? s.feedback : null,
+    feedback: s?.status === "graded" ? learnerVisibleFeedback(s.feedback) : null,
     gradedAt:
       s?.status === "graded" ? (s.gradedAt?.toISOString() ?? null) : null,
   };
