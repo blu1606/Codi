@@ -82,7 +82,7 @@ export async function POST(
       // Check if old order has crossed payment deadline while still pending
       if (oldOrder.status === "pending" && oldOrder.paymentDeadline && new Date(oldOrder.paymentDeadline) <= new Date()) {
         const isUnderpaid = oldOrder.receivedAmount > 0;
-        await tx
+        const updated = await tx
           .update(orders)
           .set({
             status: "failed",
@@ -90,7 +90,15 @@ export async function POST(
             needsReconciliation: isUnderpaid ? true : undefined,
             updatedAt: new Date(),
           })
-          .where(and(eq(orders.id, oldOrder.id), eq(orders.status, "pending")));
+          .where(and(eq(orders.id, oldOrder.id), eq(orders.status, "pending")))
+          .returning({ id: orders.id });
+
+        if (updated.length === 0) {
+          return NextResponse.json(
+            { error: "Đơn hàng cũ đã thay đổi trạng thái hoặc đã được thanh toán." },
+            { status: 409 },
+          );
+        }
 
         oldOrder.status = "failed";
         oldOrder.failReason = "expired";

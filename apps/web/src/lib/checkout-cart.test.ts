@@ -111,6 +111,7 @@ describe("createOrderFromCart unit tests", () => {
             orderBy: vi.fn().mockReturnValue({
               limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", paymentDeadline: new Date(Date.now() + 100000) }]),
             }),
+            limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", status: "pending", receivedAmount: 0, paymentDeadline: new Date(Date.now() + 100000) }]),
           }),
         }),
       }),
@@ -171,6 +172,14 @@ describe("createOrderFromCart unit tests", () => {
               orderBy: vi.fn().mockReturnValue({
                 limit: vi.fn().mockResolvedValue([{ id: 101, code: "CODI10101", paymentDeadline: new Date(Date.now() + 100000) }]),
               }),
+            }),
+          }),
+        })
+        // Authoritative re-read after the canonical code lock
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([{ id: 101, code: "CODI10101", status: "pending", receivedAmount: 0, paymentDeadline: new Date(Date.now() + 100000) }]),
             }),
           }),
         })
@@ -552,6 +561,14 @@ describe("createOrderFromCart unit tests", () => {
             }),
           }),
         })
+        // Authoritative re-read after the canonical code lock
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([{ id: 999, code: "CODI99999", status: "pending", receivedAmount: 0, paymentDeadline: new Date(Date.now() - 10000) }]),
+            }),
+          }),
+        })
         // 2. unique code check (orders)
         .mockReturnValueOnce({
           from: vi.fn().mockReturnValue({
@@ -574,7 +591,7 @@ describe("createOrderFromCart unit tests", () => {
           set: vi.fn().mockImplementation((val) => {
             updatedOrders.push(val);
             return {
-              where: vi.fn().mockResolvedValue([]),
+              where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 999 }]) }),
             };
           }),
         })

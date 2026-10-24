@@ -374,7 +374,7 @@ describe("Order API Routes", () => {
           update: () => ({
             set: (val: any) => {
               updateMock(val);
-              return { where: vi.fn().mockResolvedValue([]) };
+              return { where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 10 }]) }) };
             },
           }),
           insert: insertMock,
