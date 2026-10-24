@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -28,7 +28,6 @@ import {
   Sliders,
   Sparkles,
   Trash2,
-  Upload,
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -129,15 +128,22 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   const [lessonIsFreePreview, setLessonIsFreePreview] = useState(false);
   const [lessonMaterialsList, setLessonMaterialsList] = useState<LessonMaterialInput[]>([]);
   const [isLoadingLessonDetails, setIsLoadingLessonDetails] = useState(false);
+  const lessonDetailsRequest = useRef(0);
+  const [loadedLessonDetails, setLoadedLessonDetails] = useState<{ lessonId: string; request: number } | null>(null);
+  const [lessonDetailsError, setLessonDetailsError] = useState("");
   const [isSavingLesson, setIsSavingLesson] = useState(false);
 
-  // Form thêm tài liệu cho bài học (Upload/Link states - Finding 9 / S22)
+  useEffect(() => () => { lessonDetailsRequest.current += 1; }, []);
+  const canSaveLesson = !isLocked && !isSavingLesson && !isLoadingLessonDetails
+    && loadedLessonDetails?.lessonId === editingLessonId
+    && loadedLessonDetails?.request === lessonDetailsRequest.current;
+
+  // Tài liệu hiện chỉ hỗ trợ URL đã được lưu trữ bên ngoài.
   const [showAddMaterialForm, setShowAddMaterialForm] = useState(false);
   const [newMaterialType, setNewMaterialType] = useState<"video" | "pdf" | "slide" | "document" | "link">("video");
   const [newMaterialTitle, setNewMaterialTitle] = useState("");
   const [newMaterialUrl, setNewMaterialUrl] = useState("");
-  const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error" | "success">("idle");
-  const [uploadErrorMessage, setUploadErrorMessage] = useState("");
+  const [materialErrorMessage, setMaterialErrorMessage] = useState("");
 
   // Tổng số bài học
   const totalLessons = chapters.reduce((sum, ch) => sum + (ch.lessons?.length || 0), 0);
@@ -316,19 +322,36 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     setLessonBody(lesson.body || "");
     setLessonIsFreePreview(lesson.isFreePreview || false);
     setShowAddMaterialForm(false);
-    setUploadState("idle");
-    setUploadErrorMessage("");
+    setMaterialErrorMessage("");
+    setNewMaterialTitle("");
+    setNewMaterialUrl("");
+    await loadLessonDetails(lesson.id);
+  };
+
+  const closeLessonEditor = () => {
+    lessonDetailsRequest.current += 1;
+    setLoadedLessonDetails(null);
+    setEditingLessonId(null);
+  };
+
+  const loadLessonDetails = async (lessonId: string) => {
+    const request = ++lessonDetailsRequest.current;
+    setLoadedLessonDetails(null);
+    setLessonDetailsError("");
+    setLessonMaterialsList([]);
+    setIsLoadingLessonDetails(true);
 
     try {
-      setIsLoadingLessonDetails(true);
-      const res = await getLessonDetails(courseId, lesson.id);
-      if (res.lesson) {
-        setLessonTitle(res.lesson.title);
-        setLessonDescription(res.lesson.description || "");
-        setLessonDurationMinutes(Math.round((res.lesson.durationSeconds || 0) / 60) || 10);
-        setLessonBody(res.lesson.body || "");
-        setLessonIsFreePreview(res.lesson.isFreePreview || false);
+      const res = await getLessonDetails(courseId, lessonId);
+      if (request !== lessonDetailsRequest.current) return;
+      if (!res.lesson || res.lesson.id !== lessonId || !Array.isArray(res.materials)) {
+        throw new Error("Không thể tải chi tiết bài học. Vui lòng thử lại.");
       }
+      setLessonTitle(res.lesson.title);
+      setLessonDescription(res.lesson.description || "");
+      setLessonDurationMinutes(Math.round((res.lesson.durationSeconds || 0) / 60) || 10);
+      setLessonBody(res.lesson.body || "");
+      setLessonIsFreePreview(res.lesson.isFreePreview || false);
       setLessonMaterialsList(
         (res.materials || []).map((m: any) => ({
           id: m.id,
@@ -339,16 +362,20 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
           durationSeconds: m.durationSeconds,
         }))
       );
+      setLoadedLessonDetails({ lessonId, request });
     } catch (err: any) {
-      toast.error(err.message || "Không thể tải chi tiết bài học.");
+      if (request !== lessonDetailsRequest.current) return;
+      const message = err.message || "Không thể tải chi tiết bài học.";
+      setLessonDetailsError(message);
+      toast.error(message);
     } finally {
-      setIsLoadingLessonDetails(false);
+      if (request === lessonDetailsRequest.current) setIsLoadingLessonDetails(false);
     }
   };
 
   // Lưu chi tiết bài học và danh sách tài liệu
   const handleSaveLessonDetails = async () => {
-    if (!editingLessonId) return;
+    if (!editingLessonId || !canSaveLesson) return;
     if (!lessonTitle.trim()) {
       toast.error("Tên bài học không được để trống.");
       return;
@@ -366,7 +393,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
       });
 
       toast.success("Đã cập nhật bài học thành công!");
-      setEditingLessonId(null);
+      closeLessonEditor();
       router.refresh();
     } catch (err: any) {
       toast.error(err.message || "Lỗi khi cập nhật bài học.");
@@ -379,13 +406,11 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   const handleAddMaterial = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMaterialTitle.trim()) {
-      setUploadErrorMessage("Vui lòng nhập tên tài liệu.");
-      setUploadState("error");
+      setMaterialErrorMessage("Vui lòng nhập tên tài liệu.");
       return;
     }
     if (!newMaterialUrl.trim()) {
-      setUploadErrorMessage("Vui lòng nhập URL tài liệu hoặc tải file lên.");
-      setUploadState("error");
+      setMaterialErrorMessage("Vui lòng nhập URL tài liệu.");
       return;
     }
 
@@ -403,46 +428,13 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     setNewMaterialTitle("");
     setNewMaterialUrl("");
     setShowAddMaterialForm(false);
-    setUploadState("idle");
-    setUploadErrorMessage("");
+    setMaterialErrorMessage("");
     toast.success("Đã thêm tài liệu vào danh sách chuẩn bị lưu.");
   };
 
   // Xoá tài liệu khỏi danh sách bài học
   const handleRemoveMaterial = (index: number) => {
     setLessonMaterialsList((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // Giả lập/thực hiện upload tài liệu (Upload / Uploading / Upload error states - S22)
-  const handleSimulateFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadState("uploading");
-    setUploadErrorMessage("");
-    if (!newMaterialTitle) {
-      setNewMaterialTitle(file.name.replace(/\.[^/.]+$/, ""));
-    }
-
-    // Tự động nhận diện loại tài liệu theo đuôi file
-    if (file.type.includes("video") || file.name.endsWith(".mp4")) {
-      setNewMaterialType("video");
-    } else if (file.type.includes("pdf") || file.name.endsWith(".pdf")) {
-      setNewMaterialType("pdf");
-    } else if (file.name.endsWith(".ppt") || file.name.endsWith(".pptx")) {
-      setNewMaterialType("slide");
-    } else {
-      setNewMaterialType("document");
-    }
-
-    // Xử lý upload
-    setTimeout(() => {
-      // Giả lập lưu trữ file vào URL asset nội bộ hoặc R2 bucket
-      const mockUploadedUrl = `/uploads/courses/${courseId}/${Date.now()}-${file.name}`;
-      setNewMaterialUrl(mockUploadedUrl);
-      setUploadState("success");
-      toast.success(`Đã tải lên tệp "${file.name}"!`);
-    }, 1200);
   };
 
   return (
@@ -1042,7 +1034,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
         open={!!editingLessonId}
         onOpenChange={(open) => {
           if (!open && !isSavingLesson) {
-            setEditingLessonId(null);
+            closeLessonEditor();
           }
         }}
       >
@@ -1059,6 +1051,16 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
               <Loader2 className="size-6 animate-spin text-primary" />
               <span>Đang tải thông tin bài học...</span>
             </div>
+          ) : lessonDetailsError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Không thể tải chi tiết bài học</AlertTitle>
+              <AlertDescription>
+                <p>{lessonDetailsError}</p>
+                <Button type="button" variant="outline" onClick={() => editingLessonId && loadLessonDetails(editingLessonId)}>
+                  Thử lại
+                </Button>
+              </AlertDescription>
+            </Alert>
           ) : (
             <div className="space-y-5 py-2">
               {/* Tên bài học */}
@@ -1194,7 +1196,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                   </div>
                 )}
 
-                {/* Form thêm tài liệu / Upload */}
+                {/* Form thêm tài liệu bằng URL */}
                 {showAddMaterialForm && (
                   <div className="p-3.5 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
                     <div className="flex items-center justify-between">
@@ -1239,19 +1241,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
 
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <Label className="text-[11px]">Đường dẫn (URL) hoặc Tải tệp lên</Label>
-                        {uploadState === "uploading" && (
-                          <span className="text-[11px] text-primary flex items-center gap-1 font-medium">
-                            <Loader2 className="size-3 animate-spin" />
-                            Đang tải lên...
-                          </span>
-                        )}
-                        {uploadState === "success" && (
-                          <span className="text-[11px] text-success flex items-center gap-1 font-medium">
-                            <Check className="size-3" />
-                            Tải lên thành công!
-                          </span>
-                        )}
+                        <Label className="text-[11px]">Đường dẫn (URL)</Label>
                       </div>
 
                       <div className="flex gap-2">
@@ -1259,41 +1249,20 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                           value={newMaterialUrl}
                           onChange={(e) => {
                             setNewMaterialUrl(e.target.value);
-                            setUploadState("idle");
+                            setMaterialErrorMessage("");
                           }}
-                          placeholder="https://... hoặc bấm Tải tệp"
+                          placeholder="https://..."
                           className="h-9 text-xs flex-1"
                         />
-
-                        <label
-                          className={cn(
-                            buttonVariants({ variant: "outline", size: "sm" }),
-                            "h-9 px-3 gap-1.5 text-xs cursor-pointer shrink-0"
-                          )}
-                        >
-                          <Upload className="size-3.5" />
-                          <span>Tải tệp</span>
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={handleSimulateFileUpload}
-                            accept={
-                              newMaterialType === "video"
-                                ? "video/*"
-                                : newMaterialType === "pdf"
-                                  ? ".pdf"
-                                  : newMaterialType === "slide"
-                                    ? ".ppt,.pptx,.pdf"
-                                    : "*"
-                            }
-                          />
-                        </label>
                       </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Chỉ hỗ trợ đường dẫn (URL) tới tài liệu đã lưu trữ. Chưa hỗ trợ tải tệp lên.
+                      </p>
 
-                      {uploadErrorMessage && (
+                      {materialErrorMessage && (
                         <p className="text-[11px] text-destructive flex items-center gap-1 font-medium">
                           <AlertCircle className="size-3" />
-                          {uploadErrorMessage}
+                          {materialErrorMessage}
                         </p>
                       )}
                     </div>
@@ -1303,7 +1272,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                         type="button"
                         size="sm"
                         onClick={handleAddMaterial}
-                        disabled={uploadState === "uploading"}
+                        disabled={isSavingLesson}
                         className="text-xs cursor-pointer shadow-xs"
                       >
                         Thêm vào danh sách
@@ -1320,14 +1289,14 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
               type="button"
               variant="outline"
               disabled={isSavingLesson}
-              onClick={() => setEditingLessonId(null)}
+              onClick={closeLessonEditor}
               className="cursor-pointer"
             >
               Huỷ
             </Button>
             <Button
               type="button"
-              disabled={isSavingLesson || isLoadingLessonDetails}
+              disabled={!canSaveLesson}
               onClick={handleSaveLessonDetails}
               className="gap-2 cursor-pointer shadow-xs"
             >

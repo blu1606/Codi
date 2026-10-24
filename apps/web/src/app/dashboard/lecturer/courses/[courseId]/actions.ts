@@ -5,16 +5,26 @@ import { revalidatePath } from "next/cache";
 
 import {
   aiContentDrafts,
+  aiInteractionLogs,
   assessmentAnswers,
   assessments,
   assessmentSubmissions,
   courseChapters,
   courseDetails,
   courseLessons,
+  courseConversations,
+  courseDiscussions,
   courses,
+  learningPathCompletions,
+  learningPathJobs,
   lessonMaterials,
+  lessonProgress,
+  lessonSkills,
+  pathItems,
+  publicationReviewFlags,
   quizOptions,
   quizQuestions,
+  studentEnrollments,
 } from "@codi-1/db";
 import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
@@ -487,87 +497,89 @@ export async function moveLesson(
 }
 
 /**
- * Xoá một bài học (Hỗ trợ Hoàn tác đầy đủ theo quy tắc §7.17 và kiểm tra ràng buộc bài nộp học viên).
+ * Chỉ xoá bài học khi snapshot Hoàn tác có thể phục hồi mà không mất quan hệ.
  */
 export async function deleteLesson(courseId: string, lessonId: string) {
   const { course } = await getEditableCourse(courseId);
-  const deletedLesson = await requireCourseLesson(courseId, lessonId);
+  await requireCourseLesson(courseId, lessonId);
 
-  // Kiểm tra xem bài học có bài kiểm tra nào đã có bài nộp của học viên không
-  const [submissionCheck] = await db
-    .select({ count: count() })
-    .from(assessmentSubmissions)
-    .innerJoin(assessments, eq(assessmentSubmissions.assessmentId, assessments.id))
-    .where(eq(assessments.lessonId, lessonId));
+  const snapshot = await db.transaction(async (tx) => {
+    // FOR UPDATE conflicts with FK KEY SHARE checks: new dependents cannot slip
+    // between the checks below and deletion. Re-read membership under this lock.
+    const [locked] = await tx.select({ lesson: courseLessons }).from(courseLessons)
+      .innerJoin(courseChapters, eq(courseLessons.chapterId, courseChapters.id))
+      .where(and(eq(courseLessons.id, lessonId), eq(courseChapters.courseId, courseId)))
+      .for("update", { of: courseLessons });
+    if (!locked) throw new Error("Không tìm thấy bài học trong khoá học này.");
+    const deletedLesson = locked.lesson;
 
-  if (Number(submissionCheck?.count || 0) > 0) {
-    throw new Error(
-      "Không thể xoá bài học vì đã có học viên làm bài kiểm tra hoặc nộp bài trong bài học này."
-    );
-  }
+    const [submissionCheck] = await tx
+      .select({ count: count() })
+      .from(assessmentSubmissions)
+      .innerJoin(assessments, eq(assessmentSubmissions.assessmentId, assessments.id))
+      .where(eq(assessments.lessonId, lessonId));
 
-  // Thu thập dữ liệu tài liệu để phục hồi đầy đủ khi Undo
-  const materials = await db
-    .select()
-    .from(lessonMaterials)
-    .where(eq(lessonMaterials.lessonId, lessonId))
-    .orderBy(asc(lessonMaterials.position));
-
-  // Thu thập quiz/assessment đi kèm nếu có
-  const lessonAssessments = await db
-    .select()
-    .from(assessments)
-    .where(eq(assessments.lessonId, lessonId));
-
-  const assessmentSnapshots = [];
-  for (const ass of lessonAssessments) {
-    const qs = await db
-      .select()
-      .from(quizQuestions)
-      .where(and(eq(quizQuestions.assessmentId, ass.id), eq(quizQuestions.quizRevision, ass.currentQuizRevision)))
-      .orderBy(asc(quizQuestions.position));
-
-    const qIds = qs.map((q) => q.id);
-    let opts: Array<typeof quizOptions.$inferSelect> = [];
-    if (qIds.length > 0) {
-      opts = await db
-        .select()
-        .from(quizOptions)
-        .where(inArray(quizOptions.questionId, qIds))
-        .orderBy(asc(quizOptions.position));
+    if (Number(submissionCheck?.count || 0) > 0) {
+      throw new Error(
+        "Không thể xoá bài học vì đã có học viên làm bài kiểm tra hoặc nộp bài trong bài học này."
+      );
     }
 
-    assessmentSnapshots.push({
-      assessment: ass,
-      questions: qs.map((q) => ({
-        question: q,
-        options: opts.filter((o) => o.questionId === q.id),
-      })),
-    });
-  }
+    // Both CASCADE and SET NULL lose state that the Undo snapshot does not own.
+    // Assessment identity/history/coding content must never be recreated by Undo.
+    const dependencies = [
+      [assessments, assessments.lessonId],
+      [lessonProgress, lessonProgress.lessonId],
+      [pathItems, pathItems.lessonId],
+      [learningPathCompletions, learningPathCompletions.lessonId],
+      [lessonSkills, lessonSkills.lessonId],
+      [quizQuestions, quizQuestions.lessonId],
+      [learningPathJobs, learningPathJobs.afterLessonId],
+      [studentEnrollments, studentEnrollments.lastLessonId],
+      [courseDiscussions, courseDiscussions.lessonId],
+      [courseConversations, courseConversations.lessonId],
+      [publicationReviewFlags, publicationReviewFlags.lessonId],
+      [aiInteractionLogs, aiInteractionLogs.lessonId],
+      [aiContentDrafts, aiContentDrafts.lessonId],
+    ] as const;
+    for (const [table, column] of dependencies) {
+      const [dependent] = await tx.select({ lessonId: column }).from(table)
+        .where(eq(column, lessonId)).limit(1);
+      if (dependent) {
+        throw new Error("Không thể xoá bài học vì có dữ liệu liên kết không thể phục hồi khi Hoàn tác. Hãy giữ lại bài học này.");
+      }
+    }
 
-  const snapshot: LessonSnapshot = {
-    lesson: {
-      id: deletedLesson.id,
-      chapterId: deletedLesson.chapterId,
-      title: deletedLesson.title,
-      description: deletedLesson.description,
-      durationSeconds: deletedLesson.durationSeconds,
-      position: deletedLesson.position,
-      isPublished: deletedLesson.isPublished,
-      body: deletedLesson.body,
-      isFreePreview: deletedLesson.isFreePreview,
-      isRemedial: deletedLesson.isRemedial,
-    },
-    materials,
-    assessments: assessmentSnapshots,
-  };
+    const materials = await tx
+      .select()
+      .from(lessonMaterials)
+      .where(eq(lessonMaterials.lessonId, lessonId))
+      .orderBy(asc(lessonMaterials.position));
 
-  await db.delete(courseLessons).where(
-    and(eq(courseLessons.id, lessonId), eq(courseLessons.chapterId, deletedLesson.chapterId))
-  );
+    const snapshot: LessonSnapshot = {
+      lesson: {
+        id: deletedLesson.id,
+        chapterId: deletedLesson.chapterId,
+        title: deletedLesson.title,
+        description: deletedLesson.description,
+        durationSeconds: deletedLesson.durationSeconds,
+        position: deletedLesson.position,
+        isPublished: deletedLesson.isPublished,
+        body: deletedLesson.body,
+        isFreePreview: deletedLesson.isFreePreview,
+        isRemedial: deletedLesson.isRemedial,
+      },
+      materials,
+      assessments: [],
+    };
 
-  await markKnowledgeMapStaleIfPublished(course);
+    await tx.delete(courseLessons).where(
+      and(eq(courseLessons.id, lessonId), eq(courseLessons.chapterId, deletedLesson.chapterId))
+    );
+
+    await markKnowledgeMapStaleIfPublished(course, tx);
+    return snapshot;
+  });
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
 
   return {
