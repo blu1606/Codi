@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
       "../../node_modules/.pnpm/@jitl+quickjs-*/node_modules/@jitl/quickjs-*/{package.json,dist/**/*.{js,cjs,mjs,wasm}}",
     ],
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "img.vietqr.io",
+        pathname: "/**",
+      },
+    ],
+  },
   reactCompiler: true,
   transpilePackages: ["shiki"],
   serverExternalPackages: ["@codi-1/coding-runner"],
