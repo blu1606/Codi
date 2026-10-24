@@ -104,8 +104,8 @@ export interface QuizQuestionLike {
   explanation?: string | null;
   correctIndex?: number;
   options: string[];
-  aiGenerated?: boolean;
-  aiReviewed?: boolean;
+  aiGenerated?: boolean | null;
+  aiReviewed?: boolean | null;
 }
 
 export interface QuizLike {
@@ -126,6 +126,7 @@ export interface CodeLike {
   kind: "tutorial" | "challenge";
   tests: CodeTestLike[];
   instructions?: string[];
+  starterCode?: string;
   solutionCheck?: {
     ok: boolean;
     passed?: number;

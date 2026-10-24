@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
@@ -9,7 +9,6 @@ import {
   courseDetails,
   coursePublicationRequests,
   courses,
-  notifications,
   publicationReviewCriteria,
   publicationReviewFlags,
   user,
@@ -28,7 +27,8 @@ import {
   type ReviewRoundDto,
 } from "@/lib/publication-service";
 import { auth, db } from "@/services";
-import { fetchCourseDataForReview } from "../../lecturer/courses/[courseId]/publish/actions";
+import { fetchCourseDataForReview } from "@/lib/publication-course-data";
+import { publicationCourseTransaction, publicationRequestTransaction, publicationFlagTransaction, requireActivePublication, requirePublicationClaim } from "@/lib/publication-store";
 
 /**
  * Ensures session caller has active ADMIN role.
@@ -207,7 +207,7 @@ export interface AdminCourseReviewDetailDto {
 export async function getAdminCourseReview(
   courseId: string
 ): Promise<AdminCourseReviewDetailDto> {
-  const adminUser = await verifyAdminSession();
+  await verifyAdminSession();
 
   const { courseRow, courseData } = await fetchCourseDataForReview(courseId);
 
@@ -234,72 +234,9 @@ export async function getAdminCourseReview(
     .where(eq(coursePublicationRequests.courseId, courseId))
     .orderBy(desc(coursePublicationRequests.round));
 
-  let activeRequest = allRequests[0];
+  const activeRequest = allRequests[0];
 
-  // If course is pending and has no in_review round, open one
-  if (courseRow.status === "pending" && (!activeRequest || activeRequest.status !== "in_review")) {
-    const nextRound = activeRequest ? activeRequest.round + 1 : 1;
-    const [inserted] = await db
-      .insert(coursePublicationRequests)
-      .values({
-        courseId,
-        round: nextRound,
-        requestedBy: courseRow.instructorId || adminUser.id,
-        status: "in_review",
-        validationStatus: "passed",
-        validationNote: "Vòng duyệt được khởi tạo cho quản trị viên",
-        requestedAt: new Date(),
-      })
-      .returning();
-
-    activeRequest = inserted;
-
-    // Carry forward criteria & open flags from prev round
-    if (allRequests[0]) {
-      const prevCriteria = await db
-        .select()
-        .from(publicationReviewCriteria)
-        .where(eq(publicationReviewCriteria.requestId, allRequests[0].id));
-
-      if (prevCriteria.length > 0) {
-        await db.insert(publicationReviewCriteria).values(
-          prevCriteria.map((c) => ({
-            requestId: activeRequest.id,
-            criterionId: c.criterionId,
-            status: c.status,
-            note: c.note,
-          }))
-        );
-      }
-
-      const prevFlags = await db
-        .select()
-        .from(publicationReviewFlags)
-        .where(
-          and(
-            eq(publicationReviewFlags.requestId, allRequests[0].id),
-            sql`${publicationReviewFlags.status} <> 'closed'`
-          )
-        );
-
-      if (prevFlags.length > 0) {
-        await db.insert(publicationReviewFlags).values(
-          prevFlags.map((f) => ({
-            requestId: activeRequest.id,
-            targetType: f.targetType,
-            lessonId: f.lessonId,
-            targetLabel: f.targetLabel,
-            severity: f.severity,
-            comment: f.comment,
-            status: f.status,
-            lecturerReply: f.lecturerReply,
-            source: f.source,
-            carriedFromFlagId: f.id,
-          }))
-        );
-      }
-    }
-  }
+  if (!activeRequest) throw new Error("Khoá học chưa có yêu cầu xuất bản.");
 
   // Load criteria and flags for the active round
   const criteriaRows = await db
@@ -420,559 +357,148 @@ export async function getAdminCourseReview(
   };
 }
 
-/**
- * Saves or toggles status/note for a specific review criterion.
- */
 export async function saveCriterionVerdict(
-  requestId: number,
-  criterionId: ReviewCriterionId,
-  status: ReviewCriterionStatus | null,
-  note?: string | null
+  requestId: number, criterionId: ReviewCriterionId, status: ReviewCriterionStatus | null, note?: string | null,
 ): Promise<{ success: boolean }> {
-  await verifyAdminSession();
-
-  const [req] = await db
-    .select({ id: coursePublicationRequests.id, status: coursePublicationRequests.status })
-    .from(coursePublicationRequests)
-    .where(eq(coursePublicationRequests.id, requestId));
-
-  if (!req || req.status !== "in_review") {
-    throw new Error("Không thể thay đổi tiêu chí của vòng duyệt đã kết luận.");
-  }
-
-  if (!status) {
-    // Delete criterion row to leave it unmarked
-    await db
-      .delete(publicationReviewCriteria)
-      .where(
-        and(
-          eq(publicationReviewCriteria.requestId, requestId),
-          eq(publicationReviewCriteria.criterionId, criterionId)
-        )
-      );
-  } else {
-    await db
-      .insert(publicationReviewCriteria)
-      .values({
-        requestId,
-        criterionId,
-        status,
-        note: note ? note.trim() : null,
-      })
-      .onConflictDoUpdate({
-        target: [
-          publicationReviewCriteria.requestId,
-          publicationReviewCriteria.criterionId,
-        ],
-        set: {
-          status,
-          note: note !== undefined ? (note ? note.trim() : null) : undefined,
-        },
-      });
-  }
-
+  if (!CRITERIA.some(c => c.id === criterionId) || (status !== null && !["pass", "fix", "na"].includes(status)))
+    throw new Error("Tiêu chí hoặc kết quả không hợp lệ.");
+  await publicationRequestTransaction(requestId, async ({ tx }) => {
+    if (!status) {
+      await tx.delete(publicationReviewCriteria).where(and(eq(publicationReviewCriteria.requestId, requestId),
+        eq(publicationReviewCriteria.criterionId, criterionId)));
+    } else {
+      await tx.insert(publicationReviewCriteria).values({ requestId, criterionId, status, note: note?.trim() || null })
+        .onConflictDoUpdate({ target: [publicationReviewCriteria.requestId, publicationReviewCriteria.criterionId],
+          set: { status, note: note === undefined ? undefined : note?.trim() || null } });
+    }
+  });
+  revalidatePath("/dashboard/admin/publication");
   return { success: true };
 }
 
-/**
- * Fills unmarked criteria using autoCriteria suggestions (rv-crit-auto).
- */
-export async function applyAutoCriteria(
-  requestId: number,
-  courseId: string
-): Promise<{ success: boolean; appliedCount: number }> {
-  await verifyAdminSession();
-
-  const [req] = await db
-    .select({
-      id: coursePublicationRequests.id,
-      courseId: coursePublicationRequests.courseId,
-      status: coursePublicationRequests.status,
-    })
-    .from(coursePublicationRequests)
-    .where(eq(coursePublicationRequests.id, requestId));
-
-  if (!req || req.courseId !== courseId || req.status !== "in_review") {
-    throw new Error("Yêu cầu duyệt không hợp lệ hoặc đã kết luận.");
-  }
-
-  const { courseData } = await fetchCourseDataForReview(courseId);
-  const auto = autoCriteria(courseData);
-
-  const existingCriteria = await db
-    .select()
-    .from(publicationReviewCriteria)
-    .where(eq(publicationReviewCriteria.requestId, requestId));
-
-  const existingMap = new Set(
-    existingCriteria.filter((c) => !!c.status).map((c) => c.criterionId)
-  );
-
-  let appliedCount = 0;
-  for (const c of CRITERIA) {
-    if (!existingMap.has(c.id)) {
-      const suggestion = auto[c.id];
-      if (suggestion && suggestion.status) {
-        await db
-          .insert(publicationReviewCriteria)
-          .values({
-            requestId,
-            criterionId: c.id,
-            status: suggestion.status,
-            note: suggestion.status === "fix" ? suggestion.why : null,
-          })
-          .onConflictDoUpdate({
-            target: [
-              publicationReviewCriteria.requestId,
-              publicationReviewCriteria.criterionId,
-            ],
-            set: {
-              status: suggestion.status,
-              note: suggestion.status === "fix" ? suggestion.why : null,
-            },
-          });
-        appliedCount++;
+export async function applyAutoCriteria(requestId: number, courseId: string): Promise<{ success: boolean; appliedCount: number }> {
+  const appliedCount = await publicationRequestTransaction(requestId, async ({ tx, course }) => {
+    if (course.id !== courseId) throw new Error("Yêu cầu duyệt không khớp với khoá học.");
+    const { courseData } = await fetchCourseDataForReview(courseId, tx);
+    const auto = autoCriteria(courseData);
+    const existing = await tx.select().from(publicationReviewCriteria).where(eq(publicationReviewCriteria.requestId, requestId));
+    let applied = 0;
+    for (const criterion of CRITERIA) {
+      const suggestion = auto[criterion.id];
+      if (!existing.some(c => c.criterionId === criterion.id && c.status) && suggestion.status) {
+        await tx.insert(publicationReviewCriteria).values({ requestId, criterionId: criterion.id,
+          status: suggestion.status, note: suggestion.status === "fix" ? suggestion.why : null })
+          .onConflictDoNothing();
+        applied++;
       }
     }
-  }
-
-  revalidatePath(`/dashboard/admin/publication`);
+    return applied;
+  });
+  revalidatePath("/dashboard/admin/publication");
   return { success: true, appliedCount };
 }
 
-/**
- * Adds a new review flag (rv-flag-save).
- */
 export async function addReviewFlag(
-  courseId: string,
-  requestId: number,
-  input: {
-    targetType: string;
-    lessonId?: string | null;
-    targetLabel: string;
-    severity: ReviewFlagSeverity;
-    comment: string;
-    source?: "admin" | "ai";
-  }
+  courseId: string, requestId: number,
+  input: { targetType: string; lessonId?: string | null; targetLabel: string; severity: ReviewFlagSeverity; comment: string; source?: "admin" | "ai" },
 ): Promise<{ success: boolean; flagId: number }> {
-  await verifyAdminSession();
-
-  const trimmedComment = (input.comment || "").trim();
-  if (trimmedComment.length < 10) {
-    throw new Error("Nhận xét cần ít nhất 10 ký tự để giảng viên biết cần sửa gì.");
-  }
-
-  const [req] = await db
-    .select({
-      id: coursePublicationRequests.id,
-      courseId: coursePublicationRequests.courseId,
-      status: coursePublicationRequests.status,
-    })
-    .from(coursePublicationRequests)
-    .where(eq(coursePublicationRequests.id, requestId));
-
-  if (!req || req.courseId !== courseId || req.status !== "in_review") {
-    throw new Error("Không thể thêm cờ góp ý vào vòng duyệt đã kết luận.");
-  }
-
-  const [inserted] = await db
-    .insert(publicationReviewFlags)
-    .values({
-      requestId,
-      targetType: input.targetType,
-      lessonId: input.lessonId || null,
-      targetLabel: input.targetLabel,
-      severity: input.severity,
-      comment: trimmedComment,
-      status: "open",
-      source: input.source || "admin",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .returning({ id: publicationReviewFlags.id });
-
-  revalidatePath(`/dashboard/admin/publication`);
-  return { success: true, flagId: inserted.id };
+  const comment = (input.comment || "").trim();
+  if (comment.length < 10) throw new Error("Nhận xét cần ít nhất 10 ký tự để giảng viên biết cần sửa gì.");
+  if (!["must", "should"].includes(input.severity) || !["admin", "ai"].includes(input.source || "admin"))
+    throw new Error("Mức độ hoặc nguồn góp ý không hợp lệ.");
+  const flagId = await publicationRequestTransaction(requestId, async ({ tx, course }) => {
+    if (course.id !== courseId) throw new Error("Yêu cầu duyệt không khớp với khoá học.");
+    if (input.lessonId) {
+      const { courseData } = await fetchCourseDataForReview(courseId, tx);
+      if (!courseData.chapters.some(ch => ch.lessons.some(l => l.id === input.lessonId)))
+        throw new Error("Bài học không thuộc khoá học này.");
+    }
+    const [flag] = await tx.insert(publicationReviewFlags).values({ requestId, targetType: input.targetType,
+      lessonId: input.lessonId || null, targetLabel: input.targetLabel, severity: input.severity, comment,
+      status: "open", source: input.source || "admin" }).returning({ id: publicationReviewFlags.id });
+    return flag.id;
+  });
+  revalidatePath("/dashboard/admin/publication");
+  return { success: true, flagId };
 }
 
-/**
- * Updates status of a flag (open <-> closed).
- */
-export async function updateFlagStatus(
-  flagId: number,
-  status: ReviewFlagStatus
-): Promise<{ success: boolean }> {
-  await verifyAdminSession();
-
-  const [row] = await db
-    .select({
-      flag: publicationReviewFlags,
-      request: coursePublicationRequests,
-    })
-    .from(publicationReviewFlags)
-    .innerJoin(
-      coursePublicationRequests,
-      eq(publicationReviewFlags.requestId, coursePublicationRequests.id)
-    )
-    .where(eq(publicationReviewFlags.id, flagId));
-
-  const req = (row as any)?.request ?? row;
-  if (!row || req?.status !== "in_review") {
-    throw new Error("Không thể thay đổi trạng thái cờ của vòng duyệt đã kết luận.");
-  }
-
-  await db
-    .update(publicationReviewFlags)
-    .set({
-      status,
-      updatedAt: new Date(),
-    })
-    .where(eq(publicationReviewFlags.id, flagId));
-
-  revalidatePath(`/dashboard/admin/publication`);
+export async function updateFlagStatus(flagId: number, status: ReviewFlagStatus): Promise<{ success: boolean }> {
+  if (!["open", "closed"].includes(status)) throw new Error("Trạng thái góp ý không hợp lệ.");
+  await publicationFlagTransaction(flagId, async ({ tx }, flag) => {
+    const changed = await tx.update(publicationReviewFlags).set({ status, updatedAt: new Date() })
+      .where(and(eq(publicationReviewFlags.id, flagId), eq(publicationReviewFlags.requestId, flag.requestId),
+        eq(publicationReviewFlags.status, flag.status))).returning({ id: publicationReviewFlags.id });
+    requirePublicationClaim(changed);
+  });
+  revalidatePath("/dashboard/admin/publication");
   return { success: true };
 }
 
-/**
- * Deletes a review flag.
- */
 export async function deleteReviewFlag(flagId: number): Promise<{ success: boolean }> {
-  await verifyAdminSession();
-
-  const [row] = await db
-    .select({
-      flag: publicationReviewFlags,
-      request: coursePublicationRequests,
-    })
-    .from(publicationReviewFlags)
-    .innerJoin(
-      coursePublicationRequests,
-      eq(publicationReviewFlags.requestId, coursePublicationRequests.id)
-    )
-    .where(eq(publicationReviewFlags.id, flagId));
-
-  const req = (row as any)?.request ?? row;
-  if (!row || req?.status !== "in_review") {
-    throw new Error("Không thể xoá cờ của vòng duyệt đã kết luận.");
-  }
-
-  await db
-    .delete(publicationReviewFlags)
-    .where(eq(publicationReviewFlags.id, flagId));
-
-  revalidatePath(`/dashboard/admin/publication`);
+  await publicationFlagTransaction(flagId, async ({ tx }, flag) => {
+    requirePublicationClaim(await tx.delete(publicationReviewFlags)
+      .where(and(eq(publicationReviewFlags.id, flagId), eq(publicationReviewFlags.requestId, flag.requestId)))
+      .returning({ id: publicationReviewFlags.id }));
+  });
+  revalidatePath("/dashboard/admin/publication");
   return { success: true };
 }
 
-/**
- * Admin action: rv-approve.
- * Guard: canApprove(round) is empty.
- * Sets course.status = published, sets price, notifies lecturer.
- */
-export async function approvePublication(
-  courseId: string,
-  requestId: number,
-  approvedPrice: number
-): Promise<{ success: boolean }> {
-  const adminUser = await verifyAdminSession();
-
-  if (typeof approvedPrice !== "number" || approvedPrice < 0 || !Number.isInteger(approvedPrice)) {
-    throw new Error("Giá bán phải là số nguyên không âm (VND). Nhập 0 cho khoá miễn phí.");
-  }
-
-  const now = new Date();
-
-  await db.transaction(async (tx) => {
-    const txSelect = ("select" in tx ? tx : db) as typeof db;
-    const [request] = await txSelect.select()
-      .from(coursePublicationRequests)
-      .where(eq(coursePublicationRequests.id, requestId));
-
-    if (!request || request.courseId !== courseId) {
-      throw new Error("Yêu cầu duyệt không khớp với khoá học.");
+async function decidePublication(
+  courseId: string, requestId: number, decision: "approved" | "changes_requested" | "rejected",
+  approvedPrice?: number, reason?: string,
+) {
+  await publicationCourseTransaction(courseId, ROLE.ADMIN, async context => {
+    const { tx, course, actorId, notify } = context;
+    requireActivePublication(context, requestId);
+    const criteria = await tx.select().from(publicationReviewCriteria).where(eq(publicationReviewCriteria.requestId, requestId));
+    const flags = await tx.select().from(publicationReviewFlags).where(eq(publicationReviewFlags.requestId, requestId));
+    if (decision === "approved") {
+      const map = Object.fromEntries(CRITERIA.map(c => [c.id, {
+        status: criteria.find(row => row.criterionId === c.id)?.status || null,
+      }]));
+      const blocking = canApprove({ criteria: map, flags: flags.map(f => ({
+        id: f.id, targetLabel: f.targetLabel, severity: f.severity, comment: f.comment, status: f.status, source: f.source,
+      })) });
+      if (blocking.length) throw new Error(`Chưa đủ điều kiện duyệt: ${blocking.join("; ")}`);
+    } else if (decision === "changes_requested" && !criteria.some(c => c.status === "fix") && !flags.some(f => f.status !== "closed")) {
+      throw new Error("Chưa có tiêu chí 'Cần sửa' hay cờ nào để gửi.");
     }
-
-    if (request.status !== "in_review") {
-      throw new Error("Yêu cầu duyệt đã được kết luận trước đó.");
-    }
-
-    const [courseRow] = await txSelect.select()
-      .from(courses)
-      .where(eq(courses.id, courseId));
-
-    if (!courseRow || courseRow.status !== "pending") {
-      throw new Error("Khoá học không ở trạng thái chờ duyệt (pending).");
-    }
-
-    const criteriaRows = await txSelect.select()
-      .from(publicationReviewCriteria)
-      .where(eq(publicationReviewCriteria.requestId, requestId));
-
-    const flagsRows = await txSelect.select()
-      .from(publicationReviewFlags)
-      .where(eq(publicationReviewFlags.requestId, requestId));
-
-    const criteriaMap: Record<string, { status: any; note?: string | null }> = {};
-    for (const c of CRITERIA) {
-      const row = criteriaRows.find((r) => r.criterionId === c.id);
-      criteriaMap[c.id] = {
-        status: row?.status || null,
-        note: row?.note || null,
-      };
-    }
-
-    const flags: ReviewFlagDto[] = flagsRows.map((f) => ({
-      id: f.id,
-      severity: f.severity as any,
-      status: f.status as any,
-      targetLabel: f.targetLabel,
-      comment: f.comment,
-      source: f.source as any,
-    }));
-
-    const blockingReasons = canApprove({ criteria: criteriaMap, flags });
-    if (blockingReasons.length > 0) {
-      throw new Error(`Chưa đủ điều kiện duyệt: ${blockingReasons.join("; ")}`);
-    }
-
-    // 1. Update publication request conditionally
-    await tx
-      .update(coursePublicationRequests)
-      .set({
-        status: "approved",
-        reviewedBy: adminUser.id,
-        reviewedAt: now,
-        approvedPrice,
-      })
-      .where(
-        and(
-          eq(coursePublicationRequests.id, requestId),
-          eq(coursePublicationRequests.courseId, courseId),
-          eq(coursePublicationRequests.status, "in_review")
-        )
-      );
-
-    // 2. Update course conditionally
-    await tx
-      .update(courses)
-      .set({
-        status: "published",
-        price: approvedPrice,
-        priceUpdatedBy: adminUser.id,
-        priceUpdatedAt: now,
-        publishedAt: courseRow.publishedAt ?? now,
-        hiddenReason: null,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(courses.id, courseId),
-          eq(courses.status, "pending")
-        )
-      );
-
-    // 3. Notify lecturer
-    if (courseRow.instructorId) {
-      const priceText = approvedPrice > 0 ? `${approvedPrice.toLocaleString("vi-VN")} đ` : "Miễn phí";
-      await tx.insert(notifications).values({
-        userId: courseRow.instructorId,
-        title: "Khoá học đã được duyệt",
-        body: `"${courseRow.title}" đã được duyệt và xuất bản với giá ${priceText}.`,
-        link: `/dashboard/lecturer/courses/${courseId}/publish`,
-      });
-    }
+    const now = new Date();
+    requirePublicationClaim(await tx.update(coursePublicationRequests).set({
+      status: decision, reviewedBy: actorId, reviewedAt: now, reviewNote: reason || null,
+      approvedPrice: decision === "approved" ? approvedPrice : null,
+    }).where(and(eq(coursePublicationRequests.id, requestId), eq(coursePublicationRequests.courseId, courseId),
+      eq(coursePublicationRequests.status, "in_review"))).returning({ id: coursePublicationRequests.id }));
+    requirePublicationClaim(await tx.update(courses).set({
+      status: decision === "approved" ? "published" : "rejected", updatedAt: now,
+      ...(decision === "approved" ? { price: approvedPrice, priceUpdatedBy: actorId, priceUpdatedAt: now,
+        publishedAt: course.publishedAt ?? now, hiddenReason: null } : {}),
+    }).where(and(eq(courses.id, courseId), eq(courses.status, "pending"))).returning({ id: courses.id }));
+    if (course.instructorId) notify({
+      userId: course.instructorId,
+      title: decision === "approved" ? "Khoá học đã được duyệt" : decision === "changes_requested" ? "Khoá học cần chỉnh sửa" : "Khoá học bị từ chối",
+      body: decision === "approved" ? `"${course.title}" đã xuất bản với giá ${approvedPrice} đ.` : `"${course.title}": ${reason}`,
+      link: `/dashboard/lecturer/courses/${courseId}/publish`,
+    });
   });
-
-  revalidatePath(`/dashboard/admin/publication`);
+  revalidatePath("/dashboard/admin/publication");
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
 }
 
-/**
- * Admin action: rv-request (Yêu cầu sửa).
- * Guard: at least one fix criterion or open flag. Reason required.
- */
-export async function requestChanges(
-  courseId: string,
-  requestId: number,
-  reason: string
-): Promise<{ success: boolean }> {
-  const adminUser = await verifyAdminSession();
-
-  const trimmedReason = (reason || "").trim();
-  if (trimmedReason.length < 5) {
-    throw new Error("Vui lòng nhập lời nhắn chung cho giảng viên (ít nhất 5 ký tự).");
-  }
-
-  const now = new Date();
-
-  await db.transaction(async (tx) => {
-    const txSelect = ("select" in tx ? tx : db) as typeof db;
-    const [request] = await txSelect.select()
-      .from(coursePublicationRequests)
-      .where(eq(coursePublicationRequests.id, requestId));
-
-    if (!request || request.courseId !== courseId) {
-      throw new Error("Yêu cầu duyệt không khớp với khoá học.");
-    }
-
-    if (request.status !== "in_review") {
-      throw new Error("Yêu cầu duyệt đã được kết luận trước đó.");
-    }
-
-    const [courseRow] = await txSelect.select()
-      .from(courses)
-      .where(eq(courses.id, courseId));
-
-    if (!courseRow || courseRow.status !== "pending") {
-      throw new Error("Khoá học không ở trạng thái chờ duyệt (pending).");
-    }
-
-    const criteriaRows = await txSelect.select()
-      .from(publicationReviewCriteria)
-      .where(eq(publicationReviewCriteria.requestId, requestId));
-
-    const flagsRows = await txSelect.select()
-      .from(publicationReviewFlags)
-      .where(eq(publicationReviewFlags.requestId, requestId));
-
-    const fixes = criteriaRows.filter((c) => c.status === "fix");
-    const openFlags = flagsRows.filter((f) => f.status !== "closed");
-
-    if (fixes.length === 0 && openFlags.length === 0) {
-      throw new Error("Chưa có tiêu chí 'Cần sửa' hay cờ nào để gửi. Vui lòng chấm tiêu chí hoặc gắn cờ trước khi yêu cầu sửa.");
-    }
-
-    // 1. Update publication request conditionally
-    await tx
-      .update(coursePublicationRequests)
-      .set({
-        status: "changes_requested",
-        reviewedBy: adminUser.id,
-        reviewedAt: now,
-        reviewNote: trimmedReason,
-      })
-      .where(
-        and(
-          eq(coursePublicationRequests.id, requestId),
-          eq(coursePublicationRequests.courseId, courseId),
-          eq(coursePublicationRequests.status, "in_review")
-        )
-      );
-
-    // 2. Update course status conditionally
-    await tx
-      .update(courses)
-      .set({
-        status: "rejected",
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(courses.id, courseId),
-          eq(courses.status, "pending")
-        )
-      );
-
-    // 3. Notify lecturer
-    if (courseRow.instructorId) {
-      await tx.insert(notifications).values({
-        userId: courseRow.instructorId,
-        title: "Khoá học cần chỉnh sửa",
-        body: `"${courseRow.title}": Quản trị viên yêu cầu sửa: ${trimmedReason}`,
-        link: `/dashboard/lecturer/courses/${courseId}/publish`,
-      });
-    }
-  });
-
-  revalidatePath(`/dashboard/admin/publication`);
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
-  return { success: true };
+export async function approvePublication(courseId: string, requestId: number, approvedPrice: number): Promise<{ success: boolean }> {
+  if (!Number.isSafeInteger(approvedPrice) || approvedPrice < 0 || approvedPrice > 2147483647)
+    throw new Error("Giá bán phải là số nguyên không âm (VND), không vượt quá 2.147.483.647.");
+  return decidePublication(courseId, requestId, "approved", approvedPrice);
 }
 
-/**
- * Admin action: rv-reject (Từ chối).
- * Guard: reason required.
- */
-export async function rejectPublication(
-  courseId: string,
-  requestId: number,
-  reason: string
-): Promise<{ success: boolean }> {
-  const adminUser = await verifyAdminSession();
+export async function requestChanges(courseId: string, requestId: number, reason: string): Promise<{ success: boolean }> {
+  if ((reason || "").trim().length < 5) throw new Error("Vui lòng nhập lời nhắn chung cho giảng viên (ít nhất 5 ký tự).");
+  return decidePublication(courseId, requestId, "changes_requested", undefined, reason.trim());
+}
 
-  const trimmedReason = (reason || "").trim();
-  if (trimmedReason.length < 5) {
-    throw new Error("Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).");
-  }
-
-  const now = new Date();
-
-  await db.transaction(async (tx) => {
-    const txSelect = ("select" in tx ? tx : db) as typeof db;
-    const [request] = await txSelect.select()
-      .from(coursePublicationRequests)
-      .where(eq(coursePublicationRequests.id, requestId));
-
-    if (!request || request.courseId !== courseId) {
-      throw new Error("Yêu cầu duyệt không khớp với khoá học.");
-    }
-
-    if (request.status !== "in_review") {
-      throw new Error("Yêu cầu duyệt đã được kết luận trước đó.");
-    }
-
-    const [courseRow] = await txSelect.select()
-      .from(courses)
-      .where(eq(courses.id, courseId));
-
-    if (!courseRow || courseRow.status !== "pending") {
-      throw new Error("Khoá học không ở trạng thái chờ duyệt (pending).");
-    }
-
-    // 1. Update publication request conditionally
-    await tx
-      .update(coursePublicationRequests)
-      .set({
-        status: "rejected",
-        reviewedBy: adminUser.id,
-        reviewedAt: now,
-        reviewNote: trimmedReason,
-      })
-      .where(
-        and(
-          eq(coursePublicationRequests.id, requestId),
-          eq(coursePublicationRequests.courseId, courseId),
-          eq(coursePublicationRequests.status, "in_review")
-        )
-      );
-
-    // 2. Update course status conditionally
-    await tx
-      .update(courses)
-      .set({
-        status: "rejected",
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(courses.id, courseId),
-          eq(courses.status, "pending")
-        )
-      );
-
-    // 3. Notify lecturer
-    if (courseRow.instructorId) {
-      await tx.insert(notifications).values({
-        userId: courseRow.instructorId,
-        title: "Khoá học bị từ chối",
-        body: `"${courseRow.title}": ${trimmedReason}`,
-        link: `/dashboard/lecturer/courses/${courseId}/publish`,
-      });
-    }
-  });
-
-  revalidatePath(`/dashboard/admin/publication`);
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
-  return { success: true };
+export async function rejectPublication(courseId: string, requestId: number, reason: string): Promise<{ success: boolean }> {
+  if ((reason || "").trim().length < 5) throw new Error("Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).");
+  return decidePublication(courseId, requestId, "rejected", undefined, reason.trim());
 }
