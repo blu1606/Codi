@@ -143,7 +143,7 @@
     courses.forEach((c) => {
       const r = record(c); const order = c.chapters.flatMap((chp) => chp.lessons.map((l) => l.id));
       Object.keys(r.quiz || {}).filter((lid) => r.quiz[lid].submitted).sort((a, b) => order.indexOf(a) - order.indexOf(b)).forEach((lid) => { const l = Codi.lesson(c, lid); scores.push({ label: l ? l.title : lid, kind: 'Quiz', y: r.quiz[lid].score }); });
-      (Codi.db().codeAttempts || []).filter((a) => a.userId === uid() && a.courseId === c.id && a.submits).forEach((a) => { const l = Codi.lesson(c, a.lessonId); scores.push({ label: l ? l.title : a.lessonId, kind: 'Bài code', y: a.lastScore }); });
+      (Codi.db().codeAttempts || []).filter((a) => a.userId === uid() && a.courseId === c.id && a.submits).forEach((a) => { const l = Codi.lesson(c, a.lessonId); scores.push({ label: l ? l.title : a.lessonId, kind: 'Bài code', y: a.bestScore }); });
     });
     const pts = scores.map((s, i) => ({ x: i, y: s.y, label: `#${i + 1}`, note: `${s.kind}: ${s.label}` }));
     const passRate = scores.length ? (scores.filter((s) => s.y >= PASS).length / scores.length) * 100 : 0;

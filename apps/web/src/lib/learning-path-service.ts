@@ -12,11 +12,15 @@ import {
 } from "drizzle-orm";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import type { Database } from "@codi-1/db";
+import { lockKnowledgeMap, readConfirmedKnowledgeMap } from "./confirmed-knowledge-map";
 import { courses } from "@codi-1/db/schema/courses";
 import {
   courseChapters,
   courseLessons,
+  lessonMaterials,
 } from "@codi-1/db/schema/course-content";
+import { codingExercises } from "@codi-1/db/schema/coding-exercises";
+import type { LessonKind } from "./lesson-kind";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
 import {
   enrollmentSkillMastery,
@@ -29,11 +33,6 @@ import {
   learningPathEvidence,
   learningPathJobs,
 } from "@codi-1/db/schema/learning-path-runtime";
-import {
-  lessonSkills,
-  skillPrerequisites,
-  skills,
-} from "@codi-1/db/schema/knowledge-map";
 import {
   assessmentAnswers,
   assessmentSubmissions,
@@ -67,7 +66,7 @@ import {
   type PathProposal,
 } from "./learning-path-contract";
 
-type Store = Pick<Database, "select" | "insert" | "update">;
+type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 type GenerationResult = {
   proposal: PathProposal;
   model: string;
@@ -108,6 +107,7 @@ async function context(
   const [enrollment] = await (lock ? query.for("update") : query);
   if (!enrollment || enrollment.status === "suspended")
     throw new LearningPathError("Bạn chưa có quyền học khoá học này.", 403);
+  if (lock) await lockKnowledgeMap(store, courseId, "read");
   const [course] = await store
     .select()
     .from(courses)
@@ -141,62 +141,16 @@ async function context(
       asc(courseLessons.position),
       asc(courseLessons.id),
     );
-  // PO Policy: Chỉ sử dụng đồ thị kỹ năng khi bản đồ kiến thức đã được xác nhận rõ ràng.
-  // Tuyệt đối không đọc draft skills/edges khi chưa confirmed, tránh rò rỉ đề xuất nháp sang learner.
-  const isMapConfirmed = course.knowledgeMapStatus === "confirmed";
-  const concepts = isMapConfirmed
-    ? await store
-        .select({ skill: skills, mastery: enrollmentSkillMastery })
-        .from(skills)
-        .leftJoin(
-          enrollmentSkillMastery,
-          and(
-            eq(enrollmentSkillMastery.skillId, skills.id),
-            eq(enrollmentSkillMastery.enrollmentId, enrollment.id),
-          ),
-        )
-        .where(
-          and(
-            eq(skills.courseId, courseId),
-            inArray(skills.review, ["accepted", "edited"]),
-          ),
-        )
-        .orderBy(asc(skills.id))
-    : [];
-  const conceptIds = concepts.map((c) => c.skill.id);
-  const edges =
-    isMapConfirmed && conceptIds.length
-      ? await store
-          .select()
-          .from(skillPrerequisites)
-          .where(
-            and(
-              inArray(skillPrerequisites.skillId, conceptIds),
-              inArray(skillPrerequisites.prerequisiteSkillId, conceptIds),
-              inArray(skillPrerequisites.review, ["accepted", "edited"]),
-            ),
-          )
-          .orderBy(
-            asc(skillPrerequisites.skillId),
-            asc(skillPrerequisites.prerequisiteSkillId),
-          )
-      : [];
-  const links =
-    isMapConfirmed && lessons.length && conceptIds.length
-      ? await store
-          .select()
-          .from(lessonSkills)
-          .where(
-            and(
-              inArray(
-                lessonSkills.lessonId,
-                lessons.map((l) => l.lesson.id),
-              ),
-              inArray(lessonSkills.skillId, conceptIds),
-            ),
-          )
-          .orderBy(asc(lessonSkills.skillId))
-      : [];
+  const publication = readConfirmedKnowledgeMap(course, lessons.map((row) => row.lesson.id));
+  const ids = publication?.skills.map((skill) => skill.id) ?? [];
+  const masteryRows = ids.length ? await store.select().from(enrollmentSkillMastery)
+    .where(and(eq(enrollmentSkillMastery.enrollmentId, enrollment.id),
+      inArray(enrollmentSkillMastery.skillId, ids))) : [];
+  const concepts = (publication?.skills ?? []).map((skill) => ({
+    skill, mastery: masteryRows.find((row) => row.skillId === skill.id),
+  }));
+  const edges = publication?.edges ?? [];
+  const links = publication?.links ?? [];
   const [path] = accessOnly
     ? []
     : await store
@@ -216,6 +170,8 @@ async function context(
         .orderBy(asc(pathItems.position))
     : [];
   const input: PathInput = {
+    publicationId: publication?.publicationId ?? null,
+    contentGeneration: course.knowledgeMapContentGeneration,
     goal: enrollment.learningGoal,
     level: enrollment.selfAssessedLevel,
     hours: enrollment.weeklyGoalMinutes
@@ -239,7 +195,7 @@ async function context(
       probability: mastery?.evidenceCount ? mastery.pMastery : null,
       evidenceCount: mastery?.evidenceCount ?? 0,
     })),
-    edges: edges.map((e) => ({ from: e.prerequisiteSkillId, to: e.skillId })),
+    edges,
     previous: items.map((p) => ({
       lessonId: p.lessonId,
       reason: p.reason ?? "Theo thứ tự bài học tiên quyết.",
@@ -252,6 +208,7 @@ async function context(
     path,
     input,
     skills: concepts.map((c) => c.skill),
+    publication,
     lessonRows: lessons,
   };
 }
@@ -297,6 +254,28 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     path ? input.previous : defaultItems(input),
     e.pathSource,
   );
+  // Derive the label from published content, never from a lesson's title or seed id.
+  // Drizzle's single-table SELECT builder removes qualification from Column nodes
+  // inside SQL expressions; keep this correlated outer reference qualified.
+  const outerLessonId = sql.raw('"course_lessons"."id"');
+  const kinds = await store
+    .select({
+      id: courseLessons.id,
+      kind: sql<LessonKind>`case
+      when exists (select 1 from ${assessments} a join ${codingExercises} e on e.assessment_id = a.id where a.lesson_id = ${outerLessonId} and a.status = 'published' and a.is_diagnostic = false and jsonb_array_length(e.tutorial_steps) > 0) then 'tutorial'
+      when exists (select 1 from ${assessments} a where a.lesson_id = ${outerLessonId} and a.status = 'published' and a.is_diagnostic = false and a.type = 'coding') then 'coding'
+      when exists (select 1 from ${lessonMaterials} m where m.lesson_id = ${outerLessonId} and m.type = 'video') then 'video'
+      when exists (select 1 from ${lessonMaterials} m where m.lesson_id = ${outerLessonId} and m.type in ('pdf', 'slide')) then 'pdf'
+      when exists (select 1 from ${assessments} a where a.lesson_id = ${outerLessonId} and a.status = 'published' and a.is_diagnostic = false and a.type = 'quiz') then 'quiz'
+      else 'reading' end`,
+    })
+    .from(courseLessons)
+    .where(
+      inArray(
+        courseLessons.id,
+        selected.rows.map((row) => row.id),
+      ),
+    );
   const [review] = await store
     .select({ rating: courseReviews.rating, text: courseReviews.text })
     .from(courseReviews)
@@ -331,6 +310,10 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     : [];
   return {
     ...selected,
+    rows: selected.rows.map((row) => ({
+      ...row,
+      kind: kinds.find((k) => k.id === row.id)?.kind ?? "reading",
+    })),
     course: { id: course.id, title: course.title, slug: course.slug },
     status: e.pathStatus,
     source: e.pathSource,
@@ -341,7 +324,8 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     showDiagnosticCard:
       e.pathSource === "default" &&
       e.pathStatus === "ready" &&
-      e.diagnosticStatus === "skipped",
+      e.diagnosticStatus === "skipped" &&
+      !e.diagnosticCardDismissedAt,
     pathId: path?.id ?? null,
     rationale: path?.aiRationale ?? null,
     updating: !!pending,
@@ -547,6 +531,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
       submittedAt: assessmentSubmissions.submittedAt,
       lessonId: assessments.lessonId,
       correct: assessmentSubmissions.isPassed,
+      solutionViewed: sql<boolean>`coalesce((${assessmentSubmissions.codingRun}->>'solutionViewed')::boolean, false)`,
     })
     .from(assessmentSubmissions)
     .innerJoin(
@@ -570,7 +555,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
       ),
     );
   const observations = [
-    ...quiz,
+    ...quiz.map((row) => ({ ...row, solutionViewed: false })),
     ...code.map((row) => ({ ...row, key: "code", position: 0, questionId: 0 })),
   ].sort(
     (a, b) =>
@@ -582,7 +567,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
   );
   for (const observation of observations) {
     const lesson = ctx.input.lessons.find((l) => l.id === observation.lessonId);
-    if (!lesson || observation.correct === null) continue;
+    if (!lesson || !lesson.skillIds.length || observation.correct === null) continue;
     // Keep the unique ledger insert as the final concurrency guard, even after the anti-join.
     const inserted = await store
       .insert(learningPathEvidence)
@@ -605,10 +590,13 @@ async function consumeEvidence(store: Store, ctx: Context) {
           ),
         );
       const values = {
-        pMastery: updateBkt(
-          prior?.pMastery ?? skill.bktPInit,
-          observation.correct,
-          skill,
+        pMastery: Math.min(
+          observation.solutionViewed ? 0.7 : 1,
+          updateBkt(
+            prior?.pMastery ?? skill.bktPInit,
+            observation.correct,
+            skill,
+          ),
         ),
         evidenceCount: (prior?.evidenceCount ?? 0) + 1,
         correctCount: (prior?.correctCount ?? 0) + Number(observation.correct),
@@ -847,7 +835,7 @@ export function createLearningPathService(
             courseId: selected.id,
             title: selected.title,
           };
-          if (ctx.course.knowledgeMapStatus !== "confirmed")
+          if (!ctx.publication)
             return { ...base, confirmed: false, nodes: [], edges: [] };
           graphLayers(
             ctx.input.concepts.map((c) => c.id),

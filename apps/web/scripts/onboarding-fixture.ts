@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { courses } from "@codi-1/db/schema/courses";
 import { courseChapters, courseLessons } from "@codi-1/db/schema/course-content";
-import { assessments, quizOptions, quizQuestions } from "@codi-1/db/schema/assessments";
+import { assessments } from "@codi-1/db/schema/assessments";
+import { seedQuizRevision } from "./seed-quiz-revision";
 import { lessonSkills, skills } from "@codi-1/db/schema/knowledge-map";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
 
-type Store = Pick<Database, "select" | "insert">;
+type Store = Pick<Database, "select" | "insert" | "update">;
 function stableUuid(input: string) {
   const hex = createHash("sha256").update(input).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
@@ -34,12 +35,12 @@ export async function seedOnboardingFixture(store: Store, courseId: string, user
     const [skill] = await store.select().from(skills).where(and(eq(skills.courseId, courseId), eq(skills.name, example.name)));
     if (!skill) throw new Error("Development concept missing");
     await store.insert(lessonSkills).values({ lessonId, skillId: skill.id }).onConflictDoNothing();
-    await store.insert(quizQuestions).values({ assessmentId: assessment.id, lessonId, text: example.text, position: index }).onConflictDoNothing();
-    const [question] = await store.select().from(quizQuestions).where(and(eq(quizQuestions.assessmentId, assessment.id), eq(quizQuestions.position, index)));
-    if (!question) throw new Error("Development question missing");
-    await store.insert(quizOptions).values([{ questionId: question.id, text: example.correct, position: 0, isCorrect: true }, { questionId: question.id, text: example.wrong, position: 1, isCorrect: false }]).onConflictDoNothing();
   }
+  const { questions } = await seedQuizRevision(store, assessment.id, examples.map((example, index) => ({
+    lessonId: stableUuid(`${courseId}:lesson:${index}`), text: example.text,
+    options: [{ text: example.correct, isCorrect: true }, { text: example.wrong, isCorrect: false }],
+  })), true);
   for (const userId of userIds) await store.insert(studentEnrollments).values({ userId, courseId }).onConflictDoNothing();
   return { courseId, chapterId, lessonIds: examples.map((_, index) => stableUuid(`${courseId}:lesson:${index}`)), assessmentId: assessment.id,
-    questions: await store.select().from(quizQuestions).where(eq(quizQuestions.assessmentId, assessment.id)).orderBy(asc(quizQuestions.position)) };
+    questions };
 }

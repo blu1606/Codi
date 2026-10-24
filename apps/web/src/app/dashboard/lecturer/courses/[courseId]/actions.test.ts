@@ -1,4 +1,10 @@
+import {
+  getEditableCourse,
+  verifyChapterBelongsToCourse,
+  verifyLessonBelongsToCourse,
+} from "./course-queries";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assessmentSubmissions, courseChapters, courseLessons, courses, lessonMaterials } from "@codi-1/db";
 
 const mockGetSession = vi.fn();
 const mockRequireRole = vi.fn();
@@ -31,7 +37,10 @@ vi.mock("@/services", () => ({
     },
   },
   db: {
-    transaction: (cb: any) => mockTransaction(cb),
+    transaction: (cb: any) => cb({
+      select: mockSelect, insert: mockInsert, update: mockUpdate, delete: mockDelete,
+      execute: vi.fn(), transaction: mockTransaction,
+    }),
     select: (...args: any[]) => mockSelect(...args),
     insert: (...args: any[]) => mockInsert(...args),
     update: (...args: any[]) => mockUpdate(...args),
@@ -44,12 +53,40 @@ import {
   addLesson,
   deleteChapter,
   deleteLesson,
-  generateAiQuizQuestions,
-  getEditableCourse,
+  getCourseEditorData,
+  getLessonDetails,
+  getQuizBuilderData,
+  moveChapter,
+  moveLesson,
+  renameChapter,
+  renameLesson,
   restoreLesson,
   saveQuizData,
   updateCourseInfo,
+  updateLesson,
 } from "./actions";
+
+function mockOwnedContent(course: Record<string, unknown>, lesson: Record<string, unknown>) {
+  mockSelect.mockImplementation((selection?: { lesson?: unknown }) => ({
+    from: vi.fn().mockImplementation((table) => {
+      const rows =
+        table === courses
+          ? [course]
+          : table === courseChapters
+          ? [{ id: lesson.chapterId, courseId: course.id }]
+          : table === courseLessons
+          ? selection?.lesson
+            ? [{ lesson }]
+            : [lesson]
+          : [];
+      const query = {
+        where: vi.fn().mockResolvedValue(rows),
+        innerJoin: vi.fn().mockReturnThis(),
+      };
+      return query;
+    }),
+  }));
+}
 
 describe("Course Editor & Quiz Builder Actions (#114)", () => {
   beforeEach(() => {
@@ -59,6 +96,7 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
       user: { id: "lecturer-1" },
     });
     mockRequireRole.mockResolvedValue(undefined);
+    mockUpdate.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) });
   });
 
   describe("getEditableCourse guard", () => {
@@ -101,6 +139,75 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
     });
   });
 
+  describe("Cross-course ownership guards (Finding 1)", () => {
+    it("verifyChapterBelongsToCourse ném lỗi khi chapter không thuộc khoá học", async () => {
+      mockSelect.mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      });
+
+      await expect(verifyChapterBelongsToCourse("c-1", "ch-other")).rejects.toThrow(
+        "Không tìm thấy chương trong khoá học này."
+      );
+    });
+
+    it("verifyLessonBelongsToCourse ném lỗi khi lesson không thuộc khoá học qua join", async () => {
+      mockSelect.mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      await expect(verifyLessonBelongsToCourse("c-1", "ls-other")).rejects.toThrow(
+        "Không tìm thấy bài học trong khoá học này."
+      );
+    });
+
+    it("addLesson chặn thêm bài vào chapter của khoá khác", async () => {
+      let callCount = 0;
+      mockSelect.mockImplementation(() => ({
+        from: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            // getEditableCourse
+            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
+          }
+          // verifyChapterBelongsToCourse (không tìm thấy)
+          return { where: vi.fn().mockResolvedValue([]) };
+        }),
+      }));
+
+      await expect(addLesson("c-1", "ch-foreign")).rejects.toThrow(
+        "Không tìm thấy chương trong khoá học này."
+      );
+    });
+
+    it("renameLesson chặn đổi tên bài học của khoá khác", async () => {
+      let callCount = 0;
+      mockSelect.mockImplementation(() => ({
+        from: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
+          }
+          // verifyLessonBelongsToCourse
+          return {
+            innerJoin: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([]),
+            }),
+          };
+        }),
+      }));
+
+      await expect(renameLesson("c-1", "ls-foreign", "Tên mới")).rejects.toThrow(
+        "Không tìm thấy bài học trong khoá học này."
+      );
+    });
+  });
+
   describe("updateCourseInfo", () => {
     it("báo lỗi validation khi tên hoặc mô tả quá ngắn", async () => {
       mockSelect.mockReturnValue({
@@ -114,7 +221,7 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
       const res = await updateCourseInfo("c-1", {
         title: "abc",
         summary: "ngắn",
-        category: "Web",
+        category: "Frontend",
         level: "Beginner",
         learningOutcomes: [],
         requirements: [],
@@ -213,55 +320,46 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
     });
   });
 
-  describe("addChapter & deleteLesson (Undo support)", () => {
-    it("thêm chương mới với position tăng dần", async () => {
-      let callCount = 0;
-      mockSelect.mockImplementation(() => ({
-        from: vi.fn().mockImplementation(() => {
-          callCount++;
-          if (callCount === 1) {
-            // getEditableCourse
-            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
-          }
-          // lastChapter
-          return {
-            where: vi.fn().mockReturnValue({
-              orderBy: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{ position: 2 }]),
-              }),
-            }),
-          };
-        }),
-      }));
-
-      mockInsert.mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([{ id: "ch-3", title: "Chương 4", position: 3 }]),
-        }),
+  describe("deleteLesson & restoreLesson (Finding 2)", () => {
+    function mockDeletion(submissions: number, lesson: Record<string, unknown>, materials: Record<string, unknown>[] = []) {
+      mockTransaction.mockImplementation((run) => run({ select: mockSelect, delete: mockDelete, update: mockUpdate }));
+      mockSelect.mockImplementation((selection?: { lesson?: unknown }) => {
+        let table: unknown;
+        const rows = () => table === courses
+          ? [{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]
+          : table === courseLessons ? [selection?.lesson ? { lesson } : lesson]
+          : table === assessmentSubmissions ? [{ count: submissions }]
+          : table === lessonMaterials ? materials : [];
+        const query = {
+          from(value: unknown) { table = value; return query; },
+          innerJoin() { return query; }, where() { return query; },
+          for() { return query; }, limit() { return query; }, orderBy() { return query; },
+          then(resolve: (value: unknown[]) => unknown) { return Promise.resolve(rows()).then(resolve); },
+        };
+        return query;
       });
+    }
+    it("chặn xoá bài học khi đã có học viên nộp bài / làm bài kiểm tra", async () => {
+      mockDeletion(2, { id: "ls-10", chapterId: "ch-1", title: "Bài 1" });
 
-      const res = await addChapter("c-1");
-      expect(res.success).toBe(true);
-      expect(res.chapter.position).toBe(3);
+      await expect(deleteLesson("c-1", "ls-10")).rejects.toThrow(
+        "Không thể xoá bài học vì đã có học viên làm bài kiểm tra hoặc nộp bài trong bài học này."
+      );
     });
 
-    it("xoá bài học trả về thông tin bài học để hỗ trợ Hoàn tác (Undo toast §7.17)", async () => {
-      let callCount = 0;
-      mockSelect.mockImplementation(() => ({
-        from: vi.fn().mockImplementation(() => {
-          callCount++;
-          if (callCount === 1) {
-            // getEditableCourse
-            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
-          }
-          // deletedLesson
-          return {
-            where: vi.fn().mockResolvedValue([
-              { id: "ls-10", chapterId: "ch-1", title: "Bài 1: Cài đặt môi trường", position: 0 },
-            ]),
-          };
-        }),
-      }));
+    it("xoá bài học an toàn trả về đầy đủ snapshot để phục hồi hoàn hảo khi Hoàn tác", async () => {
+      mockDeletion(0, {
+        id: "ls-10",
+        chapterId: "ch-1",
+        title: "Bài 1: Cài đặt",
+        description: "Mô tả bài học",
+        durationSeconds: 1200,
+        position: 0,
+        isPublished: true,
+        body: "Nội dung bài học",
+        isFreePreview: true,
+        isRemedial: false,
+      }, [{ id: 101, lessonId: "ls-10", type: "video", title: "Video 1", url: "https://vid", position: 0 }]);
 
       mockDelete.mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
@@ -269,84 +367,188 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
 
       const res = await deleteLesson("c-1", "ls-10");
       expect(res.success).toBe(true);
-      expect(res.deletedLesson?.title).toBe("Bài 1: Cài đặt môi trường");
+      expect(res.deletedLesson.lesson.title).toBe("Bài 1: Cài đặt");
+      expect(res.deletedLesson.lesson.body).toBe("Nội dung bài học");
+      expect(res.deletedLesson.materials.length).toBe(1);
     });
 
-    it("khôi phục bài học vừa xoá thành công khi bấm Hoàn tác", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]),
+    it("khôi phục bài học hoàn chỉnh kèm tài liệu khi bấm Hoàn tác", async () => {
+      let callCount = 0;
+      mockSelect.mockImplementation(() => ({
+        from: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
+          }
+          // verifyChapterBelongsToCourse
+          return { where: vi.fn().mockResolvedValue([{ id: "ch-1", courseId: "c-1" }]) };
         }),
-      });
+      }));
 
-      mockInsert.mockReturnValue({
+      const mockTxInsert = vi.fn().mockReturnValue({
         values: vi.fn().mockResolvedValue(undefined),
       });
 
+      mockTransaction.mockImplementation(async (cb: any) => {
+        return cb({
+          insert: mockTxInsert,
+          update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) }),
+        });
+      });
+
       const res = await restoreLesson("c-1", {
-        id: "ls-10",
-        chapterId: "ch-1",
-        title: "Bài 1: Cài đặt môi trường",
-        position: 0,
+        lesson: {
+          id: "ls-10",
+          chapterId: "ch-1",
+          title: "Bài 1: Cài đặt",
+          description: "Mô tả",
+          durationSeconds: 1200,
+          position: 0,
+          isPublished: true,
+          body: "Nội dung",
+          isFreePreview: true,
+          isRemedial: false,
+        },
+        materials: [
+          {
+            id: 101,
+            lessonId: "ls-10",
+            type: "video",
+            title: "Video 1",
+            url: "https://vid",
+            position: 0,
+            fileSizeKb: null,
+            durationSeconds: 300,
+            createdAt: new Date(),
+          },
+        ],
+        assessments: [],
       });
 
       expect(res.success).toBe(true);
-      expect(mockInsert).toHaveBeenCalled();
+      expect(mockTransaction).toHaveBeenCalled();
     });
   });
 
-  describe("saveQuizData (Quiz Builder)", () => {
-    beforeEach(() => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([
-            { id: "c-1", instructorId: "lecturer-1", status: "draft" },
-          ]),
+  describe("updateLesson (Finding 9 / S22)", () => {
+    it("cập nhật thông tin chi tiết bài học và tài liệu học tập", async () => {
+      let callCount = 0;
+      mockSelect.mockImplementation(() => ({
+        from: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
+          }
+          // verifyLessonBelongsToCourse
+          return {
+            innerJoin: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([{ id: "ls-1", chapterId: "ch-1" }]),
+            }),
+          };
         }),
+      }));
+
+      const mockTxUpdate = vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
       });
+      const mockTxDelete = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
+      const mockTxInsert = vi.fn().mockReturnValue({
+        values: vi.fn().mockResolvedValue(undefined),
+      });
+
+      mockTransaction.mockImplementation(async (cb: any) => {
+        return cb({
+          update: mockTxUpdate,
+          delete: mockTxDelete,
+          insert: mockTxInsert,
+        });
+      });
+
+      const res = await updateLesson("c-1", "ls-1", {
+        title: "Bài học cập nhật",
+        description: "Mô tả chi tiết",
+        durationMinutes: 15,
+        body: "Nội dung markdown",
+        isFreePreview: true,
+        materials: [
+          {
+            type: "pdf",
+            title: "Tài liệu tham khảo",
+            url: "https://codi.test/doc.pdf",
+          },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      expect(mockTransaction).toHaveBeenCalled();
+    });
+  });
+
+  describe("saveQuizData (Findings 3, 4, 8)", () => {
+    beforeEach(() => {
+      mockOwnedContent(
+        { id: "c-1", instructorId: "lecturer-1", status: "draft" },
+        { id: "ls-1", chapterId: "ch-1", title: "Quiz lesson" },
+      );
     });
 
-    it("ném lỗi khi điểm đạt không nằm trong khoảng 1-100", async () => {
-      await expect(
-        saveQuizData("c-1", "ls-1", {
-          passingScore: 0,
-          isEntry: false,
-          questions: [],
-        })
-      ).rejects.toThrow("Điểm đạt phải từ 1 đến 100%.");
-    });
-
-    it("ném lỗi khi quiz không có câu hỏi nào", async () => {
-      await expect(
-        saveQuizData("c-1", "ls-1", {
-          passingScore: 70,
-          isEntry: false,
-          questions: [],
-        })
-      ).rejects.toThrow("Cần ít nhất một câu hỏi.");
-    });
-
-    it("ném lỗi khi câu hỏi có dưới 2 lựa chọn hoặc thiếu đáp án đúng", async () => {
-      await expect(
-        saveQuizData("c-1", "ls-1", {
-          passingScore: 70,
-          isEntry: false,
-          questions: [
-            {
-              text: "Biến let trong JS là gì?",
-              correctIndex: 0,
-              options: ["Khai báo biến block-scoped"], // chỉ có 1 lựa chọn
-            },
-          ],
-        })
-      ).rejects.toThrow("Câu 1: cần ít nhất 2 lựa chọn có nội dung.");
-    });
-
-    it("lưu quiz thành công và lưu đúng các options cùng đáp án đúng", async () => {
+    it("lưu bài kiểm tra đầu vào (Diagnostic) mà KHÔNG làm mất cờ isDiagnostic (Finding 3)", async () => {
       const mockTxUpdateSet = vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
       });
-      const mockTxDeleteWhere = vi.fn().mockResolvedValue(undefined);
+
+      let txSelectCalls = 0;
+      mockTransaction.mockImplementation(async (cb: any) => {
+        return cb({
+          select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockImplementation(() => {
+                txSelectCalls++;
+                if (txSelectCalls === 1) {
+                  return {
+                    limit: vi.fn().mockReturnValue({
+                      for: vi.fn().mockResolvedValue([{ id: 99, isDiagnostic: true, lessonId: null, currentQuizRevision: 1 }]),
+                    }),
+                  };
+                }
+                return Promise.resolve([]);
+              }),
+            }),
+          }),
+          update: vi.fn().mockReturnValue({ set: mockTxUpdateSet }),
+          delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+          insert: vi.fn().mockReturnValue({
+            values: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([{ id: 701 }]),
+            }),
+          }),
+        });
+      });
+
+      const res = await saveQuizData("c-1", "entry", {
+        passingScore: 75,
+        isEntry: true,
+        questions: [
+          {
+            text: "Câu hỏi xếp lớp 1",
+            correctIndex: 0,
+            options: ["A", "B"],
+          },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      expect(mockTxUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ passingScore: 75, isDiagnostic: true, currentQuizRevision: 2 })
+      );
+    });
+
+    it("lưu quiz tạo revision mới bảo toàn lịch sử câu hỏi và bài làm (Finding 4)", async () => {
+      const mockTxUpdateSet = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+      });
       const mockTxInsertValues = vi.fn().mockImplementation((val: any) => ({
         returning: vi.fn().mockResolvedValue([{ id: 501 }]),
       }));
@@ -356,12 +558,13 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
           select: vi.fn().mockReturnValue({
             from: vi.fn().mockReturnValue({
               where: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{ id: 99 }]),
+                limit: vi.fn().mockReturnValue({
+                  for: vi.fn().mockResolvedValue([{ id: 99, currentQuizRevision: 2 }]),
+                }),
               }),
             }),
           }),
           update: vi.fn().mockReturnValue({ set: mockTxUpdateSet }),
-          delete: vi.fn().mockReturnValue({ where: mockTxDeleteWhere }),
           insert: vi.fn().mockReturnValue({ values: mockTxInsertValues }),
         });
       });
@@ -380,41 +583,62 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
       });
 
       expect(res.success).toBe(true);
+      expect(mockTxInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({ quizRevision: 3 })
+      );
+      expect(mockTxUpdateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ currentQuizRevision: 3 })
+      );
       expect(mockTransaction).toHaveBeenCalled();
       expect(mockRevalidatePath).toHaveBeenCalled();
     });
-  });
 
-  describe("generateAiQuizQuestions", () => {
-    it("sinh câu hỏi AI cho quiz bài học và lưu vào ai_content_drafts", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockImplementation(() => {
-            return Promise.resolve([
-              {
-                id: "c-1",
-                instructorId: "lecturer-1",
-                title: "React TypeScript Chuyên Sâu",
-                status: "draft",
-              },
-            ]);
-          }),
+    it("kiểm tra bài học gắn với câu hỏi diagnostic phải thuộc khoá học (Finding 8)", async () => {
+      let callCount = 0;
+      mockSelect.mockImplementation(() => ({
+        from: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return { where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]) };
+          }
+          // verifyLessonBelongsToCourse: không tìm thấy lesson
+          return {
+            innerJoin: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue([]),
+            }),
+          };
         }),
-      });
+      }));
 
-      const mockValues = vi.fn().mockResolvedValue(undefined);
-      mockInsert.mockReturnValue({ values: mockValues });
-
-      const res = await generateAiQuizQuestions("c-1", "ls-1", 3, "medium");
-
-      expect(res.success).toBe(true);
-      expect(res.questions.length).toBe(3);
-      expect(res.questions[0].aiGenerated).toBe(true);
-      expect(res.questions[0].aiReviewed).toBe(false);
-      expect(res.questions[0].options.length).toBe(4);
-      expect(res.questions[0].correctIndex).toBe(0);
-      expect(mockInsert).toHaveBeenCalled();
+      await expect(
+        saveQuizData("c-1", "entry", {
+          passingScore: 80,
+          isEntry: true,
+          questions: [
+            {
+              text: "Câu hỏi diagnostic gắn bài lạ",
+              correctIndex: 0,
+              options: ["A", "B"],
+              lessonId: "ls-foreign",
+            },
+          ],
+        })
+      ).rejects.toThrow("Không tìm thấy bài học trong khoá học này.");
     });
   });
 });
 
+// Session transport is a boundary here; transactional revalidation has its own tests.
+vi.mock("@/lib/lecturer-auth", () => ({
+  readLecturerIdentity: async () => {
+    const identity = await mockGetSession();
+    if (!identity?.user) throw new Error("Unauthorized");
+    return identity;
+  },
+  verifyLecturerSession: async (_store: unknown, identity?: any) => {
+    const authenticated = identity ?? await mockGetSession();
+    if (!authenticated?.user) throw new Error("Unauthorized");
+    await mockRequireRole();
+    return authenticated.user;
+  },
+}));

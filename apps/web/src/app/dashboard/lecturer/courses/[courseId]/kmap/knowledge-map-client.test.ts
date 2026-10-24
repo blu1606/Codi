@@ -96,6 +96,17 @@ afterEach(async () => {
 });
 
 describe("knowledge map client saved graph state", () => {
+  it("explains legacy reconfirmation and clears the notice only after confirmation succeeds", async () => {
+    const legacy = snapshot();
+    legacy.concepts = legacy.concepts.map((concept) => ({ ...concept, review: "accepted" }));
+    legacy.course.requiresReconfirmation = true;
+    await render(legacy);
+    expect(document.body.textContent).toContain("Cần xác nhận lại để áp dụng cho học viên");
+    expect(confirm().disabled).toBe(false);
+    await click("Xác nhận bản đồ kiến thức");
+    expect(boundary.confirmKnowledgeMap).toHaveBeenCalledWith("owned");
+    expect(document.body.textContent).not.toContain("Cần xác nhận lại để áp dụng cho học viên");
+  });
   it("offers analysis for a ready course with lessons but no extracted concepts", async () => {
     const unanalysed = snapshot();
     unanalysed.concepts = [];

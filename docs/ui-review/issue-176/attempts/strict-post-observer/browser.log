@@ -1,0 +1,10 @@
+Issue176 failed at empty 375 dark reload: Expected values to be strictly deep-equal:
++ actual - expected
+
++ [
++   'profile and course-home comparison: unexpected POST /api/learn/qa-course/path',
++   'continue learning navigation: unexpected POST /api/learn/qa-course/lessons/8e9fcb60-aebd-4f2e-ac92-1d4e3331dc45'
++ ]
+- []
+
+Cleanup verified: zero QA users/accounts/sessions/enrollments/activities/clocks/days/courses remain.

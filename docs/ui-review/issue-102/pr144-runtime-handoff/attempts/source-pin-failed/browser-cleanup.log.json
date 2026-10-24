@@ -1,0 +1,14 @@
+{
+  "startedUtc": "2026-10-22T11:56:38.297Z",
+  "finishedUtc": "2026-10-22T11:57:08.589Z",
+  "cwd": "E:\\Code\\AI Study\\Codi-102-dashboard-progress\\apps\\web",
+  "command": [
+    "node",
+    "../../node_modules/tsx/dist/cli.mjs",
+    "--env-file=.env",
+    "scripts/verify-study-activity-browser.ts",
+    "--allow-dev-db"
+  ],
+  "exitCode": 1,
+  "signal": null
+}

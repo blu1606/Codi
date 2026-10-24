@@ -1,0 +1,5326 @@
+{
+  "users": [
+    {
+      "id": "usr-learner-001",
+      "name": "Nguyễn Minh Anh",
+      "email": "minhanh@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-08-15T10:30:00Z",
+      "lastActive": "2026-10-11T08:15:00Z"
+    },
+    {
+      "id": "usr-learner-002",
+      "name": "Trần Minh Vũ",
+      "email": "minhvu@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-08-18T14:45:00Z",
+      "lastActive": "2026-10-10T16:20:00Z"
+    },
+    {
+      "id": "usr-learner-003",
+      "name": "Phạm Thảo Linh",
+      "email": "thaolinh@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-08-20T09:00:00Z",
+      "lastActive": "2026-10-09T11:30:00Z"
+    },
+    {
+      "id": "usr-learner-004",
+      "name": "Hoàng Kim Oanh",
+      "email": "kimoanh@codi.vn",
+      "role": "learner",
+      "status": "inactive",
+      "createdAt": "2026-07-30T13:20:00Z",
+      "lastActive": "2026-09-25T10:00:00Z"
+    },
+    {
+      "id": "usr-learner-005",
+      "name": "Lý Hải Đăng",
+      "email": "haidang@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-09-10T15:40:00Z",
+      "lastActive": "2026-10-11T09:45:00Z"
+    },
+    {
+      "id": "usr-learner-006",
+      "name": "Đặng Quốc Anh",
+      "email": "quocanh@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-09-22T08:15:00Z",
+      "lastActive": "2026-10-08T14:25:00Z"
+    },
+    {
+      "id": "usr-learner-007",
+      "name": "Vũ Thị Hương",
+      "email": "thihuong@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-09-25T11:50:00Z",
+      "lastActive": "2026-10-11T07:30:00Z"
+    },
+    {
+      "id": "usr-learner-008",
+      "name": "Bùi Minh Tuấn",
+      "email": "minhtuan@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-09-28T16:00:00Z",
+      "lastActive": "2026-10-10T13:10:00Z"
+    },
+    {
+      "id": "usr-learner-009",
+      "name": "Ngô Bảo Ngọc",
+      "email": "baongoc@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-10-02T08:00:00Z",
+      "lastActive": "2026-10-11T06:50:00Z"
+    },
+    {
+      "id": "usr-learner-010",
+      "name": "Đỗ Thanh Tùng",
+      "email": "thanhtung@codi.vn",
+      "role": "learner",
+      "status": "active",
+      "createdAt": "2026-10-05T19:20:00Z",
+      "lastActive": "2026-10-10T21:05:00Z"
+    },
+    {
+      "id": "usr-lecturer-001",
+      "name": "Trần Quốc Huy",
+      "email": "quochuy@codi.vn",
+      "role": "lecturer",
+      "status": "active",
+      "createdAt": "2026-03-01T08:00:00Z",
+      "lastActive": "2026-10-11T07:55:00Z"
+    },
+    {
+      "id": "usr-lecturer-002",
+      "name": "Lê Thu Hà",
+      "email": "thuha@codi.vn",
+      "role": "lecturer",
+      "status": "active",
+      "createdAt": "2026-03-12T08:00:00Z",
+      "lastActive": "2026-10-10T18:40:00Z"
+    },
+    {
+      "id": "usr-admin-001",
+      "name": "Phạm Gia Bảo",
+      "email": "giabao@codi.vn",
+      "role": "admin",
+      "status": "active",
+      "createdAt": "2026-01-05T08:00:00Z",
+      "lastActive": "2026-10-11T08:30:00Z"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat-frontend",
+      "name": "Frontend"
+    },
+    {
+      "id": "cat-backend",
+      "name": "Backend"
+    },
+    {
+      "id": "cat-data",
+      "name": "Dữ liệu"
+    },
+    {
+      "id": "cat-tools",
+      "name": "Công cụ"
+    }
+  ],
+  "levels": {
+    "Beginner": "Cơ bản",
+    "Intermediate": "Trung cấp",
+    "Advanced": "Nâng cao"
+  },
+  "courses": [
+    {
+      "id": "course-react-001",
+      "slug": "react-du-an-thuc-te",
+      "title": "React từ cơ bản đến dự án thực tế",
+      "summary": "Xây dựng giao diện web hiện đại với React: component, state, hooks, gọi API và định tuyến — kết thúc bằng một dự án hoàn chỉnh.",
+      "categoryId": "cat-frontend",
+      "level": "Intermediate",
+      "lecturerId": "usr-lecturer-001",
+      "price": 1290000,
+      "proposedPrice": 1290000,
+      "status": "published",
+      "submittedAt": "2026-08-20T09:00:00Z",
+      "rating": 4.7,
+      "ratingCount": 128,
+      "ratingBreakdown": [
+        92,
+        24,
+        8,
+        3,
+        1
+      ],
+      "learnersCount": 1340,
+      "hue": 190,
+      "outcomes": [
+        "Hiểu cách React render giao diện từ state",
+        "Tách giao diện thành component tái sử dụng",
+        "Quản lý state và xử lý form với hooks",
+        "Gọi API, xử lý trạng thái tải và lỗi",
+        "Xây dựng ứng dụng nhiều trang với React Router",
+        "Hoàn thành một dự án quản lý công việc"
+      ],
+      "requirements": [
+        "Nắm vững JavaScript cơ bản (biến, hàm, mảng, đối tượng)",
+        "Biết HTML/CSS cơ bản",
+        "Máy tính cài Node.js 18 trở lên"
+      ],
+      "concepts": [
+        {
+          "id": "c-jsx",
+          "name": "JSX"
+        },
+        {
+          "id": "c-component",
+          "name": "Component"
+        },
+        {
+          "id": "c-props",
+          "name": "Props"
+        },
+        {
+          "id": "c-state",
+          "name": "State (useState)"
+        },
+        {
+          "id": "c-event",
+          "name": "Sự kiện & Form"
+        },
+        {
+          "id": "c-list",
+          "name": "Danh sách & key"
+        },
+        {
+          "id": "c-effect",
+          "name": "useEffect"
+        },
+        {
+          "id": "c-fetch",
+          "name": "Gọi API"
+        },
+        {
+          "id": "c-router",
+          "name": "React Router"
+        },
+        {
+          "id": "c-context",
+          "name": "Context API"
+        }
+      ],
+      "prerequisites": [
+        {
+          "from": "c-jsx",
+          "to": "c-component"
+        },
+        {
+          "from": "c-component",
+          "to": "c-props"
+        },
+        {
+          "from": "c-props",
+          "to": "c-state"
+        },
+        {
+          "from": "c-state",
+          "to": "c-event"
+        },
+        {
+          "from": "c-state",
+          "to": "c-list"
+        },
+        {
+          "from": "c-state",
+          "to": "c-effect"
+        },
+        {
+          "from": "c-effect",
+          "to": "c-fetch"
+        },
+        {
+          "from": "c-component",
+          "to": "c-router"
+        },
+        {
+          "from": "c-props",
+          "to": "c-context"
+        }
+      ],
+      "chapters": [
+        {
+          "id": "course-react-001-ch1",
+          "title": "Nền tảng React",
+          "lessons": [
+            {
+              "id": "lesson-react-001",
+              "title": "Giới thiệu React và cài đặt môi trường",
+              "type": "video",
+              "durationMin": 12,
+              "conceptIds": [
+                "c-jsx"
+              ],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-002",
+              "title": "JSX hoạt động thế nào",
+              "type": "reading",
+              "durationMin": 15,
+              "conceptIds": [
+                "c-jsx"
+              ],
+              "reading": "JSX là cú pháp mở rộng cho JavaScript, cho phép bạn viết giao diện gần giống HTML ngay trong mã JavaScript. Khi build, mỗi thẻ JSX được chuyển thành một lời gọi hàm tạo phần tử React.\n\nĐiểm khác biệt quan trọng: thuộc tính dùng camelCase (className, onClick), biểu thức JavaScript đặt trong dấu ngoặc nhọn {}, và mỗi component chỉ trả về một phần tử gốc.\n\nVí dụ: const greeting = <h1 className=\"title\">Xin chào, {name}!</h1>;\n\nHãy thử thay đổi biến name và quan sát kết quả hiển thị thay đổi theo.",
+              "quiz": {
+                "id": "lesson-react-002-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-jsx-1",
+                    "conceptId": "c-jsx",
+                    "text": "Cách nhúng biến name vào JSX?",
+                    "options": [
+                      "{{name}}",
+                      "${name}",
+                      "{name}",
+                      "(name)"
+                    ],
+                    "correctIndex": 2,
+                    "explanation": "Biểu thức JavaScript trong JSX đặt trong một cặp ngoặc nhọn."
+                  },
+                  {
+                    "id": "rq-jsx-2",
+                    "conceptId": "c-jsx",
+                    "text": "Một component có thể trả về hai thẻ anh em không bọc ngoài không?",
+                    "options": [
+                      "Có, luôn được",
+                      "Không, cần một phần tử gốc hoặc Fragment",
+                      "Chỉ trong class component",
+                      "Chỉ khi dùng TypeScript"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Cần bọc trong một phần tử gốc hoặc <>...</>."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-003",
+              "title": "Component đầu tiên của bạn",
+              "type": "video",
+              "durationMin": 18,
+              "conceptIds": [
+                "c-component"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-003-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-comp-1",
+                    "conceptId": "c-component",
+                    "text": "Function component trả về gì?",
+                    "options": [
+                      "Một chuỗi HTML",
+                      "JSX (phần tử React)",
+                      "Một đối tượng DOM",
+                      "Một Promise"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Function component trả về phần tử React, thường viết bằng JSX."
+                  },
+                  {
+                    "id": "rq-comp-2",
+                    "conceptId": "c-component",
+                    "text": "Lợi ích chính của việc tách component?",
+                    "options": [
+                      "Chạy nhanh hơn trên server",
+                      "Tái sử dụng và dễ bảo trì",
+                      "Không cần CSS",
+                      "Tự động tối ưu SEO"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Component nhỏ, độc lập giúp tái sử dụng và kiểm thử dễ hơn."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-react-001-ch2",
+          "title": "Props, State và sự kiện",
+          "lessons": [
+            {
+              "id": "lesson-react-004",
+              "title": "Truyền dữ liệu bằng Props",
+              "type": "video",
+              "durationMin": 20,
+              "conceptIds": [
+                "c-props"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-004-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-props-1",
+                    "conceptId": "c-props",
+                    "text": "Component con có nên sửa trực tiếp props không?",
+                    "options": [
+                      "Có",
+                      "Không, props là chỉ đọc",
+                      "Chỉ với mảng",
+                      "Chỉ trong useEffect"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Props là chỉ đọc; muốn đổi dữ liệu hãy gọi hàm do cha truyền xuống."
+                  },
+                  {
+                    "id": "rq-props-2",
+                    "conceptId": "c-props",
+                    "text": "Giá trị nằm giữa thẻ mở và thẻ đóng của component được nhận qua prop nào?",
+                    "options": [
+                      "content",
+                      "inner",
+                      "children",
+                      "body"
+                    ],
+                    "correctIndex": 2,
+                    "explanation": "Nội dung lồng bên trong được truyền qua props.children."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-005",
+              "title": "State với useState",
+              "type": "video",
+              "durationMin": 22,
+              "conceptIds": [
+                "c-state"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-005-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-state-1",
+                    "conceptId": "c-state",
+                    "text": "Vì sao không nên gán trực tiếp count = count + 1?",
+                    "options": [
+                      "Sai cú pháp",
+                      "React không biết để render lại",
+                      "Làm chậm trình duyệt",
+                      "Không có lý do"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Chỉ khi gọi hàm set React mới lên lịch render lại."
+                  },
+                  {
+                    "id": "rq-state-2",
+                    "conceptId": "c-state",
+                    "text": "Khi state mới phụ thuộc state cũ, nên viết?",
+                    "options": [
+                      "setCount(count + 1)",
+                      "setCount(c => c + 1)",
+                      "count++",
+                      "setCount(++count)"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Dạng hàm cập nhật đảm bảo dùng giá trị mới nhất."
+                  }
+                ]
+              },
+              "assignment": {
+                "maxScore": 10,
+                "passScore": 5,
+                "acceptedTypes": "",
+                "dueDays": 7,
+                "latePolicy": "penalty",
+                "latePenalty": 20,
+                "rubric": [
+                  {
+                    "id": "r1",
+                    "name": "Chức năng đúng yêu cầu",
+                    "points": 4,
+                    "desc": "Mọi yêu cầu trong đề chạy đúng, kể cả trường hợp biên."
+                  },
+                  {
+                    "id": "r2",
+                    "name": "Xử lý trạng thái & lỗi",
+                    "points": 2,
+                    "desc": "Có trạng thái đang tải, thông báo lỗi rõ ràng."
+                  },
+                  {
+                    "id": "r3",
+                    "name": "Cấu trúc & đặt tên",
+                    "points": 2,
+                    "desc": "Tách hàm/component hợp lý, tên biến dễ hiểu."
+                  },
+                  {
+                    "id": "r4",
+                    "name": "Trình bày bài nộp",
+                    "points": 2,
+                    "desc": "README hoặc ghi chú giải thích cách làm và cách chạy."
+                  }
+                ],
+                "instructions": "Xây dựng component Bộ đếm (Counter) có nút tăng, giảm và đặt lại. Giá trị không được nhỏ hơn 0. Nộp đường dẫn CodeSandbox hoặc GitHub, kèm ghi chú ngắn về cách bạn xử lý giới hạn 0.",
+                "requiresFile": false,
+                "requiresLink": true
+              },
+              "code": null
+            },
+            {
+              "id": "lesson-react-006",
+              "title": "Xử lý sự kiện và form",
+              "type": "pdf",
+              "durationMin": 16,
+              "conceptIds": [
+                "c-event"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-006-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-event-1",
+                    "conceptId": "c-event",
+                    "text": "Ngăn form tải lại trang khi submit?",
+                    "options": [
+                      "return false",
+                      "e.preventDefault()",
+                      "e.stop()",
+                      "Không cần làm gì"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Gọi e.preventDefault() trong hàm xử lý submit."
+                  },
+                  {
+                    "id": "rq-event-2",
+                    "conceptId": "c-event",
+                    "text": "Input có value và onChange do state điều khiển gọi là?",
+                    "options": [
+                      "Uncontrolled input",
+                      "Controlled input",
+                      "Ref input",
+                      "Static input"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Controlled input: giá trị luôn đến từ state."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-p01",
+              "title": "Thử thách: Reducer quản lý danh sách công việc",
+              "type": "code",
+              "durationMin": 25,
+              "conceptIds": [
+                "c-state"
+              ],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": {
+                "kind": "challenge",
+                "language": "javascript",
+                "fileName": "todoReducer.js",
+                "instructions": [
+                  "Với action `{ type: \"add\", text }`, trả về mảng **mới** có thêm `{ id, text, done: false }` ở cuối. `id` bằng id lớn nhất hiện có cộng 1 (mảng rỗng thì bắt đầu từ 1).",
+                  "Với action `{ type: \"toggle\", id }`, đảo giá trị `done` của công việc có `id` đó. Không sửa trực tiếp mảng hay đối tượng cũ.",
+                  "Với action `{ type: \"remove\", id }`, bỏ công việc có `id` đó. Action không biết trước thì trả về đúng `state` cũ."
+                ],
+                "starter": "// Reducer dùng với useReducer trong component TaskList:\n// const [tasks, dispatch] = useReducer(todoReducer, []);\nfunction todoReducer(state, action) {\n  switch (action.type) {\n    case 'add':\n      // Bước 1: thêm công việc mới\n      return state;\n    // Bước 2: case 'toggle'\n    // Bước 3: case 'remove'\n    default:\n      return state;\n  }\n}\n\nconsole.log(todoReducer([], { type: 'add', text: 'Học JSX' }));",
+                "solution": "function todoReducer(state, action) {\n  switch (action.type) {\n    case 'add': {\n      const id = state.reduce((max, t) => Math.max(max, t.id), 0) + 1;\n      return [...state, { id, text: action.text, done: false }];\n    }\n    case 'toggle':\n      return state.map((t) => (t.id === action.id ? { ...t, done: !t.done } : t));\n    case 'remove':\n      return state.filter((t) => t.id !== action.id);\n    default:\n      return state;\n  }\n}",
+                "tests": [
+                  {
+                    "id": "rt-1",
+                    "step": 0,
+                    "name": "add vào mảng rỗng",
+                    "call": "todoReducer([], { type: 'add', text: 'Học JSX' })",
+                    "expected": [
+                      {
+                        "id": 1,
+                        "text": "Học JSX",
+                        "done": false
+                      }
+                    ]
+                  },
+                  {
+                    "id": "rt-2",
+                    "step": 0,
+                    "name": "add tính id tiếp theo",
+                    "call": "todoReducer([{ id: 3, text: 'A', done: true }], { type: 'add', text: 'B' })",
+                    "expected": [
+                      {
+                        "id": 3,
+                        "text": "A",
+                        "done": true
+                      },
+                      {
+                        "id": 4,
+                        "text": "B",
+                        "done": false
+                      }
+                    ]
+                  },
+                  {
+                    "id": "rt-3",
+                    "step": 1,
+                    "name": "toggle đảo trạng thái",
+                    "call": "todoReducer([{ id: 1, text: 'A', done: false }], { type: 'toggle', id: 1 })",
+                    "expected": [
+                      {
+                        "id": 1,
+                        "text": "A",
+                        "done": true
+                      }
+                    ]
+                  },
+                  {
+                    "id": "rt-4",
+                    "step": 1,
+                    "name": "toggle không sửa state cũ",
+                    "call": "(() => { const s = [{ id: 1, text: 'A', done: false }]; todoReducer(s, { type: 'toggle', id: 1 }); return s[0].done; })()",
+                    "expected": false,
+                    "hidden": true
+                  },
+                  {
+                    "id": "rt-5",
+                    "step": 2,
+                    "name": "remove bỏ đúng công việc",
+                    "call": "todoReducer([{ id: 1, text: 'A', done: false }, { id: 2, text: 'B', done: false }], { type: 'remove', id: 1 })",
+                    "expected": [
+                      {
+                        "id": 2,
+                        "text": "B",
+                        "done": false
+                      }
+                    ]
+                  },
+                  {
+                    "id": "rt-6",
+                    "step": 2,
+                    "name": "action lạ trả về state cũ",
+                    "call": "(() => { const s = []; return todoReducer(s, { type: 'reset' }) === s; })()",
+                    "expected": true,
+                    "hidden": true
+                  }
+                ],
+                "hints": [
+                  "Dùng cú pháp spread `[...state, công việc mới]` để tạo mảng mới thay vì `push`.",
+                  "`state.map` trả về mảng mới; với phần tử cần đổi, tạo đối tượng mới bằng `{ ...t, done: !t.done }`.",
+                  "`state.filter((t) => t.id !== action.id)` bỏ đúng một công việc. Nhánh `default` phải `return state` để React biết không có gì thay đổi."
+                ],
+                "solutionCheck": {
+                  "ok": true,
+                  "passed": 6,
+                  "total": 6,
+                  "at": "2026-08-15T09:00:00Z"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "course-react-001-ch3",
+          "title": "Danh sách và hiệu ứng",
+          "lessons": [
+            {
+              "id": "lesson-react-007",
+              "title": "Render danh sách và key",
+              "type": "reading",
+              "durationMin": 14,
+              "conceptIds": [
+                "c-list"
+              ],
+              "reading": "Khi hiển thị một mảng dữ liệu, ta dùng map() để biến mỗi phần tử thành một phần tử JSX. React cần thuộc tính key ổn định và duy nhất cho mỗi phần tử để biết phần tử nào thay đổi giữa các lần render.\n\nKhông nên dùng chỉ số mảng làm key nếu danh sách có thể sắp xếp lại hoặc xoá phần tử, vì điều đó khiến state của các phần tử bị lẫn.\n\nQuy tắc ngắn gọn: dùng id từ dữ liệu, giữ key ổn định giữa các lần render.",
+              "quiz": {
+                "id": "lesson-react-007-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-list-1",
+                    "conceptId": "c-list",
+                    "text": "Thuộc tính key dùng để làm gì?",
+                    "options": [
+                      "Tạo CSS",
+                      "Giúp React nhận diện phần tử giữa các lần render",
+                      "Bảo mật",
+                      "Sắp xếp danh sách"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "key giúp React so khớp phần tử khi danh sách thay đổi."
+                  },
+                  {
+                    "id": "rq-list-2",
+                    "conceptId": "c-list",
+                    "text": "Key nào phù hợp nhất?",
+                    "options": [
+                      "Math.random()",
+                      "Chỉ số mảng khi danh sách có thể sắp xếp",
+                      "id ổn định từ dữ liệu",
+                      "Thời gian hiện tại"
+                    ],
+                    "correctIndex": 2,
+                    "explanation": "id ổn định, duy nhất là lựa chọn an toàn."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-008",
+              "title": "useEffect và vòng đời component",
+              "type": "video",
+              "durationMin": 24,
+              "conceptIds": [
+                "c-effect"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-008-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-effect-1",
+                    "conceptId": "c-effect",
+                    "text": "Hàm trả về từ useEffect dùng để?",
+                    "options": [
+                      "Trả dữ liệu cho component",
+                      "Dọn dẹp (cleanup)",
+                      "Bắt lỗi",
+                      "Render lại"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Hàm cleanup chạy trước lần effect tiếp theo và khi gỡ component."
+                  },
+                  {
+                    "id": "rq-effect-2",
+                    "conceptId": "c-effect",
+                    "text": "Thiếu biến trong mảng phụ thuộc có thể gây ra?",
+                    "options": [
+                      "Lỗi cú pháp",
+                      "Dùng giá trị cũ (stale)",
+                      "Tăng tốc độ",
+                      "Không ảnh hưởng"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Effect có thể đọc giá trị cũ nếu thiếu phụ thuộc."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-009",
+              "title": "Gọi API với fetch",
+              "type": "video",
+              "durationMin": 26,
+              "conceptIds": [
+                "c-fetch"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-009-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-fetch-1",
+                    "conceptId": "c-fetch",
+                    "text": "Nên gọi API khi component vừa hiển thị ở đâu?",
+                    "options": [
+                      "Trong thân hàm component",
+                      "Trong useEffect",
+                      "Trong CSS",
+                      "Trong key"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Gọi API là side effect, đặt trong useEffect."
+                  },
+                  {
+                    "id": "rq-fetch-2",
+                    "conceptId": "c-fetch",
+                    "text": "Khi đang chờ API, giao diện nên?",
+                    "options": [
+                      "Không hiển thị gì",
+                      "Hiển thị trạng thái đang tải",
+                      "Báo lỗi",
+                      "Tải lại trang"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Luôn hiển thị trạng thái đang tải và xử lý lỗi."
+                  }
+                ]
+              },
+              "assignment": {
+                "maxScore": 10,
+                "passScore": 5,
+                "acceptedTypes": ".zip, .js, .pdf",
+                "dueDays": 7,
+                "latePolicy": "penalty",
+                "latePenalty": 20,
+                "rubric": [
+                  {
+                    "id": "r1",
+                    "name": "Chức năng đúng yêu cầu",
+                    "points": 4,
+                    "desc": "Mọi yêu cầu trong đề chạy đúng, kể cả trường hợp biên."
+                  },
+                  {
+                    "id": "r2",
+                    "name": "Xử lý trạng thái & lỗi",
+                    "points": 2,
+                    "desc": "Có trạng thái đang tải, thông báo lỗi rõ ràng."
+                  },
+                  {
+                    "id": "r3",
+                    "name": "Cấu trúc & đặt tên",
+                    "points": 2,
+                    "desc": "Tách hàm/component hợp lý, tên biến dễ hiểu."
+                  },
+                  {
+                    "id": "r4",
+                    "name": "Trình bày bài nộp",
+                    "points": 2,
+                    "desc": "README hoặc ghi chú giải thích cách làm và cách chạy."
+                  }
+                ],
+                "instructions": "Tạo trang danh sách người dùng lấy dữ liệu từ https://jsonplaceholder.typicode.com/users. Hiển thị trạng thái đang tải, thông báo lỗi khi API hỏng và nút \"Thử lại\". Nộp tệp .zip mã nguồn hoặc đường dẫn GitHub.",
+                "requiresFile": true,
+                "requiresLink": false
+              },
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-react-001-ch4",
+          "title": "Ứng dụng nhiều trang",
+          "lessons": [
+            {
+              "id": "lesson-react-010",
+              "title": "React Router cơ bản",
+              "type": "video",
+              "durationMin": 20,
+              "conceptIds": [
+                "c-router"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-010-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-router-1",
+                    "conceptId": "c-router",
+                    "text": "Thành phần dùng để tạo liên kết không tải lại trang?",
+                    "options": [
+                      "<a>",
+                      "<Link>",
+                      "<Route>",
+                      "<Nav>"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "<Link> điều hướng phía client."
+                  },
+                  {
+                    "id": "rq-router-2",
+                    "conceptId": "c-router",
+                    "text": "Đọc tham số :id từ URL dùng hook nào?",
+                    "options": [
+                      "useState",
+                      "useParams",
+                      "useEffect",
+                      "useId"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "useParams trả về các tham số động của route."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-011",
+              "title": "Context API chia sẻ state",
+              "type": "pdf",
+              "durationMin": 18,
+              "conceptIds": [
+                "c-context"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-react-011-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "rq-ctx-1",
+                    "conceptId": "c-context",
+                    "text": "Đọc giá trị context trong function component?",
+                    "options": [
+                      "useContext",
+                      "useReducer",
+                      "useMemo",
+                      "useRef"
+                    ],
+                    "correctIndex": 0,
+                    "explanation": "useContext(MyContext) trả về giá trị hiện tại."
+                  },
+                  {
+                    "id": "rq-ctx-2",
+                    "conceptId": "c-context",
+                    "text": "Giá trị context được cung cấp bởi?",
+                    "options": [
+                      "Consumer",
+                      "Provider",
+                      "Router",
+                      "Store"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "<MyContext.Provider value={...}> cung cấp giá trị."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-react-012",
+              "title": "Dự án: Ứng dụng quản lý công việc",
+              "type": "reading",
+              "durationMin": 40,
+              "conceptIds": [
+                "c-state",
+                "c-fetch",
+                "c-router"
+              ],
+              "reading": "Trong dự án cuối khoá, bạn sẽ xây dựng ứng dụng quản lý công việc gồm: danh sách công việc lấy từ API, thêm/sửa/xoá công việc, lọc theo trạng thái và hai trang (Danh sách, Chi tiết) dùng React Router.\n\nYêu cầu kỹ thuật: dùng useState cho dữ liệu form, useEffect để tải dữ liệu, tách ít nhất 4 component, và xử lý trạng thái đang tải/lỗi khi gọi API.\n\nNộp bài: đường dẫn GitHub và (không bắt buộc) đường dẫn bản demo.",
+              "quiz": null,
+              "assignment": {
+                "maxScore": 10,
+                "passScore": 5,
+                "acceptedTypes": "",
+                "dueDays": 7,
+                "latePolicy": "penalty",
+                "latePenalty": 20,
+                "rubric": [
+                  {
+                    "id": "r1",
+                    "name": "Chức năng đúng yêu cầu",
+                    "points": 4,
+                    "desc": "Mọi yêu cầu trong đề chạy đúng, kể cả trường hợp biên."
+                  },
+                  {
+                    "id": "r2",
+                    "name": "Xử lý trạng thái & lỗi",
+                    "points": 2,
+                    "desc": "Có trạng thái đang tải, thông báo lỗi rõ ràng."
+                  },
+                  {
+                    "id": "r3",
+                    "name": "Cấu trúc & đặt tên",
+                    "points": 2,
+                    "desc": "Tách hàm/component hợp lý, tên biến dễ hiểu."
+                  },
+                  {
+                    "id": "r4",
+                    "name": "Trình bày bài nộp",
+                    "points": 2,
+                    "desc": "README hoặc ghi chú giải thích cách làm và cách chạy."
+                  }
+                ],
+                "instructions": "Hoàn thành ứng dụng quản lý công việc theo yêu cầu trong bài đọc. Nộp đường dẫn GitHub (bắt buộc) và tệp ảnh chụp màn hình (không bắt buộc).",
+                "requiresFile": false,
+                "requiresLink": true
+              },
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 270,
+      "defaultOrder": [
+        "lesson-react-001",
+        "lesson-react-002",
+        "lesson-react-003",
+        "lesson-react-004",
+        "lesson-react-005",
+        "lesson-react-006",
+        "lesson-react-p01",
+        "lesson-react-007",
+        "lesson-react-008",
+        "lesson-react-009",
+        "lesson-react-010",
+        "lesson-react-011",
+        "lesson-react-012"
+      ],
+      "entryTest": {
+        "id": "course-react-001-entry",
+        "title": "Bài kiểm tra đầu vào",
+        "isEntryTest": true,
+        "questions": [
+          {
+            "id": "rq-jsx-0",
+            "conceptId": "c-jsx",
+            "text": "Trong JSX, thuộc tính class của HTML được viết thế nào?",
+            "options": [
+              "class",
+              "className",
+              "cssClass",
+              "classList"
+            ],
+            "correctIndex": 1,
+            "explanation": "JSX dùng className vì class là từ khoá của JavaScript."
+          },
+          {
+            "id": "rq-comp-0",
+            "conceptId": "c-component",
+            "text": "Tên component React nên bắt đầu bằng?",
+            "options": [
+              "Chữ thường",
+              "Chữ hoa",
+              "Dấu gạch dưới",
+              "Ký tự $"
+            ],
+            "correctIndex": 1,
+            "explanation": "React coi thẻ chữ thường là thẻ HTML, chữ hoa là component."
+          },
+          {
+            "id": "rq-props-0",
+            "conceptId": "c-props",
+            "text": "Props trong React là gì?",
+            "options": [
+              "Dữ liệu nội bộ có thể thay đổi",
+              "Dữ liệu truyền từ component cha xuống con",
+              "Biến toàn cục",
+              "Thuộc tính CSS"
+            ],
+            "correctIndex": 1,
+            "explanation": "Props là dữ liệu đầu vào, truyền từ cha xuống con."
+          },
+          {
+            "id": "rq-state-0",
+            "conceptId": "c-state",
+            "text": "useState trả về gì?",
+            "options": [
+              "Một giá trị",
+              "Một mảng [giá trị, hàm cập nhật]",
+              "Một đối tượng",
+              "Một Promise"
+            ],
+            "correctIndex": 1,
+            "explanation": "useState trả về cặp [state, setState]."
+          },
+          {
+            "id": "rq-event-0",
+            "conceptId": "c-event",
+            "text": "Gắn sự kiện click trong JSX viết thế nào?",
+            "options": [
+              "onclick=\"handle()\"",
+              "onClick={handle}",
+              "click={handle}",
+              "on-click={handle}"
+            ],
+            "correctIndex": 1,
+            "explanation": "Sự kiện dùng camelCase và truyền hàm, không truyền chuỗi."
+          },
+          {
+            "id": "rq-list-0",
+            "conceptId": "c-list",
+            "text": "Phương thức thường dùng để render danh sách?",
+            "options": [
+              "forEach",
+              "map",
+              "reduce",
+              "filter"
+            ],
+            "correctIndex": 1,
+            "explanation": "map trả về mảng phần tử JSX mới."
+          },
+          {
+            "id": "rq-effect-0",
+            "conceptId": "c-effect",
+            "text": "useEffect với mảng phụ thuộc rỗng [] chạy khi nào?",
+            "options": [
+              "Mỗi lần render",
+              "Một lần sau lần render đầu",
+              "Không bao giờ",
+              "Trước khi render"
+            ],
+            "correctIndex": 1,
+            "explanation": "Mảng rỗng: chạy một lần sau khi component được gắn."
+          },
+          {
+            "id": "rq-fetch-0",
+            "conceptId": "c-fetch",
+            "text": "fetch() trả về gì?",
+            "options": [
+              "Dữ liệu JSON",
+              "Một Promise",
+              "Một chuỗi",
+              "Một mảng"
+            ],
+            "correctIndex": 1,
+            "explanation": "fetch trả về Promise của Response."
+          },
+          {
+            "id": "rq-router-0",
+            "conceptId": "c-router",
+            "text": "React Router dùng để?",
+            "options": [
+              "Gọi API",
+              "Điều hướng giữa các trang trong SPA",
+              "Quản lý state toàn cục",
+              "Viết test"
+            ],
+            "correctIndex": 1,
+            "explanation": "Router ánh xạ URL tới component."
+          },
+          {
+            "id": "rq-ctx-0",
+            "conceptId": "c-context",
+            "text": "Context giải quyết vấn đề gì?",
+            "options": [
+              "Tăng tốc render",
+              "Truyền props qua nhiều tầng (prop drilling)",
+              "Gọi API",
+              "Định tuyến"
+            ],
+            "correctIndex": 1,
+            "explanation": "Context chia sẻ dữ liệu mà không truyền qua từng tầng."
+          }
+        ]
+      },
+      "aiPath": [
+        {
+          "lessonId": "lesson-react-001",
+          "skippable": true,
+          "reason": "Bạn trả lời đúng câu JSX ở bài đầu vào — có thể lướt nhanh phần cài đặt."
+        },
+        {
+          "lessonId": "lesson-react-002",
+          "skippable": true,
+          "reason": "JSX đã ở mức Thành thạo; giữ lại để ôn nếu cần."
+        },
+        {
+          "lessonId": "lesson-react-003",
+          "skippable": false,
+          "reason": "Component là nền tảng cho mọi bài sau và bạn trả lời sai câu này ở bài đầu vào."
+        },
+        {
+          "lessonId": "lesson-react-004",
+          "skippable": false,
+          "reason": "Props là điều kiện bắt buộc trước State và Context."
+        },
+        {
+          "lessonId": "lesson-react-005",
+          "skippable": false,
+          "reason": "Mục tiêu \"Làm được dự án\" cần nắm chắc State — bạn chọn \"Tôi chưa biết\" ở câu này."
+        },
+        {
+          "lessonId": "lesson-react-006",
+          "skippable": false,
+          "reason": "Form xuất hiện trong dự án cuối khoá, nên học ngay sau State."
+        },
+        {
+          "lessonId": "lesson-react-p01",
+          "skippable": false,
+          "reason": "Luyện State bằng code chạy thật trước khi làm dự án; danh sách công việc là phần lõi của dự án cuối khoá."
+        },
+        {
+          "lessonId": "lesson-react-007",
+          "skippable": false,
+          "reason": "Ngắn và cần cho việc hiển thị danh sách công việc trong dự án."
+        },
+        {
+          "lessonId": "lesson-react-008",
+          "skippable": false,
+          "reason": "useEffect là điều kiện trước bài Gọi API."
+        },
+        {
+          "lessonId": "lesson-react-009",
+          "skippable": false,
+          "reason": "Phần trọng tâm của dự án; dành nhiều thời gian hơn cho bài này."
+        },
+        {
+          "lessonId": "lesson-react-010",
+          "skippable": false,
+          "reason": "Dự án có hai trang nên cần Router trước khi bắt đầu."
+        },
+        {
+          "lessonId": "lesson-react-011",
+          "skippable": true,
+          "reason": "Dự án không bắt buộc dùng Context — có thể bỏ qua nếu bạn bị giới hạn thời gian."
+        },
+        {
+          "lessonId": "lesson-react-012",
+          "skippable": false,
+          "reason": "Bài tổng hợp, đáp ứng trực tiếp mục tiêu \"Làm được dự án\"."
+        }
+      ],
+      "pathUpdates": [
+        {
+          "afterLessonId": "lesson-react-003",
+          "changes": [
+            {
+              "type": "now-skippable",
+              "lessonId": "lesson-react-004",
+              "text": "Props giờ có thể bỏ qua vì quiz Component của bạn đạt điểm tối đa."
+            },
+            {
+              "type": "unlocked",
+              "lessonId": "lesson-react-010",
+              "text": "React Router đã được mở khoá (đã đủ điều kiện Component)."
+            }
+          ]
+        },
+        {
+          "afterLessonId": "lesson-react-005",
+          "changes": [
+            {
+              "type": "moved-up",
+              "lessonId": "lesson-react-007",
+              "text": "Danh sách & key được đưa lên trước Xử lý sự kiện vì bài tập State của bạn cần hiển thị danh sách."
+            },
+            {
+              "type": "unlocked",
+              "lessonId": "lesson-react-008",
+              "text": "useEffect đã được mở khoá."
+            }
+          ]
+        },
+        {
+          "afterLessonId": "*",
+          "changes": [
+            {
+              "type": "moved-up",
+              "lessonId": null,
+              "text": "Bài tiếp theo được giữ nguyên thứ tự; mức độ thành thạo của bạn đã được cập nhật."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "course-js-001",
+      "slug": "javascript-nen-tang",
+      "title": "JavaScript nền tảng",
+      "summary": "Nắm chắc JavaScript hiện đại: biến, hàm, mảng, đối tượng, DOM và lập trình bất đồng bộ — nền móng cho mọi framework.",
+      "categoryId": "cat-frontend",
+      "level": "Beginner",
+      "lecturerId": "usr-lecturer-001",
+      "price": 590000,
+      "proposedPrice": 590000,
+      "status": "published",
+      "submittedAt": "2026-06-02T09:00:00Z",
+      "rating": 4.8,
+      "ratingCount": 312,
+      "ratingBreakdown": [
+        251,
+        44,
+        12,
+        4,
+        1
+      ],
+      "learnersCount": 2875,
+      "hue": 48,
+      "outcomes": [
+        "Viết JavaScript hiện đại (ES6+)",
+        "Xử lý dữ liệu với mảng và đối tượng",
+        "Thao tác DOM và sự kiện",
+        "Làm việc với Promise và async/await"
+      ],
+      "requirements": [
+        "Không cần kinh nghiệm lập trình trước",
+        "Biết HTML cơ bản là một lợi thế"
+      ],
+      "concepts": [
+        {
+          "id": "j-var",
+          "name": "Biến & kiểu dữ liệu"
+        },
+        {
+          "id": "j-func",
+          "name": "Hàm"
+        },
+        {
+          "id": "j-array",
+          "name": "Mảng"
+        },
+        {
+          "id": "j-object",
+          "name": "Đối tượng"
+        },
+        {
+          "id": "j-dom",
+          "name": "DOM & sự kiện"
+        },
+        {
+          "id": "j-async",
+          "name": "Bất đồng bộ"
+        },
+        {
+          "id": "j-closure",
+          "name": "Closure"
+        },
+        {
+          "id": "j-error",
+          "name": "Xử lý lỗi"
+        },
+        {
+          "id": "j-module",
+          "name": "Module & ES6"
+        },
+        {
+          "id": "j-spread",
+          "name": "Spread & Destructuring"
+        },
+        {
+          "id": "j-template",
+          "name": "Template Literal"
+        },
+        {
+          "id": "j-regex",
+          "name": "Regular Expression"
+        }
+      ],
+      "prerequisites": [
+        {
+          "from": "j-var",
+          "to": "j-func"
+        },
+        {
+          "from": "j-func",
+          "to": "j-closure"
+        },
+        {
+          "from": "j-func",
+          "to": "j-array"
+        },
+        {
+          "from": "j-func",
+          "to": "j-object"
+        },
+        {
+          "from": "j-array",
+          "to": "j-spread"
+        },
+        {
+          "from": "j-object",
+          "to": "j-spread"
+        },
+        {
+          "from": "j-object",
+          "to": "j-dom"
+        },
+        {
+          "from": "j-func",
+          "to": "j-async"
+        },
+        {
+          "from": "j-async",
+          "to": "j-error"
+        },
+        {
+          "from": "j-var",
+          "to": "j-template"
+        },
+        {
+          "from": "j-var",
+          "to": "j-regex"
+        },
+        {
+          "from": "j-func",
+          "to": "j-module"
+        }
+      ],
+      "chapters": [
+        {
+          "id": "course-js-001-ch1",
+          "title": "Làm quen JavaScript",
+          "lessons": [
+            {
+              "id": "lesson-js-001",
+              "title": "Biến, hằng và kiểu dữ liệu",
+              "type": "video",
+              "durationMin": 16,
+              "conceptIds": [
+                "j-var"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-js-001-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-var-1",
+                    "conceptId": "j-var",
+                    "text": "Phạm vi của let là?",
+                    "options": [
+                      "Toàn cục",
+                      "Hàm",
+                      "Khối {}",
+                      "Tệp"
+                    ],
+                    "correctIndex": 2,
+                    "explanation": "let có phạm vi khối."
+                  },
+                  {
+                    "id": "jq-var-2",
+                    "conceptId": "j-var",
+                    "text": "typeof null trả về?",
+                    "options": [
+                      "\"null\"",
+                      "\"object\"",
+                      "\"undefined\"",
+                      "\"number\""
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Đây là một đặc điểm lịch sử của JavaScript."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-js-002",
+              "title": "Hàm và phạm vi",
+              "type": "video",
+              "durationMin": 20,
+              "conceptIds": [
+                "j-func"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-js-002-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-func-1",
+                    "conceptId": "j-func",
+                    "text": "Giá trị trả về mặc định của hàm không có return?",
+                    "options": [
+                      "null",
+                      "0",
+                      "undefined",
+                      "\"\""
+                    ],
+                    "correctIndex": 2,
+                    "explanation": "Hàm không return trả về undefined."
+                  },
+                  {
+                    "id": "jq-func-2",
+                    "conceptId": "j-func",
+                    "text": "Closure là gì?",
+                    "options": [
+                      "Một vòng lặp",
+                      "Hàm ghi nhớ biến của phạm vi tạo ra nó",
+                      "Một kiểu dữ liệu",
+                      "Một lỗi"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Closure giữ tham chiếu tới biến bên ngoài."
+                  }
+                ]
+              },
+              "assignment": {
+                "maxScore": 10,
+                "passScore": 5,
+                "acceptedTypes": "",
+                "dueDays": 7,
+                "latePolicy": "penalty",
+                "latePenalty": 20,
+                "rubric": [
+                  {
+                    "id": "r1",
+                    "name": "Kết quả đúng",
+                    "points": 5,
+                    "desc": "Hàm trả về đúng với các ví dụ trong đề."
+                  },
+                  {
+                    "id": "r2",
+                    "name": "Xử lý đầu vào bất thường",
+                    "points": 2,
+                    "desc": "Số âm, giá trị không phải số, mảng rỗng."
+                  },
+                  {
+                    "id": "r3",
+                    "name": "Code dễ đọc",
+                    "points": 3,
+                    "desc": "Ngắn gọn, đặt tên rõ, không lặp code."
+                  }
+                ],
+                "instructions": "Viết hàm formatPrice(n) trả về chuỗi giá VND có dấu chấm phân cách (ví dụ 1290000 → \"1.290.000 ₫\"). Nộp đường dẫn hoặc tệp .js.",
+                "requiresFile": false,
+                "requiresLink": true
+              },
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-js-001-ch2",
+          "title": "Dữ liệu có cấu trúc",
+          "lessons": [
+            {
+              "id": "lesson-js-003",
+              "title": "Làm việc với mảng",
+              "type": "reading",
+              "durationMin": 18,
+              "conceptIds": [
+                "j-array"
+              ],
+              "reading": "Bài đọc này tóm tắt các ý chính của chủ đề, kèm ví dụ ngắn và lưu ý thường gặp. Đọc kỹ từng phần, chạy lại ví dụ trên máy của bạn, rồi làm quiz cuối bài để kiểm tra mức độ hiểu.",
+              "quiz": {
+                "id": "lesson-js-003-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-arr-1",
+                    "conceptId": "j-array",
+                    "text": "[1,2,3].map(x => x * 2) cho kết quả?",
+                    "options": [
+                      "[1,2,3]",
+                      "[2,4,6]",
+                      "6",
+                      "[3,2,1]"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "map áp dụng hàm cho từng phần tử."
+                  },
+                  {
+                    "id": "jq-arr-2",
+                    "conceptId": "j-array",
+                    "text": "reduce thường dùng để?",
+                    "options": [
+                      "Sắp xếp",
+                      "Gộp mảng thành một giá trị",
+                      "Xoá phần tử",
+                      "Tìm chỉ số"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "reduce tích luỹ thành một giá trị."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-js-004",
+              "title": "Đối tượng và destructuring",
+              "type": "video",
+              "durationMin": 17,
+              "conceptIds": [
+                "j-object"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-js-004-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-obj-1",
+                    "conceptId": "j-object",
+                    "text": "Toán tử spread {...a} dùng để?",
+                    "options": [
+                      "So sánh",
+                      "Sao chép nông đối tượng",
+                      "Xoá thuộc tính",
+                      "Đóng băng đối tượng"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Spread tạo bản sao nông."
+                  },
+                  {
+                    "id": "jq-obj-2",
+                    "conceptId": "j-object",
+                    "text": "const {name} = user gọi là?",
+                    "options": [
+                      "Destructuring",
+                      "Hoisting",
+                      "Currying",
+                      "Binding"
+                    ],
+                    "correctIndex": 0,
+                    "explanation": "Destructuring tách thuộc tính ra biến."
+                  }
+                ]
+              },
+              "assignment": {
+                "maxScore": 10,
+                "passScore": 5,
+                "acceptedTypes": ".zip, .js, .pdf",
+                "dueDays": 7,
+                "latePolicy": "penalty",
+                "latePenalty": 20,
+                "rubric": [
+                  {
+                    "id": "r1",
+                    "name": "Kết quả đúng",
+                    "points": 5,
+                    "desc": "Hàm trả về đúng với các ví dụ trong đề."
+                  },
+                  {
+                    "id": "r2",
+                    "name": "Xử lý đầu vào bất thường",
+                    "points": 2,
+                    "desc": "Số âm, giá trị không phải số, mảng rỗng."
+                  },
+                  {
+                    "id": "r3",
+                    "name": "Code dễ đọc",
+                    "points": 3,
+                    "desc": "Ngắn gọn, đặt tên rõ, không lặp code."
+                  }
+                ],
+                "instructions": "Cho mảng đơn hàng, viết hàm trả về tổng tiền theo từng khách hàng dùng reduce và destructuring. Nộp tệp .js.",
+                "requiresFile": true,
+                "requiresLink": false
+              },
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-js-001-ch3",
+          "title": "Luyện tập lập trình",
+          "lessons": [
+            {
+              "id": "lesson-js-p01",
+              "title": "Hướng dẫn: Viết và chạy JavaScript",
+              "type": "tutorial",
+              "durationMin": 20,
+              "conceptIds": [
+                "j-array"
+              ],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": {
+                "kind": "tutorial",
+                "language": "javascript",
+                "fileName": "main.js",
+                "steps": [
+                  {
+                    "title": "Chào mừng",
+                    "body": "Trong bài này bạn viết và chạy JavaScript ngay trên trình duyệt, không cần cài đặt gì.\n\nBên phải là **trình soạn code** (tệp `main.js`) và **Console** hiện kết quả. Bấm **Chạy** để chạy dòng lệnh có sẵn.",
+                    "starter": "// Bấm \"Chạy\" để chạy dòng lệnh bên dưới\nconsole.log(\"Xin chào Codi!\");"
+                  },
+                  {
+                    "title": "Không gian làm việc",
+                    "body": "Mỗi lần bấm **Chạy**, Codi chạy toàn bộ tệp từ trên xuống và in mọi `console.log` vào Console.\n\n- **Ctrl + Enter** (hoặc ⌘ + Enter) cũng chạy code\n- **Tab** thụt lề 2 dấu cách; nhấn **Esc** rồi **Tab** để rời trình soạn\n- Code của từng bước được **lưu nháp tự động**\n\nThử đổi tên trong biến `ten` rồi chạy lại.",
+                    "starter": "const ten = \"Minh Anh\";\nconsole.log(\"Chào \" + ten + \"!\");"
+                  },
+                  {
+                    "title": "Hàm xử lý mảng",
+                    "body": "Ba hàm bạn sẽ dùng nhiều nhất với mảng:\n\n- `map` tạo mảng mới bằng cách biến đổi từng phần tử\n- `filter` giữ lại phần tử thoả điều kiện\n- `reduce` gộp cả mảng thành một giá trị\n\nChạy thử, rồi đổi điều kiện trong `filter` thành `d >= 8`.",
+                    "starter": "const diem = [7, 9, 4, 10, 6];\n\n// map: nhân mỗi điểm với 10\nconsole.log(diem.map((d) => d * 10));\n\n// filter: giữ lại điểm từ 5 trở lên\nconsole.log(diem.filter((d) => d >= 5));\n\n// reduce: cộng tất cả điểm\nconsole.log(diem.reduce((tong, d) => tong + d, 0));"
+                  },
+                  {
+                    "title": "Đọc thông báo lỗi",
+                    "body": "Lỗi là chuyện bình thường. Chạy đoạn code bên cạnh và đọc Console:\n\n- Dòng 2 in `undefined` vì gõ sai `length` thành `lenght` — JavaScript không báo lỗi, chỉ trả về `undefined`\n- Dòng 3 báo **ReferenceError** vì hàm `tinhTong` chưa được khai báo\n\nSửa cả hai chỗ rồi chạy lại.",
+                    "starter": "const diem = [7, 9, 4];\nconsole.log(diem.lenght);\nconsole.log(tinhTong(diem));"
+                  },
+                  {
+                    "title": "Sửa code của mình!",
+                    "body": "Hàm `diemTrungBinh` đang trả về `NaN`. Tìm và sửa lỗi để hàm trả về đúng điểm trung bình.\n\nGợi ý: chỉ số cuối cùng của mảng là `length - 1`.",
+                    "starter": "function diemTrungBinh(diem) {\n  let tong = 0;\n  for (let i = 0; i <= diem.length; i++) {\n    tong += diem[i];\n  }\n  return tong / diem.length;\n}\n\nconsole.log(diemTrungBinh([8, 6, 10]));",
+                    "tests": [
+                      {
+                        "id": "t-avg-1",
+                        "name": "diemTrungBinh([8, 6, 10]) trả về 8",
+                        "call": "diemTrungBinh([8, 6, 10])",
+                        "expected": 8
+                      },
+                      {
+                        "id": "t-avg-2",
+                        "name": "diemTrungBinh([5]) trả về 5",
+                        "call": "diemTrungBinh([5])",
+                        "expected": 5
+                      }
+                    ]
+                  },
+                  {
+                    "title": "Thử thách",
+                    "body": "Viết hàm `xepLoai(diem)` trả về:\n\n- `\"Giỏi\"` nếu điểm từ 8 trở lên\n- `\"Khá\"` nếu từ 6.5\n- `\"Trung bình\"` nếu từ 5\n- `\"Yếu\"` với điểm còn lại\n\nBấm **Chạy** để xem các test.",
+                    "starter": "function xepLoai(diem) {\n  // Viết code của bạn ở đây\n}\n\nconsole.log(xepLoai(9));",
+                    "tests": [
+                      {
+                        "id": "t-rank-1",
+                        "name": "xepLoai(9) trả về \"Giỏi\"",
+                        "call": "xepLoai(9)",
+                        "expected": "Giỏi"
+                      },
+                      {
+                        "id": "t-rank-2",
+                        "name": "xepLoai(6.5) trả về \"Khá\"",
+                        "call": "xepLoai(6.5)",
+                        "expected": "Khá"
+                      },
+                      {
+                        "id": "t-rank-3",
+                        "name": "xepLoai(5) trả về \"Trung bình\"",
+                        "call": "xepLoai(5)",
+                        "expected": "Trung bình"
+                      },
+                      {
+                        "id": "t-rank-4",
+                        "name": "xepLoai(3) trả về \"Yếu\"",
+                        "call": "xepLoai(3)",
+                        "expected": "Yếu"
+                      }
+                    ]
+                  },
+                  {
+                    "title": "Lời giải (đừng xem trước!)",
+                    "isSolution": true,
+                    "body": "Đây là một cách làm cho hai bước trước. Code của bạn khác vẫn đúng nếu các test đều đạt.",
+                    "starter": "function diemTrungBinh(diem) {\n  let tong = 0;\n  for (let i = 0; i < diem.length; i++) {\n    tong += diem[i];\n  }\n  return tong / diem.length;\n}\n\nfunction xepLoai(diem) {\n  if (diem >= 8) return \"Giỏi\";\n  if (diem >= 6.5) return \"Khá\";\n  if (diem >= 5) return \"Trung bình\";\n  return \"Yếu\";\n}\n\nconsole.log(diemTrungBinh([8, 6, 10]), xepLoai(9));"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "lesson-js-p02",
+              "title": "Thử thách: Thống kê đơn hàng",
+              "type": "code",
+              "durationMin": 25,
+              "conceptIds": [
+                "j-array"
+              ],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": {
+                "kind": "challenge",
+                "language": "javascript",
+                "fileName": "don-hang.js",
+                "instructions": [
+                  "Viết hàm `tongTien(orders)` trả về tổng `price` của mọi đơn hàng. Mảng rỗng trả về `0`.",
+                  "Viết hàm `donLonNhat(orders)` trả về đơn hàng có `price` lớn nhất, hoặc `null` nếu mảng rỗng.",
+                  "Viết hàm `demTheoTrangThai(orders)` trả về đối tượng đếm số đơn theo `status`, ví dụ `{ paid: 2, pending: 1 }`."
+                ],
+                "starter": "// Đơn hàng mẫu để bạn thử với console.log\nconst orders = [\n  { id: 'DH01', price: 590000, status: 'paid' },\n  { id: 'DH02', price: 1290000, status: 'pending' },\n  { id: 'DH03', price: 350000, status: 'paid' },\n];\n\n// Bước 1: tổng tiền các đơn\nfunction tongTien(orders) {\n  // Viết code của bạn ở đây\n}\n\n// Bước 2: đơn có giá lớn nhất\n\n// Bước 3: đếm số đơn theo trạng thái\n\nconsole.log(tongTien(orders));",
+                "solution": "function tongTien(orders) {\n  return orders.reduce((tong, o) => tong + o.price, 0);\n}\n\nfunction donLonNhat(orders) {\n  if (!orders.length) return null;\n  return orders.reduce((max, o) => (o.price > max.price ? o : max));\n}\n\nfunction demTheoTrangThai(orders) {\n  return orders.reduce((dem, o) => {\n    dem[o.status] = (dem[o.status] || 0) + 1;\n    return dem;\n  }, {});\n}",
+                "tests": [
+                  {
+                    "id": "ct-1",
+                    "step": 0,
+                    "name": "tongTien với 2 đơn",
+                    "call": "tongTien([{ price: 100 }, { price: 250 }])",
+                    "expected": 350
+                  },
+                  {
+                    "id": "ct-2",
+                    "step": 0,
+                    "name": "tongTien với mảng rỗng",
+                    "call": "tongTien([])",
+                    "expected": 0
+                  },
+                  {
+                    "id": "ct-3",
+                    "step": 0,
+                    "name": "tongTien với giá 0",
+                    "call": "tongTien([{ price: 590000 }, { price: 1290000 }, { price: 0 }])",
+                    "expected": 1880000,
+                    "hidden": true
+                  },
+                  {
+                    "id": "ct-4",
+                    "step": 1,
+                    "name": "donLonNhat chọn đơn giá cao nhất",
+                    "call": "donLonNhat([{ id: 'A', price: 5 }, { id: 'B', price: 9 }])",
+                    "expected": {
+                      "id": "B",
+                      "price": 9
+                    }
+                  },
+                  {
+                    "id": "ct-5",
+                    "step": 1,
+                    "name": "donLonNhat với mảng rỗng",
+                    "call": "donLonNhat([])",
+                    "expected": null
+                  },
+                  {
+                    "id": "ct-6",
+                    "step": 1,
+                    "name": "donLonNhat với một đơn",
+                    "call": "donLonNhat([{ id: 'X', price: 1 }])",
+                    "expected": {
+                      "id": "X",
+                      "price": 1
+                    },
+                    "hidden": true
+                  },
+                  {
+                    "id": "ct-7",
+                    "step": 2,
+                    "name": "demTheoTrangThai đếm đúng",
+                    "call": "demTheoTrangThai([{ status: 'paid' }, { status: 'pending' }, { status: 'paid' }])",
+                    "expected": {
+                      "paid": 2,
+                      "pending": 1
+                    }
+                  },
+                  {
+                    "id": "ct-8",
+                    "step": 2,
+                    "name": "demTheoTrangThai với mảng rỗng",
+                    "call": "demTheoTrangThai([])",
+                    "expected": {},
+                    "hidden": true
+                  }
+                ],
+                "hints": [
+                  "`reduce` nhận một hàm `(tong, o) => …` và giá trị khởi đầu. Với tổng tiền, giá trị khởi đầu là `0`.",
+                  "Với `donLonNhat`, kiểm tra mảng rỗng trước, rồi dùng `reduce` giữ lại đơn có `price` lớn hơn.",
+                  "Với `demTheoTrangThai`, khởi đầu `reduce` bằng `{}` và tăng `dem[o.status]` thêm 1 cho mỗi đơn."
+                ],
+                "solutionCheck": {
+                  "ok": true,
+                  "passed": 8,
+                  "total": 8,
+                  "at": "2026-06-01T09:00:00Z"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "course-js-001-ch4",
+          "title": "Trình duyệt và DOM",
+          "lessons": [
+            {
+              "id": "lesson-js-005",
+              "title": "Chọn và thay đổi phần tử DOM",
+              "type": "video",
+              "durationMin": 19,
+              "conceptIds": [
+                "j-dom"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-js-005-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-dom-1",
+                    "conceptId": "j-dom",
+                    "text": "Gắn sự kiện click cho nút?",
+                    "options": [
+                      "btn.click = fn",
+                      "btn.addEventListener(\"click\", fn)",
+                      "btn.on(\"click\")",
+                      "btn.event(fn)"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "addEventListener là cách chuẩn."
+                  },
+                  {
+                    "id": "jq-dom-2",
+                    "conceptId": "j-dom",
+                    "text": "Event delegation là?",
+                    "options": [
+                      "Gắn sự kiện lên phần tử cha để xử lý cho con",
+                      "Xoá sự kiện",
+                      "Sự kiện bất đồng bộ",
+                      "Một thư viện"
+                    ],
+                    "correctIndex": 0,
+                    "explanation": "Tận dụng cơ chế nổi bọt sự kiện."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-js-006",
+              "title": "Sự kiện và event delegation",
+              "type": "pdf",
+              "durationMin": 15,
+              "conceptIds": [
+                "j-dom"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-js-006-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-dom-1",
+                    "conceptId": "j-dom",
+                    "text": "Gắn sự kiện click cho nút?",
+                    "options": [
+                      "btn.click = fn",
+                      "btn.addEventListener(\"click\", fn)",
+                      "btn.on(\"click\")",
+                      "btn.event(fn)"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "addEventListener là cách chuẩn."
+                  },
+                  {
+                    "id": "jq-dom-2",
+                    "conceptId": "j-dom",
+                    "text": "Event delegation là?",
+                    "options": [
+                      "Gắn sự kiện lên phần tử cha để xử lý cho con",
+                      "Xoá sự kiện",
+                      "Sự kiện bất đồng bộ",
+                      "Một thư viện"
+                    ],
+                    "correctIndex": 0,
+                    "explanation": "Tận dụng cơ chế nổi bọt sự kiện."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-js-001-ch5",
+          "title": "Bất đồng bộ",
+          "lessons": [
+            {
+              "id": "lesson-js-007",
+              "title": "Promise là gì",
+              "type": "video",
+              "durationMin": 21,
+              "conceptIds": [
+                "j-async"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-js-007-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-async-1",
+                    "conceptId": "j-async",
+                    "text": "Promise ở trạng thái nào sau khi lỗi?",
+                    "options": [
+                      "fulfilled",
+                      "rejected",
+                      "pending",
+                      "settled-ok"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Lỗi chuyển Promise sang rejected."
+                  },
+                  {
+                    "id": "jq-async-2",
+                    "conceptId": "j-async",
+                    "text": "Bắt lỗi khi dùng await?",
+                    "options": [
+                      "if/else",
+                      "try/catch",
+                      "switch",
+                      "Không bắt được"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Bọc trong try/catch."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-js-008",
+              "title": "async/await và xử lý lỗi",
+              "type": "video",
+              "durationMin": 19,
+              "conceptIds": [
+                "j-async"
+              ],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-js-008-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "jq-async-1",
+                    "conceptId": "j-async",
+                    "text": "Promise ở trạng thái nào sau khi lỗi?",
+                    "options": [
+                      "fulfilled",
+                      "rejected",
+                      "pending",
+                      "settled-ok"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Lỗi chuyển Promise sang rejected."
+                  },
+                  {
+                    "id": "jq-async-2",
+                    "conceptId": "j-async",
+                    "text": "Bắt lỗi khi dùng await?",
+                    "options": [
+                      "if/else",
+                      "try/catch",
+                      "switch",
+                      "Không bắt được"
+                    ],
+                    "correctIndex": 1,
+                    "explanation": "Bọc trong try/catch."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-js-009",
+              "title": "Dự án nhỏ: Ứng dụng thời tiết",
+              "type": "reading",
+              "durationMin": 30,
+              "conceptIds": [
+                "j-dom",
+                "j-async"
+              ],
+              "reading": "Bài đọc này tóm tắt các ý chính của chủ đề, kèm ví dụ ngắn và lưu ý thường gặp. Đọc kỹ từng phần, chạy lại ví dụ trên máy của bạn, rồi làm quiz cuối bài để kiểm tra mức độ hiểu.",
+              "quiz": null,
+              "assignment": {
+                "maxScore": 10,
+                "passScore": 5,
+                "acceptedTypes": "",
+                "dueDays": 7,
+                "latePolicy": "penalty",
+                "latePenalty": 20,
+                "rubric": [
+                  {
+                    "id": "r1",
+                    "name": "Chức năng đúng yêu cầu",
+                    "points": 4,
+                    "desc": "Mọi yêu cầu trong đề chạy đúng, kể cả trường hợp biên."
+                  },
+                  {
+                    "id": "r2",
+                    "name": "Xử lý trạng thái & lỗi",
+                    "points": 2,
+                    "desc": "Có trạng thái đang tải, thông báo lỗi rõ ràng."
+                  },
+                  {
+                    "id": "r3",
+                    "name": "Cấu trúc & đặt tên",
+                    "points": 2,
+                    "desc": "Tách hàm/component hợp lý, tên biến dễ hiểu."
+                  },
+                  {
+                    "id": "r4",
+                    "name": "Trình bày bài nộp",
+                    "points": 2,
+                    "desc": "README hoặc ghi chú giải thích cách làm và cách chạy."
+                  }
+                ],
+                "instructions": "Xây dựng trang tra cứu thời tiết theo tên thành phố, có trạng thái đang tải và lỗi. Nộp đường dẫn GitHub.",
+                "requiresFile": false,
+                "requiresLink": true
+              },
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 220,
+      "defaultOrder": [
+        "lesson-js-001",
+        "lesson-js-002",
+        "lesson-js-003",
+        "lesson-js-004",
+        "lesson-js-p01",
+        "lesson-js-p02",
+        "lesson-js-005",
+        "lesson-js-006",
+        "lesson-js-007",
+        "lesson-js-008",
+        "lesson-js-009"
+      ],
+      "entryTest": {
+        "id": "course-js-001-entry",
+        "title": "Bài kiểm tra đầu vào",
+        "isEntryTest": true,
+        "questions": [
+          {
+            "id": "jq-var-0",
+            "conceptId": "j-var",
+            "text": "Khai báo nào không thể gán lại?",
+            "options": [
+              "var",
+              "let",
+              "const",
+              "Tất cả"
+            ],
+            "correctIndex": 2,
+            "explanation": "const không cho gán lại tham chiếu."
+          },
+          {
+            "id": "jq-func-0",
+            "conceptId": "j-func",
+            "text": "Arrow function khác function thường ở điểm nào?",
+            "options": [
+              "Không có this riêng",
+              "Chạy nhanh hơn",
+              "Không nhận tham số",
+              "Không trả về giá trị"
+            ],
+            "correctIndex": 0,
+            "explanation": "Arrow function dùng this của phạm vi bao ngoài."
+          },
+          {
+            "id": "jq-arr-0",
+            "conceptId": "j-array",
+            "text": "Phương thức tạo mảng mới chỉ gồm phần tử thoả điều kiện?",
+            "options": [
+              "map",
+              "filter",
+              "find",
+              "push"
+            ],
+            "correctIndex": 1,
+            "explanation": "filter trả về mảng mới."
+          },
+          {
+            "id": "jq-obj-0",
+            "conceptId": "j-object",
+            "text": "Truy cập thuộc tính có tên động?",
+            "options": [
+              "obj.key",
+              "obj[key]",
+              "obj->key",
+              "obj::key"
+            ],
+            "correctIndex": 1,
+            "explanation": "Dùng ngoặc vuông với biến."
+          },
+          {
+            "id": "jq-dom-0",
+            "conceptId": "j-dom",
+            "text": "Chọn phần tử đầu tiên khớp selector?",
+            "options": [
+              "getElementsByClassName",
+              "querySelector",
+              "querySelectorAll",
+              "getElement"
+            ],
+            "correctIndex": 1,
+            "explanation": "querySelector trả về phần tử đầu tiên."
+          },
+          {
+            "id": "jq-async-0",
+            "conceptId": "j-async",
+            "text": "await chỉ dùng được trong?",
+            "options": [
+              "Mọi hàm",
+              "Hàm async (hoặc module cấp cao nhất)",
+              "Vòng lặp for",
+              "Câu lệnh if"
+            ],
+            "correctIndex": 1,
+            "explanation": "await cần ngữ cảnh async."
+          }
+        ]
+      },
+      "aiPath": [
+        {
+          "lessonId": "lesson-js-001",
+          "skippable": true,
+          "reason": "Bạn đã biết khai báo biến — có thể lướt nhanh."
+        },
+        {
+          "lessonId": "lesson-js-002",
+          "skippable": false,
+          "reason": "Hàm là điều kiện trước Mảng, Đối tượng và Bất đồng bộ."
+        },
+        {
+          "lessonId": "lesson-js-003",
+          "skippable": false,
+          "reason": "Kết quả đầu vào cho thấy bạn còn yếu phần mảng."
+        },
+        {
+          "lessonId": "lesson-js-004",
+          "skippable": false,
+          "reason": "Cần cho bài DOM và dự án cuối khoá."
+        },
+        {
+          "lessonId": "lesson-js-p01",
+          "skippable": false,
+          "reason": "Thực hành ngay sau phần mảng giúp bạn nhớ lâu hơn."
+        },
+        {
+          "lessonId": "lesson-js-p02",
+          "skippable": false,
+          "reason": "Kiểm tra lại kỹ năng mảng trước khi sang DOM."
+        },
+        {
+          "lessonId": "lesson-js-005",
+          "skippable": false,
+          "reason": "Mục tiêu \"Làm được dự án\" cần thao tác DOM thành thạo."
+        },
+        {
+          "lessonId": "lesson-js-006",
+          "skippable": false,
+          "reason": "Bổ sung cho bài DOM; ngắn và thực hành nhiều."
+        },
+        {
+          "lessonId": "lesson-js-007",
+          "skippable": false,
+          "reason": "Bạn chọn \"Tôi chưa biết\" ở câu Promise."
+        },
+        {
+          "lessonId": "lesson-js-008",
+          "skippable": false,
+          "reason": "Tiếp nối trực tiếp bài Promise."
+        },
+        {
+          "lessonId": "lesson-js-009",
+          "skippable": false,
+          "reason": "Bài tổng hợp, đáp ứng mục tiêu dự án."
+        }
+      ],
+      "pathUpdates": [
+        {
+          "afterLessonId": "*",
+          "changes": [
+            {
+              "type": "moved-up",
+              "lessonId": null,
+              "text": "Thứ tự giữ nguyên; mức độ thành thạo đã được cập nhật."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "concepts": [],
+      "prerequisites": [],
+      "id": "course-node-001",
+      "slug": "nodejs-express-rest-api",
+      "title": "Node.js & Express xây dựng REST API",
+      "summary": "Thiết kế và xây dựng REST API với Node.js, Express, xác thực JWT và PostgreSQL.",
+      "categoryId": "cat-backend",
+      "level": "Intermediate",
+      "lecturerId": "usr-lecturer-002",
+      "price": 990000,
+      "proposedPrice": 990000,
+      "status": "published",
+      "rating": 4.6,
+      "ratingCount": 87,
+      "ratingBreakdown": [
+        58,
+        20,
+        6,
+        2,
+        1
+      ],
+      "learnersCount": 940,
+      "hue": 140,
+      "outcomes": [
+        "Xây dựng REST API chuẩn",
+        "Xác thực với JWT",
+        "Kết nối PostgreSQL"
+      ],
+      "requirements": [
+        "JavaScript cơ bản"
+      ],
+      "chapters": [
+        {
+          "id": "course-node-001-ch1",
+          "title": "Khởi đầu với Node.js",
+          "lessons": [
+            {
+              "id": "lesson-node-001",
+              "title": "Node.js và npm",
+              "type": "video",
+              "durationMin": 15,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-node-002",
+              "title": "Express và routing",
+              "type": "video",
+              "durationMin": 22,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-node-001-ch2",
+          "title": "API và dữ liệu",
+          "lessons": [
+            {
+              "id": "lesson-node-003",
+              "title": "Thiết kế REST API",
+              "type": "reading",
+              "durationMin": 18,
+              "conceptIds": [],
+              "reading": "Bài đọc này tóm tắt các ý chính của chủ đề, kèm ví dụ ngắn và lưu ý thường gặp. Đọc kỹ từng phần, chạy lại ví dụ trên máy của bạn, rồi làm quiz cuối bài để kiểm tra mức độ hiểu.",
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-node-004",
+              "title": "Kết nối PostgreSQL",
+              "type": "video",
+              "durationMin": 25,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-node-005",
+              "title": "Xác thực JWT",
+              "type": "video",
+              "durationMin": 24,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 104,
+      "defaultOrder": [
+        "lesson-node-001",
+        "lesson-node-002",
+        "lesson-node-003",
+        "lesson-node-004",
+        "lesson-node-005"
+      ],
+      "entryTest": {
+        "id": "course-node-001-entry",
+        "title": "Bài kiểm tra đầu vào",
+        "isEntryTest": true,
+        "questions": [
+          {
+            "id": "jq-async-0",
+            "conceptId": "j-async",
+            "text": "await chỉ dùng được trong?",
+            "options": [
+              "Mọi hàm",
+              "Hàm async (hoặc module cấp cao nhất)",
+              "Vòng lặp for",
+              "Câu lệnh if"
+            ],
+            "correctIndex": 1,
+            "explanation": "await cần ngữ cảnh async."
+          },
+          {
+            "id": "jq-async-1",
+            "conceptId": "j-async",
+            "text": "Promise ở trạng thái nào sau khi lỗi?",
+            "options": [
+              "fulfilled",
+              "rejected",
+              "pending",
+              "settled-ok"
+            ],
+            "correctIndex": 1,
+            "explanation": "Lỗi chuyển Promise sang rejected."
+          },
+          {
+            "id": "jq-async-2",
+            "conceptId": "j-async",
+            "text": "Bắt lỗi khi dùng await?",
+            "options": [
+              "if/else",
+              "try/catch",
+              "switch",
+              "Không bắt được"
+            ],
+            "correctIndex": 1,
+            "explanation": "Bọc trong try/catch."
+          }
+        ]
+      },
+      "aiPath": [],
+      "pathUpdates": []
+    },
+    {
+      "concepts": [],
+      "prerequisites": [],
+      "id": "course-python-001",
+      "slug": "python-phan-tich-du-lieu",
+      "title": "Python cho phân tích dữ liệu",
+      "summary": "Làm sạch, phân tích và trực quan hoá dữ liệu với Python, pandas và matplotlib.",
+      "categoryId": "cat-data",
+      "level": "Beginner",
+      "lecturerId": "usr-lecturer-002",
+      "price": 890000,
+      "proposedPrice": 890000,
+      "status": "published",
+      "rating": 4.5,
+      "ratingCount": 64,
+      "ratingBreakdown": [
+        40,
+        15,
+        6,
+        2,
+        1
+      ],
+      "learnersCount": 610,
+      "hue": 220,
+      "outcomes": [
+        "Đọc và làm sạch dữ liệu",
+        "Phân tích với pandas",
+        "Vẽ biểu đồ với matplotlib"
+      ],
+      "requirements": [
+        "Không cần kinh nghiệm"
+      ],
+      "chapters": [
+        {
+          "id": "course-python-001-ch1",
+          "title": "Python cơ bản",
+          "lessons": [
+            {
+              "id": "lesson-py-001",
+              "title": "Cú pháp Python",
+              "type": "video",
+              "durationMin": 18,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-py-002",
+              "title": "Cấu trúc dữ liệu",
+              "type": "reading",
+              "durationMin": 16,
+              "conceptIds": [],
+              "reading": "Bài đọc này tóm tắt các ý chính của chủ đề, kèm ví dụ ngắn và lưu ý thường gặp. Đọc kỹ từng phần, chạy lại ví dụ trên máy của bạn, rồi làm quiz cuối bài để kiểm tra mức độ hiểu.",
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-python-001-ch2",
+          "title": "pandas",
+          "lessons": [
+            {
+              "id": "lesson-py-003",
+              "title": "DataFrame",
+              "type": "video",
+              "durationMin": 24,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-py-004",
+              "title": "Làm sạch dữ liệu",
+              "type": "video",
+              "durationMin": 26,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-py-005",
+              "title": "Trực quan hoá",
+              "type": "pdf",
+              "durationMin": 20,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 104,
+      "defaultOrder": [
+        "lesson-py-001",
+        "lesson-py-002",
+        "lesson-py-003",
+        "lesson-py-004",
+        "lesson-py-005"
+      ],
+      "entryTest": {
+        "id": "course-python-001-entry",
+        "title": "Bài kiểm tra đầu vào",
+        "isEntryTest": true,
+        "questions": [
+          {
+            "id": "jq-var-0",
+            "conceptId": "j-var",
+            "text": "Khai báo nào không thể gán lại?",
+            "options": [
+              "var",
+              "let",
+              "const",
+              "Tất cả"
+            ],
+            "correctIndex": 2,
+            "explanation": "const không cho gán lại tham chiếu."
+          },
+          {
+            "id": "jq-var-1",
+            "conceptId": "j-var",
+            "text": "Phạm vi của let là?",
+            "options": [
+              "Toàn cục",
+              "Hàm",
+              "Khối {}",
+              "Tệp"
+            ],
+            "correctIndex": 2,
+            "explanation": "let có phạm vi khối."
+          },
+          {
+            "id": "jq-var-2",
+            "conceptId": "j-var",
+            "text": "typeof null trả về?",
+            "options": [
+              "\"null\"",
+              "\"object\"",
+              "\"undefined\"",
+              "\"number\""
+            ],
+            "correctIndex": 1,
+            "explanation": "Đây là một đặc điểm lịch sử của JavaScript."
+          }
+        ]
+      },
+      "aiPath": [],
+      "pathUpdates": []
+    },
+    {
+      "concepts": [],
+      "prerequisites": [],
+      "id": "course-git-001",
+      "slug": "git-github-cho-nguoi-moi",
+      "title": "Git & GitHub cho người mới",
+      "summary": "Quản lý phiên bản mã nguồn với Git và cộng tác trên GitHub qua pull request.",
+      "categoryId": "cat-tools",
+      "level": "Beginner",
+      "lecturerId": "usr-lecturer-002",
+      "price": 0,
+      "proposedPrice": 0,
+      "status": "published",
+      "rating": 4.9,
+      "ratingCount": 410,
+      "ratingBreakdown": [
+        370,
+        30,
+        7,
+        2,
+        1
+      ],
+      "learnersCount": 5210,
+      "hue": 15,
+      "outcomes": [
+        "Dùng Git hằng ngày",
+        "Làm việc với nhánh",
+        "Tạo pull request"
+      ],
+      "requirements": [
+        "Không yêu cầu"
+      ],
+      "chapters": [
+        {
+          "id": "course-git-001-ch1",
+          "title": "Git cơ bản",
+          "lessons": [
+            {
+              "id": "lesson-git-001",
+              "title": "Commit đầu tiên",
+              "type": "video",
+              "durationMin": 12,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-git-002",
+              "title": "Nhánh và merge",
+              "type": "video",
+              "durationMin": 16,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        },
+        {
+          "id": "course-git-001-ch2",
+          "title": "GitHub",
+          "lessons": [
+            {
+              "id": "lesson-git-003",
+              "title": "Pull request",
+              "type": "video",
+              "durationMin": 14,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 42,
+      "defaultOrder": [
+        "lesson-git-001",
+        "lesson-git-002",
+        "lesson-git-003"
+      ],
+      "entryTest": null,
+      "aiPath": [],
+      "pathUpdates": []
+    },
+    {
+      "concepts": [],
+      "prerequisites": [],
+      "id": "course-ts-001",
+      "slug": "typescript-chuyen-sau",
+      "title": "TypeScript chuyên sâu",
+      "summary": "",
+      "categoryId": "cat-frontend",
+      "level": "Advanced",
+      "lecturerId": "usr-lecturer-001",
+      "price": 0,
+      "proposedPrice": null,
+      "status": "draft",
+      "rating": 0,
+      "ratingCount": 0,
+      "ratingBreakdown": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "learnersCount": 0,
+      "hue": 205,
+      "outcomes": [],
+      "requirements": [],
+      "chapters": [
+        {
+          "id": "course-ts-001-ch1",
+          "title": "Hệ thống kiểu",
+          "lessons": [
+            {
+              "id": "lesson-ts-001",
+              "title": "Kiểu cơ bản và suy luận kiểu",
+              "type": "video",
+              "durationMin": 18,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 18,
+      "defaultOrder": [
+        "lesson-ts-001"
+      ],
+      "entryTest": null,
+      "aiPath": [],
+      "pathUpdates": []
+    },
+    {
+      "concepts": [],
+      "prerequisites": [],
+      "id": "course-next-001",
+      "slug": "nextjs-app-router-thuc-chien",
+      "title": "Next.js App Router thực chiến",
+      "summary": "Xây dựng ứng dụng Next.js với App Router, Server Components và triển khai lên Vercel.",
+      "categoryId": "cat-frontend",
+      "level": "Advanced",
+      "lecturerId": "usr-lecturer-001",
+      "price": 0,
+      "proposedPrice": 1490000,
+      "status": "pending",
+      "submittedAt": "2026-10-08T14:20:00Z",
+      "rating": 0,
+      "ratingCount": 0,
+      "ratingBreakdown": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "learnersCount": 0,
+      "hue": 260,
+      "outcomes": [
+        "Hiểu Server và Client Components",
+        "Định tuyến với App Router",
+        "Triển khai lên Vercel"
+      ],
+      "requirements": [
+        "Đã học React"
+      ],
+      "chapters": [
+        {
+          "id": "course-next-001-ch1",
+          "title": "App Router",
+          "lessons": [
+            {
+              "id": "lesson-next-001",
+              "title": "Cấu trúc thư mục app/",
+              "type": "video",
+              "durationMin": 15,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null,
+              "material": {
+                "fileName": "app-router-cau-truc.pdf",
+                "kind": "pdf",
+                "pages": 18
+              }
+            },
+            {
+              "id": "lesson-next-002",
+              "title": "Server Components",
+              "type": "video",
+              "durationMin": 22,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": {
+                "id": "lesson-next-002-quiz",
+                "passingScore": 70,
+                "questions": [
+                  {
+                    "id": "nq-1",
+                    "conceptId": null,
+                    "text": "Server Component mặc định chạy ở đâu?",
+                    "options": [
+                      "Trên máy chủ",
+                      "Trên trình duyệt",
+                      "Trong Service Worker",
+                      "Trong Edge Function"
+                    ],
+                    "correctIndex": 0,
+                    "explanation": "Trong App Router, component mặc định là Server Component."
+                  },
+                  {
+                    "id": "nq-2",
+                    "conceptId": null,
+                    "text": "Muốn dùng useState trong một component, cần làm gì?",
+                    "options": [
+                      "Thêm \"use client\" ở đầu tệp",
+                      "Đổi tên tệp thành .client.js",
+                      "Không cần làm gì",
+                      "Bọc trong Suspense"
+                    ],
+                    "correctIndex": 2,
+                    "explanation": "Cần chỉ thị \"use client\" mới dùng được hook."
+                  },
+                  {
+                    "id": "nq-3",
+                    "conceptId": null,
+                    "text": "Server Component có thể đọc trực tiếp cơ sở dữ liệu không?",
+                    "options": [
+                      "Có",
+                      "Không"
+                    ],
+                    "correctIndex": 0,
+                    "explanation": "Server Component chạy trên máy chủ nên truy cập được dữ liệu."
+                  }
+                ]
+              },
+              "assignment": null,
+              "code": null,
+              "material": {
+                "fileName": "server-components.pptx",
+                "kind": "pptx",
+                "pages": 24
+              }
+            }
+          ]
+        },
+        {
+          "id": "course-next-001-ch2",
+          "title": "Dữ liệu & triển khai",
+          "lessons": [
+            {
+              "id": "lesson-next-003",
+              "title": "Data fetching và cache",
+              "type": "reading",
+              "durationMin": 20,
+              "conceptIds": [],
+              "reading": "Bài đọc này tóm tắt các ý chính của chủ đề, kèm ví dụ ngắn và lưu ý thường gặp. Đọc kỹ từng phần, chạy lại ví dụ trên máy của bạn, rồi làm quiz cuối bài để kiểm tra mức độ hiểu.",
+              "quiz": null,
+              "assignment": {
+                "maxScore": 10,
+                "passScore": 5,
+                "acceptedTypes": "",
+                "dueDays": 7,
+                "latePolicy": "penalty",
+                "latePenalty": 20,
+                "rubric": [],
+                "instructions": "Viết trang /posts lấy danh sách bài viết bằng fetch trong Server Component, có cache 60 giây. Nộp đường dẫn GitHub.",
+                "requiresFile": false,
+                "requiresLink": true
+              },
+              "code": null
+            },
+            {
+              "id": "lesson-next-004",
+              "title": "Triển khai lên Vercel",
+              "type": "video",
+              "durationMin": 12,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null,
+              "material": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 69,
+      "defaultOrder": [
+        "lesson-next-001",
+        "lesson-next-002",
+        "lesson-next-003",
+        "lesson-next-004"
+      ],
+      "entryTest": {
+        "id": "course-next-001-entry",
+        "title": "Bài kiểm tra đầu vào",
+        "isEntryTest": true,
+        "questions": [
+          {
+            "id": "rq-comp-0",
+            "conceptId": "c-component",
+            "text": "Tên component React nên bắt đầu bằng?",
+            "options": [
+              "Chữ thường",
+              "Chữ hoa",
+              "Dấu gạch dưới",
+              "Ký tự $"
+            ],
+            "correctIndex": 1,
+            "explanation": "React coi thẻ chữ thường là thẻ HTML, chữ hoa là component."
+          },
+          {
+            "id": "rq-comp-1",
+            "conceptId": "c-component",
+            "text": "Function component trả về gì?",
+            "options": [
+              "Một chuỗi HTML",
+              "JSX (phần tử React)",
+              "Một đối tượng DOM",
+              "Một Promise"
+            ],
+            "correctIndex": 1,
+            "explanation": "Function component trả về phần tử React, thường viết bằng JSX."
+          },
+          {
+            "id": "rq-comp-2",
+            "conceptId": "c-component",
+            "text": "Lợi ích chính của việc tách component?",
+            "options": [
+              "Chạy nhanh hơn trên server",
+              "Tái sử dụng và dễ bảo trì",
+              "Không cần CSS",
+              "Tự động tối ưu SEO"
+            ],
+            "correctIndex": 1,
+            "explanation": "Component nhỏ, độc lập giúp tái sử dụng và kiểm thử dễ hơn."
+          },
+          {
+            "id": "rq-router-0",
+            "conceptId": "c-router",
+            "text": "React Router dùng để?",
+            "options": [
+              "Gọi API",
+              "Điều hướng giữa các trang trong SPA",
+              "Quản lý state toàn cục",
+              "Viết test"
+            ],
+            "correctIndex": 1,
+            "explanation": "Router ánh xạ URL tới component."
+          },
+          {
+            "id": "rq-router-1",
+            "conceptId": "c-router",
+            "text": "Thành phần dùng để tạo liên kết không tải lại trang?",
+            "options": [
+              "<a>",
+              "<Link>",
+              "<Route>",
+              "<Nav>"
+            ],
+            "correctIndex": 1,
+            "explanation": "<Link> điều hướng phía client."
+          },
+          {
+            "id": "rq-router-2",
+            "conceptId": "c-router",
+            "text": "Đọc tham số :id từ URL dùng hook nào?",
+            "options": [
+              "useState",
+              "useParams",
+              "useEffect",
+              "useId"
+            ],
+            "correctIndex": 1,
+            "explanation": "useParams trả về các tham số động của route."
+          }
+        ]
+      },
+      "aiPath": [],
+      "pathUpdates": []
+    },
+    {
+      "concepts": [],
+      "prerequisites": [],
+      "id": "course-solid-001",
+      "slug": "clean-code-solid-javascript",
+      "title": "Clean Code & SOLID trong JavaScript",
+      "summary": "Viết mã dễ đọc, dễ bảo trì với các nguyên tắc SOLID.",
+      "categoryId": "cat-frontend",
+      "level": "Intermediate",
+      "lecturerId": "usr-lecturer-001",
+      "price": 0,
+      "proposedPrice": 790000,
+      "status": "rejected",
+      "submittedAt": "2026-09-28T10:00:00Z",
+      "rejectReason": "Bài 2 và bài 3 thiếu tài liệu (video chưa tải lên). Bài kiểm tra đầu vào chỉ có 2 câu, chưa đủ để xếp lộ trình — vui lòng bổ sung ít nhất 6 câu.",
+      "rating": 0,
+      "ratingCount": 0,
+      "ratingBreakdown": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "learnersCount": 0,
+      "hue": 330,
+      "outcomes": [
+        "Đặt tên rõ ràng",
+        "Áp dụng SOLID"
+      ],
+      "requirements": [
+        "JavaScript cơ bản"
+      ],
+      "chapters": [
+        {
+          "id": "course-solid-001-ch1",
+          "title": "Clean Code",
+          "lessons": [
+            {
+              "id": "lesson-solid-001",
+              "title": "Đặt tên có ý nghĩa",
+              "type": "video",
+              "durationMin": 14,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null,
+              "material": {
+                "fileName": "dat-ten.mp4",
+                "kind": "video",
+                "pages": null
+              }
+            },
+            {
+              "id": "lesson-solid-002",
+              "title": "Hàm nhỏ và một nhiệm vụ",
+              "type": "video",
+              "durationMin": 16,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-solid-003",
+              "title": "Nguyên tắc SOLID",
+              "type": "pdf",
+              "durationMin": 20,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 50,
+      "defaultOrder": [
+        "lesson-solid-001",
+        "lesson-solid-002",
+        "lesson-solid-003"
+      ],
+      "entryTest": {
+        "id": "course-solid-001-entry",
+        "title": "Bài kiểm tra đầu vào",
+        "isEntryTest": true,
+        "questions": [
+          {
+            "id": "jq-func-0",
+            "conceptId": "j-func",
+            "text": "Arrow function khác function thường ở điểm nào?",
+            "options": [
+              "Không có this riêng",
+              "Chạy nhanh hơn",
+              "Không nhận tham số",
+              "Không trả về giá trị"
+            ],
+            "correctIndex": 0,
+            "explanation": "Arrow function dùng this của phạm vi bao ngoài."
+          },
+          {
+            "id": "jq-func-1",
+            "conceptId": "j-func",
+            "text": "Giá trị trả về mặc định của hàm không có return?",
+            "options": [
+              "null",
+              "0",
+              "undefined",
+              "\"\""
+            ],
+            "correctIndex": 2,
+            "explanation": "Hàm không return trả về undefined."
+          }
+        ]
+      },
+      "aiPath": [],
+      "pathUpdates": []
+    },
+    {
+      "concepts": [],
+      "prerequisites": [],
+      "id": "course-jest-001",
+      "slug": "kiem-thu-voi-jest",
+      "title": "Kiểm thử JavaScript với Jest",
+      "summary": "Viết unit test và integration test cho ứng dụng JavaScript với Jest.",
+      "categoryId": "cat-tools",
+      "level": "Intermediate",
+      "lecturerId": "usr-lecturer-001",
+      "price": 690000,
+      "proposedPrice": 690000,
+      "status": "hidden",
+      "hideReason": "Nội dung bài 3 dùng phiên bản Jest đã ngừng hỗ trợ; tạm ẩn đến khi giảng viên cập nhật.",
+      "rating": 4.2,
+      "ratingCount": 21,
+      "ratingBreakdown": [
+        10,
+        6,
+        3,
+        1,
+        1
+      ],
+      "learnersCount": 186,
+      "hue": 100,
+      "outcomes": [
+        "Viết unit test",
+        "Mock và spy"
+      ],
+      "requirements": [
+        "JavaScript cơ bản"
+      ],
+      "chapters": [
+        {
+          "id": "course-jest-001-ch1",
+          "title": "Jest cơ bản",
+          "lessons": [
+            {
+              "id": "lesson-jest-001",
+              "title": "Cài đặt Jest",
+              "type": "video",
+              "durationMin": 10,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-jest-002",
+              "title": "Matcher",
+              "type": "video",
+              "durationMin": 15,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            },
+            {
+              "id": "lesson-jest-003",
+              "title": "Mock",
+              "type": "video",
+              "durationMin": 18,
+              "conceptIds": [],
+              "reading": null,
+              "quiz": null,
+              "assignment": null,
+              "code": null
+            }
+          ]
+        }
+      ],
+      "durationMin": 43,
+      "defaultOrder": [
+        "lesson-jest-001",
+        "lesson-jest-002",
+        "lesson-jest-003"
+      ],
+      "entryTest": {
+        "id": "course-jest-001-entry",
+        "title": "Bài kiểm tra đầu vào",
+        "isEntryTest": true,
+        "questions": [
+          {
+            "id": "jq-func-0",
+            "conceptId": "j-func",
+            "text": "Arrow function khác function thường ở điểm nào?",
+            "options": [
+              "Không có this riêng",
+              "Chạy nhanh hơn",
+              "Không nhận tham số",
+              "Không trả về giá trị"
+            ],
+            "correctIndex": 0,
+            "explanation": "Arrow function dùng this của phạm vi bao ngoài."
+          },
+          {
+            "id": "jq-func-1",
+            "conceptId": "j-func",
+            "text": "Giá trị trả về mặc định của hàm không có return?",
+            "options": [
+              "null",
+              "0",
+              "undefined",
+              "\"\""
+            ],
+            "correctIndex": 2,
+            "explanation": "Hàm không return trả về undefined."
+          },
+          {
+            "id": "jq-func-2",
+            "conceptId": "j-func",
+            "text": "Closure là gì?",
+            "options": [
+              "Một vòng lặp",
+              "Hàm ghi nhớ biến của phạm vi tạo ra nó",
+              "Một kiểu dữ liệu",
+              "Một lỗi"
+            ],
+            "correctIndex": 1,
+            "explanation": "Closure giữ tham chiếu tới biến bên ngoài."
+          }
+        ]
+      },
+      "aiPath": [],
+      "pathUpdates": []
+    }
+  ],
+  "knowledgeMaps": {
+    "course-react-001": {
+      "status": "confirmed",
+      "updatedAt": "2026-10-07T10:00:00Z",
+      "concepts": [
+        {
+          "id": "c-jsx",
+          "name": "JSX",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-001",
+            "lesson-react-002"
+          ]
+        },
+        {
+          "id": "c-component",
+          "name": "Component",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-003"
+          ]
+        },
+        {
+          "id": "c-props",
+          "name": "Props",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-004"
+          ]
+        },
+        {
+          "id": "c-state",
+          "name": "State (useState)",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-005",
+            "lesson-react-p01",
+            "lesson-react-012"
+          ]
+        },
+        {
+          "id": "c-event",
+          "name": "Sự kiện & Form",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-006"
+          ]
+        },
+        {
+          "id": "c-list",
+          "name": "Danh sách & key",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-007"
+          ]
+        },
+        {
+          "id": "c-effect",
+          "name": "useEffect",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-008"
+          ]
+        },
+        {
+          "id": "c-fetch",
+          "name": "Gọi API",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-009",
+            "lesson-react-012"
+          ]
+        },
+        {
+          "id": "c-router",
+          "name": "React Router",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-010",
+            "lesson-react-012"
+          ]
+        },
+        {
+          "id": "c-context",
+          "name": "Context API",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-react-011"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "review": "accepted",
+          "from": "c-jsx",
+          "to": "c-component"
+        },
+        {
+          "review": "accepted",
+          "from": "c-component",
+          "to": "c-props"
+        },
+        {
+          "review": "accepted",
+          "from": "c-props",
+          "to": "c-state"
+        },
+        {
+          "review": "accepted",
+          "from": "c-state",
+          "to": "c-event"
+        },
+        {
+          "review": "accepted",
+          "from": "c-state",
+          "to": "c-list"
+        },
+        {
+          "review": "accepted",
+          "from": "c-state",
+          "to": "c-effect"
+        },
+        {
+          "review": "accepted",
+          "from": "c-effect",
+          "to": "c-fetch"
+        },
+        {
+          "review": "accepted",
+          "from": "c-component",
+          "to": "c-router"
+        },
+        {
+          "review": "accepted",
+          "from": "c-props",
+          "to": "c-context"
+        }
+      ]
+    },
+    "course-js-001": {
+      "status": "confirmed",
+      "updatedAt": "2026-10-07T10:00:00Z",
+      "concepts": [
+        {
+          "id": "j-var",
+          "name": "Biến & kiểu dữ liệu",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-js-001"
+          ]
+        },
+        {
+          "id": "j-func",
+          "name": "Hàm",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-js-002"
+          ]
+        },
+        {
+          "id": "j-array",
+          "name": "Mảng",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-js-003",
+            "lesson-js-p01",
+            "lesson-js-p02"
+          ]
+        },
+        {
+          "id": "j-object",
+          "name": "Đối tượng",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-js-004"
+          ]
+        },
+        {
+          "id": "j-dom",
+          "name": "DOM & sự kiện",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-js-005",
+            "lesson-js-006",
+            "lesson-js-009"
+          ]
+        },
+        {
+          "id": "j-async",
+          "name": "Bất đồng bộ",
+          "review": "accepted",
+          "lessonIds": [
+            "lesson-js-007",
+            "lesson-js-008",
+            "lesson-js-009"
+          ]
+        },
+        {
+          "id": "j-closure",
+          "name": "Closure",
+          "review": "accepted",
+          "lessonIds": []
+        },
+        {
+          "id": "j-error",
+          "name": "Xử lý lỗi",
+          "review": "accepted",
+          "lessonIds": []
+        },
+        {
+          "id": "j-module",
+          "name": "Module & ES6",
+          "review": "accepted",
+          "lessonIds": []
+        },
+        {
+          "id": "j-spread",
+          "name": "Spread & Destructuring",
+          "review": "accepted",
+          "lessonIds": []
+        },
+        {
+          "id": "j-template",
+          "name": "Template Literal",
+          "review": "accepted",
+          "lessonIds": []
+        },
+        {
+          "id": "j-regex",
+          "name": "Regular Expression",
+          "review": "accepted",
+          "lessonIds": []
+        }
+      ],
+      "edges": [
+        {
+          "review": "accepted",
+          "from": "j-var",
+          "to": "j-func"
+        },
+        {
+          "review": "accepted",
+          "from": "j-func",
+          "to": "j-closure"
+        },
+        {
+          "review": "accepted",
+          "from": "j-func",
+          "to": "j-array"
+        },
+        {
+          "review": "accepted",
+          "from": "j-func",
+          "to": "j-object"
+        },
+        {
+          "review": "accepted",
+          "from": "j-array",
+          "to": "j-spread"
+        },
+        {
+          "review": "accepted",
+          "from": "j-object",
+          "to": "j-spread"
+        },
+        {
+          "review": "accepted",
+          "from": "j-object",
+          "to": "j-dom"
+        },
+        {
+          "review": "accepted",
+          "from": "j-func",
+          "to": "j-async"
+        },
+        {
+          "review": "accepted",
+          "from": "j-async",
+          "to": "j-error"
+        },
+        {
+          "review": "accepted",
+          "from": "j-var",
+          "to": "j-template"
+        },
+        {
+          "review": "accepted",
+          "from": "j-var",
+          "to": "j-regex"
+        },
+        {
+          "review": "accepted",
+          "from": "j-func",
+          "to": "j-module"
+        }
+      ]
+    },
+    "course-next-001": {
+      "status": "confirmed",
+      "updatedAt": "2026-10-08T09:00:00Z",
+      "concepts": [
+        {
+          "id": "n-app",
+          "name": "App Router",
+          "lessonIds": [
+            "lesson-next-001"
+          ],
+          "review": "accepted"
+        },
+        {
+          "id": "n-rsc",
+          "name": "Server Components",
+          "lessonIds": [
+            "lesson-next-002"
+          ],
+          "review": "accepted"
+        },
+        {
+          "id": "n-data",
+          "name": "Data fetching & cache",
+          "lessonIds": [
+            "lesson-next-003"
+          ],
+          "review": "accepted"
+        },
+        {
+          "id": "n-deploy",
+          "name": "Triển khai",
+          "lessonIds": [
+            "lesson-next-004"
+          ],
+          "review": "accepted"
+        }
+      ],
+      "edges": [
+        {
+          "from": "n-app",
+          "to": "n-rsc",
+          "review": "accepted"
+        },
+        {
+          "from": "n-rsc",
+          "to": "n-data",
+          "review": "accepted"
+        }
+      ]
+    },
+    "course-ts-001": {
+      "status": "ready",
+      "updatedAt": "2026-10-10T16:00:00Z",
+      "concepts": [
+        {
+          "id": "t-basic",
+          "name": "Kiểu cơ bản",
+          "lessonIds": [
+            "lesson-ts-001"
+          ],
+          "review": "suggested"
+        },
+        {
+          "id": "t-infer",
+          "name": "Suy luận kiểu",
+          "lessonIds": [
+            "lesson-ts-001"
+          ],
+          "review": "suggested"
+        },
+        {
+          "id": "t-generic",
+          "name": "Generics",
+          "lessonIds": [],
+          "review": "suggested"
+        },
+        {
+          "id": "t-utility",
+          "name": "Utility Types",
+          "lessonIds": [],
+          "review": "suggested"
+        },
+        {
+          "id": "t-adv",
+          "name": "Nâng cao",
+          "lessonIds": [],
+          "review": "suggested"
+        },
+        {
+          "id": "t-test",
+          "name": "Kiểm thử Type",
+          "lessonIds": [],
+          "review": "suggested"
+        }
+      ],
+      "edges": [
+        {
+          "from": "t-basic",
+          "to": "t-infer",
+          "review": "suggested"
+        },
+        {
+          "from": "t-infer",
+          "to": "t-generic",
+          "review": "suggested"
+        },
+        {
+          "from": "t-generic",
+          "to": "t-utility",
+          "review": "suggested"
+        },
+        {
+          "from": "t-utility",
+          "to": "t-adv",
+          "review": "suggested"
+        },
+        {
+          "from": "t-adv",
+          "to": "t-test",
+          "review": "suggested"
+        },
+        {
+          "from": "t-test",
+          "to": "t-basic",
+          "review": "suggested"
+        }
+      ]
+    },
+    "course-solid-001": {
+      "status": "stale",
+      "updatedAt": "2026-09-27T10:00:00Z",
+      "concepts": [
+        {
+          "id": "s-name",
+          "name": "Đặt tên",
+          "lessonIds": [
+            "lesson-solid-001"
+          ],
+          "review": "accepted"
+        },
+        {
+          "id": "s-func",
+          "name": "Hàm nhỏ",
+          "lessonIds": [
+            "lesson-solid-002"
+          ],
+          "review": "accepted"
+        },
+        {
+          "id": "s-solid",
+          "name": "SOLID",
+          "lessonIds": [
+            "lesson-solid-003"
+          ],
+          "review": "accepted"
+        }
+      ],
+      "edges": [
+        {
+          "from": "s-name",
+          "to": "s-func",
+          "review": "accepted"
+        },
+        {
+          "from": "s-func",
+          "to": "s-solid",
+          "review": "accepted"
+        }
+      ]
+    },
+    "course-jest-001": {
+      "status": "confirmed",
+      "updatedAt": "2026-07-01T10:00:00Z",
+      "concepts": [],
+      "edges": []
+    }
+  },
+  "orders": [
+    {
+      "id": "order-10231",
+      "code": "CODI10231",
+      "userId": "usr-learner-001",
+      "items": [
+        {
+          "courseId": "course-js-001",
+          "price": 590000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 590000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-08-16T09:10:00Z",
+      "paidAt": "2026-08-16T09:12:00Z",
+      "content": "CODI10231",
+      "timeline": [
+        {
+          "at": "2026-08-16T09:10:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-08-16T09:12:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10244",
+      "code": "CODI10244",
+      "userId": "usr-learner-002",
+      "items": [
+        {
+          "courseId": "course-react-001",
+          "price": 1290000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 1290000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-09-02T20:01:00Z",
+      "paidAt": "2026-09-02T20:04:00Z",
+      "content": "CODI10244",
+      "timeline": [
+        {
+          "at": "2026-09-02T20:01:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-02T20:04:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10251",
+      "code": "CODI10251",
+      "userId": "usr-learner-003",
+      "items": [
+        {
+          "courseId": "course-react-001",
+          "price": 1290000
+        },
+        {
+          "courseId": "course-js-001",
+          "price": 590000
+        }
+      ],
+      "voucherCode": "WELCOME20",
+      "discount": 376000,
+      "total": 1504000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-09-05T11:20:00Z",
+      "paidAt": "2026-09-05T11:31:00Z",
+      "content": "CODI10251",
+      "timeline": [
+        {
+          "at": "2026-09-05T11:20:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-05T11:31:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10262",
+      "code": "CODI10262",
+      "userId": "usr-learner-005",
+      "items": [
+        {
+          "courseId": "course-react-001",
+          "price": 1290000
+        }
+      ],
+      "voucherCode": "REACT10",
+      "discount": 129000,
+      "total": 1161000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-09-12T08:00:00Z",
+      "paidAt": "2026-09-12T08:02:00Z",
+      "content": "CODI10262",
+      "timeline": [
+        {
+          "at": "2026-09-12T08:00:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-12T08:02:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10270",
+      "code": "CODI10270",
+      "userId": "usr-learner-006",
+      "items": [
+        {
+          "courseId": "course-node-001",
+          "price": 990000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 990000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "failed",
+      "createdAt": "2026-09-18T15:00:00Z",
+      "paidAt": null,
+      "content": "CODI10270",
+      "timeline": [
+        {
+          "at": "2026-09-18T15:00:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-18T18:00:00Z",
+          "label": "Thanh toán thất bại (sai nội dung chuyển khoản)"
+        }
+      ]
+    },
+    {
+      "id": "order-10275",
+      "code": "CODI10275",
+      "userId": "usr-learner-006",
+      "items": [
+        {
+          "courseId": "course-react-001",
+          "price": 1290000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 1290000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-09-19T09:00:00Z",
+      "paidAt": "2026-09-19T09:05:00Z",
+      "content": "CODI10275",
+      "timeline": [
+        {
+          "at": "2026-09-19T09:00:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-19T09:05:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10281",
+      "code": "CODI10281",
+      "userId": "usr-learner-007",
+      "items": [
+        {
+          "courseId": "course-python-001",
+          "price": 890000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 890000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "cancelled",
+      "createdAt": "2026-09-24T13:00:00Z",
+      "paidAt": null,
+      "content": "CODI10281",
+      "timeline": [
+        {
+          "at": "2026-09-24T13:00:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-24T13:10:00Z",
+          "label": "Người mua đã huỷ"
+        }
+      ]
+    },
+    {
+      "id": "order-10288",
+      "code": "CODI10288",
+      "userId": "usr-learner-007",
+      "items": [
+        {
+          "courseId": "course-js-001",
+          "price": 590000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 590000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-09-26T10:00:00Z",
+      "paidAt": "2026-09-26T10:03:00Z",
+      "content": "CODI10288",
+      "timeline": [
+        {
+          "at": "2026-09-26T10:00:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-26T10:03:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10293",
+      "code": "CODI10293",
+      "userId": "usr-learner-008",
+      "items": [
+        {
+          "courseId": "course-jest-001",
+          "price": 690000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 690000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "refunded",
+      "createdAt": "2026-09-29T18:00:00Z",
+      "paidAt": "2026-09-29T18:02:00Z",
+      "content": "CODI10293",
+      "timeline": [
+        {
+          "at": "2026-09-29T18:00:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-09-29T18:02:00Z",
+          "label": "Đã nhận tiền"
+        },
+        {
+          "at": "2026-10-06T10:00:00Z",
+          "label": "Đã hoàn tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10301",
+      "code": "CODI10301",
+      "userId": "usr-learner-003",
+      "items": [
+        {
+          "courseId": "course-node-001",
+          "price": 990000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 990000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "pending",
+      "createdAt": "2026-10-05T21:00:00Z",
+      "paidAt": null,
+      "content": "CODI10301",
+      "timeline": [
+        {
+          "at": "2026-10-05T21:00:00Z",
+          "label": "Đã tạo đơn"
+        }
+      ]
+    },
+    {
+      "id": "order-10307",
+      "code": "CODI10307",
+      "userId": "usr-learner-008",
+      "items": [
+        {
+          "courseId": "course-js-001",
+          "price": 590000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 590000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-10-07T07:40:00Z",
+      "paidAt": "2026-10-07T07:41:00Z",
+      "content": "CODI10307",
+      "timeline": [
+        {
+          "at": "2026-10-07T07:40:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-10-07T07:41:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10312",
+      "code": "CODI10312",
+      "userId": "usr-learner-009",
+      "items": [
+        {
+          "courseId": "course-react-001",
+          "price": 1290000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 1290000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-10-09T19:00:00Z",
+      "paidAt": "2026-10-09T19:06:00Z",
+      "content": "CODI10312",
+      "timeline": [
+        {
+          "at": "2026-10-09T19:00:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-10-09T19:06:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10318",
+      "code": "CODI10318",
+      "userId": "usr-learner-010",
+      "items": [
+        {
+          "courseId": "course-python-001",
+          "price": 890000
+        },
+        {
+          "courseId": "course-node-001",
+          "price": 990000
+        }
+      ],
+      "voucherCode": "WELCOME20",
+      "discount": 376000,
+      "total": 1504000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "paid",
+      "createdAt": "2026-10-10T20:15:00Z",
+      "paidAt": "2026-10-10T20:22:00Z",
+      "content": "CODI10318",
+      "timeline": [
+        {
+          "at": "2026-10-10T20:15:00Z",
+          "label": "Đã tạo đơn"
+        },
+        {
+          "at": "2026-10-10T20:22:00Z",
+          "label": "Đã nhận tiền"
+        }
+      ]
+    },
+    {
+      "id": "order-10322",
+      "code": "CODI10322",
+      "userId": "usr-learner-010",
+      "items": [
+        {
+          "courseId": "course-react-001",
+          "price": 1290000
+        }
+      ],
+      "voucherCode": null,
+      "discount": 0,
+      "total": 1290000,
+      "method": "Chuyển khoản ngân hàng",
+      "status": "pending",
+      "createdAt": "2026-10-11T07:50:00Z",
+      "paidAt": null,
+      "content": "CODI10322",
+      "timeline": [
+        {
+          "at": "2026-10-11T07:50:00Z",
+          "label": "Đã tạo đơn"
+        }
+      ]
+    }
+  ],
+  "vouchers": [
+    {
+      "id": "v-001",
+      "code": "WELCOME20",
+      "type": "percent",
+      "value": 20,
+      "minOrder": 500000,
+      "usageLimit": 500,
+      "used": 132,
+      "expiresAt": "2026-12-31",
+      "active": true,
+      "scope": "all"
+    },
+    {
+      "id": "v-002",
+      "code": "REACT10",
+      "type": "percent",
+      "value": 10,
+      "minOrder": 0,
+      "usageLimit": null,
+      "used": 41,
+      "expiresAt": null,
+      "active": true,
+      "scope": "all"
+    },
+    {
+      "id": "v-003",
+      "code": "GIAM100K",
+      "type": "amount",
+      "value": 100000,
+      "minOrder": 800000,
+      "usageLimit": 100,
+      "used": 100,
+      "expiresAt": "2026-11-30",
+      "active": true,
+      "scope": "all"
+    },
+    {
+      "id": "v-004",
+      "code": "SUMMER15",
+      "type": "percent",
+      "value": 15,
+      "minOrder": 0,
+      "usageLimit": 300,
+      "used": 287,
+      "expiresAt": "2026-08-31",
+      "active": false,
+      "scope": "all"
+    },
+    {
+      "id": "v-005",
+      "code": "BACKEND50K",
+      "type": "amount",
+      "value": 50000,
+      "minOrder": 0,
+      "usageLimit": null,
+      "used": 12,
+      "expiresAt": "2027-01-31",
+      "active": true,
+      "scope": "all"
+    }
+  ],
+  "bankInfo": {
+    "bank": "Vietcombank",
+    "accountNumber": "1029384756",
+    "accountName": "CONG TY CODI EDU"
+  },
+  "submissions": [
+    {
+      "id": "sub-001",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-005",
+      "userId": "usr-learner-005",
+      "submittedAt": "2026-10-10T22:10:00Z",
+      "status": "pending",
+      "fileName": null,
+      "link": "https://codesandbox.io/s/counter-haidang",
+      "note": "Em chặn giá trị âm bằng Math.max.",
+      "score": null,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "",
+      "gradedAt": null
+    },
+    {
+      "id": "sub-002",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-005",
+      "userId": "usr-learner-006",
+      "submittedAt": "2026-10-09T18:30:00Z",
+      "status": "pending",
+      "fileName": null,
+      "link": "https://github.com/quocanh/react-counter",
+      "note": "",
+      "score": null,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "",
+      "gradedAt": null
+    },
+    {
+      "id": "sub-003",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-009",
+      "userId": "usr-learner-002",
+      "submittedAt": "2026-10-08T20:00:00Z",
+      "status": "pending",
+      "fileName": "user-list.zip",
+      "link": null,
+      "note": "Chưa làm được nút Thử lại, em xin góp ý.",
+      "score": null,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "",
+      "gradedAt": null
+    },
+    {
+      "id": "sub-004",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-012",
+      "userId": "usr-learner-003",
+      "submittedAt": "2026-10-06T09:00:00Z",
+      "status": "graded",
+      "fileName": null,
+      "link": "https://github.com/thaolinh/todo-app",
+      "note": "",
+      "score": 9,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "Cấu trúc component rõ ràng, xử lý lỗi tốt. Có thể tách hook useTasks để gọn hơn.",
+      "gradedAt": "2026-10-07T08:00:00Z"
+    },
+    {
+      "id": "sub-005",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-009",
+      "userId": "usr-learner-003",
+      "submittedAt": "2026-09-30T09:00:00Z",
+      "status": "graded",
+      "fileName": "users-page.zip",
+      "link": null,
+      "note": "",
+      "score": 8,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "Tốt. Nên hiển thị skeleton thay vì chữ \"Loading\".",
+      "gradedAt": "2026-10-01T08:00:00Z"
+    },
+    {
+      "id": "sub-006",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-004",
+      "userId": "usr-learner-001",
+      "submittedAt": "2026-10-09T21:30:00Z",
+      "status": "pending",
+      "fileName": "tong-tien-khach-hang.js",
+      "link": null,
+      "note": "",
+      "score": null,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "",
+      "gradedAt": null
+    },
+    {
+      "id": "sub-007",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-002",
+      "userId": "usr-learner-007",
+      "submittedAt": "2026-10-04T15:00:00Z",
+      "status": "pending",
+      "fileName": null,
+      "link": "https://github.com/thihuong/format-price",
+      "note": "",
+      "score": null,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "",
+      "gradedAt": null
+    },
+    {
+      "id": "sub-008",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-002",
+      "userId": "usr-learner-001",
+      "submittedAt": "2026-08-25T20:00:00Z",
+      "status": "graded",
+      "fileName": null,
+      "link": "https://github.com/minhanh/format-price",
+      "note": "Em dùng toLocaleString.",
+      "score": 8.5,
+      "maxScore": 10,
+      "passScore": 5,
+      "feedback": "Làm tốt! Lưu ý xử lý số âm và giá trị không phải số — hàm hiện trả về \"NaN ₫\". Thêm một kiểm tra đầu vào là đạt điểm tối đa.",
+      "gradedAt": "2026-08-27T09:00:00Z"
+    }
+  ],
+  "questions": [
+    {
+      "id": "qa-001",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-005",
+      "userId": "usr-learner-005",
+      "text": "Vì sao gọi setCount hai lần liên tiếp mà giá trị chỉ tăng 1?",
+      "createdAt": "2026-10-10T20:00:00Z",
+      "status": "unanswered",
+      "replies": []
+    },
+    {
+      "id": "qa-002",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-008",
+      "userId": "usr-learner-002",
+      "text": "useEffect của em bị chạy hai lần khi dev, có phải lỗi không ạ?",
+      "createdAt": "2026-10-09T14:00:00Z",
+      "status": "unanswered",
+      "replies": []
+    },
+    {
+      "id": "qa-003",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-003",
+      "userId": "usr-learner-006",
+      "text": "Nên đặt mỗi component một file riêng không ạ?",
+      "createdAt": "2026-10-05T10:00:00Z",
+      "status": "answered",
+      "replies": [
+        {
+          "userId": "usr-lecturer-001",
+          "isLecturer": true,
+          "text": "Nên, với component dùng lại nhiều nơi. Component nhỏ chỉ dùng nội bộ có thể để chung file.",
+          "at": "2026-10-05T16:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "qa-004",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-009",
+      "userId": "usr-learner-003",
+      "text": "Khi API trả về 404 thì fetch có ném lỗi không?",
+      "createdAt": "2026-09-29T09:00:00Z",
+      "status": "answered",
+      "replies": [
+        {
+          "userId": "usr-lecturer-001",
+          "isLecturer": true,
+          "text": "Không. fetch chỉ reject khi lỗi mạng; bạn cần kiểm tra response.ok.",
+          "at": "2026-09-29T13:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "qa-005",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-005",
+      "userId": "usr-learner-007",
+      "text": "querySelectorAll trả về mảng hay gì ạ?",
+      "createdAt": "2026-10-08T19:00:00Z",
+      "status": "unanswered",
+      "replies": []
+    },
+    {
+      "id": "qa-006",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-003",
+      "userId": "usr-learner-001",
+      "text": "Khi nào nên dùng for...of thay vì forEach?",
+      "createdAt": "2026-09-10T20:00:00Z",
+      "status": "answered",
+      "replies": [
+        {
+          "userId": "usr-lecturer-001",
+          "isLecturer": true,
+          "text": "Dùng for...of khi cần break/continue hoặc await bên trong vòng lặp.",
+          "at": "2026-09-11T08:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "qa-007",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-005",
+      "userId": "usr-learner-003",
+      "text": "Có nên dùng innerHTML để thêm phần tử không?",
+      "createdAt": "2026-10-02T09:00:00Z",
+      "status": "unanswered",
+      "replies": [
+        {
+          "userId": "usr-learner-007",
+          "isLecturer": false,
+          "text": "Mình nghĩ nên tránh nếu nội dung đến từ người dùng.",
+          "at": "2026-10-02T11:00:00Z"
+        }
+      ]
+    }
+  ],
+  "reviews": [
+    {
+      "id": "rv-001",
+      "courseId": "course-react-001",
+      "userId": "usr-learner-003",
+      "stars": 5,
+      "text": "Dự án cuối khoá rất sát thực tế, lộ trình gợi ý giúp mình bỏ qua phần đã biết.",
+      "createdAt": "2026-10-07T09:00:00Z",
+      "reply": {
+        "text": "Cảm ơn Linh! Chúc bạn áp dụng tốt vào công việc.",
+        "at": "2026-10-07T15:00:00Z"
+      }
+    },
+    {
+      "id": "rv-002",
+      "courseId": "course-react-001",
+      "userId": "usr-learner-002",
+      "stars": 4,
+      "text": "Nội dung tốt, mong có thêm bài về tối ưu hiệu năng.",
+      "createdAt": "2026-10-03T21:00:00Z",
+      "reply": null
+    },
+    {
+      "id": "rv-003",
+      "courseId": "course-react-001",
+      "userId": "usr-learner-006",
+      "stars": 3,
+      "text": "Video phần useEffect hơi nhanh.",
+      "createdAt": "2026-10-01T08:00:00Z",
+      "reply": null
+    },
+    {
+      "id": "rv-004",
+      "courseId": "course-js-001",
+      "userId": "usr-learner-007",
+      "stars": 5,
+      "text": "Giải thích dễ hiểu, bài tập vừa sức.",
+      "createdAt": "2026-09-30T20:00:00Z",
+      "reply": {
+        "text": "Cảm ơn bạn đã học cùng Codi!",
+        "at": "2026-10-01T09:00:00Z"
+      }
+    },
+    {
+      "id": "rv-005",
+      "courseId": "course-js-001",
+      "userId": "usr-learner-003",
+      "stars": 5,
+      "text": "",
+      "createdAt": "2026-09-20T20:00:00Z",
+      "reply": null
+    },
+    {
+      "id": "rv-006",
+      "courseId": "course-js-001",
+      "userId": "usr-learner-008",
+      "stars": 4,
+      "text": "Phần bất đồng bộ cần thêm ví dụ.",
+      "createdAt": "2026-10-09T20:00:00Z",
+      "reply": null
+    },
+    {
+      "id": "rv-007",
+      "courseId": "course-git-001",
+      "userId": "usr-learner-002",
+      "stars": 5,
+      "text": "Ngắn gọn, đủ dùng.",
+      "createdAt": "2026-09-03T20:00:00Z",
+      "reply": null
+    },
+    {
+      "id": "rv-008",
+      "courseId": "course-node-001",
+      "userId": "usr-learner-010",
+      "stars": 4,
+      "text": "Phần JWT rất hữu ích.",
+      "createdAt": "2026-10-11T07:00:00Z",
+      "reply": null
+    }
+  ],
+  "enrolments": [
+    {
+      "userId": "usr-learner-001",
+      "courseId": "course-js-001",
+      "enrolledAt": "2026-08-16T09:12:00Z"
+    },
+    {
+      "userId": "usr-learner-002",
+      "courseId": "course-react-001",
+      "enrolledAt": "2026-09-02T20:04:00Z"
+    },
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-react-001",
+      "enrolledAt": "2026-09-05T11:31:00Z"
+    },
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-js-001",
+      "enrolledAt": "2026-09-05T11:31:00Z"
+    },
+    {
+      "userId": "usr-learner-005",
+      "courseId": "course-react-001",
+      "enrolledAt": "2026-09-12T08:02:00Z"
+    },
+    {
+      "userId": "usr-learner-006",
+      "courseId": "course-react-001",
+      "enrolledAt": "2026-09-19T09:05:00Z"
+    },
+    {
+      "userId": "usr-learner-007",
+      "courseId": "course-js-001",
+      "enrolledAt": "2026-09-26T10:03:00Z"
+    },
+    {
+      "userId": "usr-learner-008",
+      "courseId": "course-js-001",
+      "enrolledAt": "2026-10-07T07:41:00Z"
+    },
+    {
+      "userId": "usr-learner-009",
+      "courseId": "course-react-001",
+      "enrolledAt": "2026-10-09T19:06:00Z"
+    },
+    {
+      "userId": "usr-learner-010",
+      "courseId": "course-python-001",
+      "enrolledAt": "2026-10-10T20:22:00Z"
+    },
+    {
+      "userId": "usr-learner-010",
+      "courseId": "course-node-001",
+      "enrolledAt": "2026-10-10T20:22:00Z"
+    },
+    {
+      "userId": "usr-learner-002",
+      "courseId": "course-git-001",
+      "enrolledAt": "2026-09-01T10:00:00Z"
+    }
+  ],
+  "learnerProgress": [
+    {
+      "userId": "usr-learner-002",
+      "courseId": "course-react-001",
+      "completed": [
+        "lesson-react-001",
+        "lesson-react-002",
+        "lesson-react-003",
+        "lesson-react-004",
+        "lesson-react-005",
+        "lesson-react-006",
+        "lesson-react-p01",
+        "lesson-react-007"
+      ],
+      "quizScores": {
+        "lesson-react-002": 100,
+        "lesson-react-003": 0,
+        "lesson-react-004": 100,
+        "lesson-react-005": 50,
+        "lesson-react-006": 100,
+        "lesson-react-007": 50
+      },
+      "answers": {
+        "rq-jsx-1": true,
+        "rq-jsx-2": true,
+        "rq-comp-1": false,
+        "rq-comp-2": false,
+        "rq-props-1": true,
+        "rq-props-2": true,
+        "rq-state-1": false,
+        "rq-state-2": true,
+        "rq-event-1": true,
+        "rq-event-2": true,
+        "rq-list-1": false,
+        "rq-list-2": true
+      },
+      "lastActive": "2026-10-08T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-react-001",
+      "completed": [
+        "lesson-react-001",
+        "lesson-react-002",
+        "lesson-react-003",
+        "lesson-react-004",
+        "lesson-react-005",
+        "lesson-react-006",
+        "lesson-react-p01",
+        "lesson-react-007",
+        "lesson-react-008",
+        "lesson-react-009",
+        "lesson-react-010",
+        "lesson-react-011"
+      ],
+      "quizScores": {
+        "lesson-react-002": 50,
+        "lesson-react-003": 50,
+        "lesson-react-004": 50,
+        "lesson-react-005": 50,
+        "lesson-react-006": 50,
+        "lesson-react-007": 50,
+        "lesson-react-008": 100,
+        "lesson-react-009": 50,
+        "lesson-react-010": 100,
+        "lesson-react-011": 0
+      },
+      "answers": {
+        "rq-jsx-1": false,
+        "rq-jsx-2": true,
+        "rq-comp-1": false,
+        "rq-comp-2": true,
+        "rq-props-1": false,
+        "rq-props-2": true,
+        "rq-state-1": true,
+        "rq-state-2": false,
+        "rq-event-1": false,
+        "rq-event-2": true,
+        "rq-list-1": true,
+        "rq-list-2": false,
+        "rq-effect-1": true,
+        "rq-effect-2": true,
+        "rq-fetch-1": false,
+        "rq-fetch-2": true,
+        "rq-router-1": true,
+        "rq-router-2": true,
+        "rq-ctx-1": false,
+        "rq-ctx-2": false
+      },
+      "lastActive": "2026-10-10T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-005",
+      "courseId": "course-react-001",
+      "completed": [
+        "lesson-react-001",
+        "lesson-react-002",
+        "lesson-react-003",
+        "lesson-react-004",
+        "lesson-react-005"
+      ],
+      "quizScores": {
+        "lesson-react-002": 50,
+        "lesson-react-003": 100,
+        "lesson-react-004": 50,
+        "lesson-react-005": 100
+      },
+      "answers": {
+        "rq-jsx-1": true,
+        "rq-jsx-2": false,
+        "rq-comp-1": true,
+        "rq-comp-2": true,
+        "rq-props-1": false,
+        "rq-props-2": true,
+        "rq-state-1": true,
+        "rq-state-2": true
+      },
+      "lastActive": "2026-10-05T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-006",
+      "courseId": "course-react-001",
+      "completed": [
+        "lesson-react-001",
+        "lesson-react-002",
+        "lesson-react-003"
+      ],
+      "quizScores": {
+        "lesson-react-002": 50,
+        "lesson-react-003": 100
+      },
+      "answers": {
+        "rq-jsx-1": true,
+        "rq-jsx-2": false,
+        "rq-comp-1": true,
+        "rq-comp-2": true
+      },
+      "lastActive": "2026-10-06T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-009",
+      "courseId": "course-react-001",
+      "completed": [
+        "lesson-react-001"
+      ],
+      "quizScores": {},
+      "answers": {},
+      "lastActive": "2026-10-08T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-001",
+      "courseId": "course-js-001",
+      "completed": [
+        "lesson-js-001",
+        "lesson-js-002",
+        "lesson-js-003",
+        "lesson-js-004"
+      ],
+      "quizScores": {
+        "lesson-js-001": 100,
+        "lesson-js-002": 50,
+        "lesson-js-003": 50,
+        "lesson-js-004": 0
+      },
+      "answers": {
+        "jq-var-1": true,
+        "jq-var-2": true,
+        "jq-func-1": true,
+        "jq-func-2": false,
+        "jq-arr-1": false,
+        "jq-arr-2": true,
+        "jq-obj-1": false,
+        "jq-obj-2": false
+      },
+      "lastActive": "2026-10-07T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-js-001",
+      "completed": [
+        "lesson-js-001",
+        "lesson-js-002",
+        "lesson-js-003",
+        "lesson-js-004",
+        "lesson-js-p01",
+        "lesson-js-p02",
+        "lesson-js-005",
+        "lesson-js-006",
+        "lesson-js-007"
+      ],
+      "quizScores": {
+        "lesson-js-001": 100,
+        "lesson-js-002": 100,
+        "lesson-js-003": 100,
+        "lesson-js-004": 100,
+        "lesson-js-005": 100,
+        "lesson-js-006": 0,
+        "lesson-js-007": 50
+      },
+      "answers": {
+        "jq-var-1": true,
+        "jq-var-2": true,
+        "jq-func-1": true,
+        "jq-func-2": true,
+        "jq-arr-1": true,
+        "jq-arr-2": true,
+        "jq-obj-1": true,
+        "jq-obj-2": true,
+        "jq-dom-1": false,
+        "jq-dom-2": false,
+        "jq-async-1": true,
+        "jq-async-2": false
+      },
+      "lastActive": "2026-10-06T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-007",
+      "courseId": "course-js-001",
+      "completed": [
+        "lesson-js-001",
+        "lesson-js-002",
+        "lesson-js-003",
+        "lesson-js-004",
+        "lesson-js-p01",
+        "lesson-js-p02"
+      ],
+      "quizScores": {
+        "lesson-js-001": 100,
+        "lesson-js-002": 100,
+        "lesson-js-003": 100,
+        "lesson-js-004": 100
+      },
+      "answers": {
+        "jq-var-1": true,
+        "jq-var-2": true,
+        "jq-func-1": true,
+        "jq-func-2": true,
+        "jq-arr-1": true,
+        "jq-arr-2": true,
+        "jq-obj-1": true,
+        "jq-obj-2": true
+      },
+      "lastActive": "2026-10-05T10:00:00Z"
+    },
+    {
+      "userId": "usr-learner-008",
+      "courseId": "course-js-001",
+      "completed": [
+        "lesson-js-001",
+        "lesson-js-002"
+      ],
+      "quizScores": {
+        "lesson-js-001": 100,
+        "lesson-js-002": 50
+      },
+      "answers": {
+        "jq-var-1": true,
+        "jq-var-2": true,
+        "jq-func-1": false,
+        "jq-func-2": true
+      },
+      "lastActive": "2026-10-09T10:00:00Z"
+    }
+  ],
+  "learnerSeed": {
+    "userId": "usr-learner-001",
+    "courses": {
+      "course-js-001": {
+        "goal": {
+          "goal": "project",
+          "level": "basic",
+          "hours": 5
+        },
+        "diagnostic": {
+          "status": "done",
+          "right": 3,
+          "wrong": 1,
+          "unknown": 2
+        },
+        "pathStatus": "ready",
+        "completed": [
+          "lesson-js-001",
+          "lesson-js-002",
+          "lesson-js-003",
+          "lesson-js-004"
+        ],
+        "currentLessonId": "lesson-js-005",
+        "studied": [
+          "lesson-js-001",
+          "lesson-js-002",
+          "lesson-js-003",
+          "lesson-js-004"
+        ],
+        "quizScores": {
+          "lesson-js-001": 100,
+          "lesson-js-002": 50,
+          "lesson-js-003": 100,
+          "lesson-js-004": 100
+        },
+        "assignments": {
+          "lesson-js-002": {
+            "status": "graded",
+            "submittedAt": "2026-08-25T20:00:00Z",
+            "link": "https://github.com/minhanh/format-price",
+            "note": "Em dùng toLocaleString.",
+            "score": 8.5,
+            "maxScore": 10,
+            "passScore": 5,
+            "feedback": "Làm tốt! Lưu ý xử lý số âm và giá trị không phải số — hàm hiện trả về \"NaN ₫\". Thêm một kiểm tra đầu vào là đạt điểm tối đa.",
+            "gradedAt": "2026-08-27T09:00:00Z"
+          },
+          "lesson-js-004": {
+            "status": "pending",
+            "submittedAt": "2026-10-09T21:30:00Z",
+            "fileName": "tong-tien-khach-hang.js",
+            "note": ""
+          }
+        },
+        "mastery": {
+          "j-var": 4,
+          "j-func": 3,
+          "j-array": 3,
+          "j-object": 2,
+          "j-dom": 1,
+          "j-async": 0
+        },
+        "rating": null
+      }
+    }
+  },
+  "notifications": [
+    {
+      "id": "n-001",
+      "userId": "usr-learner-001",
+      "title": "Bài tập đã được chấm",
+      "body": "Hàm và phạm vi — 8,5/10. Xem nhận xét của giảng viên.",
+      "link": "/progress",
+      "read": false,
+      "createdAt": "2026-08-27T09:00:00Z"
+    },
+    {
+      "id": "n-002",
+      "userId": "usr-learner-001",
+      "title": "Câu hỏi đã có trả lời",
+      "body": "Giảng viên đã trả lời câu hỏi của bạn ở bài \"Làm việc với mảng\".",
+      "link": "/learn/course-js-001/lesson-js-003",
+      "read": true,
+      "createdAt": "2026-09-11T08:00:00Z"
+    },
+    {
+      "id": "n-003",
+      "userId": "usr-lecturer-001",
+      "title": "Có 4 bài tập chờ chấm",
+      "body": "React từ cơ bản đến dự án thực tế, JavaScript nền tảng.",
+      "link": "/teach/grading",
+      "read": false,
+      "createdAt": "2026-10-10T22:10:00Z"
+    },
+    {
+      "id": "n-004",
+      "userId": "usr-lecturer-001",
+      "title": "Khoá học bị từ chối",
+      "body": "Clean Code & SOLID trong JavaScript — xem lý do và sửa để gửi lại.",
+      "link": "/teach/courses/course-solid-001/publish",
+      "read": false,
+      "createdAt": "2026-09-30T10:00:00Z"
+    },
+    {
+      "id": "n-005",
+      "userId": "usr-admin-001",
+      "title": "Yêu cầu xuất bản mới",
+      "body": "Next.js App Router thực chiến — Trần Quốc Huy.",
+      "link": "/admin/publication",
+      "read": false,
+      "createdAt": "2026-10-08T14:20:00Z"
+    }
+  ],
+  "codeAttempts": [
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p01",
+      "draft": null,
+      "submits": 0,
+      "failSubmits": 0,
+      "runs": 14,
+      "passed": false,
+      "bestScore": 0,
+      "solutionViewed": false,
+      "failedTests": {},
+      "lastRun": null,
+      "tutorialStep": 6,
+      "tutorialVisited": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-09-14T20:00:00Z"
+    },
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p02",
+      "draft": null,
+      "submits": 2,
+      "failSubmits": 0,
+      "runs": 9,
+      "passed": true,
+      "bestScore": 100,
+      "solutionViewed": false,
+      "failedTests": {
+        "ct-8": 1
+      },
+      "lastRun": null,
+      "tutorialStep": 0,
+      "tutorialVisited": [],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-09-15T21:10:00Z"
+    },
+    {
+      "userId": "usr-learner-007",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p01",
+      "draft": null,
+      "submits": 0,
+      "failSubmits": 0,
+      "runs": 11,
+      "passed": false,
+      "bestScore": 0,
+      "solutionViewed": false,
+      "failedTests": {},
+      "lastRun": null,
+      "tutorialStep": 6,
+      "tutorialVisited": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-10-02T19:00:00Z"
+    },
+    {
+      "userId": "usr-learner-007",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p02",
+      "draft": null,
+      "submits": 4,
+      "failSubmits": 0,
+      "runs": 17,
+      "passed": true,
+      "bestScore": 100,
+      "solutionViewed": true,
+      "failedTests": {
+        "ct-6": 3,
+        "ct-8": 3,
+        "ct-5": 1
+      },
+      "lastRun": null,
+      "tutorialStep": 0,
+      "tutorialVisited": [],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-10-03T22:40:00Z"
+    },
+    {
+      "userId": "usr-learner-008",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p01",
+      "draft": null,
+      "submits": 0,
+      "failSubmits": 0,
+      "runs": 4,
+      "passed": false,
+      "bestScore": 0,
+      "solutionViewed": false,
+      "failedTests": {},
+      "lastRun": null,
+      "tutorialStep": 3,
+      "tutorialVisited": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-10-09T08:00:00Z"
+    },
+    {
+      "userId": "usr-learner-008",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p02",
+      "draft": null,
+      "submits": 2,
+      "failSubmits": 0,
+      "runs": 6,
+      "passed": false,
+      "bestScore": 50,
+      "solutionViewed": false,
+      "failedTests": {
+        "ct-4": 2,
+        "ct-6": 2,
+        "ct-7": 2,
+        "ct-8": 2
+      },
+      "lastRun": null,
+      "tutorialStep": 0,
+      "tutorialVisited": [],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-10-10T07:30:00Z"
+    },
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-p01",
+      "draft": null,
+      "submits": 3,
+      "failSubmits": 0,
+      "runs": 12,
+      "passed": true,
+      "bestScore": 100,
+      "solutionViewed": false,
+      "failedTests": {
+        "rt-4": 2
+      },
+      "lastRun": null,
+      "tutorialStep": 0,
+      "tutorialVisited": [],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-09-22T20:30:00Z"
+    },
+    {
+      "userId": "usr-learner-002",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-p01",
+      "draft": null,
+      "submits": 3,
+      "failSubmits": 3,
+      "runs": 9,
+      "passed": false,
+      "bestScore": 67,
+      "solutionViewed": true,
+      "failedTests": {
+        "rt-4": 3,
+        "rt-6": 2
+      },
+      "lastRun": null,
+      "tutorialStep": 0,
+      "tutorialVisited": [],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-10-05T21:00:00Z"
+    },
+    {
+      "userId": "usr-learner-005",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-p01",
+      "draft": null,
+      "submits": 1,
+      "failSubmits": 1,
+      "runs": 3,
+      "passed": false,
+      "bestScore": 33,
+      "solutionViewed": false,
+      "failedTests": {
+        "rt-2": 1,
+        "rt-4": 1,
+        "rt-5": 1,
+        "rt-6": 1
+      },
+      "lastRun": null,
+      "tutorialStep": 0,
+      "tutorialVisited": [],
+      "stepDrafts": {},
+      "stepRuns": {},
+      "updatedAt": "2026-10-11T09:00:00Z"
+    }
+  ],
+  "analyticsAsOf": "2026-10-12",
+  "conversations": [
+    {
+      "id": "conv-001",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-002",
+      "learnerId": "usr-learner-001",
+      "lecturerId": "usr-lecturer-001",
+      "status": "resolved",
+      "fromAI": false,
+      "aiContext": null,
+      "messages": [
+        {
+          "from": "learner",
+          "text": "Em không hiểu sao hàm hoisting chỉ áp dụng cho function declarations mà không áp dụng cho function expressions. Tại sao vậy ạ?",
+          "at": "2026-08-20T15:30:00Z"
+        },
+        {
+          "from": "lecturer",
+          "text": "Hoisting chỉ có hiệu lực cho hàm được khai báo bằng `function` vì JavaScript engine phải biết tên hàm trước khi thực thi code. Với function expressions, biến được khai báo nhưng giá trị (hàm) chưa được gán. Hãy thử viết một hàm declaration vs expression rồi gọi chúng trước khi định nghĩa để thấy khác biệt.",
+          "at": "2026-08-21T08:00:00Z"
+        }
+      ],
+      "createdAt": "2026-08-20T15:30:00Z"
+    },
+    {
+      "id": "conv-002",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-003",
+      "learnerId": "usr-learner-003",
+      "lecturerId": "usr-lecturer-001",
+      "status": "open",
+      "fromAI": true,
+      "aiContext": {
+        "summary": "Learner asked why re-render happens after setState",
+        "code": "setState(newVal)",
+        "failingTest": null
+      },
+      "messages": [
+        {
+          "from": "learner",
+          "text": "Cách mà setState hoạt động trong React là gì? Tại sao component lại render lại?",
+          "at": "2026-10-10T20:00:00Z"
+        },
+        {
+          "from": "lecturer",
+          "text": "setState không thay đổi state ngay — React lên lịch một bản cập nhật. Sau đó React so sánh render cũ với render mới (reconciliation) và chỉ cập nhật những phần thay đổi. Đó là lý do tại sao setState gây re-render.",
+          "at": "2026-10-11T09:15:00Z"
+        }
+      ],
+      "createdAt": "2026-10-10T20:00:00Z"
+    }
+  ],
+  "feedbackSnippets": [
+    {
+      "id": "fb-001",
+      "lecturerId": "usr-lecturer-001",
+      "title": "Nhận xét chung",
+      "text": "Bài nộp của {ten_hoc_vien} có điểm {diem}/10. Bạn đã làm rất tốt phần logic, nhưng cần chú ý xử lý các edge case."
+    },
+    {
+      "id": "fb-002",
+      "lecturerId": "usr-lecturer-001",
+      "title": "Cần cải thiện",
+      "text": "Mã code của bạn có thể rút gọn hơn bằng cách sử dụng các phương thức Array (map, filter, reduce) thay vì các vòng lặp truyền thống."
+    },
+    {
+      "id": "fb-003",
+      "lecturerId": "usr-lecturer-001",
+      "title": "Rất tốt",
+      "text": "Tuyệt vời! {ten_hoc_vien} đã đạt {diem}/10. Mã code sạch, dễ đọc và xử lý đầy đủ các trường hợp."
+    },
+    {
+      "id": "fb-004",
+      "lecturerId": "usr-lecturer-002",
+      "title": "Bổ sung",
+      "text": "Để cải thiện thêm: hãy thêm error handling và kiểm tra input trước khi xử lý dữ liệu."
+    }
+  ],
+  "courseReviews": [
+    {
+      "id": "rv-solid-1",
+      "courseId": "course-solid-001",
+      "round": 1,
+      "status": "changes_requested",
+      "submittedAt": "2026-09-28T10:00:00Z",
+      "decidedAt": "2026-09-30T09:40:00Z",
+      "reviewerId": "usr-admin-001",
+      "note": "Khoá học có cấu trúc tốt, cần bổ sung tài liệu và bài kiểm tra đầu vào trước khi xuất bản.",
+      "criteria": {
+        "info": {
+          "status": "pass",
+          "note": ""
+        },
+        "materials": {
+          "status": "fix",
+          "note": "Bài 2 và 3 chưa có video."
+        },
+        "quiz": {
+          "status": "na",
+          "note": "Khoá chưa có quiz bài học."
+        },
+        "entry": {
+          "status": "fix",
+          "note": "Cần ít nhất 5 câu."
+        },
+        "code": {
+          "status": "na",
+          "note": ""
+        },
+        "assignment": {
+          "status": "na",
+          "note": ""
+        },
+        "rights": {
+          "status": "pass",
+          "note": ""
+        }
+      },
+      "flags": [
+        {
+          "id": "fl-s1",
+          "target": {
+            "type": "lesson",
+            "lessonId": "lesson-solid-002",
+            "label": "Bài: Hàm nhỏ và một nhiệm vụ"
+          },
+          "severity": "must",
+          "comment": "Video chưa được tải lên, học viên sẽ thấy bài trống.",
+          "status": "open",
+          "reply": "",
+          "source": "admin",
+          "at": "2026-09-30T09:30:00Z"
+        },
+        {
+          "id": "fl-s2",
+          "target": {
+            "type": "lesson",
+            "lessonId": "lesson-solid-003",
+            "label": "Bài: Nguyên tắc SOLID"
+          },
+          "severity": "must",
+          "comment": "Tệp PDF bị lỗi khi mở, vui lòng tải lại.",
+          "status": "open",
+          "reply": "",
+          "source": "admin",
+          "at": "2026-09-30T09:32:00Z"
+        },
+        {
+          "id": "fl-s3",
+          "target": {
+            "type": "course",
+            "label": "Bài kiểm tra đầu vào"
+          },
+          "severity": "must",
+          "comment": "Bài kiểm tra đầu vào chỉ có 2 câu, chưa đủ để xếp lộ trình — cần ít nhất 5 câu.",
+          "status": "open",
+          "reply": "",
+          "source": "admin",
+          "at": "2026-09-30T09:35:00Z"
+        },
+        {
+          "id": "fl-s4",
+          "target": {
+            "type": "course",
+            "label": "Mô tả khoá học"
+          },
+          "severity": "should",
+          "comment": "Nên thêm 1–2 dòng về đối tượng học viên phù hợp.",
+          "status": "open",
+          "reply": "",
+          "source": "admin",
+          "at": "2026-09-30T09:36:00Z"
+        }
+      ]
+    },
+    {
+      "id": "rv-next-1",
+      "courseId": "course-next-001",
+      "round": 1,
+      "status": "in_review",
+      "submittedAt": "2026-10-08T14:20:00Z",
+      "decidedAt": null,
+      "reviewerId": null,
+      "note": "",
+      "criteria": {},
+      "flags": []
+    }
+  ],
+  "hintUsage": [
+    {
+      "userId": "usr-learner-003",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-005",
+      "level": 2,
+      "at": "2026-09-20T19:30:00Z"
+    },
+    {
+      "userId": "usr-learner-007",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p02",
+      "level": 1,
+      "at": "2026-10-03T22:00:00Z"
+    },
+    {
+      "userId": "usr-learner-007",
+      "courseId": "course-js-001",
+      "lessonId": "lesson-js-p02",
+      "level": 2,
+      "at": "2026-10-03T22:15:00Z"
+    },
+    {
+      "userId": "usr-learner-002",
+      "courseId": "course-react-001",
+      "lessonId": "lesson-react-p01",
+      "level": 1,
+      "at": "2026-10-05T20:45:00Z"
+    }
+  ]
+}

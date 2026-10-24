@@ -14,7 +14,9 @@ vi.mock("@codi-1/auth", () => ({
 }));
 vi.mock("@/services", () => ({
   auth: { api: { getSession: (...args: unknown[]) => boundary.session(...args) } },
-  db: { select: (...args: unknown[]) => boundary.select(...args), insert: boundary.insert, update: boundary.update, delete: boundary.remove },
+  db: { select: (...args: unknown[]) => boundary.select(...args), insert: boundary.insert, update: boundary.update, delete: boundary.remove,
+    transaction: (callback: any) => callback({ select: boundary.select, insert: boundary.insert, update: boundary.update, execute: vi.fn() }),
+  },
 }));
 vi.mock("@/lib/notification-service", () => ({ createNotificationService: () => ({ notify: boundary.notify }) }));
 
@@ -24,6 +26,7 @@ const generatedAt = new Date("2026-10-19T00:00:00Z");
 let storedCourse: {
   id: string; title: string; instructorId: string; status: string;
   knowledgeMapStatus: MapStatus; knowledgeMapGeneratedAt: Date | null;
+  confirmedKnowledgeMap?: object | null;
 } | undefined;
 let chapters: { id: string; title: string; position: number }[];
 let lessons: { id: string; chapterId: string; title: string; position: number }[];
@@ -88,6 +91,11 @@ describe("knowledge map content availability", () => {
   it.each(statuses.filter((status) => status !== "empty"))("preserves %s when lessons exist", async (status) => {
     storedCourse!.knowledgeMapStatus = status;
     storedCourse!.knowledgeMapGeneratedAt = generatedAt;
+    if (status === "confirmed") storedCourse!.confirmedKnowledgeMap = {
+      version: 1, publicationId: "published-1", contentGeneration: 0, publishedAt: generatedAt.toISOString(),
+      skills: [{ id: 101, name: "Concept", bktPInit: 0.1, bktPLearn: 0.2, bktPGuess: 0.2, bktPSlip: 0.1 }],
+      edges: [], links: [{ lessonId: "lesson-1", skillId: 101 }],
+    };
     lessons.push({ id: "lesson-1", chapterId: "chapter-1", title: "First lesson", position: 0 });
     const data = await getKnowledgeMapData("owned");
     expect(data.course.knowledgeMapStatus).toBe(status);
@@ -98,6 +106,17 @@ describe("knowledge map content availability", () => {
   it.each(statuses)("keeps no-lesson courses empty when the stored status is %s", async (status) => {
     storedCourse!.knowledgeMapStatus = status;
     expect((await getKnowledgeMapData("owned")).course.knowledgeMapStatus).toBe("empty");
+    expectReadOnly();
+  });
+  it("offers explicit reconfirmation for legacy confirmed status without silently publishing draft rows", async () => {
+    storedCourse!.knowledgeMapStatus = "confirmed";
+    storedCourse!.confirmedKnowledgeMap = null;
+    lessons.push({ id: "lesson-1", chapterId: "chapter-1", title: "First lesson", position: 0 });
+    const data = await getKnowledgeMapData("owned");
+    expect(data.course.knowledgeMapStatus).toBe("ready");
+    expect(data.course.requiresReconfirmation).toBe(true);
+    expect(storedCourse!.knowledgeMapStatus).toBe("confirmed");
+    expect(storedCourse!.confirmedKnowledgeMap).toBeNull();
     expectReadOnly();
   });
 
@@ -156,3 +175,18 @@ describe("knowledge map content availability", () => {
     expectReadOnly();
   });
 });
+
+// Session transport is a boundary here; transactional revalidation has its own tests.
+vi.mock("@/lib/lecturer-auth", () => ({
+  readLecturerIdentity: async () => {
+    const identity = await boundary.session();
+    if (!identity?.user) throw new Error("Unauthorized");
+    return identity;
+  },
+  verifyLecturerSession: async (_store: unknown, identity?: any) => {
+    const authenticated = identity ?? await boundary.session();
+    if (!authenticated?.user) throw new Error("Unauthorized");
+    await boundary.role();
+    return authenticated.user;
+  },
+}));

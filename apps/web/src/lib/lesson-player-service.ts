@@ -1,4 +1,8 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import {
+  codingExercises,
+  codingWorkspaces,
+} from "@codi-1/db/schema/coding-exercises";
 import type { Database } from "@codi-1/db";
 import { lessonMaterials } from "@codi-1/db/schema/course-content";
 import {
@@ -30,7 +34,7 @@ import {
   type LessonMediaUpdate,
 } from "./lesson-player-contract";
 
-type Store = Pick<Database, "select" | "insert" | "update">;
+type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 
 async function context(
   store: Store,
@@ -56,8 +60,21 @@ async function context(
           title: assessments.title,
           passingScore: assessments.passingScore,
           maxScore: assessments.maxScore,
+          isTutorial: sql<boolean>`coalesce(jsonb_array_length(${codingExercises.tutorialSteps}), 0) > 0`,
+          tutorialDone: sql<boolean>`coalesce(${codingWorkspaces.tutorialProgress}->'visited', '[0]'::jsonb) @> jsonb_build_array(jsonb_array_length(${codingExercises.tutorialSteps}) - 1)`,
         })
         .from(assessments)
+        .leftJoin(
+          codingExercises,
+          eq(codingExercises.assessmentId, assessments.id),
+        )
+        .leftJoin(
+          codingWorkspaces,
+          and(
+            eq(codingWorkspaces.exerciseId, codingExercises.id),
+            eq(codingWorkspaces.enrollmentId, enrollment.id),
+          ),
+        )
         .where(
           and(
             eq(assessments.courseId, courseId),

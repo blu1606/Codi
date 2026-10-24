@@ -30,3 +30,40 @@ export function generateUniqueCourseSlug(title: string, customSuffix?: string): 
   const suffix = customSuffix || randomBytes(3).toString("hex");
   return `${base}-${suffix}`;
 }
+
+/**
+ * Nhận diện lỗi trùng UNIQUE slug từ PostgreSQL (mã 23505),
+ * kể cả khi Drizzle ORM (node-postgres) bọc trong DrizzleQueryError với err.cause.
+ */
+export function isSlugUniqueConstraintError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+
+  const current = err as Record<string, any>;
+  const cause =
+    current.cause && typeof current.cause === "object"
+      ? (current.cause as Record<string, any>)
+      : null;
+
+  const code = current.code ?? cause?.code;
+  const constraint = current.constraint ?? cause?.constraint;
+  const detail = current.detail ?? cause?.detail;
+
+  if (code === "23505") {
+    if (typeof constraint === "string" && constraint.length > 0) {
+      return constraint.includes("slug");
+    }
+    if (typeof detail === "string" && detail.length > 0) {
+      return detail.includes("slug");
+    }
+    return true;
+  }
+
+  if (typeof constraint === "string" && constraint.includes("slug")) {
+    return true;
+  }
+  if (typeof detail === "string" && detail.includes("Key (slug)=")) {
+    return true;
+  }
+
+  return false;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -97,7 +97,7 @@ export function CodingBuilderClient({
       ? exercise.tests
       : [
           {
-            id: 1,
+            id: "draft-default",
             name: "Kiểm tra cơ bản",
             call: "tinhToan(1)",
             expected: 1,
@@ -109,6 +109,12 @@ export function CodingBuilderClient({
   );
 
   const [isDirty, setIsDirty] = useState(false);
+  const draftRevision = useRef(0);
+  const saveInFlight = useRef(false);
+  const markDirty = () => {
+    draftRevision.current += 1;
+    setIsDirty(true);
+  };
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
@@ -137,7 +143,7 @@ export function CodingBuilderClient({
   const handleAddInstruction = () => {
     if (isLocked) return;
     setInstructions((prev) => [...prev, ""]);
-    setIsDirty(true);
+    markDirty();
   };
 
   const handleUpdateInstruction = (index: number, val: string) => {
@@ -146,7 +152,7 @@ export function CodingBuilderClient({
       copy[index] = val;
       return copy;
     });
-    setIsDirty(true);
+    markDirty();
   };
 
   const handleDeleteInstruction = (index: number) => {
@@ -156,14 +162,14 @@ export function CodingBuilderClient({
       return;
     }
     setInstructions((prev) => prev.filter((_, idx) => idx !== index));
-    setIsDirty(true);
+    markDirty();
   };
 
   // Thêm / xoá gợi ý
   const handleAddHint = () => {
     if (isLocked) return;
     setHints((prev) => [...prev, ""]);
-    setIsDirty(true);
+    markDirty();
   };
 
   const handleUpdateHint = (index: number, val: string) => {
@@ -172,22 +178,23 @@ export function CodingBuilderClient({
       copy[index] = val;
       return copy;
     });
-    setIsDirty(true);
+    markDirty();
   };
 
   const handleDeleteHint = (index: number) => {
     if (isLocked) return;
     setHints((prev) => prev.filter((_, idx) => idx !== index));
-    setIsDirty(true);
+    markDirty();
   };
 
   // Thêm / xoá / sửa test case
   const handleAddTest = () => {
     if (isLocked) return;
+    const draftId = `draft-${crypto.randomUUID()}`;
     setTests((prev) => [
       ...prev,
       {
-        id: Date.now(),
+        id: draftId,
         name: `Kiểm tra ${prev.length + 1}`,
         call: "",
         expected: "",
@@ -196,7 +203,7 @@ export function CodingBuilderClient({
         hidden: false,
       },
     ]);
-    setIsDirty(true);
+    markDirty();
   };
 
   const handleUpdateTest = (index: number, field: keyof CodingTestCaseInput, val: any) => {
@@ -213,7 +220,7 @@ export function CodingBuilderClient({
       copy[index] = updated;
       return copy;
     });
-    setIsDirty(true);
+    markDirty();
   };
 
   const handleDeleteTest = (index: number) => {
@@ -223,7 +230,7 @@ export function CodingBuilderClient({
       return;
     }
     setTests((prev) => prev.filter((_, idx) => idx !== index));
-    setIsDirty(true);
+    markDirty();
   };
 
   // Chạy thử nghiệm với lời giải mẫu
@@ -281,11 +288,11 @@ export function CodingBuilderClient({
 
       if (res.success && res.tests.length > 0) {
         setTests((prev) => [...prev, ...res.tests]);
-        setIsDirty(true);
-        toast.success(`AI đã gợi ý thành công ${res.tests.length} test case biên mới!`);
+        markDirty();
+        toast.success(`Đã gợi ý thành công ${res.tests.length} test case biên mới!`);
         setActiveTab("tests");
       } else {
-        toast.info("AI không tìm thêm được trường hợp biên mới cho bài này.");
+        toast.info("Không tìm thêm được trường hợp biên mới cho bài này.");
       }
     } catch (err: any) {
       toast.error(err.message || "Không thể sinh test case biên bằng AI lúc này.");
@@ -296,7 +303,7 @@ export function CodingBuilderClient({
 
   // Lưu bài tập coding
   const handleSaveExercise = async () => {
-    if (isLocked) return;
+    if (isLocked || saveInFlight.current) return;
 
     // Client-side validations
     if (!title.trim()) {
@@ -325,9 +332,12 @@ export function CodingBuilderClient({
     }
 
     // Nếu chưa từng verify hoặc lời giải đã bị sửa đổi
+    const submittedTests = tests;
+    const submittedRevision = draftRevision.current;
     try {
+      saveInFlight.current = true;
       setIsSaving(true);
-      await saveCodingExercise(courseId, lessonId, {
+      const saved = await saveCodingExercise(courseId, lessonId, {
         title,
         durationMinutes,
         fileName,
@@ -339,12 +349,20 @@ export function CodingBuilderClient({
         tests,
       });
 
-      setIsDirty(false);
+      // Reconcile only identity; edits, additions and removals made during save survive.
+      setTests((current) => current.map((test) => {
+        const index = submittedTests.findIndex((submitted) =>
+          submitted.id === undefined ? submitted === test : submitted.id === test.id
+        );
+        return index < 0 ? test : { ...test, id: saved.testIds[index] };
+      }));
+      setIsDirty(draftRevision.current !== submittedRevision);
       toast.success("Đã lưu bài tập thực hành code thành công!");
       router.refresh();
     } catch (err: any) {
       toast.error(err.message || "Lỗi khi lưu bài code.");
     } finally {
+      saveInFlight.current = false;
       setIsSaving(false);
     }
   };
@@ -370,7 +388,7 @@ export function CodingBuilderClient({
               Bài tập code (S23b)
             </span>
             <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-muted text-muted-foreground border border-border">
-              {language === "python" ? "Python (mô phỏng)" : "JavaScript"}
+              "JavaScript (QuickJS Sandbox)"
             </span>
             {isLocked && (
               <span className="px-2.5 py-0.5 text-xs font-semibold rounded-md bg-warning/10 text-warning border border-warning/20">
@@ -517,7 +535,7 @@ export function CodingBuilderClient({
                       disabled={isLocked}
                       onChange={(e) => {
                         setTitle(e.target.value);
-                        setIsDirty(true);
+                        markDirty();
                       }}
                       className="h-9 text-sm"
                     />
@@ -535,7 +553,7 @@ export function CodingBuilderClient({
                       disabled={isLocked}
                       onChange={(e) => {
                         setDurationMinutes(Number(e.target.value) || 15);
-                        setIsDirty(true);
+                        markDirty();
                       }}
                       className="h-9 text-sm"
                     />
@@ -550,12 +568,12 @@ export function CodingBuilderClient({
                       disabled={isLocked}
                       onChange={(e) => {
                         setLanguage(e.target.value);
-                        setIsDirty(true);
+                        markDirty();
                       }}
                       className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground"
                     >
-                      <option value="javascript">JavaScript (Chạy trực tiếp trên trình duyệt)</option>
-                      <option value="python">Python (Môi trường mô phỏng)</option>
+                      <option value="javascript">JavaScript (QuickJS WASM Sandbox)</option>
+                      <option value="python" disabled>Python (Chưa hỗ trợ trong Sandbox)</option>
                     </select>
                   </div>
 
@@ -566,7 +584,7 @@ export function CodingBuilderClient({
                       disabled={isLocked}
                       onChange={(e) => {
                         setFileName(e.target.value);
-                        setIsDirty(true);
+                        markDirty();
                       }}
                       placeholder="ví dụ: main.js"
                       className="h-9 text-sm font-mono"
@@ -650,7 +668,7 @@ export function CodingBuilderClient({
                     disabled={isLocked}
                     onChange={(e) => {
                       setStarterCode(e.target.value);
-                      setIsDirty(true);
+                      markDirty();
                     }}
                     placeholder={`// Khung code gợi ý cho học viên\nfunction solution(input) {\n  // Viết code của bạn ở đây\n  return input;\n}`}
                     className="font-mono text-xs leading-relaxed bg-background"
@@ -702,7 +720,7 @@ export function CodingBuilderClient({
                     disabled={isLocked}
                     onChange={(e) => {
                       setSolutionCode(e.target.value);
-                      setIsDirty(true);
+                      markDirty();
                     }}
                     placeholder={`function solution(input) {\n  // Lời giải đúng\n  return input;\n}`}
                     className="font-mono text-xs leading-relaxed bg-background"
@@ -736,7 +754,7 @@ export function CodingBuilderClient({
                       ) : (
                         <>
                           <Sparkles className="size-3.5" />
-                          AI gợi ý test biên
+                          Gợi ý test biên
                         </>
                       )}
                     </Button>
