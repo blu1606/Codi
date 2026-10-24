@@ -19,9 +19,12 @@ import { getAdminDashboardData } from "./actions";
 
 const NAV_ITEMS = [
   { label: "Quản lý tài khoản người dùng", href: "/dashboard/admin/users", icon: Users },
+  { label: "Khóa học đã xuất bản", href: "/dashboard/admin/courses", icon: BookOpen },
   { label: "Duyệt yêu cầu xuất bản khoá học", disabled: true, icon: ClipboardCheck },
-  { label: "Đơn hàng & giao dịch", disabled: true, icon: Receipt },
-  { label: "Voucher", disabled: true, icon: Ticket },
+  { label: "Đơn hàng & giao dịch", href: "/dashboard/admin/orders", icon: Receipt },
+  { label: "Voucher", href: "/dashboard/admin/vouchers", icon: Ticket },
+  { label: "Quan sát hệ thống (Insights)", href: "/dashboard/admin/insights", icon: TrendingUp },
+  { label: "Tài chính (Finance)", disabled: true, icon: DollarSign },
 ];
 
 export default async function AdminDashboardPage() {
@@ -64,17 +67,18 @@ export default async function AdminDashboardPage() {
 
   const todo = [
     {
-      href: "/dashboard/admin/publication",
+      href: "#",
+      disabled: true,
       count: data.todo.pendingCoursesCount,
       title: "Khoá học chờ duyệt",
-      meta: "Giảng viên đã gửi yêu cầu xuất bản",
+      meta: "Chưa khả dụng · chờ tích hợp duyệt xuất bản",
       icon: ClipboardCheck,
     },
     {
       href: "/dashboard/admin/orders?status=pending&overdue=1&range=all",
       count: data.todo.overdueOrdersCount,
       title: "Đơn chờ thanh toán quá hạn",
-      meta: "Đơn chờ thanh toán quá 24 giờ, có thể cần đối soát",
+      meta: "Đơn chờ thanh toán từ 24 giờ trở lên, có thể cần đối soát",
       icon: CreditCard,
     },
     {
@@ -133,7 +137,13 @@ export default async function AdminDashboardPage() {
       <div className="space-y-4">
         <h2 className="text-lg font-bold tracking-tight text-foreground">Cần xử lý</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {todo.map((item) => (
+          {todo.map((item) => item.disabled ? (
+            <div key={item.title} aria-disabled="true" className="rounded-xl border border-border bg-muted/20 p-4 space-y-2">
+              <span className="text-2xl font-bold text-foreground">{item.count}</span>
+              <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+              <p className="text-xs text-muted-foreground">{item.meta}</p>
+            </div>
+          ) : (
             <Link
               key={item.title}
               href={item.href as any}
@@ -167,7 +177,7 @@ export default async function AdminDashboardPage() {
             <div className="space-y-1">
               <h3 className="font-semibold text-foreground">Quan sát hệ thống</h3>
               <p className="text-xs text-muted-foreground">
-                DAU, đăng ký mới, ghi danh, phân tích chỉ tiêu hoạt động
+                Số tài khoản, khóa học và đơn hàng được tạo trong kỳ. Telemetry chưa khả dụng.
               </p>
             </div>
             <div className="text-right shrink-0">
@@ -178,23 +188,22 @@ export default async function AdminDashboardPage() {
             </div>
           </Link>
 
-          <Link
-            href={"/dashboard/admin/finance" as any}
-            className="flex items-center justify-between rounded-xl border border-border bg-card p-5 hover:bg-muted/30 transition-colors"
+          <div
+            aria-disabled="true"
+            className="flex items-center justify-between rounded-xl border border-border bg-card p-5"
           >
             <div className="space-y-1">
               <h3 className="font-semibold text-foreground">Tài chính</h3>
               <p className="text-xs text-muted-foreground">
-                Doanh thu, đơn hàng, thanh toán, hoàn tiền
+                Phân tích tài chính, đối soát và hoàn tiền chưa khả dụng.
               </p>
             </div>
             <div className="text-right shrink-0">
               <div className="text-xl font-bold text-foreground">
-                {formatVnd(data.kpis.revenue30d)}
+                Chưa khả dụng
               </div>
-              <span className="text-xs text-muted-foreground">30 ngày</span>
             </div>
-          </Link>
+          </div>
         </div>
       </div>
 
@@ -280,7 +289,7 @@ export default async function AdminDashboardPage() {
                     <span className="text-muted-foreground font-medium">{item.label}</span>
                   </div>
                   <span className="text-xs rounded bg-muted px-2 py-0.5 text-muted-foreground">
-                    Sắp ra mắt
+                    Chưa khả dụng
                   </span>
                 </div>
               )}

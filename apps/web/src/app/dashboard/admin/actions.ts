@@ -143,6 +143,126 @@ export async function toggleUserBan(
   });
 }
 
+// ─────────────────────────────────────────────────────────────
+// Admin Published Courses Actions (S33)
+// ─────────────────────────────────────────────────────────────
+
+export async function hideCourseAction(
+  courseId: string,
+  reason: string
+): Promise<{ success: boolean; title: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { adminHideCourse } = await import("@/lib/admin-courses-service");
+  return await adminHideCourse(db, courseId, reason, session.user.id);
+}
+
+export async function unhideCourseAction(
+  courseId: string
+): Promise<{ success: boolean; title: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { adminUnhideCourse } = await import("@/lib/admin-courses-service");
+  return await adminUnhideCourse(db, courseId, session.user.id);
+}
+
+export async function updateCoursePriceAction(
+  courseId: string,
+  newPrice: number
+): Promise<{ success: boolean; title: string; oldPrice: number; newPrice: number }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { adminUpdateCoursePrice } = await import("@/lib/admin-courses-service");
+  return await adminUpdateCoursePrice(db, courseId, newPrice, session.user.id);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin Orders Actions (S34)
+// ─────────────────────────────────────────────────────────────
+
+export async function cancelAdminOrderAction(
+  orderId: number,
+  reason?: string
+): Promise<{ success: boolean; orderCode: string }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) {
+    throw new Error("Lý do huỷ đơn hàng là bắt buộc.");
+  }
+
+  const { adminCancelOrder } = await import("@/lib/admin-orders-service");
+  return await adminCancelOrder(db, orderId, session.user.id, trimmedReason);
+}
+
+export async function getAdminOrderDetailAction(
+  orderIdOrCode: number | string
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { getAdminOrderDetail } = await import("@/lib/admin-orders-service");
+  return await getAdminOrderDetail(db, orderIdOrCode);
+}
+
+export async function getAdminOrdersExportAction(
+  filter: import("@/lib/admin-orders-service").AdminOrdersFilter
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { getAdminOrders } = await import("@/lib/admin-orders-service");
+  const result = await getAdminOrders(db, filter);
+  return result.orders;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin Vouchers Actions (S35)
+// ─────────────────────────────────────────────────────────────
+
+export async function createVoucherAction(data: import("@/lib/admin-vouchers-service").VoucherFormData) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { createAdminVoucher } = await import("@/lib/admin-vouchers-service");
+  return await createAdminVoucher(db, session.user.id, data);
+}
+
+export async function updateVoucherAction(
+  voucherId: number,
+  data: Partial<import("@/lib/admin-vouchers-service").VoucherFormData>
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { updateAdminVoucher } = await import("@/lib/admin-vouchers-service");
+  return await updateAdminVoucher(db, voucherId, data);
+}
+
+export async function toggleVoucherActiveAction(
+  voucherId: number,
+  active: boolean
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { toggleAdminVoucherActive } = await import("@/lib/admin-vouchers-service");
+  return await toggleAdminVoucherActive(db, voucherId, active);
+}
+
 export type UserImpactCounts = {
   ownedCourses: number;
   pendingOrders: number;
@@ -271,16 +391,13 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       )
     );
 
-  // 3. Voucher sap het luot (active, usageLimit is not null, usedCount / usageLimit >= 0.9)
+  // 3. Same usage-exhaustion predicate as the voucher queue (not date expiry).
+  const { nearLimitVoucherPredicate } = await import("@/lib/admin-vouchers-service");
   const [expiringVouchersRes] = await db
     .select({ count: count() })
     .from(vouchers)
     .where(
-      and(
-        eq(vouchers.isActive, true),
-        sql`${vouchers.usageLimit} IS NOT NULL`,
-        sql`${vouchers.usedCount}::float / ${vouchers.usageLimit} >= 0.9`
-      )
+      nearLimitVoucherPredicate()
     );
 
   // 4. Tai khoan bi vo hieu hoa (banned = true)

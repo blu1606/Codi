@@ -49,7 +49,12 @@ const emptyDraft = (): AssignmentDraft => ({
   fileName: null,
 });
 
-async function context(store: Store, scope: Scope, lock = false) {
+async function context(
+  store: Store,
+  scope: Scope,
+  lock = false,
+  currentQuiz = false,
+) {
   const { enrollment } = await loadLearningLessonAccess(
     store,
     scope.userId,
@@ -91,12 +96,30 @@ async function context(store: Store, scope: Scope, lock = false) {
           .where(eq(assessmentSubmissions.id, submissions[0].id))
           .for("update")
       : submissions;
+  // Existing attempts retain their content; a new start or retake uses publication's current revision.
+  const quizRevision =
+    currentQuiz || !submission
+      ? assessment.currentQuizRevision
+      : submission.quizRevision;
+  if (
+    assessment.type === "quiz" &&
+    (!Number.isInteger(quizRevision) || quizRevision! < 1)
+  )
+    throw new LearningPathError(
+      "Không tìm thấy phiên bản bài kiểm tra. Vui lòng liên hệ quản trị viên.",
+      409,
+    );
   const questions =
     assessment.type === "quiz"
       ? await store
           .select()
           .from(quizQuestions)
-          .where(eq(quizQuestions.assessmentId, assessment.id))
+          .where(
+            and(
+              eq(quizQuestions.assessmentId, assessment.id),
+              eq(quizQuestions.quizRevision, quizRevision!),
+            ),
+          )
           .orderBy(asc(quizQuestions.position))
       : [];
   const options = questions.length
@@ -319,7 +342,7 @@ export function createAssessmentService(
       const command = assessmentCommand.parse(input);
       const obsolete: string[] = [];
       const view = await db.transaction(async (tx) => {
-        const ctx = await context(tx, scope, true);
+        const ctx = await context(tx, scope, true, command.type === "quiz-retake");
         const { assessment: a, submission: s, questions } = ctx;
         const now = new Date();
         if (
@@ -346,6 +369,7 @@ export function createAssessmentService(
                 assessmentId: a.id,
                 enrollmentId: ctx.enrollment.id,
                 attempt: transition.attempt,
+                quizRevision: a.currentQuizRevision,
               })
               .returning();
             ctx.submission = created!;

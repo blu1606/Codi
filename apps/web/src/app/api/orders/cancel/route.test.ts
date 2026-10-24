@@ -58,7 +58,9 @@ describe("POST /api/orders/cancel", () => {
     mocks.getSession.mockResolvedValueOnce({ user: { id: "user-123" } });
 
     mocks.transaction.mockImplementation(async (cb) => {
+      let selectCall = 0;
       const mockTx = {
+        execute: vi.fn().mockResolvedValue(undefined),
         update: vi.fn()
           // 1. orders
           .mockReturnValueOnce({
@@ -74,6 +76,24 @@ describe("POST /api/orders/cancel", () => {
               where: vi.fn().mockResolvedValue([]),
             }),
           }),
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selectCall++;
+              return {
+                // 1st & 2nd select: orderToCancel and lockedOrder
+                limit: vi.fn().mockResolvedValue([{ id: 10, code: "CODI10101", status: "pending" }]),
+                // 3rd select: orderItems (no limit)
+                then: (resolve: any) => Promise.resolve([{ courseId: "c1" }]).then(resolve),
+              };
+            }),
+          }),
+        }),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            onConflictDoNothing: vi.fn(),
+          }),
+        }),
       };
       return cb(mockTx);
     });
@@ -89,13 +109,15 @@ describe("POST /api/orders/cancel", () => {
     mocks.getSession.mockResolvedValueOnce({ user: { id: "user-123" } });
 
     mocks.transaction.mockImplementation(async (cb) => {
+      let selectCall = 0;
       const mockTx = {
+        execute: vi.fn().mockResolvedValue(undefined),
         update: vi.fn()
           // 1. orders
           .mockReturnValueOnce({
             set: vi.fn().mockReturnValue({
               where: vi.fn().mockReturnValue({
-                returning: vi.fn().mockResolvedValue([{ id: 20 }]),
+                returning: vi.fn().mockResolvedValue([{ id: 20, code: "CODI20202" }]),
               }),
             }),
           })
@@ -107,6 +129,22 @@ describe("POST /api/orders/cancel", () => {
               }),
             }),
           }),
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockImplementation(() => {
+              selectCall++;
+              return {
+                limit: vi.fn().mockResolvedValue([{ id: 20, code: "CODI20202", status: "pending" }]),
+                then: (resolve: any) => Promise.resolve([{ courseId: "c2" }]).then(resolve),
+              };
+            }),
+          }),
+        }),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            onConflictDoNothing: vi.fn(),
+          }),
+        }),
       };
       return cb(mockTx);
     });
@@ -122,6 +160,14 @@ describe("POST /api/orders/cancel", () => {
 
     mocks.transaction.mockImplementation(async (cb) => {
       const mockTx = {
+        execute: vi.fn().mockResolvedValue(undefined),
+        select: vi.fn().mockReturnValue({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
         update: vi.fn().mockReturnValue({
           set: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({

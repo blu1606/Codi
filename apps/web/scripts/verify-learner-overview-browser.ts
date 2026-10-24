@@ -307,6 +307,7 @@ async function main() {
         {
           ...common,
           assessmentId: f.quizId,
+          quizRevision: f.questions[0]!.quizRevision,
           score: 67,
           quizPercent: 67,
           isPassed: false,

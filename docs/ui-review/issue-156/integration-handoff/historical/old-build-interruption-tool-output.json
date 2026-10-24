@@ -1,0 +1,11 @@
+[
+  {
+    "time": "2026-10-21T11:15:14.376Z",
+    "callId": "call_5ec5a1a62f504513b356d8a01449dcbd",
+    "chunk_id": "81165e",
+    "wall_time_seconds": 0.0518172,
+    "exit_code": 1,
+    "original_token_count": 0,
+    "output": ""
+  }
+]

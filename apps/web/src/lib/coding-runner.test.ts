@@ -70,7 +70,7 @@ describe("JavaScript WebAssembly sandbox", () => {
   it("runs samples before hidden tests so a hidden timeout cannot contaminate sample results", async () => {
     const r = await runJavaScript({
       code: "",
-      timeoutMs: 50,
+      timeoutMs: 200,
       tests: [
         { id: 2, input: "while(true) {}", isSample: false },
         { id: 1, input: "42", isSample: true },

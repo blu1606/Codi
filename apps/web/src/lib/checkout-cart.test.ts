@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CheckoutError, createOrderFromCart } from "./checkout-cart";
 import * as cartService from "./cart-service";
 import type { CartCourse } from "./cart-contract";
@@ -15,6 +15,35 @@ const dummyCourse: CartCourse = {
 };
 
 describe("createOrderFromCart unit tests", () => {
+  beforeEach(() => {
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "test-secret");
+    vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "12345678");
+    vi.stubEnv("SEPAY_BANK_CODE", "VCB");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("throws 503 when total > 0 and payment gateway configuration is missing", async () => {
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "");
+    vi.spyOn(cartService, "getCartSummary").mockResolvedValueOnce({
+      items: [dummyCourse],
+      subtotal: 500000,
+      discount: 0,
+      total: 500000,
+      voucher: null,
+      voucherError: null,
+      removedOwnedTitles: [],
+      pendingOrder: null,
+    });
+
+    const mockDb = {} as any;
+    await expect(createOrderFromCart(mockDb, "user-1")).rejects.toThrow(
+      "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.",
+    );
+  });
+
   it("throws 400 when cart is empty", async () => {
     vi.spyOn(cartService, "getCartSummary").mockResolvedValueOnce({
       items: [],
@@ -82,6 +111,7 @@ describe("createOrderFromCart unit tests", () => {
             orderBy: vi.fn().mockReturnValue({
               limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", paymentDeadline: new Date(Date.now() + 100000) }]),
             }),
+            limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", status: "pending", receivedAmount: 0, paymentDeadline: new Date(Date.now() + 100000) }]),
           }),
         }),
       }),
@@ -142,6 +172,14 @@ describe("createOrderFromCart unit tests", () => {
               orderBy: vi.fn().mockReturnValue({
                 limit: vi.fn().mockResolvedValue([{ id: 101, code: "CODI10101", paymentDeadline: new Date(Date.now() + 100000) }]),
               }),
+            }),
+          }),
+        })
+        // Authoritative re-read after the canonical code lock
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([{ id: 101, code: "CODI10101", status: "pending", receivedAmount: 0, paymentDeadline: new Date(Date.now() + 100000) }]),
             }),
           }),
         })
@@ -523,6 +561,14 @@ describe("createOrderFromCart unit tests", () => {
             }),
           }),
         })
+        // Authoritative re-read after the canonical code lock
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([{ id: 999, code: "CODI99999", status: "pending", receivedAmount: 0, paymentDeadline: new Date(Date.now() - 10000) }]),
+            }),
+          }),
+        })
         // 2. unique code check (orders)
         .mockReturnValueOnce({
           from: vi.fn().mockReturnValue({
@@ -545,7 +591,7 @@ describe("createOrderFromCart unit tests", () => {
           set: vi.fn().mockImplementation((val) => {
             updatedOrders.push(val);
             return {
-              where: vi.fn().mockResolvedValue([]),
+              where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 999 }]) }),
             };
           }),
         })

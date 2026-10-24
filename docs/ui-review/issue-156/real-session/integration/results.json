@@ -1,0 +1,29 @@
+﻿{
+    "candidate":  "c20c4ef21c6463f85f374a42f0b7c43d38d28ccd",
+    "base":  "437c1e8df16969a54b1fb96f0ff3e02a09c15e7a",
+    "startTimeUtc":  "2026-10-21T13:43:49.2610000+00:00",
+    "durationMs":  117704.204,
+    "tests":  [
+                  {
+                      "title":  "available CTA opens player; locked lesson is denied desktop-light",
+                      "outcome":  "expected",
+                      "duration":  32336
+                  },
+                  {
+                      "title":  "available CTA opens player; locked lesson is denied desktop-dark",
+                      "outcome":  "expected",
+                      "duration":  27029
+                  },
+                  {
+                      "title":  "available CTA opens player; locked lesson is denied mobile-light",
+                      "outcome":  "expected",
+                      "duration":  29147
+                  },
+                  {
+                      "title":  "available CTA opens player; locked lesson is denied mobile-dark",
+                      "outcome":  "expected",
+                      "duration":  27383
+                  }
+              ],
+    "cleanup":  "owned QA data removed; zero remaining sessions, credentials, enrollments and skills"
+}

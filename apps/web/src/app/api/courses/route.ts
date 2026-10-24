@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, countDistinct, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/services";
-import { courses, courseDetails, studentEnrollments, user } from "@codi-1/db";
+import { courses, courseDetails, skills, studentEnrollments, user } from "@codi-1/db";
 
 export async function GET(request: NextRequest) {
   const sort = request.nextUrl.searchParams.get("sort") ?? "title";
@@ -17,13 +17,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Count enrollment rows, not activity events, so each learner is counted once.
-    const enrollmentCount = count(studentEnrollments.id);
+    // Count distinct enrollment rows so each learner is counted once, even when joined with multiple skills.
+    const enrollmentCount = countDistinct(studentEnrollments.id);
     const statusFilter = includeHidden
       ? inArray(courses.status, ["published", "hidden"])
       : eq(courses.status, "published");
 
     // Public catalogue fields only: lifecycle, pricing audit and knowledge-map columns stay internal.
+    // Suppress topic names until the published course's current map is confirmed.
+    // Keep this gate inside the aggregate so other courses and their counts remain visible.
+    const topicEligibility = and(
+      eq(courses.status, "published"),
+      eq(courses.knowledgeMapStatus, "confirmed"),
+      inArray(skills.review, ["accepted", "edited"]),
+    );
+    const topicsAgg = sql<string[]>`COALESCE(ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN ${topicEligibility} THEN ${skills.name} END), NULL), ARRAY[]::text[])`.as("topics");
+
     const query = db
       .select({
         id: courses.id, slug: courses.slug, title: courses.title, category: courses.category,
@@ -33,11 +42,13 @@ export async function GET(request: NextRequest) {
         status: courses.status,
         enrollmentCount, coverImageUrl: courseDetails.coverImageUrl,
         instructorName: user.name,
+        topics: topicsAgg,
       })
       .from(courses)
       .leftJoin(studentEnrollments, eq(studentEnrollments.courseId, courses.id))
       .leftJoin(courseDetails, eq(courseDetails.courseId, courses.id))
       .leftJoin(user, eq(courses.instructorId, user.id))
+      .leftJoin(skills, eq(skills.courseId, courses.id))
       .where(statusFilter)
       .groupBy(courses.id, courseDetails.coverImageUrl, user.name)
       .orderBy(...(sort === "popular"
