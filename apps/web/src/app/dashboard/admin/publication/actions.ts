@@ -259,15 +259,15 @@ export async function getAdminCourseReview(
     .where(eq(publicationReviewFlags.requestId, activeRequest.id))
     .orderBy(
       asc(
-        sql`CASE 
-          WHEN ${publicationReviewFlags.status} = 'closed' THEN 2 
-          ELSE 1 
+        sql`CASE
+          WHEN ${publicationReviewFlags.status} = 'closed' THEN 2
+          ELSE 1
         END`
       ),
       asc(
-        sql`CASE 
-          WHEN ${publicationReviewFlags.severity} = 'must' THEN 1 
-          ELSE 2 
+        sql`CASE
+          WHEN ${publicationReviewFlags.severity} = 'must' THEN 1
+          ELSE 2
         END`
       ),
       asc(publicationReviewFlags.id)

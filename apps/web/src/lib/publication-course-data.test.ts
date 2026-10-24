@@ -7,6 +7,19 @@ let boundary: ReturnType<typeof createPublicationTestStore>;
 beforeEach(() => { boundary = createPublicationTestStore(); });
 
 describe("publication question projection", () => {
+  it("requires reconfirmation for a legacy confirmed status without a published map payload", async () => {
+    boundary.state.courses[0].confirmedKnowledgeMap = null;
+    const { courseData } = await fetchCourseDataForReview("c-1", boundary.store as any);
+    expect(courseData.knowledgeMapStatus).toBe("ready");
+    expect(checkReadiness(courseData).items.find(item => item.key === "kmap")?.ok).toBe(false);
+  });
+  it("does not invent a lecturer proposal from the official selling price", async () => {
+    boundary.state.courses[0].proposedPrice = null;
+    boundary.state.courses[0].price = 990000;
+    const { courseData } = await fetchCourseDataForReview("c-1", boundary.store as any);
+    expect(courseData.proposedPrice).toBeNull();
+    expect(checkReadiness(courseData).items.find(item => item.key === "price")?.ok).toBe(false);
+  });
   it("loads only the current revision with its real sorted options and correct answer", async () => {
     boundary.state.quiz_questions = [
       { id: 1, assessmentId: 1, quizRevision: 1, text: "Old question", position: 0 },

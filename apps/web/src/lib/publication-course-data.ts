@@ -1,8 +1,9 @@
-import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray } from "drizzle-orm";
 import { assessments, codingExercises, codingTestCases, courseChapters, courseDetails, courseLessons,
   courses, lessonMaterials, quizOptions, quizQuestions } from "@codi-1/db";
 import type { CourseDataForReview } from "./publication-service";
 import { db } from "@/services";
+import { readConfirmedKnowledgeMap } from "./confirmed-knowledge-map";
 
 function parseInstructions(value: string | null): string[] {
   if (!value) return [];
@@ -78,8 +79,7 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
       .from(quizQuestions)
       .innerJoin(assessments, eq(quizQuestions.assessmentId, assessments.id))
       .where(and(inArray(quizQuestions.assessmentId, assessmentIds),
-        // Current schema retains old revisions for immutable learner attempts.
-        sql`${quizQuestions}."quiz_revision" = ${assessments}."current_quiz_revision"`))
+        eq(quizQuestions.quizRevision, assessments.currentQuizRevision)))
       .orderBy(asc(quizQuestions.position));
 
     const questionIds = questions.map((q) => q.id);
@@ -229,8 +229,9 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
     category: courseRow.category,
     level: courseRow.level,
     price: courseRow.price,
-    proposedPrice: (courseRow as any).proposedPrice ?? courseRow.price,
-    knowledgeMapStatus: courseRow.knowledgeMapStatus,
+    proposedPrice: courseRow.proposedPrice,
+    knowledgeMapStatus: courseRow.knowledgeMapStatus === "confirmed" && !readConfirmedKnowledgeMap(courseRow, lessonIds)
+      ? "ready" : courseRow.knowledgeMapStatus,
     chapters: transformedChapters,
     entryTest: entryAssessment
       ? {

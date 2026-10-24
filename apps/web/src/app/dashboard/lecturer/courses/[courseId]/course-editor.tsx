@@ -166,8 +166,8 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     if (infoTitle.trim().length < 5) errors.title = "Tên khoá học cần ít nhất 5 ký tự.";
     if (infoSummary.trim().length < 20) errors.summary = "Mô tả cần ít nhất 20 ký tự.";
 
-    const parsedPrice = Number(infoPrice.replace(/[^\d]/g, ""));
-    if (isNaN(parsedPrice) || parsedPrice < 0) {
+    const parsedPrice = Number(infoPrice);
+    if (!infoPrice.trim() || !Number.isSafeInteger(parsedPrice) || parsedPrice < 0 || parsedPrice > 2147483647) {
       errors.price = "Giá đề xuất phải là số nguyên không âm.";
     }
 
@@ -970,7 +970,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                   Quản trị viên sẽ kiểm tra và xác nhận giá bán cuối cùng khi duyệt xuất bản. Nhập 0 cho khoá học miễn phí.
                   {course.status === "published" && (
                     <span className="block mt-0.5 font-medium text-foreground">
-                      Giá đang bán chính thức: {course.price.toLocaleString("vi-VN")} đ. Sửa đổi giá tại đây chỉ là đề xuất và giữ nguyên giá bán đến khi Admin duyệt.
+                      Giá đang bán chính thức: {course.price.toLocaleString("vi-VN")} đ. Sửa đổi tại đây chỉ là đề xuất; chỉ Admin có thể thay đổi giá bán.
                     </span>
                   )}
                 </span>

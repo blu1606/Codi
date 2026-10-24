@@ -32,7 +32,7 @@ export interface PublicationDataDto {
     description: string;
     status: string;
     price: number;
-    proposedPrice: number;
+    proposedPrice: number | null;
     rejectReason: string | null;
     reviewOutcome: string | null;
     publishedAt: string | null;
@@ -80,16 +80,16 @@ export async function getPublicationData(courseId: string): Promise<PublicationD
       .where(eq(publicationReviewFlags.requestId, latestRequest.id))
       .orderBy(
         asc(
-          sql`CASE 
-            WHEN ${publicationReviewFlags.status} = 'open' THEN 1 
-            WHEN ${publicationReviewFlags.status} = 'fixed' THEN 2 
-            ELSE 3 
+          sql`CASE
+            WHEN ${publicationReviewFlags.status} = 'open' THEN 1
+            WHEN ${publicationReviewFlags.status} = 'fixed' THEN 2
+            ELSE 3
           END`
         ),
         asc(
-          sql`CASE 
-            WHEN ${publicationReviewFlags.severity} = 'must' THEN 1 
-            ELSE 2 
+          sql`CASE
+            WHEN ${publicationReviewFlags.severity} = 'must' THEN 1
+            ELSE 2
           END`
         ),
         asc(publicationReviewFlags.id)
@@ -152,7 +152,7 @@ export async function getPublicationData(courseId: string): Promise<PublicationD
       description: courseRow.description,
       status: courseRow.status,
       price: courseRow.price,
-      proposedPrice: (courseRow as any).proposedPrice ?? courseRow.price,
+      proposedPrice: courseRow.proposedPrice,
       rejectReason: latestRequest?.reviewNote || null,
       reviewOutcome:
         latestRequest?.status === "changes_requested"

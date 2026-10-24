@@ -71,7 +71,7 @@ describe("publication-service", () => {
     });
 
     it("fails when proposed price is null/undefined", () => {
-      const course = { ...baseValidCourse, price: null, proposedPrice: null };
+      const course = { ...baseValidCourse, price: 1290000, proposedPrice: null };
       const result = checkReadiness(course);
       expect(result.allOk).toBe(false);
       const priceItem = result.items.find((i) => i.key === "price");

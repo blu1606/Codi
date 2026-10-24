@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { defaultRehypePlugins, Streamdown } from "streamdown";
+import LessonMarkdown from "@/components/lesson-markdown";
 import { Button } from "@codi-1/ui/components/button";
 import type { CourseDataForReview, LessonLike, QuizQuestionLike } from "@/lib/publication-service";
 
@@ -10,16 +10,6 @@ function safeUrl(value?: string | null) {
     const url = new URL(value || "");
     return ["https:", "http:"].includes(url.protocol) ? url.href : null;
   } catch { return null; }
-}
-
-// Same static, raw-HTML-free pipeline used by the current learner markdown view.
-function PreviewMarkdown({ children }: { children: string }) {
-  return <Streamdown mode="static" skipHtml parseIncompleteMarkdown={false}
-    rehypePlugins={[defaultRehypePlugins.sanitize, defaultRehypePlugins.harden].filter(p => p !== undefined)}
-    linkSafety={{ enabled: false }}
-    components={{ a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" /> }}>
-    {children}
-  </Streamdown>;
 }
 
 function PreviewQuiz({ questions }: { questions: QuizQuestionLike[] }) {
@@ -65,16 +55,16 @@ function PreviewLesson({ lesson }: { lesson: LessonLike }) {
         </>}
       </section>;
     })}
-    {lesson.body && <PreviewMarkdown>{lesson.body}</PreviewMarkdown>}
+    {lesson.body && <LessonMarkdown>{lesson.body}</LessonMarkdown>}
     {lesson.quiz && <PreviewQuiz questions={lesson.quiz.questions} />}
     {lesson.code && <section className="space-y-3" aria-label="Bài code xem trước">
       <p className="text-sm font-semibold">Không chạy mã trong preview. Chỉ xem yêu cầu và mã khởi đầu.</p>
-      {(lesson.code.instructions || []).map((text, i) => <PreviewMarkdown key={i}>{text}</PreviewMarkdown>)}
+      {(lesson.code.instructions || []).map((text, i) => <LessonMarkdown key={i}>{text}</LessonMarkdown>)}
       {lesson.code.starterCode ? <pre className="overflow-auto rounded-lg bg-muted p-3"><code>{lesson.code.starterCode}</code></pre>
         : <p className="text-sm text-muted-foreground">Chưa có mã khởi đầu.</p>}
     </section>}
     {lesson.assignment && <section className="space-y-3">
-      <PreviewMarkdown>{lesson.assignment.instructions}</PreviewMarkdown>
+      <LessonMarkdown>{lesson.assignment.instructions}</LessonMarkdown>
       <ul>{lesson.assignment.rubric?.map((item, i) => <li key={i}>{item.name}: {item.points} điểm{item.desc ? ` — ${item.desc}` : ""}</li>)}</ul>
       <p className="text-sm text-muted-foreground">Chỉ xem nội dung, không nộp bài trong preview.</p>
     </section>}

@@ -385,8 +385,8 @@ export function PublicationReviewClient({
   // Approve Decision
   const handleApprove = async () => {
     if (!detail) return;
-    const parsedPrice = Number(priceInput.replace(/[^\d]/g, ""));
-    if (isNaN(parsedPrice) || parsedPrice < 0) {
+    const parsedPrice = Number(priceInput);
+    if (!priceInput.trim() || !Number.isSafeInteger(parsedPrice) || parsedPrice < 0 || parsedPrice > 2147483647) {
       setApproveError("Giá bán phải là số nguyên không âm (VND).");
       return;
     }

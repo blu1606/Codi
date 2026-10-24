@@ -209,6 +209,20 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
   });
 
   describe("updateCourseInfo", () => {
+    it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2147483648])("rejects an invalid proposed price (%s) without writing", async (proposedPrice) => {
+      mockSelect.mockReturnValue({ from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]),
+      }) });
+      const result = await updateCourseInfo("c-1", {
+        title: "Khoá học React thực chiến",
+        summary: "Nội dung khoá học React dành cho người mới bắt đầu.",
+        category: "Frontend", level: "Beginner", proposedPrice,
+        learningOutcomes: [], requirements: [],
+      });
+      expect(result.success).toBe(false);
+      expect(result.errors?.price).toBeTruthy();
+      expect(mockTransaction).not.toHaveBeenCalled();
+    });
     it("báo lỗi validation khi tên hoặc mô tả quá ngắn", async () => {
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({

@@ -7,7 +7,9 @@ type Row = Record<string, any>;
 export function createPublicationTestStore() {
   const state: Record<string, Row[]> = {
     courses: [{ id: "c-1", title: "React", description: "A sufficiently detailed course description for review.",
-      instructorId: "lecturer-1", status: "pending", price: 1000, proposedPrice: 2000, knowledgeMapStatus: "confirmed" }],
+      instructorId: "lecturer-1", status: "pending", price: 1000, proposedPrice: 2000, knowledgeMapStatus: "confirmed",
+      confirmedKnowledgeMap: { version: 1, publicationId: "confirmed-1", contentGeneration: 0,
+        publishedAt: "2026-10-24T00:00:00Z", skills: [], edges: [], links: [] } }],
     session: [{ id: "session-1", userId: "actor-1", expiresAt: new Date("2099-01-01") }],
     course_publication_requests: [{ id: 10, courseId: "c-1", round: 1, status: "in_review", requestedBy: "lecturer-1", requestedAt: new Date() }],
     publication_review_criteria: ["info", "materials", "quiz", "entry", "code", "assignment", "rights"].map(criterionId => ({ requestId: 10, criterionId, status: "pass" })),
