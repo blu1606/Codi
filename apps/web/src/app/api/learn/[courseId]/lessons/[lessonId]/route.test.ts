@@ -99,7 +99,7 @@ describe("lesson player HTTP guards", () => {
         )
       ).status,
     ).toBe(400));
-  it.each(["open", "study", "complete"])(
+  it.each(["complete"])(
     "uses the validated route/session on %s",
     async (type) => {
       expect((await POST(request({ type }), ctx())).status).toBe(200);

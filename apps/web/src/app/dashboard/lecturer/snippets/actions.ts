@@ -210,12 +210,17 @@ export async function restoreFeedbackSnippet(snippet: {
 }): Promise<{ success: boolean; snippet: FeedbackSnippetDto }> {
   const user = await verifyLecturerSession();
 
+  const title = typeof snippet?.title === "string" ? snippet.title.trim() : "";
+  const body = typeof snippet?.body === "string" ? snippet.body.trim() : "";
+  if (!title || title.length > 100 || !body || body.length > 2000) {
+    throw new Error("Mẫu nhận xét không hợp lệ.");
+  }
   const [inserted] = await db
     .insert(feedbackSnippets)
     .values({
       lecturerId: user.id,
-      title: snippet.title,
-      body: snippet.body,
+      title,
+      body,
     })
     .returning();
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Codi prototype runtime (window.Codi) — shared by every feature module.
  * Classic script, works from file://. Feature modules (learner-commerce.js,
  * learner-learning.js, lecturer.js, admin.js) load after this file and register
@@ -82,8 +82,8 @@
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'codi-proto-v9';
-  const STATE_VERSION = 9; // v9: product decisions 14/10 (buy-now order, quiz pass, latest code score, deactivation) · v4: coding practice lessons + db.codeAttempts · v5: React coding challenge · v6: dark mode + charts + seed data · v7: seeded 180-day analytics + learner study days · v8: course reviews, assignment rubrics, review demo content
+  const STORAGE_KEY = 'codi-proto-v8';
+  const STATE_VERSION = 8; // v4: coding practice lessons + db.codeAttempts · v5: React coding challenge · v6: dark mode + charts + seed data · v7: seeded 180-day analytics + learner study days · v8: course reviews, assignment rubrics, review demo content
 
   // ───────────────────────── templating ─────────────────────────
   class SafeHTML {
@@ -705,11 +705,7 @@
 
   // ───────────────────────── selectors ─────────────────────────
   const db = () => Codi.state.db;
-  // An inactive (deactivated) account has no valid session: it is treated as signed out everywhere.
-  const currentUser = () => {
-    const u = Codi.state.currentUserId ? db().users.find((x) => x.id === Codi.state.currentUserId) || null : null;
-    return u && u.status === 'active' ? u : null;
-  };
+  const currentUser = () => (Codi.state.currentUserId ? db().users.find((u) => u.id === Codi.state.currentUserId) || null : null);
   const ROLE_LABEL = { learner: 'Học viên', lecturer: 'Giảng viên', admin: 'Quản trị viên' };
 
   // ───────────────────────── auth UI ─────────────────────────
@@ -1041,10 +1037,11 @@
   const maskEmail = (e) => { const [a, d] = String(e).split('@'); return a.slice(0, 2) + '•'.repeat(Math.max(3, a.length - 2)) + '@' + d; };
   function settingsPage(params, query) {
     const u = currentUser();
-    const tab = query.tab === 'security' ? 'security' : 'account';
+    const tab = query.tab === 'security' ? 'security' : query.tab === 'connections' ? 'connections' : 'account';
     const items = [
       { section: 'Tài khoản', href: '/settings', label: 'Thông tin tài khoản', icon: 'user' },
       { section: 'Tài khoản', href: '/settings?tab=security', label: 'Mật khẩu & Bảo mật', icon: 'key' },
+      { section: 'Tài khoản', href: '/settings?tab=connections', label: 'Tài khoản liên kết', icon: 'github' },
     ];
     const dirty = settingsUI.editingName && settingsUI.nameDraft.trim() && settingsUI.nameDraft.trim() !== u.name;
     const account = html`
@@ -1086,7 +1083,28 @@
         <div class="stack-1"><strong>Đăng xuất</strong><p class="small muted">Kết thúc phiên đăng nhập trên thiết bị này.</p></div>
         <button class="btn btn-secondary" data-action="sign-out">${icon('log-out')} Đăng xuất</button>
       </div></div>`;
-    return ui.workspace({ items, active: tab === 'security' ? '/settings?tab=security' : '/settings', label: 'Cài đặt', body: tab === 'security' ? security : account });
+    // Linked accounts: GitHub for now; same row shape (provider icon + identifier + ⋯ menu) ready for Google and LMS later.
+    const gh = (Codi.github && Codi.github.stateFor(u.id)) || { connected: false };
+    const connections = html`
+      <div class="page-header"><div><h1>Tài khoản liên kết</h1><p class="muted">Kết nối tài khoản bên ngoài để Codi cá nhân hoá gợi ý khoá học và bài tập.</p></div></div>
+      <div class="card"><div class="card-body stack-4">
+        <div class="conn-row">
+          <div class="conn-main">
+            <span class="conn-icon" aria-hidden="true">${icon('github')}</span>
+            <div class="conn-text">
+              <strong>GitHub</strong>
+              <span class="small muted">${gh.connected ? html`Đã kết nối <span class="mono">@${gh.username}</span> · phân tích ${fmt.date(gh.analyzedAt)}` : 'Codi đọc repo công khai, ngôn ngữ chính và đóng góp để gợi ý khoá sát với bạn.'}</span>
+            </div>
+          </div>
+          <div class="row" style="gap:8px">
+            ${gh.connected
+              ? html`<a class="btn btn-secondary btn-sm" href="#/github/analysis">Xem phân tích</a><button class="btn btn-ghost btn-sm" data-action="gh-reanalyze">${icon('rotate-ccw', { cls: 'icon-sm' })} Phân tích lại</button><button class="btn btn-ghost btn-sm" data-action="gh-disconnect">${icon('x', { cls: 'icon-sm' })} Ngắt kết nối</button>`
+              : html`<button class="btn btn-primary btn-sm" data-action="gh-connect">${icon('github', { cls: 'icon-sm' })} Kết nối GitHub</button>`}
+          </div>
+        </div>
+      </div></div>
+      <p class="xsmall muted" style="margin-top:12px">Thông tin kết nối chỉ dùng trong tài khoản Codi của bạn. Bạn ngắt kết nối bất kỳ lúc nào — dữ liệu phân tích sẽ bị xoá.</p>`;
+    return ui.workspace({ items, active: tab === 'security' ? '/settings?tab=security' : tab === 'connections' ? '/settings?tab=connections' : '/settings', label: 'Cài đặt', body: tab === 'security' ? security : tab === 'connections' ? connections : account });
   }
 
   // Profile

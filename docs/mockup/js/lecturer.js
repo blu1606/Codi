@@ -959,28 +959,7 @@
     const item = el.dataset.kind === 'concept' ? m.concepts.find((k) => k.id === el.dataset.id) : m.edges[Number(el.dataset.id)];
     item.review = el.dataset.v; if (m.status === 'confirmed') m.status = 'ready'; persist();
   });
-  // Accept-all never creates a prerequisite loop (D10): an edge whose target already reaches its source
-  // through accepted/edited edges stays "suggested" for the lecturer to decide one by one.
-  Codi.action('tc-kmap-accept-all', async (el) => {
-    const m = kmapOf(Codi.course(el.dataset.course));
-    const concepts = m.concepts.filter((k) => k.review === 'suggested');
-    const kept = m.edges.filter((e) => e.review === 'accepted' || e.review === 'edited');
-    const reaches = (from, to) => { const seen = new Set(); const st = [from]; while (st.length) { const n = st.pop(); if (n === to) return true; if (seen.has(n)) continue; seen.add(n); kept.filter((e) => e.from === n).forEach((e) => st.push(e.to)); } return false; };
-    const accept = []; const skip = [];
-    m.edges.filter((e) => e.review === 'suggested').forEach((e) => { if (reaches(e.to, e.from)) skip.push(e); else { accept.push(e); kept.push(e); } });
-    if (!concepts.length && !accept.length) { ui.toast(skip.length ? `Không còn đề xuất nào chấp nhận được tự động. ${skip.length} quan hệ tạo vòng lặp cần bạn xử lý.` : 'Không còn đề xuất nào chờ duyệt.', { type: 'info' }); return; }
-    const r = await ui.confirm({
-      title: 'Chấp nhận tất cả đề xuất?',
-      body: html`<ul class="stack-1 small"><li><strong>${concepts.length}</strong> khái niệm</li><li><strong>${accept.length}</strong> quan hệ tiên quyết</li>${skip.length ? html`<li><strong>${skip.length}</strong> quan hệ bị bỏ qua vì sẽ tạo vòng lặp — vẫn ở trạng thái chờ để bạn quyết định</li>` : ''}</ul>`,
-      consequence: 'Các đề xuất được đánh dấu "Đã chấp nhận". Bản đồ chỉ có hiệu lực khi bạn bấm xác nhận.',
-      reversible: 'Có thể đổi từng mục sau.',
-      confirmLabel: 'Chấp nhận',
-    });
-    if (!r.ok) return;
-    concepts.concat(accept).forEach((x) => { x.review = 'accepted'; });
-    if (m.status === 'confirmed') m.status = 'ready';
-    persist(); ui.toast(skip.length ? `Đã chấp nhận ${concepts.length + accept.length} đề xuất. ${skip.length} quan hệ tạo vòng lặp cần bạn xử lý.` : `Đã chấp nhận ${concepts.length + accept.length} đề xuất. Kiểm tra lại rồi xác nhận bản đồ.`);
-  });
+  Codi.action('tc-kmap-accept-all', (el) => { const m = kmapOf(Codi.course(el.dataset.course)); m.concepts.concat(m.edges).forEach((x) => { if (x.review === 'suggested') x.review = 'accepted'; }); persist(); ui.toast('Đã chấp nhận mọi đề xuất. Kiểm tra lại rồi xác nhận bản đồ.'); });
   Codi.action('tc-kmap-rename', (el) => { renamingConcept = el.dataset.id || null; Codi.rerender(); });
   Codi.action('tc-kmap-rename-save', (form, e, v) => {
     const m = kmapOf(Codi.course(form.dataset.course)); const k = m.concepts.find((x) => x.id === form.dataset.id);
@@ -1293,8 +1272,6 @@
     if (!db.conversations) return;
     const conv = db.conversations.find((x) => x.id === btn.dataset.id);
     if (!conv) return;
-    // Only the lecturer (or an admin) closes a conversation, and only after answering it (D9).
-    if (!(conv.messages || []).some((m) => m.from === 'lecturer')) { ui.toast('Hãy trả lời học viên trước khi đánh dấu đã giải quyết.', { type: 'warn' }); return; }
     conv.status = 'resolved';
     persist(false); ui.toast('Đã đánh dấu cuộc hội thoại đã giải quyết.', { type: 'success' });
     Codi.rerender();

@@ -1,37 +1,28 @@
 "use server";
 
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { ROLE } from "@codi-1/auth";
 import {
-  assessments,
-  codingExercises,
-  codingTestCases,
-  courseChapters,
-  courseDetails,
-  courseLessons,
   coursePublicationRequests,
   courses,
-  lessonMaterials,
-  notifications,
   publicationReviewCriteria,
   publicationReviewFlags,
-  quizOptions,
-  quizQuestions,
   user,
   userRoles,
 } from "@codi-1/db";
 import {
   checkReadiness,
   CRITERIA,
-  type CourseDataForReview,
   type ReadinessResult,
   type ReviewFlagDto,
   type ReviewRoundDto,
 } from "@/lib/publication-service";
 import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
+import { fetchCourseDataForReview } from "@/lib/publication-course-data";
+import { publicationCourseTransaction, requirePublicationClaim, type PublicationContext } from "@/lib/publication-store";
 
 export interface PublicationDataDto {
   course: {
@@ -41,7 +32,7 @@ export interface PublicationDataDto {
     description: string;
     status: string;
     price: number;
-    proposedPrice: number;
+    proposedPrice: number | null;
     rejectReason: string | null;
     reviewOutcome: string | null;
     publishedAt: string | null;
@@ -51,245 +42,6 @@ export interface PublicationDataDto {
   readiness: ReadinessResult;
   round: ReviewRoundDto | null;
   isLocked: boolean;
-}
-
-/**
- * Builds standard CourseDataForReview structure from database for a given course.
- */
-export async function fetchCourseDataForReview(courseId: string): Promise<{
-  courseRow: typeof courses.$inferSelect;
-  courseData: CourseDataForReview;
-}> {
-  const [courseRow] = await db
-    .select()
-    .from(courses)
-    .where(eq(courses.id, courseId));
-
-  if (!courseRow) {
-    throw new Error("Không tìm thấy khoá học.");
-  }
-
-  const [details] = await db
-    .select()
-    .from(courseDetails)
-    .where(eq(courseDetails.courseId, courseId));
-
-  const chapters = await db
-    .select()
-    .from(courseChapters)
-    .where(eq(courseChapters.courseId, courseId))
-    .orderBy(asc(courseChapters.position));
-
-  const chapterIds = chapters.map((ch) => ch.id);
-
-  let lessons: Array<typeof courseLessons.$inferSelect> = [];
-  if (chapterIds.length > 0) {
-    lessons = await db
-      .select()
-      .from(courseLessons)
-      .where(inArray(courseLessons.chapterId, chapterIds))
-      .orderBy(asc(courseLessons.position));
-  }
-
-  const lessonIds = lessons.map((l) => l.id);
-
-  // Lesson materials
-  let materials: Array<typeof lessonMaterials.$inferSelect> = [];
-  if (lessonIds.length > 0) {
-    materials = await db
-      .select()
-      .from(lessonMaterials)
-      .where(inArray(lessonMaterials.lessonId, lessonIds));
-  }
-
-  // Assessments for course
-  const courseAssessments = await db
-    .select()
-    .from(assessments)
-    .where(eq(assessments.courseId, courseId));
-
-  const entryAssessment = courseAssessments.find((a) => a.isDiagnostic);
-  const assessmentIds = courseAssessments.map((a) => a.id);
-
-  // Quiz questions & options
-  let options: Array<typeof quizOptions.$inferSelect> = [];
-  let questions: Array<typeof quizQuestions.$inferSelect> = [];
-  if (assessmentIds.length > 0) {
-    questions = await db
-      .select()
-      .from(quizQuestions)
-      .where(inArray(quizQuestions.assessmentId, assessmentIds))
-      .orderBy(asc(quizQuestions.position));
-
-    const questionIds = questions.map((q) => q.id);
-    if (questionIds.length > 0) {
-      options = await db
-        .select()
-        .from(quizOptions)
-        .where(inArray(quizOptions.questionId, questionIds))
-        .orderBy(asc(quizOptions.position));
-    }
-  }
-
-  // Coding exercises and test cases
-  const codingAssessmentIds = courseAssessments
-    .filter((a) => a.type === "coding")
-    .map((a) => a.id);
-
-  let exercises: Array<typeof codingExercises.$inferSelect> = [];
-  let testCases: Array<typeof codingTestCases.$inferSelect> = [];
-
-  if (codingAssessmentIds.length > 0) {
-    exercises = await db
-      .select()
-      .from(codingExercises)
-      .where(inArray(codingExercises.assessmentId, codingAssessmentIds));
-
-    const exIds = exercises.map((e) => e.id);
-    if (exIds.length > 0) {
-      testCases = await db
-        .select()
-        .from(codingTestCases)
-        .where(inArray(codingTestCases.exerciseId, exIds))
-        .orderBy(asc(codingTestCases.position));
-    }
-  }
-
-  // Transform into CourseDataForReview
-  const transformedChapters = chapters.map((ch) => ({
-    id: ch.id,
-    title: ch.title,
-    lessons: lessons
-      .filter((l) => l.chapterId === ch.id)
-      .map((l) => {
-        const lMaterials = materials.filter((m) => m.lessonId === l.id);
-        const lQuizAssessment = courseAssessments.find(
-          (a) => a.lessonId === l.id && a.type === "quiz"
-        );
-        const lCodingAssessment = courseAssessments.find(
-          (a) => a.lessonId === l.id && a.type === "coding"
-        );
-        const lAssignmentAssessment = courseAssessments.find(
-          (a) => a.lessonId === l.id && a.type === "assignment"
-        );
-
-        let quizObj = null;
-        if (lQuizAssessment) {
-          const qList = questions.filter((q) => q.assessmentId === lQuizAssessment.id);
-          quizObj = {
-            id: lQuizAssessment.id,
-            passingScore: lQuizAssessment.passingScore,
-            questions: qList.map((q) => {
-              const qOpts = options
-                .filter((o) => o.questionId === q.id)
-                .sort((a, b) => a.position - b.position);
-              return {
-              id: q.id,
-              text: q.text,
-              explanation: q.explanation,
-                options: qOpts.map((o) => o.text),
-                correctIndex: qOpts.findIndex((o) => o.isCorrect),
-                aiGenerated: (q as any).aiGenerated ?? false,
-                aiReviewed: (q as any).aiReviewed ?? true,
-              };
-            }),
-          };
-        }
-
-        let codeObj = null;
-        if (lCodingAssessment) {
-          const ex = exercises.find((e) => e.assessmentId === lCodingAssessment.id);
-          const tests = ex ? testCases.filter((t) => t.exerciseId === ex.id) : [];
-          codeObj = {
-            kind: "challenge" as const,
-            tests: tests.map((t) => ({
-              id: t.id,
-              name: t.name,
-              call: t.input || "",
-              hidden: !t.isSample,
-            })),
-            solutionCheck: {
-              ok: tests.length > 0 && !!ex?.solutionVerifiedAt,
-              passed: tests.length,
-              total: tests.length,
-            },
-          };
-        }
-
-        let assignmentObj = null;
-        if (lAssignmentAssessment) {
-          let rubric: any[] = [];
-          if (lAssignmentAssessment.rubric) {
-            try {
-              rubric = typeof lAssignmentAssessment.rubric === "string"
-                ? JSON.parse(lAssignmentAssessment.rubric)
-                : (lAssignmentAssessment.rubric as any);
-            } catch {
-              rubric = [];
-            }
-          }
-          assignmentObj = {
-            instructions: lAssignmentAssessment.instructions || "",
-            rubric: Array.isArray(rubric) ? rubric : [],
-          };
-        }
-
-        return {
-          id: l.id,
-          title: l.title,
-          type: lMaterials.length > 0 ? lMaterials[0].type : "reading",
-          durationSeconds: l.durationSeconds,
-          body: l.body,
-          materials: lMaterials.map((m) => ({
-            id: m.id,
-            type: m.type,
-            title: m.title,
-            url: m.url,
-            fileName: m.title || m.url,
-          })),
-          quiz: quizObj,
-          code: codeObj,
-          assignment: assignmentObj,
-        };
-      }),
-  }));
-
-  const entryQuestions = entryAssessment
-    ? questions.filter((q) => q.assessmentId === entryAssessment.id)
-    : [];
-
-  const courseData: CourseDataForReview = {
-    id: courseRow.id,
-    title: courseRow.title,
-    description: courseRow.description,
-    summary: courseRow.description,
-    category: courseRow.category,
-    level: courseRow.level,
-    price: courseRow.price,
-    proposedPrice: (courseRow as any).proposedPrice ?? courseRow.price,
-    knowledgeMapStatus: courseRow.knowledgeMapStatus,
-    chapters: transformedChapters,
-    entryTest: entryAssessment
-      ? {
-          questions: entryQuestions.map((q) => {
-            const qOpts = options
-              .filter((o) => o.questionId === q.id)
-              .sort((a, b) => a.position - b.position);
-            return {
-            id: q.id,
-            text: q.text,
-            explanation: q.explanation,
-            options: qOpts.map((o) => o.text),
-            correctIndex: qOpts.findIndex((o) => o.isCorrect),
-            aiGenerated: (q as any).aiGenerated ?? false,
-            aiReviewed: (q as any).aiReviewed ?? true,
-          };
-        }),
-        }
-      : null,
-  };
-
-  return { courseRow, courseData };
 }
 
 /**
@@ -328,16 +80,16 @@ export async function getPublicationData(courseId: string): Promise<PublicationD
       .where(eq(publicationReviewFlags.requestId, latestRequest.id))
       .orderBy(
         asc(
-          sql`CASE 
-            WHEN ${publicationReviewFlags.status} = 'open' THEN 1 
-            WHEN ${publicationReviewFlags.status} = 'fixed' THEN 2 
-            ELSE 3 
+          sql`CASE
+            WHEN ${publicationReviewFlags.status} = 'open' THEN 1
+            WHEN ${publicationReviewFlags.status} = 'fixed' THEN 2
+            ELSE 3
           END`
         ),
         asc(
-          sql`CASE 
-            WHEN ${publicationReviewFlags.severity} = 'must' THEN 1 
-            ELSE 2 
+          sql`CASE
+            WHEN ${publicationReviewFlags.severity} = 'must' THEN 1
+            ELSE 2
           END`
         ),
         asc(publicationReviewFlags.id)
@@ -400,7 +152,7 @@ export async function getPublicationData(courseId: string): Promise<PublicationD
       description: courseRow.description,
       status: courseRow.status,
       price: courseRow.price,
-      proposedPrice: (courseRow as any).proposedPrice ?? courseRow.price,
+      proposedPrice: courseRow.proposedPrice,
       rejectReason: latestRequest?.reviewNote || null,
       reviewOutcome:
         latestRequest?.status === "changes_requested"
@@ -424,32 +176,14 @@ export async function getPublicationData(courseId: string): Promise<PublicationD
  * Transitions course.status -> pending, opens round in_review, carries flags.
  */
 export async function submitCourseForPublication(courseId: string): Promise<{ success: boolean }> {
-  const userSession = await verifyLecturerSession();
-
-  const { courseRow, courseData } = await fetchCourseDataForReview(courseId);
-
-  if (courseRow.instructorId !== userSession.id) {
-    throw new Error("Không có quyền yêu cầu xuất bản khoá học này.");
-  }
-
-  if (!["draft", "rejected"].includes(courseRow.status)) {
-    throw new Error(`Không thể gửi yêu cầu xuất bản khi khoá học đang ở trạng thái "${courseRow.status}".`);
-  }
-
-  const readiness = checkReadiness(courseData);
-  if (!readiness.allOk) {
-    const missing = readiness.items.filter((i) => !i.ok).map((i) => i.label);
-    throw new Error(`Chưa đủ điều kiện xuất bản: ${missing.join(", ")}.`);
-  }
-
-  await db.transaction(async (tx) => {
-    // 1. Fetch latest round to determine round number and carried items
-    const [prevRequest] = await tx
-      .select()
-      .from(coursePublicationRequests)
-      .where(eq(coursePublicationRequests.courseId, courseId))
-      .orderBy(desc(coursePublicationRequests.round))
-      .limit(1);
+  await publicationCourseTransaction(courseId, ROLE.LECTURER, async context => {
+    const { tx, course: courseRow, request: prevRequest, actorId, notify } = context;
+    if (!["draft", "rejected"].includes(courseRow.status) || prevRequest?.status === "in_review")
+      throw new Error(`Không thể gửi yêu cầu xuất bản khi khoá học đang ở trạng thái "${courseRow.status}".`);
+    const { courseData } = await fetchCourseDataForReview(courseId, tx);
+    const readiness = checkReadiness(courseData);
+    if (!readiness.allOk)
+      throw new Error(`Chưa đủ điều kiện xuất bản: ${readiness.items.filter(i => !i.ok).map(i => i.label).join(", ")}.`);
 
     const nextRound = prevRequest ? prevRequest.round + 1 : 1;
 
@@ -459,7 +193,7 @@ export async function submitCourseForPublication(courseId: string): Promise<{ su
       .values({
         courseId,
         round: nextRound,
-        requestedBy: userSession.id,
+        requestedBy: actorId,
         validationStatus: "passed",
         validationNote: "Đã vượt qua tất cả điều kiện kiểm tra tự động.",
         validatedAt: new Date(),
@@ -516,13 +250,15 @@ export async function submitCourseForPublication(courseId: string): Promise<{ su
     }
 
     // 4. Update course status to pending
-    await tx
+    const claimed = await tx
       .update(courses)
       .set({
         status: "pending",
         updatedAt: new Date(),
       })
-      .where(eq(courses.id, courseId));
+      .where(and(eq(courses.id, courseId), eq(courses.status, courseRow.status)))
+      .returning({ id: courses.id });
+    requirePublicationClaim(claimed);
 
     // 5. Notify all active admins
     const activeAdmins = await tx
@@ -538,7 +274,7 @@ export async function submitCourseForPublication(courseId: string): Promise<{ su
       );
 
     for (const admin of activeAdmins) {
-      await tx.insert(notifications).values({
+      notify({
         userId: admin.userId,
         title: nextRound === 1 ? "Yêu cầu xuất bản mới" : `Gửi lại sau góp ý (lần ${nextRound})`,
         body: `Khoá học "${courseRow.title}" đã được gửi để duyệt xuất bản (vòng ${nextRound}).`,
@@ -552,146 +288,34 @@ export async function submitCourseForPublication(courseId: string): Promise<{ su
   return { success: true };
 }
 
-/**
- * Lecturer marks a review flag as fixed with an explanation.
- */
-export async function markFlagFixed(
-  courseId: string,
-  flagId: number,
-  reply: string
-): Promise<{ success: boolean }> {
-  const userSession = await verifyLecturerSession();
+function requireReturnedRound(context: PublicationContext) {
+  if (context.course.status !== "rejected" || !context.request || !["changes_requested", "rejected"].includes(context.request.status))
+    throw new Error("Chỉ có thể phản hồi góp ý của vòng mới nhất đã trả về để chỉnh sửa.");
+  return context.request;
+}
 
+export async function markFlagFixed(courseId: string, flagId: number, reply: string): Promise<{ success: boolean }> {
   const trimmedReply = (reply || "").trim();
-  if (trimmedReply.length < 5) {
-    throw new Error("Vui lòng ghi rõ bạn đã chỉnh sửa nội dung gì (ít nhất 5 ký tự).");
-  }
-
-  const [row] = await db
-    .select({
-      flag: publicationReviewFlags,
-      request: coursePublicationRequests,
-      course: courses,
-    })
-    .from(publicationReviewFlags)
-    .innerJoin(
-      coursePublicationRequests,
-      eq(publicationReviewFlags.requestId, coursePublicationRequests.id)
-    )
-    .innerJoin(
-      courses,
-      eq(coursePublicationRequests.courseId, courses.id)
-    )
-    .where(
-      and(
-        eq(publicationReviewFlags.id, flagId),
-        eq(coursePublicationRequests.courseId, courseId),
-        eq(courses.id, courseId)
-      )
-    );
-
-  const course = (row as any)?.course ?? row;
-  const flag = (row as any)?.flag ?? row;
-
-  if (!row || course?.instructorId !== userSession.id) {
-    throw new Error("Không có quyền chỉnh sửa hoặc không tìm thấy góp ý này trong khoá học của bạn.");
-  }
-
-  if (course?.status === "pending") {
-    throw new Error("Khoá học đang chờ quản trị viên duyệt, không thể thay đổi cờ góp ý.");
-  }
-
-  if (flag?.status === "closed") {
-    throw new Error("Góp ý này đã được quản trị viên đóng, không thể sửa đổi.");
-  }
-
-  if (flag?.status !== "open") {
-    throw new Error("Chỉ có thể đánh dấu đã sửa cho góp ý đang ở trạng thái cần sửa (open).");
-  }
-
-  await db
-    .update(publicationReviewFlags)
-    .set({
-      status: "fixed",
-      lecturerReply: trimmedReply,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(publicationReviewFlags.id, flagId),
-        eq(publicationReviewFlags.status, "open")
-      )
-    );
-
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
+  if (trimmedReply.length < 5) throw new Error("Vui lòng ghi rõ bạn đã chỉnh sửa nội dung gì (ít nhất 5 ký tự).");
+  await changeLecturerFlag(courseId, flagId, "open", "fixed", trimmedReply);
   return { success: true };
 }
 
-/**
- * Lecturer reopens a review flag previously marked as fixed.
- */
-export async function reopenFlag(
-  courseId: string,
-  flagId: number
-): Promise<{ success: boolean }> {
-  const userSession = await verifyLecturerSession();
-
-  const [row] = await db
-    .select({
-      flag: publicationReviewFlags,
-      request: coursePublicationRequests,
-      course: courses,
-    })
-    .from(publicationReviewFlags)
-    .innerJoin(
-      coursePublicationRequests,
-      eq(publicationReviewFlags.requestId, coursePublicationRequests.id)
-    )
-    .innerJoin(
-      courses,
-      eq(coursePublicationRequests.courseId, courses.id)
-    )
-    .where(
-      and(
-        eq(publicationReviewFlags.id, flagId),
-        eq(coursePublicationRequests.courseId, courseId),
-        eq(courses.id, courseId)
-      )
-    );
-
-  const course = (row as any)?.course ?? row;
-  const flag = (row as any)?.flag ?? row;
-
-  if (!row || course?.instructorId !== userSession.id) {
-    throw new Error("Không có quyền chỉnh sửa hoặc không tìm thấy góp ý này trong khoá học của bạn.");
-  }
-
-  if (course?.status === "pending") {
-    throw new Error("Khoá học đang chờ quản trị viên duyệt, không thể mở lại cờ góp ý.");
-  }
-
-  if (flag?.status === "closed") {
-    throw new Error("Góp ý này đã được quản trị viên đóng, không thể mở lại.");
-  }
-
-  if (flag?.status !== "fixed") {
-    throw new Error("Chỉ có thể mở lại góp ý đang ở trạng thái đã sửa (fixed).");
-  }
-
-  await db
-    .update(publicationReviewFlags)
-    .set({
-      status: "open",
-      lecturerReply: null,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(publicationReviewFlags.id, flagId),
-        eq(publicationReviewFlags.status, "fixed")
-      )
-    );
-
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
+export async function reopenFlag(courseId: string, flagId: number): Promise<{ success: boolean }> {
+  await changeLecturerFlag(courseId, flagId, "fixed", "open", null);
   return { success: true };
+}
+
+async function changeLecturerFlag(
+  courseId: string, flagId: number, from: "open" | "fixed", to: "fixed" | "open", reply: string | null,
+) {
+  await publicationCourseTransaction(courseId, ROLE.LECTURER, async context => {
+    const request = requireReturnedRound(context);
+    const changed = await context.tx.update(publicationReviewFlags).set({
+      status: to, lecturerReply: reply, updatedAt: new Date(),
+    }).where(and(eq(publicationReviewFlags.id, flagId), eq(publicationReviewFlags.requestId, request.id),
+      eq(publicationReviewFlags.status, from))).returning({ id: publicationReviewFlags.id });
+    requirePublicationClaim(changed);
+  });
+  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
 }

@@ -88,7 +88,7 @@ export function CourseCreateForm() {
 
       if (res.success && res.courseId) {
         toast.success("Đã tạo bản nháp khoá học thành công!");
-        router.push("/dashboard/lecturer/courses");
+        router.push(`/dashboard/lecturer/courses/${res.courseId}`);
       } else if (res.errors) {
         setErrors(res.errors);
       }

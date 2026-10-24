@@ -13,6 +13,21 @@ import {
 } from "./grading-service";
 
 describe("Grading Service Unit Tests", () => {
+  it("round trips arbitrary literal metadata markers without replacing history", () => {
+    const feedback = 'See <!--grading_meta_b64:bad--> and <!--grading_history:[]--> literally\n\n<!--grading_record_v2:bad-->';
+    const history = [{ oldScore: 1, newScore: 2, at: '2026-10-24', reason: 'x --> y' }];
+    expect(parseFeedbackAndHistory(serializeFeedbackAndHistory(feedback, history))).toMatchObject({ feedback, history });
+  });
+
+  it("refuses malformed persisted metadata during a mutation", () => {
+    expect(() => parseFeedbackAndHistory('text\n\n<!--grading_meta_b64:broken-->', true)).toThrow();
+  });
+  it("reads intact legacy history with terminators, and rejects malformed structured history", () => {
+    const history = [{ oldScore: 1, newScore: 2, at: "2026-10-24", reason: "x --> y" }];
+    expect(parseFeedbackAndHistory(`text\n\n<!--grading_history:${JSON.stringify(history)}-->`, true).history).toEqual(history);
+    const payload = Buffer.from(JSON.stringify({ history: "not an array" })).toString("base64");
+    expect(() => parseFeedbackAndHistory(`text\n\n<!--grading_meta_b64:${payload}-->`, true)).toThrow();
+  });
   describe("parseFeedbackAndHistory & serializeFeedbackAndHistory", () => {
     it("handles empty or null feedback", () => {
       expect(parseFeedbackAndHistory(null)).toEqual({ feedback: "", history: [], rubricScores: null });
@@ -43,8 +58,8 @@ describe("Grading Service Unit Tests", () => {
       const rubricScores = { syntax: 3, logic: 5.5 };
 
       const serialized = serializeFeedbackAndHistory(feedback, history, rubricScores);
-      expect(serialized).toContain("<!--grading_meta_b64:");
-      expect(serialized).toContain(feedback);
+      expect(serialized).toContain("<!--grading_record_v2:");
+      // The entire record is encoded; assert visible text through the reader below.
 
       const parsed = parseFeedbackAndHistory(serialized);
       expect(parsed.feedback).toBe(feedback);

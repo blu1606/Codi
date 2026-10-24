@@ -96,4 +96,5 @@ Coverage được đo bằng công cụ V8 (`@vitest/coverage-v8`) với ngưỡ
 ## 6. Giới hạn & Khuyến nghị tương lai
 
 - **Unit tests kiểm thử logic thuần và điều kiện rẽ nhánh**: Các hành vi phụ thuộc sâu vào cơ chế vật lý của RDBMS (như PostgreSQL row-level locks `for update`, concurrent race conditions, transaction rollback khi crash phần cứng) cần được kiểm thử bằng integration tests riêng với cơ sở dữ liệu thật trong môi trường staging.
+- **E2E trên trình duyệt thật**: luồng UI được kiểm bằng Playwright (`pnpm test:e2e`, spec `apps/web/e2e/*.spec.ts`), tách khỏi Vitest. Cách chạy và biến môi trường: [ui-test-flows.md §5](ui-test-flows.md#5-chạy-test).
 - **Không dùng DOM renderer**: Các test trên không render giao diện React (không dùng jsdom/RTL) nhằm tối ưu tốc độ thực thi trong CI pipeline (chỉ tốn ~1.5 giây).

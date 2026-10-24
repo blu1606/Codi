@@ -80,6 +80,12 @@ export function createAuth(env: AuthConfig, database: Database) {
       enabled: true,
       revokeSessionsOnPasswordReset: true,
     },
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google", "github"],
+      },
+    },
     secret: env.BETTER_AUTH_SECRET,
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
@@ -133,7 +139,7 @@ export function createAuth(env: AuthConfig, database: Database) {
               .where(eq(schema.user.id, session.userId));
 
             if (dbUser?.banned) {
-              throw new APIError("UNAUTHORIZED", { message: "Tai khoan da bi khoa." });
+              throw new APIError("UNAUTHORIZED", { message: "Tài khoản đã bị vô hiệu hoá." });
             }
             return { data: session };
           },
@@ -146,7 +152,7 @@ export function createAuth(env: AuthConfig, database: Database) {
 
             if (dbUser?.banned) {
               await database.delete(schema.session).where(eq(schema.session.id, session.id));
-              throw new APIError("UNAUTHORIZED", { message: "Tai khoan da bi khoa." });
+              throw new APIError("UNAUTHORIZED", { message: "Tài khoản đã bị vô hiệu hoá." });
             }
           }
         }

@@ -19,6 +19,28 @@ Each mutation locks the owner's enrollment row inside a transaction. Answers bel
 submission; server checks the active attempt, current question and option ownership. Back/next and choices are
 saved immediately; a reload offers continuation from the saved question. A retake creates a new attempt,
 retaining earlier submissions. Duplicate submission returns the result without applying evidence twice.
+Quiz content uses immutable integer revisions. Author saves append a complete question/option set and advance
+`assessments.currentQuizRevision` atomically; they never delete or rewrite a prior set. Every quiz attempt
+stores `assessment_submissions.quizRevision` at creation, even before any answer. Resume, grading and result
+review load that pinned set; intro for a new attempt/retake loads the current revision. Mutation lock order is
+enrollment first, then assessment `FOR SHARE`; author publication takes the same assessment `FOR UPDATE` lock.
+Passing-score, max-score, lesson checklist and completion policies are unchanged. Historical learning-path
+evidence must keep joining its original questions, without a current-revision filter.
+
+Migration [20261020151926_quiz_content_revisions](../packages/db/src/migrations/20261020151926_quiz_content_revisions/migration.sql)
+extends the coding-tutorial snapshot, adds the revision columns/checks, pins all existing quiz submissions
+(including zero-answer drafts) to revision 1, and replaces question-position uniqueness with revision-scoped
+uniqueness. Question/current revision defaults backfill to1; non-quiz submission pins remain nullable. IDs,
+scores, answers and evidence are unchanged; this preserves available history, not content already lost.
+
+Before application, independently verify the migration on PostgreSQL and take a restorable backup. Fence all
+old app/preview/worker/seed writers and drain in-flight requests; apply the migration atomically, then deploy
+only revision-aware readers and writers before reopening traffic. An old writer can still insert a null pin
+or mutate historical content after migration; schema addition alone is not mixed-version compatibility.
+No migration application or runtime acceptance is implied by source tests. After multiple revisions exist,
+dropping revision columns or restoring the old unique index cannot preserve both history and uniqueness;
+prefer a forward repair. A pre-rollout rollback requires the same write fence and verified backup/restore,
+not deleting historical questions or answers to make the old index fit.
 `diagnosticPolicy` is the pure command policy exercised by Vitest on CI for every transition and rejected state.
 Postponing is permitted only at intro; leaving an in-progress test preserves it for resume.
 During goal edit, “Huỷ chỉnh sửa” discards the draft and keeps the saved goal, diagnostic and path unchanged.
@@ -61,6 +83,11 @@ Rerunning the seed also hides the previously published fixture from the public c
 The DB verification script creates isolated fixture rows inside a transaction and rolls them back after checking
 ownership, goals, resume, answer scoping, grading, idempotency, retake, default paths, D11 and completed lessons.
 These scripts refuse `NODE_ENV=production`. They are separate from the application API's real-data behavior.
+Question fixture writers run inside their caller's transaction and take the assessment publication lock.
+Unchanged mockup reruns reuse question/option IDs; changed mockup content appends a complete revision. The
+onboarding/assessment fixtures keep their existing fill-only semantics: existing content is retained and
+missing positions/options are filled in a new complete revision, never by changing a pinned set. Direct quiz
+submission fixtures pin the returned/current revision, including zero-answer drafts; non-quiz pins stay null.
 
 Open http://localhost:3001/learn/dev-onboarding-typescript/onboarding with a seeded learner account.
 Password sign-in and new-account email verification preserve this onboarding return destination.

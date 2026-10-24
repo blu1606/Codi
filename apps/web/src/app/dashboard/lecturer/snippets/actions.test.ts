@@ -157,6 +157,10 @@ describe("Feedback Snippets Actions", () => {
   });
 
   describe("deleteFeedbackSnippet & restoreFeedbackSnippet", () => {
+    it.each([{ title: "", body: "text" }, { title: "x".repeat(101), body: "text" }, { title: "Title", body: "x".repeat(2001) }])("validates restored personal snippets", async (input) => {
+      await expect(restoreFeedbackSnippet(input)).rejects.toThrow("không hợp lệ");
+      expect(mockInsert).not.toHaveBeenCalled();
+    });
     it("deletes snippet owned by lecturer and returns deleted data for undo", async () => {
       mockDelete.mockReturnValue({
         where: vi.fn().mockReturnValue({

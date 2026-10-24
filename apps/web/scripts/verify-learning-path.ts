@@ -282,6 +282,7 @@ async function main() {
         .values(
           [0, 1, 2].map((position) => ({
             assessmentId: quiz.id,
+            quizRevision: quiz.currentQuizRevision,
             text: `Câu ${position}`,
             position,
           })),
@@ -291,6 +292,7 @@ async function main() {
         .insert(assessmentSubmissions)
         .values({
           assessmentId: quiz.id,
+          quizRevision: quiz.currentQuizRevision,
           enrollmentId: e.id,
           attempt: 1,
           status: "graded",

@@ -81,7 +81,8 @@ describe("knowledge-map course membership", () => {
     boundary.transaction.mockImplementation(async (callback) => {
       inTransaction = true;
       try {
-        return await callback({ select: boundary.select, update: boundary.update, insert: boundary.insert });
+        return await callback({ select: boundary.select, update: boundary.update, insert: boundary.insert,
+          execute: vi.fn(), transaction: boundary.transaction });
       } finally {
         inTransaction = false;
       }
@@ -180,3 +181,18 @@ describe("knowledge-map course membership", () => {
     expect(query.params).toEqual([101, 102, 101, 102]);
   });
 });
+
+// Session transport is a boundary here; transactional revalidation has its own tests.
+vi.mock("@/lib/lecturer-auth", () => ({
+  readLecturerIdentity: async () => {
+    const identity = await boundary.session();
+    if (!identity?.user) throw new Error("Unauthorized");
+    return identity;
+  },
+  verifyLecturerSession: async (_store: unknown, identity?: any) => {
+    const authenticated = identity ?? await boundary.session();
+    if (!authenticated?.user) throw new Error("Unauthorized");
+    await boundary.role();
+    return authenticated.user;
+  },
+}));

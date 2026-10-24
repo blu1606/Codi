@@ -104,8 +104,8 @@ export interface QuizQuestionLike {
   explanation?: string | null;
   correctIndex?: number;
   options: string[];
-  aiGenerated?: boolean;
-  aiReviewed?: boolean;
+  aiGenerated?: boolean | null;
+  aiReviewed?: boolean | null;
 }
 
 export interface QuizLike {
@@ -126,6 +126,7 @@ export interface CodeLike {
   kind: "tutorial" | "challenge";
   tests: CodeTestLike[];
   instructions?: string[];
+  starterCode?: string;
   solutionCheck?: {
     ok: boolean;
     passed?: number;
@@ -319,13 +320,10 @@ export function checkReadiness(c: CourseDataForReview): ReadinessResult {
     },
     {
       key: "price",
-      ok:
-        (c.proposedPrice !== null && c.proposedPrice !== undefined) ||
-        (c.price !== null && c.price !== undefined),
+      ok: c.proposedPrice !== null && c.proposedPrice !== undefined,
       label: "Giá đề xuất",
       hint:
-        (c.proposedPrice !== null && c.proposedPrice !== undefined) ||
-        (c.price !== null && c.price !== undefined)
+        c.proposedPrice !== null && c.proposedPrice !== undefined
           ? "Đã đạt"
           : "Nhập giá đề xuất (quản trị viên xác nhận giá cuối).",
       href: `/dashboard/lecturer/courses/${c.id}/info`,
@@ -370,7 +368,7 @@ export interface AutoCriterionResult {
 export function autoCriteria(c: CourseDataForReview): Record<ReviewCriterionId, AutoCriterionResult> {
   const ls = extractAllLessons(c);
   const desc = (c.description || c.summary || "").trim();
-  const price = c.proposedPrice ?? c.price;
+  const price = c.proposedPrice;
 
   const quizzes = ls.filter((l) => l.quiz && l.quiz.questions.length > 0);
   const challenges = ls.filter((l) => l.code && l.code.kind === "challenge");

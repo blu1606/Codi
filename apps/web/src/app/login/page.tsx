@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
 import { onboardingReturnPath } from "@/lib/onboarding-return";
+import { safeNext } from "@/lib/safe-redirect";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -19,6 +20,9 @@ function LoginContent() {
       setActiveTab("signin");
     }
   }, [tabParam]);
+
+  const rawReturn = searchParams.get("returnTo") || searchParams.get("callbackURL") || searchParams.get("next");
+  const sanitizedReturnTo = safeNext(rawReturn, onboardingReturnPath(rawReturn));
 
   return (
     <div className="login-cyber-violet relative flex min-h-[calc(100vh-4rem)] w-full items-center justify-center overflow-y-auto bg-background p-4 py-8 sm:p-8">
@@ -35,9 +39,9 @@ function LoginContent() {
 
       <div className="relative z-10 w-full max-w-md">
         {activeTab === "signin" ? (
-          <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} returnTo={onboardingReturnPath(searchParams.get("callbackURL"))} />
+          <SignInForm onSwitchToSignUp={() => setActiveTab("signup")} returnTo={sanitizedReturnTo} />
         ) : (
-          <SignUpForm onSwitchToSignIn={() => setActiveTab("signin")} returnTo={onboardingReturnPath(searchParams.get("callbackURL"))} />
+          <SignUpForm onSwitchToSignIn={() => setActiveTab("signin")} returnTo={sanitizedReturnTo} />
         )}
       </div>
     </div>

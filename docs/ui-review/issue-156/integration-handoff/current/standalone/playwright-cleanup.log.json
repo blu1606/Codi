@@ -1,0 +1,13 @@
+{
+  "startedUtc": "2026-10-21T15:01:54.389Z",
+  "finishedUtc": "2026-10-21T15:04:27.016Z",
+  "cwd": "E:\\Code\\AI Study\\Codi-156-knowledge-map-lesson-cta\\apps\\web",
+  "command": [
+    "node",
+    "scripts/verify-knowledge-map-cta.mjs",
+    "--allow-dev-db",
+    "--edge-states"
+  ],
+  "exitCode": 0,
+  "signal": null
+}
