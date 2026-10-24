@@ -155,11 +155,11 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
       });
 
       await expect(runKnowledgeMapAnalysis("c-1")).rejects.toThrow(
-        "Khoá học chưa có bài học nào để phân tích."
+        "Phân tích AI chưa khả dụng"
       );
     });
 
-    it("tạo khái niệm và quan hệ tuần tự khi phân tích lần đầu", async () => {
+    it("refuses unavailable analysis without creating concepts, edges, audit or notices", async () => {
       let selectCount = 0;
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -211,15 +211,12 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
         }),
       });
 
-      const res = await runKnowledgeMapAnalysis("c-1");
-      expect(res.success).toBe(true);
-      expect(res.count).toBe(2);
-      expect(mockNotify).toHaveBeenCalledWith(
-        "lecturer-1",
-        "Bản đồ kiến thức đã sẵn sàng",
-        expect.stringContaining("2 khái niệm cần bạn xem lại"),
-        expect.any(String)
-      );
+      await expect(runKnowledgeMapAnalysis("c-1")).rejects.toThrow("Phân tích AI chưa khả dụng");
+      expect(mockInsert).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockDelete).not.toHaveBeenCalled();
+      expect(mockNotify).not.toHaveBeenCalled();
+      expect(mockRevalidatePath).not.toHaveBeenCalled();
     });
   });
 
@@ -404,7 +401,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
         }),
       });
 
-      await expect(confirmKnowledgeMap("c-1")).rejects.toThrow("Hãy phân tích lại trước khi xác nhận.");
+      await expect(confirmKnowledgeMap("c-1")).rejects.toThrow("bản thử nghiệm chưa hỗ trợ kiểm tra lại để xác nhận.");
     });
 
     it("ném lỗi khi còn vòng lặp trong đồ thị", async () => {

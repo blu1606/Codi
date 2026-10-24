@@ -21,7 +21,6 @@ import {
   Minus,
   Pencil,
   Plus,
-  RefreshCw,
   Sparkles,
   Undo2,
   X,
@@ -72,7 +71,6 @@ import {
   type KnowledgeMapDataDto,
   renameKnowledgeMapConcept,
   reviewKnowledgeMapItem,
-  runKnowledgeMapAnalysis,
 } from "./actions";
 
 interface KnowledgeMapClientProps {
@@ -95,7 +93,6 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
   const [zoom, setZoom] = useState<number>(1);
 
   // Loading states
-  const [isAnalysing, setIsAnalysing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isAcceptingAll, setIsAcceptingAll] = useState(false);
   const [showAcceptAllDialog, setShowAcceptAllDialog] = useState(false);
@@ -259,8 +256,8 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
     !cycle &&
     totalPending === 0 &&
     liveConcepts.length > 0 &&
-    course.knowledgeMapStatus !== "confirmed" &&
-    course.knowledgeMapStatus !== "stale";
+    !course.confirmationUnavailable &&
+    course.knowledgeMapStatus === "ready";
 
   // Pre-calculate accept all statistics for dialog
   const acceptAllPreview = useMemo(() => {
@@ -278,23 +275,6 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
       keptEdges
     );
   }, [concepts, edges]);
-
-  // Action: Run AI Analysis
-  const handleRunAnalysis = async () => {
-    if (isLocked) return;
-    try {
-      setIsAnalysing(true);
-      const res = await runKnowledgeMapAnalysis(courseId);
-      if (res.success) {
-        toast.success(`Đã phân tích xong bản đồ kiến thức (${res.count} khái niệm).`);
-        router.refresh();
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Phân tích thất bại. Vui lòng thử lại.");
-    } finally {
-      setIsAnalysing(false);
-    }
-  };
 
   // Action: Review Item (Chấp nhận / Bỏ / Khôi phục)
   const handleReviewItem = async (
@@ -467,6 +447,24 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
       {/* ─────────────────────────────────────────────────────────────
           1. HEADER & STATUS BANNERS (STATE-MACHINES §18, PRODUCT S24)
           ───────────────────────────────────────────────────────────── */}
+      <Alert variant="info">
+        <AlertTitle>Phân tích AI chưa khả dụng</AlertTitle>
+        <AlertDescription>
+          Bản thử nghiệm không gọi dịch vụ AI và không tạo bản đồ mới. Nguồn AI và thời điểm tạo
+          đã lưu trước đây chưa được xác minh, không phải bằng chứng đã trích xuất nội dung.
+          Bạn vẫn có thể xem lại, sửa và xác nhận bản đồ hiện có nếu đủ điều kiện.
+          Khi chưa có bản đồ hợp lệ, khoá học chưa thể đáp ứng điều kiện bản đồ để xuất bản.
+        </AlertDescription>
+      </Alert>
+      {liveConcepts.length === 0 && (
+        <Alert variant="warning">
+          <AlertTitle>Chưa có bản đồ để xác nhận</AlertTitle>
+          <AlertDescription>
+            Bản đồ mới hoặc trống chưa thể tạo hoặc xác nhận trong bản thử nghiệm.
+            Thêm bài học không tự động tạo khái niệm hay quan hệ.
+          </AlertDescription>
+        </Alert>
+      )}
       {course.requiresReconfirmation && (
         <Alert variant="info">
           <AlertTitle>Cần xác nhận lại để áp dụng cho học viên</AlertTitle>
@@ -486,8 +484,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
                 </EmptyMedia>
                 <EmptyTitle>Chưa có nội dung để phân tích</EmptyTitle>
                 <EmptyDescription>
-                  Thêm ít nhất một bài học vào khoá học, sau đó Codi sẽ tự động trích xuất các khái niệm
-                  và quan hệ "cần học trước" để bạn xem lại.
+                  Bạn có thể thêm bài học, nhưng bản thử nghiệm chưa hỗ trợ tạo bản đồ từ nội dung.
                 </EmptyDescription>
               </EmptyHeader>
               <Link
@@ -502,61 +499,19 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
         </Card>
       )}
 
-      {course.knowledgeMapStatus === "analysing" && (
-        <Card className="border border-border/80 bg-card/60">
-          <CardContent className="p-6 flex flex-col items-center justify-center text-center space-y-4">
-            <Loader2 className="size-8 text-primary animate-spin" />
-            <div className="space-y-1">
-              <h3 className="text-base font-semibold">Đang phân tích nội dung…</h3>
-              <p className="text-sm text-muted-foreground max-w-md">
-                AI đang trích xuất các khái niệm cốt lõi từ các bài học. Bạn sẽ nhận thông báo khi hoàn tất;
-                bạn có thể rời khỏi trang này bất cứ lúc nào.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {course.knowledgeMapStatus === "failed" && (
-        <Alert variant="destructive">
-          <AlertCircle className="size-4" />
-          <AlertTitle className="font-semibold">Phân tích bản đồ kiến thức thất bại</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-4 flex-wrap">
-            <span>Dịch vụ AI không phản hồi lúc này. Nội dung khoá học của bạn không bị ảnh hưởng.</span>
-            {!isLocked && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRunAnalysis}
-                disabled={isAnalysing}
-                className="gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className={cn("size-3.5", isAnalysing && "animate-spin")} />
-                Thử lại
-              </Button>
-            )}
-          </AlertDescription>
+      {(course.knowledgeMapStatus === "analysing" || course.knowledgeMapStatus === "failed") && (
+        <Alert variant="warning">
+          <AlertTitle>Trạng thái phân tích cũ chưa được xác minh</AlertTitle>
+          <AlertDescription>Không có tác vụ AI đang chạy hoặc chức năng thử lại trong bản thử nghiệm.</AlertDescription>
         </Alert>
       )}
-
-      {course.knowledgeMapStatus === "stale" && (
+      {(course.knowledgeMapStatus === "stale" || course.confirmationUnavailable) && (
         <Alert variant="warning">
-          <AlertTriangle className="size-4" />
-          <AlertTitle className="font-semibold">Nội dung đã thay đổi sau khi xác nhận</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-4 flex-wrap">
-            <span>Bản đồ hiện tại có thể không còn khớp với các bài học vừa sửa. Hãy phân tích lại và xác nhận.</span>
-            {!isLocked && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRunAnalysis}
-                disabled={isAnalysing}
-                className="gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className={cn("size-3.5", isAnalysing && "animate-spin")} />
-                Phân tích lại
-              </Button>
-            )}
+          <AlertTitle>Nội dung đã thay đổi — chưa thể xác nhận lại</AlertTitle>
+          <AlertDescription>
+            Bản thử nghiệm chưa hỗ trợ phân tích hoặc kiểm tra lại bản đồ sau khi nội dung thay đổi.
+            Bản phát hành đã xác nhận trước đó và dữ liệu học viên được giữ nguyên;
+            chỉnh sửa bản nháp không bỏ qua điều kiện xác nhận hay xuất bản.
           </AlertDescription>
         </Alert>
       )}
@@ -577,7 +532,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
           <AlertTitle className="font-semibold">
             {totalAccepted > 0
               ? `Đang duyệt dở dang (Partially accepted) — ${totalAccepted} mục đã duyệt, còn ${totalPending} mục chờ xem lại`
-              : `Sẵn sàng xem lại (Ready for review) — còn ${totalPending} mục do AI đề xuất`}
+              : `Sẵn sàng xem lại (Ready for review) — còn ${totalPending} mục chờ xem lại (nguồn chưa được xác minh)`}
           </AlertTitle>
           <AlertDescription>
             Chấp nhận, sửa hoặc bỏ từng khái niệm và quan hệ "cần học trước". Bản đồ chỉ được dùng sau khi bạn xác nhận.
@@ -585,7 +540,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
         </Alert>
       )}
 
-      {course.knowledgeMapStatus === "ready" && totalPending === 0 && !cycle && (
+      {course.knowledgeMapStatus === "ready" && liveConcepts.length > 0 && !course.confirmationUnavailable && totalPending === 0 && !cycle && (
         <Alert variant="info">
           <CheckCircle2 className="size-4" />
           <AlertTitle className="font-semibold">Đã xem lại mọi đề xuất</AlertTitle>
@@ -610,7 +565,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          2. TOOLBAR (Chấp nhận tất cả, Phân tích lại, Lọc chương, Switch view)
+          2. TOOLBAR (Chấp nhận tất cả, Lọc chương, Switch view)
           ───────────────────────────────────────────────────────────── */}
       {course.knowledgeMapStatus !== "empty" && course.knowledgeMapStatus !== "analysing" && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border/80 bg-card/60">
@@ -624,19 +579,6 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
               >
                 <Check className="size-3.5" />
                 Chấp nhận tất cả ({totalPending})
-              </Button>
-            )}
-
-            {!isLocked && course.knowledgeMapStatus !== "stale" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRunAnalysis}
-                disabled={isAnalysing}
-                className="gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
-              >
-                <RefreshCw className={cn("size-3.5", isAnalysing && "animate-spin")} />
-                Phân tích lại
               </Button>
             )}
 
@@ -1240,10 +1182,14 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
                 ? "Cần giải quyết vòng lặp trước khi có thể xác nhận bản đồ."
                 : totalPending > 0
                 ? `Còn ${totalPending} đề xuất chưa duyệt. Chấp nhận hoặc bỏ các mục để hoàn tất.`
-                : course.knowledgeMapStatus === "stale"
-                ? "Nội dung bài học đã thay đổi. Hãy bấm phân tích lại trước khi xác nhận."
+                : course.knowledgeMapStatus === "stale" || course.confirmationUnavailable
+                ? "Nội dung đã thay đổi; bản thử nghiệm chưa hỗ trợ xác nhận lại."
                 : course.knowledgeMapStatus === "confirmed"
                 ? "Bản đồ đã được xác nhận và đang có hiệu lực."
+                : liveConcepts.length === 0
+                ? "Chưa có bản đồ để xác nhận; chức năng tạo bản đồ chưa khả dụng."
+                : course.knowledgeMapStatus !== "ready"
+                ? "Trạng thái bản đồ hiện tại chưa cho phép xác nhận."
                 : "Tất cả đề xuất đã được xem xét xong. Sẵn sàng xác nhận!"}
             </p>
           </div>
