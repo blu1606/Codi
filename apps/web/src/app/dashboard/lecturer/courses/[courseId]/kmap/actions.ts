@@ -1,11 +1,10 @@
 "use server";
 
-import { createHash } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import {
-  aiInteractionLogs,
   courseChapters,
   courseLessons,
   courses,
@@ -18,10 +17,10 @@ import {
   findCycle,
   topoSortLessons,
 } from "@/lib/knowledge-map-runner";
-import { createNotificationService } from "@/lib/notification-service";
 import { db } from "@/services";
-import { getEditableCourse } from "../actions";
-import { verifyLecturerSession } from "@/lib/lecturer-auth";
+import { lockKnowledgeMap } from "@/lib/confirmed-knowledge-map";
+import { getEditableCourse } from "../course-queries";
+import { readLecturerIdentity, verifyLecturerSession } from "@/lib/lecturer-auth";
 
 export interface KnowledgeMapConceptDto {
   id: number;
@@ -46,6 +45,8 @@ export interface KnowledgeMapDataDto {
     status: string;
     knowledgeMapStatus: "empty" | "analysing" | "ready" | "confirmed" | "failed" | "stale";
     knowledgeMapGeneratedAt: Date | null;
+    requiresReconfirmation?: boolean;
+    confirmationUnavailable?: boolean;
   };
   isLocked: boolean;
   concepts: KnowledgeMapConceptDto[];
@@ -162,9 +163,12 @@ export async function getKnowledgeMapData(courseId: string): Promise<KnowledgeMa
 
   // Content availability controls empty/ready; ready does not imply analysis or confirmation.
   let effectiveStatus = course.knowledgeMapStatus;
+  const requiresReconfirmation = course.knowledgeMapStatus === "confirmed" && !course.confirmedKnowledgeMap;
   if (lessons.length === 0) {
     effectiveStatus = "empty";
   } else if (effectiveStatus === "empty") {
+    effectiveStatus = "ready";
+  } else if (requiresReconfirmation) {
     effectiveStatus = "ready";
   }
 
@@ -195,6 +199,9 @@ export async function getKnowledgeMapData(courseId: string): Promise<KnowledgeMa
       status: course.status,
       knowledgeMapStatus: effectiveStatus,
       knowledgeMapGeneratedAt: course.knowledgeMapGeneratedAt,
+      requiresReconfirmation: requiresReconfirmation && lessons.length > 0,
+      confirmationUnavailable: course.knowledgeMapStatus === "stale" ||
+        (course.knowledgeMapAnalysisGeneration ?? 0) !== (course.knowledgeMapContentGeneration ?? 0),
     },
     isLocked: course.status === "pending",
     concepts: mappedConcepts,
@@ -207,143 +214,16 @@ export async function getKnowledgeMapData(courseId: string): Promise<KnowledgeMa
 }
 
 /**
- * Phân tích nội dung và sinh Bản đồ kiến thức AI (STATE-MACHINES §18: tc-kmap-analyse).
+ * AI extraction is unavailable in this nonbillable prototype.
+ * Keep the endpoint fail-closed for stale clients without mutating saved data.
  */
-export async function runKnowledgeMapAnalysis(courseId: string) {
-  const { course, user } = await getEditableCourse(courseId);
-
-  // Lấy bài học của khoá học
-  const chapters = await db
-    .select()
-    .from(courseChapters)
-    .where(eq(courseChapters.courseId, courseId))
-    .orderBy(asc(courseChapters.position));
-
-  const chapterIds = chapters.map((ch) => ch.id);
-  const lessons =
-    chapterIds.length > 0
-      ? await db
-          .select()
-          .from(courseLessons)
-          .where(inArray(courseLessons.chapterId, chapterIds))
-          .orderBy(asc(courseLessons.position))
-      : [];
-
-  if (lessons.length === 0) {
-    throw new Error("Khoá học chưa có bài học nào để phân tích. Hãy thêm ít nhất 1 bài học.");
-  }
-
-  // Tính content_hash từ cấu trúc các bài học để kiểm tra thay đổi
-  const contentHash = createHash("sha256")
-    .update(
-      JSON.stringify(
-        lessons.map((l) => ({ id: l.id, title: l.title, position: l.position }))
-      )
-    )
-    .digest("hex");
-
-  // Lấy các khái niệm hiện có
-  const existingSkills = await db
-    .select()
-    .from(skills)
-    .where(eq(skills.courseId, courseId))
-    .orderBy(asc(skills.id));
-
-  let finalSkillCount = existingSkills.length;
-
-  if (existingSkills.length === 0) {
-    // Lần đầu phân tích: Tạo 1 khái niệm cho mỗi bài học
-    const createdSkills = await db
-      .insert(skills)
-      .values(
-        lessons.map((ls) => ({
-          courseId,
-          name: ls.title.replace(/^Bài \d+[:.]\s*/i, "").trim() || ls.title,
-          source: "ai" as const,
-          review: "suggested" as const,
-        }))
-      )
-      .returning();
-
-    finalSkillCount = createdSkills.length;
-
-    // Liên kết bài học với kỹ năng
-    if (createdSkills.length > 0) {
-      await db.insert(lessonSkills).values(
-        createdSkills.map((sk, idx) => ({
-          lessonId: lessons[idx].id,
-          skillId: sk.id,
-        }))
-      );
-    }
-
-    // Nối quan hệ tiên quyết tuần tự giữa các khái niệm liên tiếp
-    if (createdSkills.length > 1) {
-      const edgesToInsert = createdSkills.slice(1).map((sk, idx) => ({
-        prerequisiteSkillId: createdSkills[idx].id,
-        skillId: sk.id,
-        source: "ai" as const,
-        review: "suggested" as const,
-      }));
-      await db.insert(skillPrerequisites).values(edgesToInsert);
-    }
-  } else {
-    // Phân tích lại: Đặt lại toàn bộ về 'suggested'
-    await db
-      .update(skills)
-      .set({ review: "suggested" })
-      .where(eq(skills.courseId, courseId));
-
-    const skillIds = existingSkills.map((s) => s.id);
-    if (skillIds.length > 0) {
-      await db
-        .update(skillPrerequisites)
-        .set({ review: "suggested" })
-        .where(and(
-          inArray(skillPrerequisites.skillId, skillIds),
-          inArray(skillPrerequisites.prerequisiteSkillId, skillIds)
-        ));
-    }
-  }
-
-  // Ghi log kiểm toán vào bảng ai_interaction_logs (UC-26 / Task #116)
-  try {
-    await db.insert(aiInteractionLogs).values({
-      userId: user.id,
-      courseId,
-      requestType: "extract_knowledge_map",
-      model: "gemini-1.5-flash",
-      userPrompt: `Trích xuất bản đồ kiến thức cho khoá học ${course.title} (${lessons.length} bài học)`,
-      aiResponse: `Đã trích xuất ${finalSkillCount} khái niệm và quan hệ tiên quyết`,
-      isSuccess: true,
-    });
-  } catch {}
-
-  // Cập nhật trạng thái khoá học sang ready kèm model và contentHash
-  await db
-    .update(courses)
-    .set({
-      knowledgeMapStatus: "ready",
-      knowledgeMapModel: "gemini-1.5-flash",
-      knowledgeMapContentHash: contentHash,
-      knowledgeMapGeneratedAt: new Date(),
-    })
-    .where(eq(courses.id, courseId));
-
-  // Gửi thông báo cho giảng viên
-  try {
-    await createNotificationService(db).notify(
-      user.id,
-      "Bản đồ kiến thức đã sẵn sàng",
-      `${course.title}: ${finalSkillCount} khái niệm cần bạn xem lại.`,
-      `/dashboard/lecturer/courses/${courseId}/kmap`
-    );
-  } catch {}
-
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
-  revalidatePath(`/dashboard/lecturer/courses/${courseId}/kmap`);
-
-  return { success: true, count: finalSkillCount };
+export async function runKnowledgeMapAnalysis(courseId: string): Promise<never> {
+  const identity = await readLecturerIdentity();
+  return db.transaction(async (tx) => {
+    await lockKnowledgeMap(tx, courseId, "write");
+    await getEditableCourse(courseId, tx, identity);
+    throw new Error("Phân tích AI chưa khả dụng trong bản thử nghiệm. Không có dữ liệu nào bị thay đổi.");
+  });
 }
 
 /**
@@ -359,7 +239,10 @@ export async function reviewKnowledgeMapItem(
     review: "suggested" | "accepted" | "edited" | "declined";
   }
 ) {
-  const { course } = await getEditableCourse(courseId);
+  const identity = await readLecturerIdentity();
+  return db.transaction(async (db) => {
+    await lockKnowledgeMap(db, courseId, "write");
+  const { course } = await getEditableCourse(courseId, db, identity);
 
   if (kind === "concept" && payload.skillId) {
     await db
@@ -395,6 +278,7 @@ export async function reviewKnowledgeMapItem(
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}/kmap`);
   return { success: true };
+  });
 }
 
 /**
@@ -405,7 +289,10 @@ export async function renameKnowledgeMapConcept(
   skillId: number,
   newName: string
 ) {
-  const { course } = await getEditableCourse(courseId);
+  const identity = await readLecturerIdentity();
+  return db.transaction(async (db) => {
+    await lockKnowledgeMap(db, courseId, "write");
+  const { course } = await getEditableCourse(courseId, db, identity);
   const trimmed = newName.trim();
   if (!trimmed) {
     throw new Error("Tên khái niệm không được để trống.");
@@ -425,6 +312,7 @@ export async function renameKnowledgeMapConcept(
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}/kmap`);
   return { success: true };
+  });
 }
 
 /**
@@ -435,7 +323,10 @@ export async function addKnowledgeMapEdge(
   fromSkillId: number,
   toSkillId: number
 ) {
-  const { course } = await getEditableCourse(courseId);
+  const identity = await readLecturerIdentity();
+  return db.transaction(async (db) => {
+    await lockKnowledgeMap(db, courseId, "write");
+  const { course } = await getEditableCourse(courseId, db, identity);
 
   if (fromSkillId === toSkillId) {
     throw new Error("Một khái niệm không thể cần học trước chính nó.");
@@ -486,13 +377,17 @@ export async function addKnowledgeMapEdge(
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}/kmap`);
   return { success: true };
+  });
 }
 
 /**
  * Chấp nhận tất cả đề xuất với cơ chế bảo vệ chống vòng lặp (D10: tc-kmap-accept-all).
  */
 export async function acceptAllKnowledgeMap(courseId: string) {
-  const { course } = await getEditableCourse(courseId);
+  const identity = await readLecturerIdentity();
+  return db.transaction(async (db) => {
+    await lockKnowledgeMap(db, courseId, "write");
+  const { course } = await getEditableCourse(courseId, db, identity);
 
   const allSkills = await db
     .select()
@@ -562,6 +457,7 @@ export async function acceptAllKnowledgeMap(courseId: string) {
     acceptedEdgesCount: plan.acceptedEdges.length,
     skippedEdgesCount: plan.skippedEdges.length,
   };
+  });
 }
 
 /**
@@ -573,7 +469,10 @@ export async function acceptAllKnowledgeMap(courseId: string) {
  * - Trạng thái không phải 'stale'.
  */
 export async function confirmKnowledgeMap(courseId: string) {
-  const { course } = await getEditableCourse(courseId);
+  const identity = await readLecturerIdentity();
+  return db.transaction(async (db) => {
+    await lockKnowledgeMap(db, courseId, "write");
+  const { course } = await getEditableCourse(courseId, db, identity);
 
   await db.transaction(async (tx) => {
     const allSkills = await tx
@@ -588,13 +487,19 @@ export async function confirmKnowledgeMap(courseId: string) {
             .select()
             .from(skillPrerequisites)
             .where(
-              and(
+              or(
                 inArray(skillPrerequisites.skillId, skillIds),
                 inArray(skillPrerequisites.prerequisiteSkillId, skillIds)
               )
             )
         : [];
 
+    if (allEdges.some((edge) => !skillIds.includes(edge.skillId) || !skillIds.includes(edge.prerequisiteSkillId))) {
+      throw new Error("Quan hệ không thuộc khoá học này.");
+    }
+    if (!["ready", "confirmed", "stale"].includes(course.knowledgeMapStatus)) {
+      throw new Error("Bản đồ chưa sẵn sàng để xác nhận.");
+    }
     const liveSkills = allSkills.filter((s) => s.review !== "declined");
     if (liveSkills.length === 0) {
       throw new Error("Cần ít nhất một khái niệm để xác nhận bản đồ kiến thức.");
@@ -608,8 +513,9 @@ export async function confirmKnowledgeMap(courseId: string) {
       throw new Error(`Còn ${pendingTotal} đề xuất chưa xem lại. Hãy chấp nhận hoặc bỏ từng đề xuất trước khi xác nhận.`);
     }
 
-    if (course.knowledgeMapStatus === "stale") {
-      throw new Error("Nội dung khoá học đã thay đổi. Hãy phân tích lại trước khi xác nhận.");
+    if (course.knowledgeMapStatus === "stale" ||
+        (course.knowledgeMapAnalysisGeneration ?? 0) !== course.knowledgeMapContentGeneration) {
+      throw new Error("Nội dung khoá học đã thay đổi; bản thử nghiệm chưa hỗ trợ kiểm tra lại để xác nhận.");
     }
 
     const liveSkillIds = new Set(liveSkills.map((s) => s.id));
@@ -627,9 +533,33 @@ export async function confirmKnowledgeMap(courseId: string) {
       throw new Error("Bản đồ còn chứa vòng lặp. Cần phá vòng lặp trước khi xác nhận.");
     }
 
+    const chapters = await tx.select({ id: courseChapters.id }).from(courseChapters)
+      .where(eq(courseChapters.courseId, courseId));
+    const chapterIds = chapters.map((chapter) => chapter.id);
+    const lessons = chapterIds.length ? await tx.select({ id: courseLessons.id }).from(courseLessons)
+      .where(inArray(courseLessons.chapterId, chapterIds)) : [];
+    if (!lessons.length) throw new Error("Khoá học chưa có bài học để xác nhận.");
+    const links = await tx.select().from(lessonSkills)
+      .where(or(inArray(lessonSkills.lessonId, lessons.map((lesson) => lesson.id)),
+        inArray(lessonSkills.skillId, skillIds)));
+    if (links.some((link) => !skillIds.includes(link.skillId) || !lessons.some((lesson) => lesson.id === link.lessonId))) {
+      throw new Error("Liên kết khái niệm không thuộc khoá học này.");
+    }
+    const confirmedKnowledgeMap = {
+      version: 1 as const,
+      publicationId: randomUUID(),
+      contentGeneration: course.knowledgeMapContentGeneration,
+      publishedAt: new Date().toISOString(),
+      skills: liveSkills.map(({ id, name, bktPInit, bktPLearn, bktPGuess, bktPSlip }) =>
+        ({ id, name, bktPInit, bktPLearn, bktPGuess, bktPSlip })),
+      edges: activeEdges,
+      links: links.filter((link) => liveSkillIds.has(link.skillId))
+        .map(({ lessonId, skillId }) => ({ lessonId, skillId })),
+    };
     await tx
       .update(courses)
       .set({
+        confirmedKnowledgeMap,
         knowledgeMapStatus: "confirmed",
         updatedAt: new Date(),
       })
@@ -640,4 +570,5 @@ export async function confirmKnowledgeMap(courseId: string) {
   revalidatePath(`/dashboard/lecturer/courses/${courseId}/kmap`);
 
   return { success: true };
+  });
 }

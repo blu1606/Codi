@@ -36,9 +36,7 @@ export function LecturerNav({ counts }: LecturerNavProps) {
       href: "/dashboard/lecturer/courses" as const,
       label: "Khoá học của tôi",
       icon: BookOpen,
-      isActive:
-        pathname.startsWith("/dashboard/lecturer/courses") ||
-        pathname === "/dashboard/lecturer/new",
+      isActive: pathname.startsWith("/dashboard/lecturer/courses") || pathname === "/dashboard/lecturer/new",
       disabled: false,
     },
     {
@@ -66,14 +64,14 @@ export function LecturerNav({ counts }: LecturerNavProps) {
       disabled: false,
     },
     {
-      href: "/dashboard/lecturer/progress" as any,
+      href: "/dashboard/lecturer/progress" as const,
       label: "Tiến độ học viên",
       icon: BarChart,
       isActive: pathname.startsWith("/dashboard/lecturer/progress"),
       disabled: false,
     },
     {
-      href: "/dashboard/lecturer/insights" as any,
+      href: "/dashboard/lecturer/insights" as const,
       label: "Doanh thu",
       icon: TrendingUp,
       isActive: pathname.startsWith("/dashboard/lecturer/insights"),
@@ -106,7 +104,7 @@ export function LecturerNav({ counts }: LecturerNavProps) {
 
             return (
               <Link
-                key={item.label}
+                key={item.href}
                 href={item.href as any}
                 className={cn(
                   "flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-md whitespace-nowrap transition-colors",

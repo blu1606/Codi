@@ -12,6 +12,7 @@ import {
   HelpCircle,
   ListChecks,
   Loader2,
+  Lock,
   Play,
   RotateCcw,
   Send,
@@ -21,7 +22,7 @@ import {
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
-import { Button, buttonVariants } from "@codi-1/ui/components/button";
+import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
@@ -31,15 +32,14 @@ import {
 } from "@codi-1/ui/components/card";
 import { Textarea } from "@codi-1/ui/components/textarea";
 import { cn } from "@codi-1/ui/lib/utils";
-import { executeCode, gradeCodeResults } from "@/lib/code-runner";
-import type { CodingTestCaseInput } from "../../actions";
+import { runPreviewCode, type CodingTestCaseInput } from "../../actions";
 
 interface PreviewClientProps {
   courseId: string;
   lessonId: string;
   data: {
-    course: any;
-    lesson: any;
+    course: { id: string; title: string };
+    lesson: { id: string; title: string };
     exercise: {
       title: string;
       durationMinutes?: number;
@@ -64,24 +64,25 @@ export function CodingExercisePreviewClient({
   const [isRunning, setIsRunning] = useState(false);
   const [activeSideTab, setActiveSideTab] = useState<"brief" | "hints">("brief");
   const [activeResultTab, setActiveResultTab] = useState<"tests" | "console">("tests");
-  const [lastMode, setLastMode] = useState<"run" | "submit" | null>(null);
 
   const [runResult, setRunResult] = useState<{
     mode: "run" | "submit";
-    passed: number;
-    total: number;
-    allPass: boolean;
-    outcomes: Array<{
-      id: string | number;
-      name?: string;
-      call?: string;
+    phase: string;
+    sampleOutcomes: Array<{
+      id: number;
+      name: string;
+      call: string;
       pass: boolean;
       expected: string;
       actual: string | null;
       error: string | null;
-      hidden?: boolean;
     }>;
-    logs: Array<{ kind: string; text: string }>;
+    hiddenPassed: number;
+    hiddenTotal: number;
+    totalPassed: number;
+    totalTests: number;
+    allPass: boolean;
+    logs: string[];
   } | null>(null);
 
   // Khôi phục code ban đầu
@@ -92,62 +93,30 @@ export function CodingExercisePreviewClient({
     }
   };
 
-  // Thực thi code (Chạy hoặc Nộp bài)
+  // Thực thi code trong QuickJS WASM sandbox server-side (Chạy hoặc Nộp bài)
   const handleExecute = async (mode: "run" | "submit") => {
-    // Nếu là Chạy (run): chỉ chạy các test không ẩn (isSample = true hoặc !hidden)
-    // Nếu là Nộp bài (submit): chạy toàn bộ test
-    const testsToRun =
-      mode === "run"
-        ? exercise.tests.filter((t) => t.isSample || !t.hidden)
-        : exercise.tests;
-
-    if (testsToRun.length === 0) {
-      toast.error("Bài tập chưa có test case nào.");
-      return;
-    }
-
     try {
       setIsRunning(true);
-      setLastMode(mode);
 
-      const formattedTests = testsToRun.map((t, idx) => ({
-        id: t.id || idx + 1,
-        name: t.name,
-        call: t.call,
-        expected: t.expected !== undefined ? t.expected : t.expectedText,
-        hidden: t.hidden || !t.isSample,
-      }));
-
-      const execRes = await executeCode(studentCode, formattedTests, {
-        language: exercise.language,
-        solution: exercise.solutionCode,
-      });
-
-      const outcomes = gradeCodeResults(formattedTests, execRes);
-      const passed = outcomes.filter((o) => o.pass).length;
-      const total = outcomes.length;
-      const allPass = total > 0 && passed === total && execRes.phase === "done";
-
-      setRunResult({
+      const res = await runPreviewCode(courseId, lessonId, {
+        code: studentCode,
         mode,
-        passed,
-        total,
-        allPass,
-        outcomes,
-        logs: execRes.logs,
       });
+
+      setRunResult(res);
 
       if (mode === "submit") {
-        if (allPass) {
+        if (res.allPass) {
           toast.success("Chúc mừng! Bạn đã vượt qua tất cả test case!");
         } else {
-          toast.error(`Chưa đạt: bạn đã đúng ${passed}/${total} test case.`);
+          toast.error(`Chưa đạt: bạn đã đúng ${res.totalPassed}/${res.totalTests} test case.`);
         }
       } else {
-        toast.info(`Chạy thử hoàn tất: ${passed}/${total} test mẫu đạt.`);
+        toast.info(`Chạy thử hoàn tất: ${res.sampleOutcomes.filter((s) => s.pass).length}/${res.sampleOutcomes.length} test mẫu đạt.`);
       }
-    } catch (err: any) {
-      toast.error(err.message || "Lỗi khi chạy code.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Lỗi khi chạy code xem trước.";
+      toast.error(msg);
     } finally {
       setIsRunning(false);
     }
@@ -168,117 +137,145 @@ export function CodingExercisePreviewClient({
             Quay lại trình soạn thảo bài code
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight">{exercise.title}</h1>
-            <span className="px-2 py-0.5 text-xs font-semibold rounded-md bg-primary/10 text-primary border border-primary/20">
-              Chế độ xem như học viên
+            <h1 className="text-xl font-bold tracking-tight">Xem trước trải nghiệm học viên</h1>
+            <span className="px-2.5 py-0.5 text-xs font-semibold rounded-md bg-accent text-accent-foreground border border-border">
+              Chế độ mô phỏng học viên
             </span>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Khoá học: <span className="text-foreground font-medium">{course.title}</span> • Bài học:{" "}
+            <span className="text-foreground font-medium">{lesson.title}</span>
+          </p>
         </div>
 
-        <Link
-          href={`/dashboard/lecturer/courses/${courseId}/code/${lessonId}`}
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "text-xs")}
-        >
-          Thoát chế độ xem trước
-        </Link>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetCode}
+            disabled={isRunning}
+            className="text-xs gap-1.5 cursor-pointer"
+          >
+            <RotateCcw className="size-3.5" />
+            Khôi phục code ban đầu
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleExecute("run")}
+            disabled={isRunning}
+            className="text-xs gap-1.5 cursor-pointer"
+          >
+            {isRunning ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+            Chạy thử (Sample tests)
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={() => handleExecute("submit")}
+            disabled={isRunning}
+            className="text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+          >
+            {isRunning ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+            Nộp bài (Tất cả tests)
+          </Button>
+        </div>
       </div>
 
-      <Alert variant="info" className="py-2.5">
-        <AlertDescription className="text-xs">
-          Bạn đang trải nghiệm giao diện làm bài thực tế của học viên. Các lượt Chạy thử và Nộp bài tại đây hoàn toàn độc lập và không ghi nhận vào tiến độ của học viên thật.
-        </AlertDescription>
-      </Alert>
-
       {/* ─────────────────────────────────────────────────────────────
-          3-COLUMN / SPLIT VIEW WORKSPACE
+          KHÔNG GIAN LÀM VIỆC CHÍNH (SPLIT VIEW)
           ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* CỘT 1 (4/12): ĐỀ BÀI & GỢI Ý */}
-        <div className="lg:col-span-4 space-y-3">
-          <Card className="border border-border/80 shadow-xs">
-            <CardHeader className="py-3 px-4 border-b border-border/60">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSideTab("brief")}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
-                      activeSideTab === "brief"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    )}
-                  >
-                    Đề bài
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSideTab("hints")}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer",
-                      activeSideTab === "hints"
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    )}
-                  >
-                    Gợi ý ({exercise.hints?.length || 0})
-                  </button>
-                </div>
-                <span className="text-[11px] text-muted-foreground">
-                  ~{exercise.durationMinutes || 15} phút
-                </span>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-[640px]">
+        {/* CỘT TRÁI: ĐỀ BÀI VÀ GỢI Ý (5/12 CỘT) */}
+        <div className="lg:col-span-5 flex flex-col gap-3">
+          <div className="flex border-b border-border bg-muted/30 rounded-t-lg p-1 gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveSideTab("brief")}
+              className={cn(
+                "flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer",
+                activeSideTab === "brief"
+                  ? "bg-background text-foreground shadow-xs border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <FileCode className="size-3.5" />
+              Đề bài & Yêu cầu
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSideTab("hints")}
+              className={cn(
+                "flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer",
+                activeSideTab === "hints"
+                  ? "bg-background text-foreground shadow-xs border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <HelpCircle className="size-3.5 text-primary" />
+              Gợi ý ({exercise.hints?.length || 0})
+            </button>
+          </div>
+
+          <Card className="flex-1 shadow-xs border-border flex flex-col overflow-hidden">
+            <CardHeader className="py-3 px-4 border-b border-border bg-muted/10">
+              <CardTitle className="text-sm font-semibold">{exercise.title || lesson.title}</CardTitle>
+              <CardDescription className="text-xs">
+                Ngôn ngữ: <span className="font-mono text-foreground font-semibold">JavaScript (QuickJS Sandbox)</span> • Thời lượng:{" "}
+                {exercise.durationMinutes || 15} phút
+              </CardDescription>
             </CardHeader>
 
-            <CardContent className="p-4 space-y-4 max-h-[560px] overflow-y-auto">
+            <CardContent className="p-4 flex-1 overflow-y-auto space-y-4 text-xs leading-relaxed">
               {activeSideTab === "brief" ? (
                 <div className="space-y-4">
-                  <div>
-                    <h2 className="text-sm font-bold text-foreground">Yêu cầu cần hoàn thành</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Đạt tất cả các bước dưới đây để hoàn thành bài tập.
-                    </p>
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider text-muted-foreground">
+                      Các bước thực hiện
+                    </h4>
+                    <ol className="list-decimal list-inside space-y-2 text-foreground">
+                      {exercise.instructions.map((step, idx) => (
+                        <li key={idx} className="pl-1 leading-normal">
+                          {step}
+                        </li>
+                      ))}
+                    </ol>
                   </div>
 
-                  <div className="space-y-2.5">
-                    {exercise.instructions.map((step, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border/60 bg-muted/20 text-xs"
-                      >
-                        <span className="size-5 rounded-full bg-primary/10 text-primary font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
-                          {idx + 1}
-                        </span>
-                        <div className="flex-1 text-foreground leading-relaxed">
-                          {step}
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider text-muted-foreground">
+                      Ví dụ mẫu
+                    </h4>
+                    {exercise.tests
+                      .filter((t) => t.isSample || !t.hidden)
+                      .slice(0, 2)
+                      .map((t, idx) => (
+                        <div key={idx} className="p-2.5 rounded-md bg-muted/40 border border-border/80 font-mono text-xs space-y-1">
+                          <div className="text-muted-foreground">
+                            Đầu vào: <span className="text-foreground">{t.call}</span>
+                          </div>
+                          <div className="text-muted-foreground">
+                            Kỳ vọng: <span className="text-primary font-bold">{t.expectedText || JSON.stringify(t.expected)}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-foreground">Gợi ý cách giải</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Mở dần khi bạn cần hướng tư duy.
-                    </p>
-                  </div>
-
                   {exercise.hints && exercise.hints.length > 0 ? (
-                    <div className="space-y-2">
-                      {exercise.hints.map((hint, idx) => (
-                        <div
-                          key={idx}
-                          className="p-3 rounded-lg border border-border/80 bg-muted/30 text-xs space-y-1"
-                        >
-                          <span className="font-semibold text-primary">Gợi ý #{idx + 1}:</span>
-                          <p className="text-muted-foreground">{hint}</p>
-                        </div>
-                      ))}
-                    </div>
+                    exercise.hints.map((h, idx) => (
+                      <Alert key={idx} className="bg-primary/5 border-primary/20">
+                        <HelpCircle className="size-4 text-primary" />
+                        <AlertTitle className="text-xs font-semibold text-primary">Gợi ý #{idx + 1}</AlertTitle>
+                        <AlertDescription className="text-xs text-foreground mt-1">{h}</AlertDescription>
+                      </Alert>
+                    ))
                   ) : (
-                    <p className="text-xs text-muted-foreground">Bài này chưa có gợi ý.</p>
+                    <div className="py-8 text-center text-muted-foreground text-xs">
+                      Bài tập này chưa có gợi ý đính kèm.
+                    </div>
                   )}
                 </div>
               )}
@@ -286,206 +283,206 @@ export function CodingExercisePreviewClient({
           </Card>
         </div>
 
-        {/* CỘT 2 (5/12): TRÌNH SOẠN THẢO CODE */}
-        <div className="lg:col-span-5 space-y-3">
-          <Card className="border border-border/80 shadow-xs">
-            <CardHeader className="py-2.5 px-4 bg-muted/40 border-b border-border/60">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileCode className="size-4 text-primary" />
-                  <span className="font-mono text-xs font-semibold text-foreground">
-                    main.js
-                  </span>
-                </div>
+        {/* CỘT PHẢI: TRÌNH SOẠN THẢO CODE VÀ KẾT QUẢ TEST (7/12 CỘT) */}
+        <div className="lg:col-span-7 flex flex-col gap-3">
+          {/* TRÌNH SOẠN THẢO MÃ NGUỒN */}
+          <Card className="shadow-xs border-border flex flex-col flex-1 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b border-border text-xs font-mono">
+              <span className="flex items-center gap-1.5 font-semibold text-foreground">
+                <Code2 className="size-3.5 text-primary" />
+                solution.js
+              </span>
+              <span className="text-muted-foreground text-[11px]">JavaScript ES2023 (QuickJS Sandbox)</span>
+            </div>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleResetCode}
-                  className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground gap-1 cursor-pointer"
-                  title="Khôi phục code ban đầu"
-                >
-                  <RotateCcw className="size-3" />
-                  Khôi phục
-                </Button>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-3 space-y-3">
-              <div className="rounded-md border border-border/80 bg-background p-2">
-                <Textarea
-                  rows={18}
-                  value={studentCode}
-                  onChange={(e) => setStudentCode(e.target.value)}
-                  placeholder="// Viết code giải bài tập tại đây..."
-                  className="font-mono text-xs leading-relaxed border-0 focus-visible:ring-0 p-0 resize-none"
-                />
-              </div>
-
-              {/* Nút hành động học viên */}
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] text-muted-foreground">
-                  Phím tắt: Ctrl / ⌘ + Enter để chạy
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isRunning}
-                    onClick={() => handleExecute("run")}
-                    className="gap-1.5 text-xs cursor-pointer h-8"
-                  >
-                    {isRunning && lastMode === "run" ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Play className="size-3.5 text-primary" />
-                    )}
-                    Chạy thử
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    disabled={isRunning}
-                    onClick={() => handleExecute("submit")}
-                    className="gap-1.5 text-xs cursor-pointer h-8"
-                  >
-                    {isRunning && lastMode === "submit" ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <Send className="size-3.5" />
-                    )}
-                    Nộp bài
-                  </Button>
-                </div>
-              </div>
+            <CardContent className="p-0 flex-1 flex flex-col min-h-[300px]">
+              <Textarea
+                value={studentCode}
+                onChange={(e) => setStudentCode(e.target.value)}
+                placeholder="// Viết mã nguồn của bạn ở đây..."
+                disabled={isRunning}
+                className="w-full flex-1 p-4 font-mono text-xs border-0 rounded-none focus-visible:ring-0 resize-none bg-background text-foreground leading-relaxed"
+                rows={14}
+                spellCheck={false}
+              />
             </CardContent>
           </Card>
-        </div>
 
-        {/* CỘT 3 (3/12): KẾT QUẢ TEST & CONSOLE */}
-        <div className="lg:col-span-3 space-y-3">
-          <Card className="border border-border/80 shadow-xs">
-            <CardHeader className="py-2.5 px-4 bg-muted/40 border-b border-border/60">
-              <div className="flex items-center gap-2">
+          {/* KẾT QUẢ KIỂM THỬ VÀ CONSOLE */}
+          <Card className="shadow-xs border-border flex flex-col h-[280px] overflow-hidden">
+            <div className="flex items-center justify-between px-3 border-b border-border bg-muted/20">
+              <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveResultTab("tests")}
                   className={cn(
-                    "px-2.5 py-1 text-xs font-semibold rounded transition-colors cursor-pointer",
+                    "py-2 px-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer",
                     activeResultTab === "tests"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Kiểm thử
+                  <ListChecks className="size-3.5" />
+                  Kết quả kiểm thử
+                  {runResult && (
+                    <span
+                      className={cn(
+                        "ml-1 px-1.5 py-0.2 rounded-full text-[10px]",
+                        runResult.allPass
+                          ? "bg-success/20 text-success"
+                          : "bg-destructive/20 text-destructive"
+                      )}
+                    >
+                      {runResult.totalPassed}/{runResult.totalTests}
+                    </span>
+                  )}
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setActiveResultTab("console")}
                   className={cn(
-                    "px-2.5 py-1 text-xs font-semibold rounded transition-colors cursor-pointer",
+                    "py-2 px-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer",
                     activeResultTab === "console"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Console {runResult?.logs.length ? `(${runResult.logs.length})` : ""}
+                  <Terminal className="size-3.5" />
+                  Console Log
+                  {runResult && runResult.logs.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-muted text-muted-foreground">
+                      {runResult.logs.length}
+                    </span>
+                  )}
                 </button>
               </div>
-            </CardHeader>
 
-            <CardContent className="p-3 space-y-3 max-h-[560px] overflow-y-auto">
-              {runResult ? (
-                activeResultTab === "tests" ? (
-                  <div className="space-y-3">
-                    <div
-                      className={cn(
-                        "p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between",
-                        runResult.allPass
-                          ? "bg-success/10 border-success/30 text-success"
-                          : "bg-destructive/10 border-destructive/30 text-destructive"
-                      )}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        {runResult.allPass ? (
-                          <CheckCircle2 className="size-4" />
-                        ) : (
-                          <XCircle className="size-4" />
-                        )}
-                        {runResult.passed}/{runResult.total} test đạt
-                      </span>
-                      <span className="text-[10px] uppercase font-bold">
-                        {runResult.mode === "submit" ? "Nộp bài" : "Chạy thử"}
-                      </span>
+              {runResult && (
+                <span
+                  className={cn(
+                    "text-xs font-bold uppercase",
+                    runResult.allPass ? "text-success" : "text-destructive"
+                  )}
+                >
+                  {runResult.allPass ? "100% ĐẠT" : "CHƯA ĐẠT"}
+                </span>
+              )}
+            </div>
+
+            <CardContent className="p-3 flex-1 overflow-y-auto text-xs font-mono">
+              {activeResultTab === "tests" ? (
+                <div>
+                  {!runResult ? (
+                    <div className="py-12 text-center text-muted-foreground font-sans text-xs">
+                      Bấm <strong>&quot;Chạy thử&quot;</strong> để kiểm tra test mẫu hoặc <strong>&quot;Nộp bài&quot;</strong> để kiểm tra toàn bộ.
                     </div>
-
-                    <div className="space-y-2">
-                      {runResult.outcomes.map((o, idx) => (
-                        <div
-                          key={idx}
-                          className={cn(
-                            "p-2 rounded-md border text-xs space-y-1 transition-colors",
-                            o.pass
-                              ? "bg-success/5 border-success/20"
-                              : "bg-destructive/5 border-destructive/20"
+                  ) : (
+                    <div className="space-y-2 font-sans">
+                      <div className="flex items-center justify-between text-xs pb-1 border-b border-border">
+                        <span className="font-semibold text-foreground flex items-center gap-1.5">
+                          {runResult.allPass ? (
+                            <CheckCircle2 className="size-4 text-success" />
+                          ) : (
+                            <AlertCircle className="size-4 text-destructive" />
                           )}
-                        >
-                          <div className="flex items-center justify-between font-sans">
-                            <span className="font-semibold text-[11px] flex items-center gap-1 truncate">
-                              {o.pass ? (
-                                <Check className="size-3 text-success stroke-[3]" />
-                              ) : (
-                                <XCircle className="size-3 text-destructive" />
-                              )}
-                              {o.name || `Test #${idx + 1}`}
-                            </span>
-                            <span
-                              className={cn(
-                                "text-[10px] font-bold uppercase",
-                                o.pass ? "text-success" : "text-destructive"
-                              )}
-                            >
-                              {o.pass ? "Pass" : "Fail"}
-                            </span>
-                          </div>
+                          Tổng kết: {runResult.totalPassed}/{runResult.totalTests} test đạt
+                        </span>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                          {runResult.mode === "submit" ? "Chế độ Nộp bài" : "Chế độ Chạy thử"}
+                        </span>
+                      </div>
 
-                          <div className="text-[10px] font-mono text-muted-foreground truncate">
-                            <code>{o.call}</code>
-                          </div>
-
-                          {!o.pass && (
-                            <div className="text-[10px] space-y-0.5 pt-1 border-t border-border/40 font-mono">
-                              <div className="text-muted-foreground">Kỳ vọng: {o.expected}</div>
-                              <div className="text-destructive font-semibold">
-                                Thực tế: {o.actual || o.error || "undefined"}
-                              </div>
+                      {/* Danh sách Sample Tests chi tiết */}
+                      <div className="space-y-2">
+                        {runResult.sampleOutcomes.map((o, idx) => (
+                          <div
+                            key={idx}
+                            className={cn(
+                              "p-2.5 rounded-md border text-xs space-y-1 transition-colors",
+                              o.pass
+                                ? "bg-success/5 border-success/20"
+                                : "bg-destructive/5 border-destructive/20"
+                            )}
+                          >
+                            <div className="flex items-center justify-between font-sans">
+                              <span className="font-semibold text-xs flex items-center gap-1 truncate">
+                                {o.pass ? (
+                                  <Check className="size-3.5 text-success stroke-[3]" />
+                                ) : (
+                                  <XCircle className="size-3.5 text-destructive" />
+                                )}
+                                {o.name || `Test mẫu #${idx + 1}`}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-[10px] font-bold uppercase",
+                                  o.pass ? "text-success" : "text-destructive"
+                                )}
+                              >
+                                {o.pass ? "Pass" : "Fail"}
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1 font-mono text-xs">
-                    {runResult.logs.length > 0 ? (
-                      <div className="p-2 rounded-md bg-muted/40 border border-border/80 space-y-1">
-                        {runResult.logs.map((log, idx) => (
-                          <div key={idx} className="text-foreground text-[11px]">
-                            {log.text}
+
+                            <div className="text-[11px] font-mono text-muted-foreground truncate">
+                              <code>{o.call}</code>
+                            </div>
+
+                            {!o.pass && (
+                              <div className="text-[11px] space-y-0.5 pt-1 border-t border-border/40 font-mono">
+                                <div className="text-muted-foreground">Kỳ vọng: {o.expected}</div>
+                                <div className="text-destructive font-semibold">
+                                  Thực tế: {o.actual || o.error || "undefined"}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
+
+                        {/* Thẻ hiển thị tổng hợp cho Test Case ẩn (Parity với học viên #128) */}
+                        {runResult.mode === "submit" && runResult.hiddenTotal > 0 && (
+                          <div className="p-3 rounded-md border border-border bg-muted/40 flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2.5">
+                              <Lock className="size-4 text-muted-foreground" />
+                              <div>
+                                <span className="font-semibold text-foreground">
+                                  Bộ test case ẩn ({runResult.hiddenPassed}/{runResult.hiddenTotal} đạt)
+                                </span>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Chi tiết test case ẩn được bảo mật đúng như trải nghiệm thực tế của học viên.
+                                </p>
+                              </div>
+                            </div>
+                            <span
+                              className={cn(
+                                "text-[10px] font-bold uppercase px-2 py-0.5 rounded",
+                                runResult.hiddenPassed === runResult.hiddenTotal
+                                  ? "bg-success/15 text-success"
+                                  : "bg-warning/15 text-warning"
+                              )}
+                            >
+                              {runResult.hiddenPassed === runResult.hiddenTotal ? "Đạt hết" : "Chưa đạt"}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Không có console log.</p>
-                    )}
-                  </div>
-                )
+                    </div>
+                  )}
+                </div>
               ) : (
-                <div className="p-6 text-center space-y-1.5 text-xs text-muted-foreground">
-                  <Terminal className="size-5 mx-auto text-muted-foreground" />
-                  <p>Chưa chạy code.</p>
-                  <p className="text-[11px]">Bấm &quot;Chạy thử&quot; hoặc &quot;Nộp bài&quot; để xem kết quả đánh giá.</p>
+                <div className="space-y-1">
+                  {!runResult || runResult.logs.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground font-sans text-xs">
+                      Không có đầu ra console log.
+                    </div>
+                  ) : (
+                    runResult.logs.map((log, idx) => (
+                      <div key={idx} className="text-muted-foreground text-xs font-mono py-0.5">
+                        <span className="text-primary mr-2">&gt;</span>
+                        {log}
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </CardContent>

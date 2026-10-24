@@ -72,7 +72,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
     });
     mockRequireRole.mockResolvedValue(undefined);
     mockTransaction.mockImplementation((callback) => callback({
-      select: mockSelect, update: mockUpdate, insert: mockInsert,
+      select: mockSelect, update: mockUpdate, insert: mockInsert, execute: vi.fn(), transaction: mockTransaction,
     }));
   });
 
@@ -155,11 +155,11 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
       });
 
       await expect(runKnowledgeMapAnalysis("c-1")).rejects.toThrow(
-        "Khoá học chưa có bài học nào để phân tích."
+        "Phân tích AI chưa khả dụng"
       );
     });
 
-    it("tạo khái niệm và quan hệ tuần tự khi phân tích lần đầu", async () => {
+    it("refuses unavailable analysis without creating concepts, edges, audit or notices", async () => {
       let selectCount = 0;
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -211,15 +211,12 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
         }),
       });
 
-      const res = await runKnowledgeMapAnalysis("c-1");
-      expect(res.success).toBe(true);
-      expect(res.count).toBe(2);
-      expect(mockNotify).toHaveBeenCalledWith(
-        "lecturer-1",
-        "Bản đồ kiến thức đã sẵn sàng",
-        expect.stringContaining("2 khái niệm cần bạn xem lại"),
-        expect.any(String)
-      );
+      await expect(runKnowledgeMapAnalysis("c-1")).rejects.toThrow("Phân tích AI chưa khả dụng");
+      expect(mockInsert).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockDelete).not.toHaveBeenCalled();
+      expect(mockNotify).not.toHaveBeenCalled();
+      expect(mockRevalidatePath).not.toHaveBeenCalled();
     });
   });
 
@@ -253,7 +250,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([
-            { id: "c-1", instructorId: "lecturer-1", status: "draft" },
+            { id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 },
           ]),
         }),
       });
@@ -267,7 +264,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([
-            { id: "c-1", instructorId: "lecturer-1", status: "draft" },
+            { id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 },
           ]),
         }),
       });
@@ -288,7 +285,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
       mockSelect.mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([
-            { id: "c-1", instructorId: "lecturer-1", status: "draft" },
+            { id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 },
           ]),
         }),
       });
@@ -305,7 +302,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
           where: vi.fn().mockImplementation(() => {
             callCount++;
             if (callCount === 1) {
-              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]);
+              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 }]);
             }
             if (callCount === 2) {
               const rows = [{ id: 101 }, { id: 102 }];
@@ -329,7 +326,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
             callCount++;
             if (callCount === 1) {
               // getEditableCourse
-              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]);
+              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 }]);
             }
             if (callCount === 2) {
               // all skills
@@ -374,7 +371,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
           where: vi.fn().mockImplementation(() => {
             callCount++;
             if (callCount === 1) {
-              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft" }]);
+              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 }]);
             }
             if (callCount === 2) {
               return Promise.resolve([{ id: 1, review: "suggested" }]);
@@ -404,7 +401,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
         }),
       });
 
-      await expect(confirmKnowledgeMap("c-1")).rejects.toThrow("Hãy phân tích lại trước khi xác nhận.");
+      await expect(confirmKnowledgeMap("c-1")).rejects.toThrow("bản thử nghiệm chưa hỗ trợ kiểm tra lại để xác nhận.");
     });
 
     it("ném lỗi khi còn vòng lặp trong đồ thị", async () => {
@@ -414,7 +411,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
           where: vi.fn().mockImplementation(() => {
             callCount++;
             if (callCount === 1) {
-              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready" }]);
+              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 }]);
             }
             if (callCount === 2) {
               return Promise.resolve([
@@ -443,7 +440,7 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
           where: vi.fn().mockImplementation(() => {
             callCount++;
             if (callCount === 1) {
-              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready" }]);
+              return Promise.resolve([{ id: "c-1", instructorId: "lecturer-1", status: "draft", knowledgeMapStatus: "ready", knowledgeMapContentGeneration: 0 }]);
             }
             if (callCount === 2) {
               return Promise.resolve([
@@ -456,6 +453,9 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
                 { prerequisiteSkillId: 1, skillId: 2, review: "accepted" },
               ]);
             }
+            if (callCount === 4) return Promise.resolve([{ id: "ch-1" }]);
+            if (callCount === 5) return Promise.resolve([{ id: "ls-1" }]);
+            if (callCount === 6) return Promise.resolve([{ lessonId: "ls-1", skillId: 1 }]);
             return Promise.resolve([]);
           }),
         }),
@@ -477,3 +477,18 @@ describe("Knowledge Map Server Actions (#116, S24)", () => {
     });
   });
 });
+
+// Session transport is a boundary here; transactional revalidation has its own tests.
+vi.mock("@/lib/lecturer-auth", () => ({
+  readLecturerIdentity: async () => {
+    const identity = await mockGetSession();
+    if (!identity?.user) throw new Error("Unauthorized");
+    return identity;
+  },
+  verifyLecturerSession: async (_store: unknown, identity?: any) => {
+    const authenticated = identity ?? await mockGetSession();
+    if (!authenticated?.user) throw new Error("Unauthorized");
+    await mockRequireRole();
+    return authenticated.user;
+  },
+}));

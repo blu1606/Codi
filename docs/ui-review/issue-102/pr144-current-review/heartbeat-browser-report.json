@@ -1,0 +1,133 @@
+{
+  "startedAt": "2026-10-21T14:14:30.841Z",
+  "origin": "http://localhost:3144",
+  "browserVersion": "149.0.7827.55",
+  "passed": true,
+  "cleanup": "Owned QA user/course/activity removed; zero sessions or study clocks/days remain.",
+  "accounting": [
+    {
+      "sameLesson": true,
+      "staleStartRecorded": false,
+      "staleStopRecorded": false,
+      "ticks": [
+        {
+          "tick": 1,
+          "intervalMs": 29059,
+          "addedSeconds": 29,
+          "totalSinceStart": 29,
+          "ownerPreserved": true,
+          "recorded": true
+        },
+        {
+          "tick": 2,
+          "intervalMs": 29963,
+          "addedSeconds": 30,
+          "totalSinceStart": 59,
+          "ownerPreserved": true,
+          "recorded": true
+        }
+      ],
+      "ownerStopRecorded": true
+    },
+    {
+      "sameLesson": false,
+      "staleStartRecorded": false,
+      "staleStopRecorded": false,
+      "ticks": [
+        {
+          "tick": 1,
+          "intervalMs": 29778,
+          "addedSeconds": 30,
+          "totalSinceStart": 30,
+          "ownerPreserved": true,
+          "recorded": true
+        },
+        {
+          "tick": 2,
+          "intervalMs": 29445,
+          "addedSeconds": 29,
+          "totalSinceStart": 59,
+          "ownerPreserved": true,
+          "recorded": true
+        }
+      ],
+      "ownerStopRecorded": true
+    }
+  ],
+  "visual": [
+    {
+      "route": "dashboard",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "dashboard",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true
+    }
+  ],
+  "errors": [],
+  "finishedAt": "2026-10-21T14:17:15.129Z"
+}

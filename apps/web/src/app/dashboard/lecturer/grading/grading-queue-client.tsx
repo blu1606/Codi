@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -14,7 +14,6 @@ import {
   History,
   List,
   Loader2,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,6 +45,8 @@ import { cn } from "@codi-1/ui/lib/utils";
 import {
   applySnippetPlaceholders,
   computeRubricTotal,
+  getCriterionName,
+  getCriterionMaxScore,
   formatDateTime,
   formatRelativeTime,
   type GradingHistoryEntry,
@@ -53,7 +54,6 @@ import {
 } from "@/lib/grading-service";
 import type { FeedbackSnippetItem } from "../snippets/actions";
 import {
-  getAiGradingDraft,
   gradeSubmission,
   type GradingQueueResult,
   type SubmissionListItemDto,
@@ -87,8 +87,7 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
   const [feedbackInput, setFeedbackInput] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiDraftUsed, setAiDraftUsed] = useState(false);
+  const formView = useRef({ id: 0, token: "", dirty: false, revision: 0 });
 
   // Modals
   const [snippetPickerOpen, setSnippetPickerOpen] = useState(false);
@@ -99,23 +98,26 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
   // Reset form when selected submission changes
   useEffect(() => {
     if (selectedSubmission) {
+      if (formView.current.id === selectedSubmission.id && formView.current.dirty) return;
+      formView.current = { id: selectedSubmission.id, token: selectedSubmission.viewToken, dirty: false, revision: 0 };
       setScoreInput(
         selectedSubmission.score !== null && selectedSubmission.score !== undefined
           ? String(selectedSubmission.score)
           : ""
       );
-      setRubricScores({});
+      setRubricScores(selectedSubmission.rubricScores || {});
       setFeedbackInput(selectedSubmission.feedback || "");
       setFormError(null);
-      setAiDraftUsed(false);
+
     } else {
+      formView.current = { id: 0, token: "", dirty: false, revision: 0 };
       setScoreInput("");
       setRubricScores({});
       setFeedbackInput("");
       setFormError(null);
-      setAiDraftUsed(false);
+
     }
-  }, [selectedSubmission?.id]);
+  }, [selectedSubmission?.id, selectedSubmission?.viewToken]);
 
   // Compute live score from rubric if available
   const rubricList: RubricCriterion[] = selectedSubmission?.rubric || [];
@@ -174,38 +176,6 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
     navigateWithFilters({ submissionId: subId });
   };
 
-  // AI draft handler
-  const handleRequestAiDraft = async () => {
-    if (!selectedSubmission) return;
-    setIsAiLoading(true);
-    setFormError(null);
-    try {
-      const res = await getAiGradingDraft(selectedSubmission.id);
-      if (!res.success) {
-        toast.error(res.error || "AI chưa gợi ý được. Vui lòng thử lại.");
-        return;
-      }
-
-      if (res.suggestedScore !== undefined) {
-        setScoreInput(String(res.suggestedScore));
-      }
-
-      if (res.feedback) {
-        setFeedbackInput((prev) => {
-          const trimmed = prev.trim();
-          return trimmed ? `${trimmed}\n\n${res.feedback}` : res.feedback!;
-        });
-      }
-
-      setAiDraftUsed(true);
-      toast.success("AI đã gợi ý điểm và nhận xét!");
-    } catch {
-      toast.error("Lỗi khi kết nối dịch vụ AI.");
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
   // Insert snippet template
   const handleInsertSnippet = (snippet: FeedbackSnippetItem) => {
     if (!selectedSubmission) return;
@@ -216,6 +186,8 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
       score: scoreVal,
     });
 
+    formView.current.dirty = true;
+    formView.current.revision++;
     setFeedbackInput((prev) => {
       const trimmed = prev.trim();
       return trimmed ? `${trimmed}\n\n${resolvedText}` : resolvedText;
@@ -282,8 +254,11 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
     setIsSaving(true);
     setFormError(null);
 
+    const savedRevision = formView.current.revision;
+    const savedId = selectedSubmission.id;
     try {
       const res = await gradeSubmission({
+        viewToken: formView.current.token,
         submissionId: selectedSubmission.id,
         score: params.score,
         rubricScores: params.rubricScores,
@@ -299,6 +274,13 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
         return;
       }
 
+      if (formView.current.id !== savedId) return;
+      if (formView.current.revision !== savedRevision) {
+        toast.success("Đã lưu bản trước đó. Các chỉnh sửa mới vẫn chưa được lưu.");
+        return;
+      }
+      formView.current.dirty = false;
+      router.refresh();
       toast.success("Đã lưu điểm và gửi thông báo cho học viên.");
 
       if (params.action === "next" && res.nextPendingId) {
@@ -695,7 +677,7 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
                                     <div className="text-sm font-medium text-foreground">
-                                      {crit.name}
+                                      {getCriterionName(crit)}
                                     </div>
                                     {crit.desc && (
                                       <div className="text-xs text-muted-foreground">
@@ -707,10 +689,12 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
                                     <Input
                                       type="number"
                                       min={0}
-                                      max={crit.points}
+                                      max={getCriterionMaxScore(crit)}
                                       step={0.5}
                                       value={val !== undefined ? val : ""}
                                       onChange={(e) => {
+                                        formView.current.dirty = true;
+                                        formView.current.revision++;
                                         const raw = e.target.value;
                                         setRubricScores((prev) => ({
                                           ...prev,
@@ -720,7 +704,7 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
                                       className="w-16 h-8 text-center text-sm font-mono font-medium"
                                     />
                                     <span className="text-xs text-muted-foreground">
-                                      / {crit.points}
+                                      / {getCriterionMaxScore(crit)}
                                     </span>
                                   </div>
                                 </div>
@@ -767,42 +751,14 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
                           max={selectedSubmission.maxScore}
                           step={0.5}
                           value={scoreInput}
-                          onChange={(e) => setScoreInput(e.target.value)}
+                          onChange={(e) => { formView.current.dirty = true; formView.current.revision++; setScoreInput(e.target.value); }}
                           placeholder="Ví dụ: 8.5"
                           className="h-10 text-base font-mono font-medium"
                         />
                       </div>
                     )}
 
-                    {/* AI Suggest Button */}
-                    <div className="space-y-1.5">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRequestAiDraft}
-                        disabled={isAiLoading}
-                        className="w-full gap-2 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
-                      >
-                        {isAiLoading ? (
-                          <>
-                            <Loader2 className="size-3.5 animate-spin" />
-                            AI đang đọc bài nộp...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="size-3.5 text-primary" />
-                            AI gợi ý điểm và nhận xét
-                          </>
-                        )}
-                      </Button>
-                      {aiDraftUsed && (
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <Sparkles className="size-3 text-primary shrink-0" />
-                          Đã điền bản nháp do AI gợi ý — hãy xem lại trước khi lưu.
-                        </p>
-                      )}
-                    </div>
+                    <p role="status" className="text-sm text-muted-foreground">AI chấm bài chưa khả dụng. Vui lòng chấm bài thủ công theo thang điểm.</p>
 
                     {/* Feedback Textarea + Snippet trigger */}
                     <div className="space-y-2">
@@ -824,7 +780,7 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
                       <Textarea
                         id="feedback-input"
                         value={feedbackInput}
-                        onChange={(e) => setFeedbackInput(e.target.value)}
+                        onChange={(e) => { formView.current.dirty = true; formView.current.revision++; setFeedbackInput(e.target.value); }}
                         placeholder="Điểm làm tốt, điểm cần cải thiện, gợi ý bước tiếp theo..."
                         rows={6}
                         className="text-sm leading-relaxed"

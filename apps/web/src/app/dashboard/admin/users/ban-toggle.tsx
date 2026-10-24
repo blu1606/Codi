@@ -1,137 +1,282 @@
-﻿"use client";
+"use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Ban, ShieldCheck, AlertTriangle, X } from "lucide-react";
+import { Ban, ShieldCheck, BookOpen, Receipt, Presentation } from "lucide-react";
 
 import { Button } from "@codi-1/ui/components/button";
+import { Checkbox } from "@codi-1/ui/components/checkbox";
 import { Textarea } from "@codi-1/ui/components/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@codi-1/ui/components/dialog";
 
-import { toggleUserBan } from "../actions";
+import { getUserImpactCounts, toggleUserBan, type UserImpactCounts } from "../actions";
 
-export default function BanToggle({
-  userId,
-  isBanned,
-  banReason,
-  isSelf,
-}: {
+type BanToggleProps = {
   userId: string;
+  userName?: string;
+  userEmail?: string;
   isBanned: boolean;
   banReason?: string;
   isSelf: boolean;
-}) {
+};
+
+export default function BanToggle(props: BanToggleProps) {
+  // Dialog consent and loaded impact belong to one target and account state.
+  return <UserBanToggle key={`${props.userId}:${props.isBanned}:${props.isSelf}`} {...props} />;
+}
+
+function UserBanToggle({ userId, userName = "người dùng", userEmail = "", isBanned, isSelf }: BanToggleProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [confirming, setConfirming] = useState(false);
-  const [reason, setReason] = useState("");
 
-  const handleUnban = () => {
+  // Deactivation dialog state
+  const [deactOpen, setDeactOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [consented, setConsented] = useState(false);
+  const [impact, setImpact] = useState<
+    { status: "idle" | "loading" | "error" } | { status: "ready"; counts: UserImpactCounts }
+  >({ status: "idle" });
+  const impactRequest = useRef(0);
+  useEffect(() => () => { impactRequest.current += 1; }, []);
+
+  // Reactivation dialog state
+  const [reactOpen, setReactOpen] = useState(false);
+
+  const loadImpact = async () => {
+    const request = ++impactRequest.current;
+    setImpact({ status: "loading" });
+    try {
+      const counts = await getUserImpactCounts(userId);
+      if (request === impactRequest.current) setImpact({ status: "ready", counts });
+    } catch {
+      if (request === impactRequest.current) setImpact({ status: "error" });
+    }
+  };
+
+  const openDeactivationDialog = () => {
+    if (isPending) return;
+    setReason("");
+    setConsented(false);
+    setDeactOpen(true);
+    void loadImpact();
+  };
+
+  const changeDeactivationOpen = (open: boolean) => {
+    if (isPending) return;
+    if (!open) {
+      impactRequest.current += 1;
+      setImpact({ status: "idle" });
+    }
+    setDeactOpen(open);
+  };
+
+  const handleDeactivate = () => {
+    if (!deactOpen || isSelf || isBanned || isPending || impact.status !== "ready" || !reason.trim() || !consented) return;
     startTransition(async () => {
       try {
-        await toggleUserBan(userId, false);
-        toast.success("Da mo khoa tai khoan nguoi dung.");
+        await toggleUserBan(userId, true, reason.trim());
+        toast.success(`Đã vô hiệu hoá ${userName}.`);
+        setDeactOpen(false);
         router.refresh();
       } catch (err: any) {
-        toast.error(err?.message ?? "Khong the mo khoa tai khoan.");
+        toast.error(err?.message ?? "Không thể vô hiệu hoá tài khoản.");
       }
     });
   };
 
-  const handleBan = () => {
+  const handleReactivate = () => {
+    if (!reactOpen || isSelf || !isBanned || isPending) return;
     startTransition(async () => {
       try {
-        await toggleUserBan(userId, true, reason || undefined);
-        toast.success("Da khoa tai khoan va thu hoi phien dang nhap.");
-        setConfirming(false);
-        setReason("");
+        await toggleUserBan(userId, false);
+        toast.success(`Đã kích hoạt lại ${userName}.`);
+        setReactOpen(false);
         router.refresh();
       } catch (err: any) {
-        toast.error(err?.message ?? "Khong the khoa tai khoan.");
+        toast.error(err?.message ?? "Không thể kích hoạt lại tài khoản.");
       }
     });
   };
 
   if (isSelf) {
-    return <span className="text-xs text-muted-foreground italic">Tai khoan cua ban</span>;
+    return <span className="text-xs text-muted-foreground italic">Tài khoản của bạn</span>;
   }
 
   if (isBanned) {
     return (
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-          <Ban className="h-3 w-3" />
-          Da khoa
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isPending}
-          onClick={handleUnban}
-          className="h-7 text-xs"
-        >
-          <ShieldCheck className="h-3.5 w-3.5 mr-1" />
-          {isPending ? "Dang mo..." : "Mo khoa"}
-        </Button>
-      </div>
-    );
-  }
-
-  if (confirming) {
-    return (
-      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2 w-64">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1 text-xs font-semibold text-destructive">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Xac nhan khoa TK?
+      <>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive">
+            <Ban className="h-3 w-3" />
+            Đã vô hiệu hoá
           </span>
-          <button
-            type="button"
-            onClick={() => { setConfirming(false); setReason(""); }}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <Textarea
-          placeholder="Ly do khoa (tuy chon)..."
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={2}
-          className="text-xs"
-        />
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={isPending}
-            onClick={handleBan}
-            className="flex-1 h-7 text-xs"
-          >
-            {isPending ? "Dang khoa..." : "Xac nhan khoa"}
-          </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => { setConfirming(false); setReason(""); }}
+            disabled={isPending}
+            onClick={() => setReactOpen(true)}
             className="h-7 text-xs"
           >
-            Huy
+            <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+            {isPending ? "Đang xử lý..." : "Kích hoạt lại"}
           </Button>
         </div>
-      </div>
+
+        {/* Reactivation Dialog */}
+        <Dialog open={reactOpen} onOpenChange={(open) => { if (!isPending) setReactOpen(open); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Kích hoạt lại {userName}?</DialogTitle>
+              <DialogDescription>
+                Người dùng đăng nhập lại được và truy cập toàn bộ dữ liệu cũ.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isPending}
+                onClick={() => setReactOpen(false)}
+              >
+                Huỷ
+              </Button>
+              <Button
+                type="button"
+                disabled={isPending}
+                onClick={handleReactivate}
+              >
+                {isPending ? "Đang xử lý..." : "Kích hoạt lại"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
+  const isConfirmDisabled = isPending || impact.status !== "ready" || !consented || !reason.trim();
+
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-      onClick={() => setConfirming(true)}
-    >
-      <Ban className="h-3.5 w-3.5 mr-1" />
-      Khoa TK
-    </Button>
+    <>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+        onClick={openDeactivationDialog}
+        disabled={isPending}
+      >
+        <Ban className="h-3.5 w-3.5 mr-1" />
+        Vô hiệu hoá
+      </Button>
+
+      {/* Deactivation Dialog */}
+      <Dialog open={deactOpen} onOpenChange={changeDeactivationOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Vô hiệu hoá {userName}?</DialogTitle>
+            <DialogDescription className="space-y-1">
+              <span>
+                Tài khoản bị đăng xuất khỏi mọi thiết bị và không thể đăng nhập. Dữ liệu học tập và đơn hàng được giữ nguyên. Có thể kích hoạt lại bất cứ lúc nào.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
+
+            {/* Impact counts */}
+            {impact.status === "loading" && <p role="status" className="text-sm text-muted-foreground">Đang tải tác động...</p>}
+            {impact.status === "error" && (
+              <div role="alert" className="space-y-2 text-sm text-destructive">
+                <p>Không thể tải tác động. Vui lòng thử lại trước khi xác nhận.</p>
+                <Button type="button" variant="outline" disabled={isPending} onClick={() => void loadImpact()}>Thử lại</Button>
+              </div>
+            )}
+            {impact.status === "ready" && (
+            <div className="rounded-lg border border-border/80 bg-muted/40 p-3 space-y-2 text-sm">
+              <div className="flex items-center gap-2 text-foreground">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <span>
+                  <strong>{impact.counts.ownedCourses}</strong> khoá học đang sở hữu
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-foreground">
+                <Receipt className="h-4 w-4 text-primary" />
+                <span>
+                  <strong>{impact.counts.pendingOrders}</strong> đơn hàng chờ thanh toán
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-foreground">
+                <Presentation className="h-4 w-4 text-primary" />
+                <span>
+                  Đang giảng dạy <strong>{impact.counts.taughtCourses}</strong> khoá học
+                </span>
+              </div>
+            </div>
+            )}
+
+            {/* Required Reason */}
+            <div className="space-y-1.5">
+              <label htmlFor="deact-reason" className="text-xs font-semibold text-foreground">
+                Lý do (chỉ quản trị viên xem được) <span className="text-destructive">*</span>
+              </label>
+              <Textarea
+                id="deact-reason"
+                placeholder="Ví dụ: vi phạm điều khoản dịch vụ, spam..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                disabled={isPending}
+                className="text-sm"
+              />
+            </div>
+
+            {/* Acknowledgment Checkbox */}
+            <div className="flex items-center gap-2 pt-1">
+              <Checkbox
+                id="consent-check"
+                checked={consented}
+                onCheckedChange={(checked) => setConsented(!!checked)}
+                disabled={isPending}
+              />
+              <label
+                htmlFor="consent-check"
+                className="text-xs font-medium leading-none cursor-pointer select-none text-foreground"
+              >
+                Tôi hiểu tác động
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => changeDeactivationOpen(false)}
+            >
+              Huỷ
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isConfirmDisabled}
+              onClick={handleDeactivate}
+            >
+              {isPending ? "Đang xử lý..." : "Vô hiệu hoá"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
+

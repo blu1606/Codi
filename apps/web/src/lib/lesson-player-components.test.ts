@@ -9,6 +9,14 @@ import {
   type PathInput,
 } from "./learning-path-contract";
 import type { LessonPlayerView } from "./lesson-player-contract";
+vi.mock("../components/lesson-tutorial", () => ({
+  default: ({ endpoint }: { endpoint: string }) =>
+    createElement(
+      "section",
+      { "aria-label": "Hướng dẫn code", "data-endpoint": endpoint },
+      "Tutorial workspace",
+    ),
+}));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root | undefined;
@@ -91,6 +99,38 @@ afterEach(async () => {
 });
 
 describe("lesson player", () => {
+  it("routes a tutorial to its workspace without an empty-content warning or duplicate reading", async () => {
+    const data = state();
+    data.lesson.body = "Duplicated tutorial text";
+    data.path.rows[0]!.kind = "tutorial";
+    data.path.rows[0]!.durationSeconds = 1200;
+    data.checklist = [
+      {
+        key: "code",
+        assessmentId: 7,
+        tutorial: true,
+        label: "Đi hết các bước hướng dẫn",
+        done: false,
+        note: "Chưa đi hết hướng dẫn",
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
+    await render();
+    expect(
+      document
+        .querySelector('[aria-label="Hướng dẫn code"]')
+        ?.getAttribute("data-endpoint"),
+    ).toContain("/assessments/7/tutorial");
+    expect(document.body.textContent).not.toContain("Chưa có nội dung bài học");
+    expect(document.body.textContent).not.toContain("Duplicated tutorial text");
+    expect(document.body.textContent).toContain("Hướng dẫn code · 20 phút");
+    expect(
+      document.querySelector(
+        '[aria-label="Lộ trình bài học"] a[aria-current="page"]',
+      ),
+    ).toBeTruthy();
+    expect(button("Hoàn thành bài học").disabled).toBe(true);
+  });
   it("explains the disabled completion action and renders actual reading", async () => {
     vi.stubGlobal(
       "fetch",

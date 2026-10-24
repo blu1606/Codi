@@ -81,7 +81,8 @@ describe("knowledge-map course membership", () => {
     boundary.transaction.mockImplementation(async (callback) => {
       inTransaction = true;
       try {
-        return await callback({ select: boundary.select, update: boundary.update, insert: boundary.insert });
+        return await callback({ select: boundary.select, update: boundary.update, insert: boundary.insert,
+          execute: vi.fn(), transaction: boundary.transaction });
       } finally {
         inTransaction = false;
       }
@@ -164,12 +165,10 @@ describe("knowledge-map course membership", () => {
     },
   );
 
-  it("scopes both endpoints when resetting existing edges for reanalysis", async () => {
-    await runKnowledgeMapAnalysis("c-1");
-    const update = writes.find((w) => w.table === skillPrerequisites)!;
-    const query = dialect.sqlToQuery(update.condition!);
-    expect(query.sql).toBe('(("skill_prerequisites"."skill_id" in ($1, $2)) and ("skill_prerequisites"."prerequisite_skill_id" in ($3, $4)))');
-    expect(query.params).toEqual([101, 102, 101, 102]);
+  it("unavailable reanalysis never resets existing edge reviews", async () => {
+    await expect(runKnowledgeMapAnalysis("c-1")).rejects.toThrow("Phân tích AI chưa khả dụng");
+    expect(writes).toEqual([]);
+    expect(boundary.refresh).not.toHaveBeenCalled();
   });
 
   it("scopes both endpoints when loading edges for accept-all", async () => {
@@ -180,3 +179,18 @@ describe("knowledge-map course membership", () => {
     expect(query.params).toEqual([101, 102, 101, 102]);
   });
 });
+
+// Session transport is a boundary here; transactional revalidation has its own tests.
+vi.mock("@/lib/lecturer-auth", () => ({
+  readLecturerIdentity: async () => {
+    const identity = await boundary.session();
+    if (!identity?.user) throw new Error("Unauthorized");
+    return identity;
+  },
+  verifyLecturerSession: async (_store: unknown, identity?: any) => {
+    const authenticated = identity ?? await boundary.session();
+    if (!authenticated?.user) throw new Error("Unauthorized");
+    await boundary.role();
+    return authenticated.user;
+  },
+}));

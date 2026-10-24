@@ -1,8 +1,7 @@
 "use server";
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
-  aiInteractionLogs,
   assessmentAnswers,
   assessmentSubmissions,
   assessments,
@@ -21,423 +20,440 @@ import {
   calculateAverageQuizScore,
   calculateLearnerCompletionRate,
   calculateQuestionAccuracy,
+  selectLatestCompletedAttempts,
   type CourseProgressDetailDto,
   type CourseProgressSummaryDto,
   type LearnerProgressDto,
-  type QuizQuestionStatDto,
 } from "@/lib/lecturer-progress-service";
 
-/**
- * Lấy danh sách khoá học của giảng viên cùng số liệu tiến độ tổng quát (Screen S29).
- * Chỉ bao gồm các khoá học đã xuất bản hoặc đã ẩn (đang/từng mở bán).
- */
-export async function getLecturerCoursesProgress(): Promise<CourseProgressSummaryDto[]> {
+export async function getLecturerCoursesProgress(): Promise<
+  CourseProgressSummaryDto[]
+> {
   const user = await verifyLecturerSession();
-
-  // 1. Lấy danh sách khoá học thuộc sở hữu của giảng viên
-  const myCourses = await db
-    .select({
-      id: courses.id,
-      title: courses.title,
-      status: courses.status,
-    })
-    .from(courses)
-    .where(
-      and(
-        eq(courses.instructorId, user.id),
-        inArray(courses.status, ["published", "hidden"])
-      )
-    );
-
-  if (!myCourses.length) {
-    return [];
-  }
-
-  const courseIds = myCourses.map((c) => c.id);
-
-  // 2. Lấy danh sách bài học của các khoá này (qua courseChapters)
-  const lessons = await db
-    .select({
-      id: courseLessons.id,
-      courseId: courseChapters.courseId,
-    })
-    .from(courseLessons)
-    .innerJoin(
-      courseChapters,
-      eq(courseLessons.chapterId, courseChapters.id)
-    )
-    .where(inArray(courseChapters.courseId, courseIds));
-
-  const totalLessonsByCourse = new Map<string, number>();
-  lessons.forEach((l) => {
-    totalLessonsByCourse.set(
-      l.courseId,
-      (totalLessonsByCourse.get(l.courseId) || 0) + 1
-    );
-  });
-
-  // 3. Lấy danh sách lượt đăng ký (enrollments)
-  const enrollments = await db
-    .select({
-      id: studentEnrollments.id,
-      courseId: studentEnrollments.courseId,
-      progress: studentEnrollments.progress,
-    })
-    .from(studentEnrollments)
-    .where(inArray(studentEnrollments.courseId, courseIds));
-
-  // 4. Lấy số bài học hoàn thành theo enrollment
-  const completedProgress = await db
-    .select({
-      enrollmentId: lessonProgress.enrollmentId,
-      completedCount: sql<number>`count(${lessonProgress.id})`,
-    })
-    .from(lessonProgress)
-    .where(eq(lessonProgress.status, "completed"))
-    .groupBy(lessonProgress.enrollmentId);
-
-  const completedMap = new Map<number, number>();
-  completedProgress.forEach((cp) => {
-    completedMap.set(cp.enrollmentId, Number(cp.completedCount));
-  });
-
-  // 5. Tổng hợp theo từng khoá học
-  return myCourses.map((c) => {
-    const courseEnrollments = enrollments.filter((e) => e.courseId === c.id);
-    const totalLessons = totalLessonsByCourse.get(c.id) || 0;
-
-    const completionRates = courseEnrollments.map((e) => {
-      const completed = completedMap.get(e.id) || 0;
-      return calculateLearnerCompletionRate(completed, totalLessons);
-    });
-
-    const avgRate = calculateAveragePercentage(completionRates);
-
-    return {
-      courseId: c.id,
-      title: c.title,
-      status: c.status,
-      learnersCount: courseEnrollments.length,
-      averageCompletionRate: avgRate,
-    };
-  });
+  return db.transaction(
+    async (tx) => {
+      const owned = await tx
+        .select({
+          id: courses.id,
+          title: courses.title,
+          status: courses.status,
+        })
+        .from(courses)
+        .where(
+          and(
+            eq(courses.instructorId, user.id),
+            inArray(courses.status, ["published", "hidden"]),
+          ),
+        )
+        .orderBy(courses.title, courses.id);
+      if (!owned.length) return [];
+      const ids = owned.map((course) => course.id);
+      const lessons = await tx
+        .select({ id: courseLessons.id, courseId: courseChapters.courseId })
+        .from(courseLessons)
+        .innerJoin(
+          courseChapters,
+          eq(courseLessons.chapterId, courseChapters.id),
+        )
+        .where(inArray(courseChapters.courseId, ids));
+      const enrollments = await tx
+        .select({
+          id: studentEnrollments.id,
+          courseId: studentEnrollments.courseId,
+        })
+        .from(studentEnrollments)
+        .where(inArray(studentEnrollments.courseId, ids));
+      const completions =
+        enrollments.length && lessons.length
+          ? await tx
+              .select({
+                enrollmentId: lessonProgress.enrollmentId,
+                lessonId: lessonProgress.lessonId,
+              })
+              .from(lessonProgress)
+              .where(
+                and(
+                  inArray(
+                    lessonProgress.enrollmentId,
+                    enrollments.map((row) => row.id),
+                  ),
+                  inArray(
+                    lessonProgress.lessonId,
+                    lessons.map((row) => row.id),
+                  ),
+                  eq(lessonProgress.status, "completed"),
+                ),
+              )
+          : [];
+      return owned.map((course) => {
+        const courseLessonIds = new Set(
+          lessons
+            .filter((lesson) => lesson.courseId === course.id)
+            .map((lesson) => lesson.id),
+        );
+        const students = enrollments.filter(
+          (row) => row.courseId === course.id,
+        );
+        const rates = students.map((row) =>
+          calculateLearnerCompletionRate(
+            new Set(
+              completions
+                .filter(
+                  (progress) =>
+                    progress.enrollmentId === row.id &&
+                    courseLessonIds.has(progress.lessonId),
+                )
+                .map((progress) => progress.lessonId),
+            ).size,
+            courseLessonIds.size,
+          ),
+        );
+        return {
+          courseId: course.id,
+          title: course.title,
+          status: course.status,
+          learnersCount: students.length,
+          averageCompletionRate: calculateAveragePercentage(rates),
+        };
+      });
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }
 
-/**
- * Lấy chi tiết tiến độ học viên của một khoá học cụ thể (Screen S29 & S29 Drill-down).
- * Kiểm tra phân quyền sở hữu khoá ở server (Server Guard).
- */
 export async function getCourseLearnerProgress(
-  courseId: string
+  courseId: string,
 ): Promise<CourseProgressDetailDto | null> {
   const user = await verifyLecturerSession();
-
-  // 1. Kiểm tra khoá học và quyền sở hữu
-  const [course] = await db
-    .select({
-      id: courses.id,
-      title: courses.title,
-      instructorId: courses.instructorId,
-    })
-    .from(courses)
-    .where(and(eq(courses.id, courseId), eq(courses.instructorId, user.id)));
-
-  if (!course) {
+  if (typeof courseId !== "string" || !courseId.trim() || courseId.length > 200)
     return null;
-  }
-
-  // 2. Lấy danh sách bài học của khoá (qua courseChapters)
-  const lessons = await db
-    .select({
-      id: courseLessons.id,
-      title: courseLessons.title,
-      position: courseLessons.position,
-    })
-    .from(courseLessons)
-    .innerJoin(
-      courseChapters,
-      eq(courseLessons.chapterId, courseChapters.id)
-    )
-    .where(eq(courseChapters.courseId, courseId))
-    .orderBy(courseChapters.position, courseLessons.position);
-
-  const totalLessons = lessons.length;
-
-  // 3. Lấy các bài kiểm tra (assessments) của khoá học
-  const courseAssessments = await db
-    .select({
-      id: assessments.id,
-      lessonId: assessments.lessonId,
-      type: assessments.type,
-      maxScore: assessments.maxScore,
-    })
-    .from(assessments)
-    .where(eq(assessments.courseId, courseId));
-
-  const hasCoding = courseAssessments.some((a) => a.type === "coding");
-
-  // 4. Lấy danh sách học viên đã ghi danh
-  const enrollments = await db
-    .select({
-      enrollmentId: studentEnrollments.id,
-      userId: studentEnrollments.userId,
-      userName: userTable.name,
-      userImage: userTable.image,
-      enrolledAt: studentEnrollments.enrolledAt,
-    })
-    .from(studentEnrollments)
-    .innerJoin(userTable, eq(studentEnrollments.userId, userTable.id))
-    .where(eq(studentEnrollments.courseId, courseId))
-    .orderBy(desc(studentEnrollments.enrolledAt));
-
-  const enrollmentIds = enrollments.map((e) => e.enrollmentId);
-
-  // 5. Lấy tiến độ bài học của học viên
-  const progressRows = enrollmentIds.length
-    ? await db
-        .select({
-          enrollmentId: lessonProgress.enrollmentId,
-          lessonId: lessonProgress.lessonId,
-          status: lessonProgress.status,
-          lastAccessedAt: lessonProgress.lastAccessedAt,
-          completedAt: lessonProgress.completedAt,
-        })
-        .from(lessonProgress)
-        .where(inArray(lessonProgress.enrollmentId, enrollmentIds))
-    : [];
-
-  // 6. Lấy bài nộp kiểm tra (quiz / assignment) của các enrollments
-  const assessmentIds = courseAssessments.map((a) => a.id);
-  const submissions =
-    assessmentIds.length && enrollmentIds.length
-      ? await db
-          .select({
-            id: assessmentSubmissions.id,
-            assessmentId: assessmentSubmissions.assessmentId,
-            enrollmentId: assessmentSubmissions.enrollmentId,
-            status: assessmentSubmissions.status,
-            score: assessmentSubmissions.score,
-            submittedAt: assessmentSubmissions.submittedAt,
-          })
-          .from(assessmentSubmissions)
-          .where(
-            and(
-              inArray(assessmentSubmissions.assessmentId, assessmentIds),
-              inArray(assessmentSubmissions.enrollmentId, enrollmentIds)
+  return db.transaction(
+    async (tx) => {
+      const [course] = await tx
+        .select({ id: courses.id, title: courses.title })
+        .from(courses)
+        .where(
+          and(eq(courses.id, courseId), eq(courses.instructorId, user.id)),
+        );
+      if (!course) return null;
+      const lessons = await tx
+        .select({ id: courseLessons.id, title: courseLessons.title })
+        .from(courseLessons)
+        .innerJoin(
+          courseChapters,
+          eq(courseLessons.chapterId, courseChapters.id),
+        )
+        .where(eq(courseChapters.courseId, courseId))
+        .orderBy(
+          courseChapters.position,
+          courseLessons.position,
+          courseLessons.id,
+        );
+      const lessonIds = lessons.map((lesson) => lesson.id);
+      const courseAssessments = lessonIds.length
+        ? await tx
+            .select({
+              id: assessments.id,
+              lessonId: assessments.lessonId,
+              type: assessments.type,
+              maxScore: assessments.maxScore,
+              currentQuizRevision: assessments.currentQuizRevision,
+            })
+            .from(assessments)
+            .where(
+              and(
+                eq(assessments.courseId, courseId),
+                inArray(assessments.lessonId, lessonIds),
+                eq(assessments.isDiagnostic, false),
+                eq(assessments.status, "published"),
+              ),
             )
-          )
-      : [];
-
-  // 7. Lấy log gợi ý AI (không trừ điểm)
-  const hintLogs = await db
-    .select({
-      userId: aiInteractionLogs.userId,
-      hintLevel: aiInteractionLogs.hintLevel,
-    })
-    .from(aiInteractionLogs)
-    .where(
-      and(
-        eq(aiInteractionLogs.courseId, courseId),
-        sql`${aiInteractionLogs.hintLevel} IS NOT NULL`
-      )
-    );
-
-  const hintsByUser = new Map<string, { count: number; maxLevel: number }>();
-  hintLogs.forEach((h) => {
-    if (!h.userId) return;
-    const current = hintsByUser.get(h.userId) || { count: 0, maxLevel: 0 };
-    current.count += 1;
-    current.maxLevel = Math.max(current.maxLevel, h.hintLevel || 0);
-    hintsByUser.set(h.userId, current);
-  });
-
-  // 8. Thống kê câu hỏi quiz (tỉ lệ đúng từng câu)
-  const quizAssessments = courseAssessments.filter((a) => a.type === "quiz");
-  const quizAssessmentIds = quizAssessments.map((a) => a.id);
-
-  let quizQuestionStats: QuizQuestionStatDto[] = [];
-
-  if (quizAssessmentIds.length) {
-    const questions = await db
-      .select({
-        id: quizQuestions.id,
-        assessmentId: quizQuestions.assessmentId,
-        lessonId: quizQuestions.lessonId,
-        text: quizQuestions.text,
-      })
-      .from(quizQuestions)
-      .where(inArray(quizQuestions.assessmentId, quizAssessmentIds));
-
-    const questionIds = questions.map((q) => q.id);
-
-    const answers = questionIds.length
-      ? await db
-          .select({
-            questionId: assessmentAnswers.questionId,
-            isCorrect: assessmentAnswers.isCorrect,
-          })
-          .from(assessmentAnswers)
-          .where(inArray(assessmentAnswers.questionId, questionIds))
-      : [];
-
-    const answersByQuestion = new Map<
-      number,
-      { total: number; correct: number }
-    >();
-    answers.forEach((ans) => {
-      const q = answersByQuestion.get(ans.questionId) || {
-        total: 0,
-        correct: 0,
-      };
-      q.total += 1;
-      if (ans.isCorrect) q.correct += 1;
-      answersByQuestion.set(ans.questionId, q);
-    });
-
-    const lessonTitleMap = new Map(lessons.map((l) => [l.id, l.title]));
-
-    quizQuestionStats = questions.map((q) => {
-      const stats = answersByQuestion.get(q.id) || { total: 0, correct: 0 };
-      const { correctPercent, needsReview } = calculateQuestionAccuracy(
-        stats.correct,
-        stats.total
+        : [];
+      const enrollments = await tx
+        .select({
+          enrollmentId: studentEnrollments.id,
+          userId: studentEnrollments.userId,
+          userName: userTable.name,
+          userImage: userTable.image,
+        })
+        .from(studentEnrollments)
+        .innerJoin(userTable, eq(studentEnrollments.userId, userTable.id))
+        .where(eq(studentEnrollments.courseId, courseId))
+        .orderBy(desc(studentEnrollments.enrolledAt), studentEnrollments.id);
+      const enrollmentIds = enrollments.map((row) => row.enrollmentId);
+      const progress =
+        enrollmentIds.length && lessonIds.length
+          ? await tx
+              .select({
+                enrollmentId: lessonProgress.enrollmentId,
+                lessonId: lessonProgress.lessonId,
+                status: lessonProgress.status,
+                lastAccessedAt: lessonProgress.lastAccessedAt,
+                completedAt: lessonProgress.completedAt,
+              })
+              .from(lessonProgress)
+              .where(
+                and(
+                  inArray(lessonProgress.enrollmentId, enrollmentIds),
+                  inArray(lessonProgress.lessonId, lessonIds),
+                ),
+              )
+          : [];
+      const quizzes = courseAssessments.filter(
+        (assessment) => assessment.type === "quiz",
       );
-
-      return {
-        lessonId: q.lessonId,
-        lessonTitle: q.lessonId
-          ? lessonTitleMap.get(q.lessonId) || "Bài học"
-          : "Đầu khoá / Tổng quát",
-        questionId: q.id,
-        questionText: q.text,
-        totalAnswers: stats.total,
-        correctAnswers: stats.correct,
-        correctPercent,
-        needsReview,
-      };
-    });
-  }
-
-  // 9. Lập danh sách chi tiết từng học viên
-  const learners: LearnerProgressDto[] = enrollments.map((e) => {
-    const learnerProgress = progressRows.filter(
-      (p) => p.enrollmentId === e.enrollmentId
-    );
-    const completedLessonIds = new Set(
-      learnerProgress
-        .filter((p) => p.status === "completed")
-        .map((p) => p.lessonId)
-    );
-
-    const learnerSubmissions = submissions.filter(
-      (s) => s.enrollmentId === e.enrollmentId
-    );
-
-    // Tính điểm quiz trung bình của học viên
-    const quizSubmissions = learnerSubmissions.filter((s) => {
-      const ass = courseAssessments.find((a) => a.id === s.assessmentId);
-      return ass?.type === "quiz" && s.score !== null;
-    });
-
-    const quizScores = quizSubmissions.map((s) => Number(s.score));
-    const averageQuizScore = calculateAverageQuizScore(quizScores);
-
-    // Hoạt động gần nhất
-    const activityDates = [
-      ...learnerProgress.map((p) => p.lastAccessedAt || p.completedAt),
-      ...learnerSubmissions.map((s) => s.submittedAt),
-    ]
-      .filter((d): d is Date => d !== null && d !== undefined)
-      .map((d) => new Date(d).getTime());
-
-    const lastActiveTime = activityDates.length
-      ? Math.max(...activityDates)
-      : null;
-    const lastActive = lastActiveTime
-      ? new Date(lastActiveTime).toISOString()
-      : null;
-
-    // Gợi ý AI của học viên
-    const hintInfo = hintsByUser.get(e.userId) || { count: 0, maxLevel: 0 };
-
-    // Chi tiết từng bài học của học viên
-    const lessonItems = lessons.map((l) => {
-      const isCompleted = completedLessonIds.has(l.id);
-
-      // Điểm quiz của bài (nếu có)
-      const lessonQuizAss = courseAssessments.find(
-        (a) => a.lessonId === l.id && a.type === "quiz"
+      const quizIds = quizzes.map((assessment) => assessment.id);
+      const submittedQuizzes =
+        quizIds.length && enrollmentIds.length
+          ? await tx
+              .select({
+                id: assessmentSubmissions.id,
+                assessmentId: assessmentSubmissions.assessmentId,
+                enrollmentId: assessmentSubmissions.enrollmentId,
+                status: assessmentSubmissions.status,
+                attempt: assessmentSubmissions.attempt,
+                quizPercent: assessmentSubmissions.quizPercent,
+                quizRevision: assessmentSubmissions.quizRevision,
+                submittedAt: assessmentSubmissions.submittedAt,
+              })
+              .from(assessmentSubmissions)
+              .where(
+                and(
+                  inArray(assessmentSubmissions.assessmentId, quizIds),
+                  inArray(assessmentSubmissions.enrollmentId, enrollmentIds),
+                  eq(assessmentSubmissions.status, "graded"),
+                  isNotNull(assessmentSubmissions.submittedAt),
+                ),
+              )
+              .orderBy(
+                desc(assessmentSubmissions.attempt),
+                desc(assessmentSubmissions.id),
+              )
+          : [];
+      const completedQuizzes = selectLatestCompletedAttempts(
+        submittedQuizzes.map((row) => ({
+          ...row,
+          lessonId: quizzes.find((quiz) => quiz.id === row.assessmentId)!
+            .lessonId,
+        })),
       );
-      const lessonQuizSub = lessonQuizAss
-        ? learnerSubmissions.find((s) => s.assessmentId === lessonQuizAss.id)
-        : null;
-
-      // Bài tập tự luận của bài (nếu có)
-      const lessonAssignAss = courseAssessments.find(
-        (a) => a.lessonId === l.id && a.type === "assignment"
-      );
-      const lessonAssignSub = lessonAssignAss
-        ? learnerSubmissions.find((s) => s.assessmentId === lessonAssignAss.id)
-        : null;
-
-      return {
-        id: l.id,
-        title: l.title,
-        isCompleted,
-        quizScore:
-          lessonQuizSub && lessonQuizSub.score !== null
-            ? Number(lessonQuizSub.score)
+      // Historical percentages stay useful, but only current pinned content is question evidence.
+      const currentEvidenceIds = completedQuizzes
+        .filter(
+          (row) =>
+            row.quizRevision ===
+            quizzes.find((quiz) => quiz.id === row.assessmentId)
+              ?.currentQuizRevision,
+        )
+        .map((row) => row.id);
+      const questions = quizIds.length
+        ? await tx
+            .select({
+              id: quizQuestions.id,
+              lessonId: assessments.lessonId,
+              text: quizQuestions.text,
+            })
+            .from(quizQuestions)
+            .innerJoin(
+              assessments,
+              eq(quizQuestions.assessmentId, assessments.id),
+            )
+            .where(
+              and(
+                inArray(quizQuestions.assessmentId, quizIds),
+                eq(assessments.courseId, courseId),
+                eq(assessments.isDiagnostic, false),
+                eq(assessments.status, "published"),
+                eq(quizQuestions.quizRevision, assessments.currentQuizRevision),
+              ),
+            )
+            .orderBy(
+              quizQuestions.assessmentId,
+              quizQuestions.position,
+              quizQuestions.id,
+            )
+        : [];
+      const answers =
+        currentEvidenceIds.length && questions.length
+          ? await tx
+              .select({
+                questionId: assessmentAnswers.questionId,
+                isCorrect: assessmentAnswers.isCorrect,
+              })
+              .from(assessmentAnswers)
+              .innerJoin(
+                assessmentSubmissions,
+                eq(assessmentAnswers.submissionId, assessmentSubmissions.id),
+              )
+              .innerJoin(
+                assessments,
+                eq(assessmentSubmissions.assessmentId, assessments.id),
+              )
+              .innerJoin(
+                quizQuestions,
+                and(
+                  eq(assessmentAnswers.questionId, quizQuestions.id),
+                  eq(quizQuestions.assessmentId, assessments.id),
+                ),
+              )
+              .innerJoin(
+                studentEnrollments,
+                eq(assessmentSubmissions.enrollmentId, studentEnrollments.id),
+              )
+              .where(
+                and(
+                  inArray(assessmentSubmissions.id, currentEvidenceIds),
+                  inArray(assessmentSubmissions.enrollmentId, enrollmentIds),
+                  inArray(
+                    assessmentAnswers.questionId,
+                    questions.map((question) => question.id),
+                  ),
+                  eq(studentEnrollments.courseId, courseId),
+                  eq(assessments.courseId, courseId),
+                  eq(assessments.type, "quiz"),
+                  eq(assessments.isDiagnostic, false),
+                  eq(assessments.status, "published"),
+                  eq(assessmentSubmissions.status, "graded"),
+                  isNotNull(assessmentSubmissions.submittedAt),
+                  isNotNull(assessmentAnswers.isCorrect),
+                  eq(
+                    assessmentSubmissions.quizRevision,
+                    assessments.currentQuizRevision,
+                  ),
+                  eq(
+                    quizQuestions.quizRevision,
+                    assessmentSubmissions.quizRevision,
+                  ),
+                ),
+              )
+          : [];
+      const assignmentIds = courseAssessments
+        .filter((assessment) => assessment.type === "assignment")
+        .map((assessment) => assessment.id);
+      const assignments =
+        assignmentIds.length && enrollmentIds.length
+          ? await tx
+              .select({
+                id: assessmentSubmissions.id,
+                assessmentId: assessmentSubmissions.assessmentId,
+                enrollmentId: assessmentSubmissions.enrollmentId,
+                status: assessmentSubmissions.status,
+                score: assessmentSubmissions.score,
+                submittedAt: assessmentSubmissions.submittedAt,
+              })
+              .from(assessmentSubmissions)
+              .where(
+                and(
+                  inArray(assessmentSubmissions.assessmentId, assignmentIds),
+                  inArray(assessmentSubmissions.enrollmentId, enrollmentIds),
+                  inArray(assessmentSubmissions.status, ["pending", "graded"]),
+                  isNotNull(assessmentSubmissions.submittedAt),
+                ),
+              )
+              .orderBy(
+                desc(assessmentSubmissions.attempt),
+                desc(assessmentSubmissions.id),
+              )
+          : [];
+      const learners: LearnerProgressDto[] = enrollments.map((enrollment) => {
+        const records = progress.filter(
+          (row) => row.enrollmentId === enrollment.enrollmentId,
+        );
+        const completed = new Set(
+          records
+            .filter((row) => row.status === "completed")
+            .map((row) => row.lessonId),
+        );
+        const results = completedQuizzes.filter(
+          (row) => row.enrollmentId === enrollment.enrollmentId,
+        );
+        const submittedAssignments = assignments.filter(
+          (row) => row.enrollmentId === enrollment.enrollmentId,
+        );
+        const activity = [
+          ...records.flatMap((row) => [row.lastAccessedAt, row.completedAt]),
+          ...results.map((row) => row.submittedAt),
+          ...submittedAssignments.map((row) => row.submittedAt),
+        ]
+          .filter((date): date is Date => date !== null)
+          .map((date) => date.getTime());
+        return {
+          userId: enrollment.userId,
+          name: enrollment.userName || "Học viên",
+          avatar: enrollment.userImage,
+          progressPercent: calculateLearnerCompletionRate(
+            completed.size,
+            lessons.length,
+          ),
+          completedLessonsCount: completed.size,
+          totalLessonsCount: lessons.length,
+          averageQuizScore: calculateAverageQuizScore(
+            results.map((row) => row.quizPercent),
+          ),
+          hintUsageCount: null,
+          lastActive: activity.length
+            ? new Date(Math.max(...activity)).toISOString()
             : null,
-        assignmentSubmission: lessonAssignSub
-          ? {
-              status: lessonAssignSub.status,
-              score:
-                lessonAssignSub.score !== null
-                  ? Number(lessonAssignSub.score)
-                  : null,
-              maxScore: Number(lessonAssignAss?.maxScore || 100),
-            }
-          : null,
+          lessons: lessons.map((lesson) => {
+            const quiz = results.find((row) => row.lessonId === lesson.id);
+            const assignment = submittedAssignments.find(
+              (row) =>
+                courseAssessments.find(
+                  (assessment) => assessment.id === row.assessmentId,
+                )?.lessonId === lesson.id,
+            );
+            return {
+              id: lesson.id,
+              title: lesson.title,
+              isCompleted: completed.has(lesson.id),
+              quizScore: quiz?.quizPercent ?? null,
+              assignmentSubmission: assignment
+                ? {
+                    status: assignment.status,
+                    score: assignment.score,
+                    maxScore: courseAssessments.find(
+                      (assessment) => assessment.id === assignment.assessmentId,
+                    )!.maxScore,
+                  }
+                : null,
+            };
+          }),
+        };
+      });
+      return {
+        courseId,
+        courseTitle: course.title,
+        totalLessons: lessons.length,
+        learnersCount: learners.length,
+        averageCompletionRate: calculateAveragePercentage(
+          learners.map((row) => row.progressPercent),
+        ),
+        averageQuizScore: calculateAverageQuizScore(
+          learners.map((row) => row.averageQuizScore),
+        ),
+        learners,
+        quizQuestions: questions.map((question) => {
+          const evidence = answers.filter(
+            (answer) =>
+              answer.questionId === question.id && answer.isCorrect !== null,
+          );
+          const correct = evidence.filter(
+            (answer) => answer.isCorrect === true,
+          ).length;
+          return {
+            lessonId: question.lessonId,
+            lessonTitle:
+              lessons.find((lesson) => lesson.id === question.lessonId)
+                ?.title || "Bài học",
+            questionId: question.id,
+            questionText: question.text,
+            totalAnswers: evidence.length,
+            correctAnswers: correct,
+            ...calculateQuestionAccuracy(correct, evidence.length),
+          };
+        }),
       };
-    });
-
-    const progressPercent = calculateLearnerCompletionRate(
-      completedLessonIds.size,
-      totalLessons
-    );
-
-    return {
-      userId: e.userId,
-      name: e.userName || "Học viên",
-      avatar: e.userImage,
-      progressPercent,
-      completedLessonsCount: completedLessonIds.size,
-      totalLessonsCount: totalLessons,
-      averageQuizScore,
-      hintUsageCount: hintInfo.count,
-      maxHintLevel: hintInfo.maxLevel,
-      lastActive,
-      lessons: lessonItems,
-    };
-  });
-
-  const completionPercentages = learners.map((l) => l.progressPercent);
-  const averageCompletionRate = calculateAveragePercentage(completionPercentages);
-
-  const allQuizAverages = learners
-    .map((l) => l.averageQuizScore)
-    .filter((s): s is number => s !== null);
-  const courseAverageQuizScore = calculateAverageQuizScore(allQuizAverages);
-
-  return {
-    courseId,
-    courseTitle: course.title,
-    totalLessons,
-    learnersCount: learners.length,
-    averageCompletionRate,
-    averageQuizScore: courseAverageQuizScore,
-    hasCodingExercise: hasCoding,
-    learners,
-    quizQuestions: quizQuestionStats,
-  };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }

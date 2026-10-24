@@ -1,0 +1,12 @@
+{
+  "file": "pr165-playwright-original.json.gz",
+  "uncompressedSha256": "aa099a951b8615f68f93221243a779b7095264ee20a2f9e47cfd5dd4a1ea9078",
+  "originalStats": {
+    "startTime": "2026-10-21T11:08:31.524Z",
+    "duration": 177100.65099999998,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

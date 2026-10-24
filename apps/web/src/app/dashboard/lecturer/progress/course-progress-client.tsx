@@ -9,7 +9,6 @@ import {
   Circle,
   HelpCircle,
   Search,
-  Sparkles,
   Users,
 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
@@ -21,6 +20,10 @@ import type {
   CourseProgressDetailDto,
   LearnerProgressDto,
 } from "@/lib/lecturer-progress-service";
+import {
+  HINT_USAGE_UNAVAILABLE,
+  PROGRESS_CHARTS_UNAVAILABLE,
+} from "@/lib/lecturer-progress-service";
 
 interface CourseProgressClientProps {
   data: CourseProgressDetailDto;
@@ -29,11 +32,12 @@ interface CourseProgressClientProps {
 export function CourseProgressClient({ data }: CourseProgressClientProps) {
   const [activeTab, setActiveTab] = useState<"learners" | "quiz">("learners");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLearner, setSelectedLearner] = useState<LearnerProgressDto | null>(null);
+  const [selectedLearner, setSelectedLearner] =
+    useState<LearnerProgressDto | null>(null);
 
   // Lọc học viên theo từ khoá tìm kiếm
   const filteredLearners = data.learners.filter((l) =>
-    l.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+    l.name.toLowerCase().includes(searchQuery.trim().toLowerCase()),
   );
 
   const formatDate = (iso: string | null) => {
@@ -55,16 +59,36 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
           <ArrowLeft className="size-3.5" />
           <span>Tất cả khoá học</span>
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight">{data.courseTitle}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {data.courseTitle}
+        </h1>
       </div>
 
+      <div
+        role="status"
+        className="space-y-2 rounded-lg border border-border p-4 text-sm text-muted-foreground"
+      >
+        <p>{PROGRESS_CHARTS_UNAVAILABLE}</p>
+        <p>{HINT_USAGE_UNAVAILABLE}</p>
+        <p>
+          Quiz TB chỉ tính phần trăm đã lưu của lần nộp đã chấm gần nhất theo
+          từng bài; không gồm bài kiểm tra đầu vào. Thiếu phần trăm lịch sử được
+          hiển thị “—”, không quy đổi từ điểm cũ.
+        </p>
+      </div>
       {/* 3 Stat Tiles */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border border-border/80">
           <CardContent className="p-5 flex flex-col justify-between space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">Học viên</span>
-            <div className="text-3xl font-bold tracking-tight">{data.learnersCount}</div>
-            <span className="text-xs text-muted-foreground">Đã ghi danh khoá học</span>
+            <span className="text-xs font-medium text-muted-foreground">
+              Học viên
+            </span>
+            <div className="text-3xl font-bold tracking-tight">
+              {data.learnersCount}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Đã ghi danh khoá học
+            </span>
           </CardContent>
         </Card>
 
@@ -76,7 +100,9 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
             <div className="text-3xl font-bold tracking-tight">
               {data.averageCompletionRate}%
             </div>
-            <span className="text-xs text-muted-foreground">Trên toàn bộ bài học</span>
+            <span className="text-xs text-muted-foreground">
+              Trên toàn bộ bài học
+            </span>
           </CardContent>
         </Card>
 
@@ -86,9 +112,13 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
               Điểm quiz trung bình
             </span>
             <div className="text-3xl font-bold tracking-tight">
-              {data.averageQuizScore !== null ? `${data.averageQuizScore}%` : "—"}
+              {data.averageQuizScore !== null
+                ? `${data.averageQuizScore}%`
+                : "—"}
             </div>
-            <span className="text-xs text-muted-foreground">Các bài kiểm tra trắc nghiệm</span>
+            <span className="text-xs text-muted-foreground">
+              Các bài kiểm tra trắc nghiệm
+            </span>
           </CardContent>
         </Card>
       </div>
@@ -168,7 +198,10 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                     </thead>
                     <tbody className="divide-y divide-border">
                       {filteredLearners.map((learner) => (
-                        <tr key={learner.userId} className="hover:bg-muted/30 transition-colors">
+                        <tr
+                          key={learner.userId}
+                          className="hover:bg-muted/30 transition-colors"
+                        >
                           <td className="p-3">
                             <div className="flex items-center gap-2">
                               {learner.avatar ? (
@@ -193,7 +226,9 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                               <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
                                 <div
                                   className="bg-primary h-full rounded-full transition-all"
-                                  style={{ width: `${learner.progressPercent}%` }}
+                                  style={{
+                                    width: `${learner.progressPercent}%`,
+                                  }}
                                 />
                               </div>
                               <span className="text-[11px] font-medium text-muted-foreground w-8 text-right">
@@ -203,7 +238,8 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                           </td>
 
                           <td className="p-3 text-center">
-                            {learner.completedLessonsCount}/{learner.totalLessonsCount}
+                            {learner.completedLessonsCount}/
+                            {learner.totalLessonsCount}
                           </td>
 
                           <td className="p-3 text-center font-medium">
@@ -213,9 +249,9 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                           </td>
 
                           <td className="p-3 text-center text-muted-foreground">
-                            {learner.hintUsageCount > 0
-                              ? `${learner.hintUsageCount} (L${learner.maxHintLevel})`
-                              : "0"}
+                            <span title={HINT_USAGE_UNAVAILABLE}>
+                              Chưa ghi nhận
+                            </span>
                           </td>
 
                           <td className="p-3 text-muted-foreground whitespace-nowrap">
@@ -247,7 +283,9 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
       {activeTab === "quiz" && (
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Câu có tỉ lệ đúng dưới 60% được đánh dấu để bạn xem lại cách giảng hoặc đề bài.
+            Câu có tỉ lệ đúng dưới 60% được đánh dấu để bạn xem lại cách giảng
+            hoặc đề bài. Chỉ tính câu hỏi phiên bản hiện tại từ lần nộp đã chấm
+            được chọn; chưa có bằng chứng thì hiển thị “—”.
           </p>
 
           {!data.quizQuestions.length ? (
@@ -257,9 +295,12 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                   <HelpCircle className="size-8" />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-base font-semibold">Chưa có câu hỏi quiz nào</h2>
+                  <h2 className="text-base font-semibold">
+                    Chưa có câu hỏi quiz nào
+                  </h2>
                   <p className="text-sm text-muted-foreground max-w-sm">
-                    Khoá học chưa có bài trắc nghiệm hoặc chưa có câu hỏi nào được tạo.
+                    Khoá học chưa có bài trắc nghiệm hoặc chưa có câu hỏi nào
+                    được tạo.
                   </p>
                 </div>
               </CardContent>
@@ -279,7 +320,10 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {data.quizQuestions.map((q) => (
-                      <tr key={q.questionId} className="hover:bg-muted/30 transition-colors">
+                      <tr
+                        key={q.questionId}
+                        className="hover:bg-muted/30 transition-colors"
+                      >
                         <td className="p-3 font-medium text-muted-foreground whitespace-nowrap">
                           {q.lessonTitle}
                         </td>
@@ -288,7 +332,9 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                         </td>
                         <td className="p-3 text-center">{q.totalAnswers}</td>
                         <td className="p-3 text-center font-medium">
-                          {q.correctPercent !== null ? `${q.correctPercent}%` : "—"}
+                          {q.correctPercent !== null
+                            ? `${q.correctPercent}%`
+                            : "—"}
                         </td>
                         <td className="p-3 text-right">
                           {q.needsReview ? (
@@ -297,7 +343,11 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                               <span>Cần xem lại</span>
                             </span>
                           ) : (
-                            <span className="text-muted-foreground text-[11px]">Bình thường</span>
+                            <span className="text-muted-foreground text-[11px]">
+                              {q.correctPercent === null
+                                ? "Chưa có dữ liệu"
+                                : "Bình thường"}
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -324,7 +374,8 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
               <ProgressRing value={selectedLearner.progressPercent} size={76} />
               <div className="space-y-1">
                 <h3 className="font-semibold text-sm">
-                  {selectedLearner.completedLessonsCount}/{data.totalLessons} bài hoàn thành
+                  {selectedLearner.completedLessonsCount}/{data.totalLessons}{" "}
+                  bài hoàn thành
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   Quiz trung bình:{" "}
@@ -336,18 +387,13 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
             </div>
 
             {/* Panel thông tin gợi ý AI (không phạt điểm) */}
-            {selectedLearner.hintUsageCount > 0 && (
-              <div className="flex items-start gap-3 p-3.5 rounded-lg border border-border bg-card text-xs">
-                <Sparkles className="size-4 text-primary shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <span className="font-medium text-foreground">Sử dụng gợi ý AI</span>
-                  <p className="text-muted-foreground">
-                    Đã dùng {selectedLearner.hintUsageCount} lần gợi ý (cấp độ cao nhất: L
-                    {selectedLearner.maxHintLevel}). Gợi ý hỗ trợ học viên giải bài và không bị trừ điểm.
-                  </p>
-                </div>
-              </div>
-            )}
+            <div
+              role="status"
+              className="space-y-2 text-xs text-muted-foreground"
+            >
+              <p>{HINT_USAGE_UNAVAILABLE}</p>
+              <p>{PROGRESS_CHARTS_UNAVAILABLE}</p>
+            </div>
 
             {/* Danh sách các bài học */}
             <div className="space-y-2">
@@ -368,12 +414,19 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
                     )}
 
                     <div className="flex-1 space-y-0.5">
-                      <div className="font-medium text-foreground">{lesson.title}</div>
+                      <div className="font-medium text-foreground">
+                        {lesson.title}
+                      </div>
                       <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground text-[11px]">
-                        <span>{lesson.isCompleted ? "Hoàn thành" : "Chưa hoàn thành"}</span>
-                        {lesson.quizScore !== null && lesson.quizScore !== undefined && (
-                          <span>· Quiz {lesson.quizScore}%</span>
-                        )}
+                        <span>
+                          {lesson.isCompleted
+                            ? "Hoàn thành"
+                            : "Chưa hoàn thành"}
+                        </span>
+                        {lesson.quizScore !== null &&
+                          lesson.quizScore !== undefined && (
+                            <span>· Quiz {lesson.quizScore}%</span>
+                          )}
                         {lesson.assignmentSubmission && (
                           <span>
                             · Bài tập:{" "}

@@ -96,27 +96,55 @@ afterEach(async () => {
 });
 
 describe("knowledge map client saved graph state", () => {
-  it("offers analysis for a ready course with lessons but no extracted concepts", async () => {
-    const unanalysed = snapshot();
-    unanalysed.concepts = [];
-    await render(unanalysed);
-    expect(button("Phân tích lại").disabled).toBe(false);
-    expect(confirm().disabled).toBe(true);
-    await click("Phân tích lại");
-    expect(boundary.runKnowledgeMapAnalysis).toHaveBeenCalledWith("owned");
+  it("explains legacy reconfirmation and clears the notice only after confirmation succeeds", async () => {
+    const legacy = snapshot();
+    legacy.concepts = legacy.concepts.map((concept) => ({ ...concept, review: "accepted" }));
+    legacy.course.requiresReconfirmation = true;
+    await render(legacy);
+    expect(document.body.textContent).toContain("Cần xác nhận lại để áp dụng cho học viên");
+    expect(confirm().disabled).toBe(false);
+    await click("Xác nhận bản đồ kiến thức");
+    expect(boundary.confirmKnowledgeMap).toHaveBeenCalledWith("owned");
+    expect(document.body.textContent).not.toContain("Cần xác nhận lại để áp dụng cho học viên");
+  });
+  it.each(["empty", "ready", "stale", "failed", "analysing"] as const)("discloses unavailable analysis for %s without an action", async (status) => {
+    const data = snapshot();
+    data.course.knowledgeMapStatus = status;
+    data.concepts = [];
+    await render(data);
+    expect(document.body.textContent).toContain("Phân tích AI chưa khả dụng");
+    expect(document.body.textContent).toContain("chưa thể tạo hoặc xác nhận");
+    expect(document.body.textContent).toContain("chưa thể đáp ứng điều kiện bản đồ để xuất bản");
+    expect([...document.querySelectorAll("button")].some((el) => /Phân tích lại|Thử lại/.test(el.textContent || ""))).toBe(false);
+    expect(boundary.runKnowledgeMapAnalysis).not.toHaveBeenCalled();
     expect(boundary.confirmKnowledgeMap).not.toHaveBeenCalled();
   });
 
-  it("does not offer analysis when no lessons are available", async () => {
-    const empty = snapshot();
-    empty.course.knowledgeMapStatus = "empty";
-    empty.concepts = [];
-    empty.lessons = [];
-    empty.defaultOrder = [];
-    await render(empty);
-    expect(document.body.textContent).toContain("Chưa có nội dung để phân tích");
-    expect([...document.querySelectorAll("button")].some((el) => el.textContent?.trim() === "Phân tích lại")).toBe(false);
+  it("keeps stale graph edits visible but blocks confirmation and recovery", async () => {
+    const data = snapshot();
+    data.course.knowledgeMapStatus = "stale";
+    await render(data);
+    expect(document.body.textContent).toContain("chưa thể xác nhận lại");
+    expect(confirm().disabled).toBe(true);
     expect(boundary.runKnowledgeMapAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("does not treat historical AI labels as verified extraction", async () => {
+    await render(snapshot());
+    expect(document.body.textContent).toContain("chưa được xác minh");
+    expect(confirm().disabled).toBe(false);
+  });
+
+  it("keeps a ready but generation-ineligible graph blocked after manual edits", async () => {
+    const data = snapshot();
+    data.course.confirmationUnavailable = true;
+    await render(data);
+    await click("Danh sách");
+    await addEdge("2", "1");
+    expect(document.body.textContent).toContain("chưa thể xác nhận lại");
+    expect(document.body.textContent).not.toContain("Sẵn sàng xác nhận!");
+    expect(confirm().disabled).toBe(true);
+    expect(boundary.confirmKnowledgeMap).not.toHaveBeenCalled();
   });
 
   it("does not offer first analysis while the course is pending review", async () => {
@@ -145,21 +173,6 @@ describe("knowledge map client saved graph state", () => {
     expect(document.body.textContent).not.toContain("Chấp nhận tất cả (2)");
     expect(confirm().disabled).toBe(false);
     expect(order()).toEqual(["Bài 1:Lesson 1", "Bài 2:Lesson 2"]);
-  });
-
-  it("shows a fresh analysed graph after refresh", async () => {
-    const failed = snapshot();
-    failed.course.knowledgeMapStatus = "failed";
-    failed.concepts = [];
-    await render(failed);
-    await click("Thử lại");
-    expect(boundary.runKnowledgeMapAnalysis).toHaveBeenCalledWith("owned");
-    expect(boundary.refresh).toHaveBeenCalledOnce();
-    const fresh = snapshot();
-    fresh.concepts[0]!.name = "Fresh analysis";
-    await render(fresh);
-    expect(document.body.textContent).toContain("Fresh analysis");
-    expect(confirm().disabled).toBe(false);
   });
 
   it("clears cycle warnings and enables confirmation when an edge is declined", async () => {

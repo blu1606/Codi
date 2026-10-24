@@ -1,0 +1,186 @@
+{
+  "startedAt": "2026-10-22T12:05:46.777Z",
+  "origin": "http://localhost:3144",
+  "scope": "two-tab heartbeats, reload/tracking and header/mobile",
+  "browserVersion": "149.0.7827.55",
+  "passed": true,
+  "cleanup": "Owned QA user/course/activity removed; zero sessions or study clocks/days remain.",
+  "accounting": [
+    {
+      "sameLesson": true,
+      "staleStartRecorded": false,
+      "staleStopRecorded": false,
+      "ticks": [
+        {
+          "tick": 1,
+          "intervalMs": 29159,
+          "addedSeconds": 29,
+          "totalSinceStart": 29,
+          "ownerPreserved": true,
+          "recorded": true
+        },
+        {
+          "tick": 2,
+          "intervalMs": 29981,
+          "addedSeconds": 30,
+          "totalSinceStart": 59,
+          "ownerPreserved": true,
+          "recorded": true
+        }
+      ],
+      "ownerStopRecorded": true
+    },
+    {
+      "sameLesson": false,
+      "staleStartRecorded": false,
+      "staleStopRecorded": false,
+      "ticks": [
+        {
+          "tick": 1,
+          "intervalMs": 29006,
+          "addedSeconds": 29,
+          "totalSinceStart": 29,
+          "ownerPreserved": true,
+          "recorded": true
+        },
+        {
+          "tick": 2,
+          "intervalMs": 30016,
+          "addedSeconds": 30,
+          "totalSinceStart": 59,
+          "ownerPreserved": true,
+          "recorded": true
+        }
+      ],
+      "ownerStopRecorded": true
+    }
+  ],
+  "visual": [
+    {
+      "route": "dashboard",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "desktop-light",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 29,
+      "headerWithinViewport": true,
+      "overflow": false
+    },
+    {
+      "route": "dashboard",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "desktop-dark",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 29,
+      "headerWithinViewport": true,
+      "overflow": false
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "mobile-light",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 30,
+      "headerWithinViewport": true,
+      "overflow": false
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "mobile-dark",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 29,
+      "headerWithinViewport": true,
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "finishedAt": "2026-10-22T12:11:22.138Z"
+}

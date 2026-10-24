@@ -1,20 +1,15 @@
-/**
- * Pure domain logic and calculation helpers for Lecturer Progress (Screen S29).
- * Adheres to STATE-MACHINES.md §9, §10, §13, and Mockup js/lecturer.js (lines 1363-1424).
- */
-
+/** Read-only lecturer projections. Unknown evidence is never a zero score. */
 export interface LearnerProgressLessonItem {
   id: string;
   title: string;
   isCompleted: boolean;
-  quizScore?: number | null;
-  assignmentSubmission?: {
+  quizScore: number | null;
+  assignmentSubmission: {
     status: "draft" | "pending" | "graded";
     score: number | null;
     maxScore: number;
   } | null;
 }
-
 export interface LearnerProgressDto {
   userId: string;
   name: string;
@@ -23,12 +18,10 @@ export interface LearnerProgressDto {
   completedLessonsCount: number;
   totalLessonsCount: number;
   averageQuizScore: number | null;
-  hintUsageCount: number;
-  maxHintLevel: number;
+  hintUsageCount: null;
   lastActive: string | null;
   lessons: LearnerProgressLessonItem[];
 }
-
 export interface QuizQuestionStatDto {
   lessonId: string | null;
   lessonTitle: string;
@@ -39,7 +32,6 @@ export interface QuizQuestionStatDto {
   correctPercent: number | null;
   needsReview: boolean;
 }
-
 export interface CourseProgressSummaryDto {
   courseId: string;
   title: string;
@@ -47,7 +39,6 @@ export interface CourseProgressSummaryDto {
   learnersCount: number;
   averageCompletionRate: number;
 }
-
 export interface CourseProgressDetailDto {
   courseId: string;
   courseTitle: string;
@@ -55,69 +46,73 @@ export interface CourseProgressDetailDto {
   learnersCount: number;
   averageCompletionRate: number;
   averageQuizScore: number | null;
-  hasCodingExercise: boolean;
   learners: LearnerProgressDto[];
   quizQuestions: QuizQuestionStatDto[];
 }
+export const HINT_USAGE_UNAVAILABLE =
+  "Chưa có dữ liệu gợi ý AI được ghi nhận đáng tin cậy; chưa thể thống kê mức sử dụng. Gợi ý không trừ điểm.";
+export const PROGRESS_CHARTS_UNAVAILABLE =
+  "Biểu đồ mức thành thạo và xu hướng điểm chưa khả dụng trong bản prototype. Tiến độ hoàn thành không phải mức thành thạo.";
 
-/**
- * Tính tỉ lệ hoàn thành bài học của học viên (0..100%).
- */
-export function calculateLearnerCompletionRate(
-  completedCount: number,
-  totalCount: number
-): number {
-  if (!totalCount || totalCount <= 0 || completedCount <= 0) return 0;
-  return Math.min(100, Math.round((completedCount / totalCount) * 100));
-}
-
-/**
- * Tính điểm quiz trung bình từ mảng điểm (%).
- * Trả về null nếu mảng rỗng.
- */
-export function calculateAverageQuizScore(
-  scores: Array<number | null | undefined>
-): number | null {
-  const validScores = scores.filter(
-    (s): s is number => typeof s === "number" && !isNaN(s)
-  );
-  if (validScores.length === 0) return null;
-  const sum = validScores.reduce((acc, score) => acc + score, 0);
-  return Math.round(sum / validScores.length);
-}
-
-/**
- * Tính trung bình cộng của một danh sách phần trăm, trả về 0 nếu rỗng.
- */
-export function calculateAveragePercentage(values: number[]): number {
-  if (!values.length) return 0;
-  const sum = values.reduce((acc, val) => acc + val, 0);
-  return Math.round(sum / values.length);
-}
-
-/**
- * Thống kê tỉ lệ đúng của một câu hỏi quiz.
- * Theo mockup: câu có tỉ lệ đúng dưới 60% được đánh dấu "Cần xem lại".
- */
-export function calculateQuestionAccuracy(
-  correctCount: number,
-  totalCount: number
-): { correctPercent: number | null; needsReview: boolean } {
-  if (totalCount <= 0) {
-    return { correctPercent: null, needsReview: false };
+type CompletedAttempt = {
+  id: number;
+  assessmentId: number;
+  enrollmentId: number;
+  lessonId?: string | null;
+  attempt: number;
+  status: string;
+  submittedAt: Date | null;
+};
+/** Drafts never displace a submitted graded result; no fallback to older marks. */
+export function selectLatestCompletedAttempts<T extends CompletedAttempt>(
+  rows: readonly T[],
+): T[] {
+  const latest = new Map<string, T>();
+  for (const row of rows) {
+    if (row.status !== "graded" || !row.submittedAt) continue;
+    const key = row.enrollmentId + ":" + (row.lessonId ?? row.assessmentId);
+    const previous = latest.get(key);
+    if (
+      !previous ||
+      row.attempt > previous.attempt ||
+      (row.attempt === previous.attempt && row.id > previous.id)
+    )
+      latest.set(key, row);
   }
-  const correctPercent = Math.round((correctCount / totalCount) * 100);
-  return {
-    correctPercent,
-    needsReview: correctPercent < 60,
-  };
+  return [...latest.values()];
 }
-
-/**
- * Định dạng số lần sử dụng gợi ý AI (VD: "2 (L2)" hoặc "0").
- * Nhắc nhở: Dùng gợi ý AI không trừ điểm học viên.
- */
-export function formatHintUsage(count: number, maxLevel: number): string {
-  if (!count || count <= 0) return "0";
-  return `${count} (L${Math.max(1, maxLevel || 1)})`;
+export function calculateLearnerCompletionRate(
+  completed: number,
+  total: number,
+): number {
+  return total > 0
+    ? Math.min(100, Math.max(0, Math.round((completed / total) * 100)))
+    : 0;
+}
+export function calculateAverageQuizScore(
+  scores: Array<number | null | undefined>,
+): number | null {
+  const known = scores.filter(
+    (value): value is number =>
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 100,
+  );
+  return known.length
+    ? Math.round(known.reduce((sum, value) => sum + value, 0) / known.length)
+    : null;
+}
+export function calculateAveragePercentage(values: number[]): number {
+  return values.length
+    ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+    : 0;
+}
+export function calculateQuestionAccuracy(
+  correct: number,
+  total: number,
+): { correctPercent: number | null; needsReview: boolean } {
+  if (total <= 0) return { correctPercent: null, needsReview: false };
+  const correctPercent = Math.round((correct / total) * 100);
+  return { correctPercent, needsReview: correctPercent < 60 };
 }

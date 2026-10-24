@@ -23,9 +23,12 @@ export default async function LecturerProgressPage() {
               <BarChart3 className="size-8" />
             </div>
             <div className="space-y-1">
-              <h2 className="text-base font-semibold">Chưa có khoá học đang bán</h2>
+              <h2 className="text-base font-semibold">
+                Chưa có khoá học đang bán
+              </h2>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Tiến độ học viên xuất hiện khi khoá học được xuất bản và có người học.
+                Tiến độ học viên xuất hiện khi khoá học được xuất bản và có
+                người học.
               </p>
             </div>
           </CardContent>

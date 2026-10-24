@@ -29,9 +29,12 @@ export default async function CourseProgressDetailPage({ params }: PageProps) {
               <BookX className="size-8" />
             </div>
             <div className="space-y-1">
-              <h1 className="text-base font-semibold">Khoá học không tồn tại</h1>
+              <h1 className="text-base font-semibold">
+                Khoá học không tồn tại
+              </h1>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Không tìm thấy thông tin khoá học hoặc bạn không có quyền xem tiến độ của khoá này.
+                Không tìm thấy thông tin khoá học hoặc bạn không có quyền xem
+                tiến độ của khoá này.
               </p>
             </div>
             <Link

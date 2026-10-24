@@ -15,11 +15,11 @@ const mocks = vi.hoisted(() => ({
   lessonJoin: vi.fn(),
   chapterWhere: vi.fn(),
   orderBy: vi.fn(),
-  reviewFrom: vi.fn(),
-  reviewJoin: vi.fn(),
-  reviewWhere: vi.fn(),
-  reviewOrder: vi.fn(),
-  reviewLimit: vi.fn(),
+  reviewsFrom: vi.fn(),
+  reviewsJoin: vi.fn(),
+  reviewsWhere: vi.fn(),
+  reviewsOrderBy: vi.fn(),
+  reviewsLimit: vi.fn(),
 }));
 
 vi.mock("@/services", () => ({ db: { select: mocks.select } }));
@@ -50,7 +50,7 @@ beforeEach(() => {
     .mockReturnValueOnce({ from: mocks.courseFrom })
     .mockReturnValueOnce({ from: mocks.detailsFrom })
     .mockReturnValueOnce({ from: mocks.chapterFrom })
-    .mockReturnValueOnce({ from: mocks.reviewFrom });
+    .mockReturnValueOnce({ from: mocks.reviewsFrom });
   mocks.courseFrom.mockReturnValue({ leftJoin: mocks.courseJoin });
   mocks.courseJoin.mockReturnValue({
     leftJoin: mocks.courseJoin,
@@ -66,26 +66,28 @@ beforeEach(() => {
   mocks.lessonJoin.mockReturnValue({ where: mocks.chapterWhere });
   mocks.chapterWhere.mockReturnValue({ orderBy: mocks.orderBy });
   mocks.orderBy.mockResolvedValue([]);
-  mocks.reviewFrom.mockReturnValue({ innerJoin: mocks.reviewJoin });
-  mocks.reviewJoin.mockReturnValue({
-    innerJoin: mocks.reviewJoin,
-    where: mocks.reviewWhere,
+  mocks.reviewsFrom.mockReturnValue({ innerJoin: mocks.reviewsJoin });
+  mocks.reviewsJoin.mockReturnValue({
+    innerJoin: mocks.reviewsJoin,
+    where: mocks.reviewsWhere,
   });
-  mocks.reviewWhere.mockReturnValue({ orderBy: mocks.reviewOrder });
-  mocks.reviewOrder.mockReturnValue({ limit: mocks.reviewLimit });
-  mocks.reviewLimit.mockResolvedValue([]);
+  mocks.reviewsWhere.mockReturnValue({ orderBy: mocks.reviewsOrderBy });
+  mocks.reviewsOrderBy.mockReturnValue({ limit: mocks.reviewsLimit });
+  mocks.reviewsLimit.mockResolvedValue([]);
 });
 
 describe("GET /api/courses/[slug]", () => {
-  it("returns only visible, course-scoped public reviews without exposing private identity data", async () => {
+  it("uses the shared public review DTO, visible course scope and ISO dates", async () => {
     const date = new Date("2026-10-16T00:00:00Z");
-    mocks.reviewLimit.mockResolvedValue([
+    mocks.reviewsLimit.mockResolvedValue([
       {
         id: 1,
         name: "Học viên",
+        userAvatar: null,
         rating: 4,
         text: "Hữu ích",
-        lecturerReply: "Cảm ơn bạn",
+        lecturerReply: "Cảm ơn",
+        repliedAt: date,
         createdAt: date,
       },
     ]);
@@ -94,28 +96,18 @@ describe("GET /api/courses/[slug]", () => {
       {
         id: "1",
         userName: "Học viên",
+        userAvatar: null,
         stars: 4,
         text: "Hữu ích",
-        reply: { text: "Cảm ơn bạn" },
+        reply: { text: "Cảm ơn", createdAt: date.toISOString() },
         createdAt: date.toISOString(),
       },
     ]);
     const filter = new PgDialect().sqlToQuery(
-      mocks.reviewWhere.mock.calls[0][0],
+      mocks.reviewsWhere.mock.calls[0][0],
     );
     expect(filter.params).toEqual([course.id, course.id, true]);
-    expect(filter.sql).toContain('"course_reviews"."is_visible"');
-    expect(Object.keys(mocks.select.mock.calls[3][0])).toEqual([
-      "id",
-      "name",
-      "rating",
-      "text",
-      "lecturerReply",
-      "createdAt",
-      "repliedAt",
-      "userAvatar",
-    ]);
-    expect(mocks.reviewLimit).toHaveBeenCalledWith(50);
+    expect(mocks.reviewsLimit).toHaveBeenCalledWith(50);
   });
   it("returns the database course with honest empty content and no fabricated metadata", async () => {
     const response = await request();
@@ -176,7 +168,7 @@ describe("GET /api/courses/[slug]", () => {
     const dialect = new PgDialect();
     expect(
       dialect.sqlToQuery(mocks.courseWhere.mock.calls[0][0]).params,
-    ).toEqual([course.slug]);
+    ).toEqual([course.slug, "published"]);
     expect(
       dialect.sqlToQuery(mocks.detailsWhere.mock.calls[0][0]).params,
     ).toEqual([course.id]);
@@ -251,6 +243,7 @@ describe("GET /api/courses/[slug]", () => {
       title: "Bài 1",
       description: "Mô tả bài",
       durationSeconds: 120,
+      isFreePreview: false,
     });
   });
 

@@ -73,6 +73,7 @@ export const pathProposalOutput = pathProposal.extend({
     .max(1000),
 });
 export type PathLesson = {
+  kind?: import("./lesson-kind").LessonKind;
   id: string;
   title: string;
   chapterId: string;
@@ -95,6 +96,8 @@ export type PathItem = {
   reason: string;
 };
 export type PathInput = {
+  publicationId?: string | null;
+  contentGeneration?: number;
   lessons: PathLesson[];
   concepts: PathConcept[];
   edges: PathEdge[];

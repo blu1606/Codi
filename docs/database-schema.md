@@ -39,6 +39,49 @@ tables are read by everyone; schema changes to a table go through its owner.
 | Commerce, AI advisor, Admin ops | #103 (@GnadiahHna) | `student_cart`, `vouchers`, `orders`, `order_items`, `order_events`, `payments`, `student_transactions` (retire), `courses.price*` / `hidden_reason`, `user.banned` / `user_roles` (admin), `ai_interaction_logs` (advisor) |
 | Lecturer workspace + Publication | #112 (@taidz0987-dot) | `courses` (lifecycle), `course_details`, `course_chapters`, `course_lessons`, `lesson_materials`, `skills`, `skill_prerequisites`, `lesson_skills`, `assessments`, `quiz_questions`, `quiz_options`, `coding_exercises`, `coding_test_cases`, `course_publication_requests`, `publication_review_criteria`, `publication_review_flags`, `feedback_snippets`, `ai_content_drafts`, grading writes on `assessment_submissions`, lecturer side of conversations / reviews |
 
+## Confirmed knowledge-map boundary
+
+`courses.confirmed_knowledge_map` holds one current typed publication, separate
+from mutable lecturer review rows. Its canonical skill IDs, names, BKT parameters,
+edges and lesson links are replaced only by explicit confirmation. Draft edits,
+reanalysis and content invalidation retain the publication; learner readers
+intersect its links with currently published, accessible course lessons. Existing
+skill identities, mastery, paths and progress are not rebuilt by reconfirmation.
+
+Legacy NULL publications require lecturer reconfirmation, even if the old map
+status says confirmed. A diagnostic without a trusted publication still saves
+score, answers and completion, but does not update mastery and is not replayed
+after later confirmation. Ordinary quiz/coding observations with no trusted live
+skill mapping remain unconsumed for later reconciliation.
+
+See the [typed payload](../packages/db/src/schema/confirmed-knowledge-map.ts) and
+[reader/locking helper](../apps/web/src/lib/confirmed-knowledge-map.ts). Content
+generation invalidates confirmation eligibility; publication identity also fences
+background path results. Authors acquire the per-course exclusive transaction
+advisory lock before course/child rows; learner mutations acquire enrollment then
+the matching shared advisory lock. No provider call holds these locks. Migrate
+before deploying the new code and fence old graph/content writers during rollout:
+an old binary does not participate in this protocol. No automatic backfill or
+history/recovery framework is provided.
+
+### Nonbillable knowledge-map prototype
+
+AI analysis is unavailable: its server action rejects without creating skills,
+edges, audit success records, notifications or analysis-generation stamps. The
+lecturer UI does not offer analysis/retry and treats historical AI metadata as
+unverified, not evidence of an extraction. Existing database history is retained.
+
+Existing graphs can still be reviewed, renamed and explicitly confirmed under
+the current ownership, review, cycle, membership and generation guards. The
+accepted legacy NULL analysis generation is treated as zero only for unchanged
+generation-zero graphs. New/empty graphs cannot be generated, and stale or
+content-changed graphs cannot be revalidated in this prototype. There is no
+manual concept/link creation or replacement revalidation workflow. Such courses
+cannot satisfy a confirmed-map prerequisite for publication; readiness must not
+be bypassed. Existing published payloads, canonical IDs, mastery and evidence
+are retained. No provider, billing, migration or history rewrite is introduced.
+Unavailable analysis does not fulfill a content-hash or no-op-analysis contract.
+
 ## Changing the schema
 
 1. Edit the Drizzle files in `packages/db/src/schema/` (keep enums in sync with `STATE-MACHINES.md`).

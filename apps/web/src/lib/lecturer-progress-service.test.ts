@@ -1,93 +1,83 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateAveragePercentage,
   calculateAverageQuizScore,
   calculateLearnerCompletionRate,
   calculateQuestionAccuracy,
-  formatHintUsage,
+  selectLatestCompletedAttempts,
 } from "./lecturer-progress-service";
 
-describe("Lecturer Progress Service Helper Functions", () => {
-  describe("calculateLearnerCompletionRate", () => {
-    it("returns 0 when totalLessons is 0 or negative", () => {
-      expect(calculateLearnerCompletionRate(0, 0)).toBe(0);
-      expect(calculateLearnerCompletionRate(5, 0)).toBe(0);
-      expect(calculateLearnerCompletionRate(2, -1)).toBe(0);
-    });
+const attempt = (
+  id: number,
+  number: number,
+  status = "graded",
+  submittedAt: Date | null = new Date("2026-10-20"),
+) => ({
+  id,
+  attempt: number,
+  assessmentId: 10,
+  enrollmentId: 1,
+  status,
+  submittedAt,
+  quizPercent: 80,
+});
 
-    it("returns correct percentage rounded to integer", () => {
-      expect(calculateLearnerCompletionRate(1, 3)).toBe(33);
-      expect(calculateLearnerCompletionRate(2, 3)).toBe(67);
-      expect(calculateLearnerCompletionRate(5, 10)).toBe(50);
-      expect(calculateLearnerCompletionRate(10, 10)).toBe(100);
-    });
-
-    it("caps at 100%", () => {
-      expect(calculateLearnerCompletionRate(15, 10)).toBe(100);
-    });
+describe("lecturer completed result selection", () => {
+  it.each([false, true])(
+    "selects latest completed result without draft displacement (reversed=%s)",
+    (reverse) => {
+      const rows = [
+        attempt(1, 1),
+        attempt(2, 2),
+        attempt(3, 3, "draft", null),
+        attempt(4, 4, "pending"),
+      ];
+      const result = selectLatestCompletedAttempts(
+        reverse ? rows.toReversed() : rows,
+      );
+      expect(result.map((row) => row.id)).toEqual([2]);
+      expect(rows.map((row) => row.id)).toEqual([1, 2, 3, 4]);
+    },
+  );
+  it("keeps enrollment/assessment scopes separate and breaks attempt ties by id", () => {
+    const result = selectLatestCompletedAttempts([
+      attempt(5, 2),
+      attempt(6, 2),
+      { ...attempt(7, 1), enrollmentId: 2 },
+      { ...attempt(8, 1), assessmentId: 11 },
+    ]);
+    expect(result.map((row) => row.id).sort()).toEqual([6, 7, 8]);
   });
-
-  describe("calculateAverageQuizScore", () => {
-    it("returns null for empty or null array", () => {
-      expect(calculateAverageQuizScore([])).toBeNull();
-      expect(calculateAverageQuizScore([null, undefined])).toBeNull();
-    });
-
-    it("calculates average ignoring null/undefined", () => {
-      expect(calculateAverageQuizScore([80, 90, 100])).toBe(90);
-      expect(calculateAverageQuizScore([75, null, 85, undefined])).toBe(80);
-    });
+  it("selects only one completed quiz result per lesson even across assessment rows", () => {
+    const result = selectLatestCompletedAttempts([
+      { ...attempt(5, 2), lessonId: "lesson" },
+      { ...attempt(6, 2), lessonId: "lesson", assessmentId: 11 },
+    ]);
+    expect(result.map((row) => row.id)).toEqual([6]);
   });
-
-  describe("calculateAveragePercentage", () => {
-    it("returns 0 for empty array", () => {
-      expect(calculateAveragePercentage([])).toBe(0);
-    });
-
-    it("calculates average of numbers", () => {
-      expect(calculateAveragePercentage([50, 60, 70])).toBe(60);
-      expect(calculateAveragePercentage([33, 67])).toBe(50);
-    });
+  it("does not fall back to an older percentage or a mark when the selected result has no percent", () => {
+    const rows = [
+      attempt(1, 1),
+      { ...attempt(2, 2), quizPercent: null, score: 8 },
+    ];
+    const [selected] = selectLatestCompletedAttempts(rows);
+    expect(selected?.id).toBe(2);
+    expect(calculateAverageQuizScore([selected?.quizPercent])).toBeNull();
   });
-
-  describe("calculateQuestionAccuracy", () => {
-    it("returns null and needsReview=false when total is 0", () => {
-      const res = calculateQuestionAccuracy(0, 0);
-      expect(res.correctPercent).toBeNull();
-      expect(res.needsReview).toBe(false);
-    });
-
-    it("flags needsReview=true when correct percentage < 60%", () => {
-      const res1 = calculateQuestionAccuracy(5, 10); // 50%
-      expect(res1.correctPercent).toBe(50);
-      expect(res1.needsReview).toBe(true);
-
-      const res2 = calculateQuestionAccuracy(59, 100); // 59%
-      expect(res2.correctPercent).toBe(59);
-      expect(res2.needsReview).toBe(true);
-    });
-
-    it("flags needsReview=false when correct percentage >= 60%", () => {
-      const res1 = calculateQuestionAccuracy(6, 10); // 60%
-      expect(res1.correctPercent).toBe(60);
-      expect(res1.needsReview).toBe(false);
-
-      const res2 = calculateQuestionAccuracy(8, 10); // 80%
-      expect(res2.correctPercent).toBe(80);
-      expect(res2.needsReview).toBe(false);
-    });
+  it("excludes unsubmitted graded rows", () => {
+    expect(
+      selectLatestCompletedAttempts([attempt(1, 1, "graded", null)]),
+    ).toEqual([]);
   });
-
-  describe("formatHintUsage", () => {
-    it("returns '0' when count is 0 or falsy", () => {
-      expect(formatHintUsage(0, 0)).toBe("0");
-      expect(formatHintUsage(0, 2)).toBe("0");
+  it("keeps absent scores and correctness unknown", () => {
+    expect(calculateAverageQuizScore([null])).toBeNull();
+    expect(calculateQuestionAccuracy(0, 0)).toEqual({
+      correctPercent: null,
+      needsReview: false,
     });
-
-    it("formats count with maxLevel without affecting score", () => {
-      expect(formatHintUsage(2, 2)).toBe("2 (L2)");
-      expect(formatHintUsage(1, 3)).toBe("1 (L3)");
-      expect(formatHintUsage(4, 1)).toBe("4 (L1)");
+    expect(calculateQuestionAccuracy(1, 2)).toEqual({
+      correctPercent: 50,
+      needsReview: true,
     });
+    expect(calculateLearnerCompletionRate(1, 2)).toBe(50);
   });
 });

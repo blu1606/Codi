@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgEnum, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgEnum, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import type { ConfirmedKnowledgeMap } from "./confirmed-knowledge-map";
 import { user } from "./auth";
 
 // Course lifecycle — values are the contract in docs/mockup/STATE-MACHINES.md §16.
@@ -39,6 +40,9 @@ export const courses = pgTable("courses", {
   // Lets the app skip re-extraction when the authored content has not changed.
   knowledgeMapContentHash: text("knowledge_map_content_hash"),
   knowledgeMapGeneratedAt: timestamp("knowledge_map_generated_at", { withTimezone: true }),
+  confirmedKnowledgeMap: jsonb("confirmed_knowledge_map").$type<ConfirmedKnowledgeMap>(),
+  knowledgeMapContentGeneration: integer("knowledge_map_content_generation").default(0).notNull(),
+  knowledgeMapAnalysisGeneration: integer("knowledge_map_analysis_generation"),
 }, (table) => [
   index("courses_status_level_idx").on(table.status, table.level),
   index("courses_instructor_idx").on(table.instructorId),
