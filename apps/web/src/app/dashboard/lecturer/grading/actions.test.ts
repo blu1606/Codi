@@ -21,7 +21,9 @@ vi.mock("@codi-1/auth", () => ({
 const mockSelect = vi.fn();
 const mockInsert = vi.fn();
 const mockUpdate = vi.fn();
+const mockTransaction = vi.fn();
 const mockNotify = vi.fn().mockResolvedValue({ id: 1 });
+const mockGenerateText = vi.fn();
 
 vi.mock("@/services", () => ({
   auth: {
@@ -33,6 +35,7 @@ vi.mock("@/services", () => ({
     select: (...args: any[]) => mockSelect(...args),
     insert: (...args: any[]) => mockInsert(...args),
     update: (...args: any[]) => mockUpdate(...args),
+    transaction: (...args: any[]) => mockTransaction(...args),
   },
 }));
 
@@ -42,11 +45,34 @@ vi.mock("@/lib/notification-service", () => ({
   }),
 }));
 
+vi.mock("@/lib/ai", () => ({
+  getLlmProvider: () => ({
+    getModel: () => "mock-model",
+  }),
+}));
+
+vi.mock("ai", () => ({
+  generateText: (...args: any[]) => mockGenerateText(...args),
+}));
+
 import {
   getAiGradingDraft,
   getGradingQueueData,
   gradeSubmission,
 } from "./actions";
+
+function createMockQuery(data: any = []) {
+  const query: any = {
+    from: vi.fn().mockReturnThis(),
+    innerJoin: vi.fn().mockReturnThis(),
+    leftJoin: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockImplementation(() => Promise.resolve(data)),
+    then: (resolve: any, reject: any) => Promise.resolve(data).then(resolve, reject),
+  };
+  return query;
+}
 
 describe("Lecturer Grading Server Actions", () => {
   beforeEach(() => {
@@ -56,17 +82,19 @@ describe("Lecturer Grading Server Actions", () => {
       user: { id: "lecturer-1", name: "Thầy A" },
     });
     mockRequireRole.mockResolvedValue(undefined);
+    mockTransaction.mockImplementation(async (cb: any) => {
+      const mockTx: any = {
+        select: (...args: any[]) => mockSelect(...args),
+        update: (...args: any[]) => mockUpdate(...args),
+        insert: (...args: any[]) => mockInsert(...args),
+      };
+      return cb(mockTx);
+    });
   });
 
   describe("getGradingQueueData", () => {
     it("returns empty queue when lecturer has no courses", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue([]), // no courses
-          }),
-        }),
-      });
+      mockSelect.mockReturnValue(createMockQuery([]));
 
       const res = await getGradingQueueData();
       expect(res.courses).toEqual([]);
@@ -75,8 +103,9 @@ describe("Lecturer Grading Server Actions", () => {
       expect(res.selectedSubmission).toBeNull();
     });
 
-    it("fetches counts, submissions list and detail for selected submission", async () => {
+    it("fetches counts, assignments, submissions list and detail for selected submission", async () => {
       const myCourses = [{ id: "c1", title: "React & Next.js" }];
+      const myAssignments = [{ id: 101, title: "Bài tập 1", courseId: "c1" }];
       const submissionsList = [
         {
           id: 10,
@@ -108,129 +137,125 @@ describe("Lecturer Grading Server Actions", () => {
         instructions: "Tạo component Header",
         maxScore: 10,
         passingScore: 60,
-        rubric: JSON.stringify([{ id: "r1", name: "Cú pháp", points: 10 }]),
-        answerText: "Đây là bài làm của em",
-        fileUrl: "https://codi.vn/files/b.zip",
-        fileName: "b.zip",
-        linkUrl: "https://github.com/b/repo",
+        rubric: JSON.stringify([
+          { id: "c1", name: "Giao diện", points: 5 },
+          { id: "c2", name: "Chức năng", points: 5 },
+        ]),
+        answerText: "Em đã hoàn thành bài tập.",
+        fileUrl: null,
+        fileName: null,
+        linkUrl: "https://github.com/b/hw1",
         submittedAt: new Date("2026-10-18T10:00:00Z"),
         status: "pending",
         score: null,
         feedback: null,
       };
 
-      let queryCall = 0;
-      mockSelect.mockImplementation(() => ({
-        from: vi.fn().mockImplementation(() => {
-          queryCall++;
-          if (queryCall === 1) {
-            // myCourses
-            return {
-              where: vi.fn().mockReturnValue({
-                orderBy: vi.fn().mockResolvedValue(myCourses),
-              }),
-            };
-          }
-          if (queryCall === 2) {
-            // pending count
-            return {
-              innerJoin: vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue([{ count: 1 }]),
-              }),
-            };
-          }
-          if (queryCall === 3) {
-            // graded count
-            return {
-              innerJoin: vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue([{ count: 0 }]),
-              }),
-            };
-          }
-          if (queryCall === 4) {
-            // submissions list
-            return {
-              innerJoin: vi.fn().mockReturnValue({
-                innerJoin: vi.fn().mockReturnValue({
-                  innerJoin: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                      leftJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockReturnValue({
-                          orderBy: vi.fn().mockResolvedValue(submissionsList),
-                        }),
-                      }),
-                    }),
-                  }),
-                }),
-              }),
-            };
-          }
-          if (queryCall === 5) {
-            // selected submission detail
-            return {
-              innerJoin: vi.fn().mockReturnValue({
-                innerJoin: vi.fn().mockReturnValue({
-                  innerJoin: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                      leftJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockReturnValue({
-                          limit: vi.fn().mockResolvedValue([detailRow]),
-                        }),
-                      }),
-                    }),
-                  }),
-                }),
-              }),
-            };
-          }
-          if (queryCall === 6) {
-            // nextPendingId
-            return {
-              innerJoin: vi.fn().mockReturnValue({
-                where: vi.fn().mockReturnValue({
-                  orderBy: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue([]),
-                  }),
-                }),
-              }),
-            };
-          }
-          return { where: vi.fn().mockResolvedValue([]) };
-        }),
-      }));
+      let selectCall = 0;
+      mockSelect.mockImplementation(() => {
+        selectCall++;
+        if (selectCall === 1) return createMockQuery(myCourses); // courses
+        if (selectCall === 2) return createMockQuery(myAssignments); // assignments
+        if (selectCall === 3) return createMockQuery([{ count: 1 }]); // pending count
+        if (selectCall === 4) return createMockQuery([{ count: 0 }]); // graded count
+        if (selectCall === 5) return createMockQuery(submissionsList); // list
+        if (selectCall === 6) return createMockQuery([detailRow]); // detail
+        if (selectCall === 7) return createMockQuery([]); // next pending
+        return createMockQuery([]);
+      });
 
-      const res = await getGradingQueueData();
+      const res = await getGradingQueueData({ courseId: "c1", assignmentId: "101", date: "today" });
       expect(res.counts.pending).toBe(1);
       expect(res.counts.graded).toBe(0);
+      expect(res.assignments).toHaveLength(1);
       expect(res.submissions).toHaveLength(1);
       expect(res.selectedSubmission).not.toBeNull();
       expect(res.selectedSubmission?.studentName).toBe("Nguyễn Văn B");
-      expect(res.selectedSubmission?.rubric).toHaveLength(1);
+      expect(res.selectedSubmission?.rubric).toHaveLength(2);
     });
   });
 
   describe("gradeSubmission", () => {
     it("fails when submission does not exist or does not belong to lecturer's course", async () => {
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          innerJoin: vi.fn().mockReturnValue({
-            innerJoin: vi.fn().mockReturnValue({
-              innerJoin: vi.fn().mockReturnValue({
-                leftJoin: vi.fn().mockReturnValue({
-                  where: vi.fn().mockResolvedValue([]), // not found
-                }),
-              }),
-            }),
-          }),
-        }),
-      });
+      mockSelect.mockReturnValue(createMockQuery([]));
 
       const res = await gradeSubmission({ submissionId: 999, score: 8 });
       expect(res.success).toBe(false);
       expect(res.error).toContain("không tồn tại");
     });
 
-    it("grades pending submission successfully and notifies learner (pending -> graded)", async () => {
+    it("fails when submission is draft", async () => {
+      const mockDraftSub = {
+        id: 10,
+        status: "draft",
+        score: null,
+        feedback: null,
+        maxScore: 10,
+        passingScore: 60,
+        studentUserId: "user-student-1",
+        courseId: "c1",
+        courseTitle: "React",
+        lessonTitle: "Bài 1",
+        rubric: null,
+        type: "assignment",
+      };
+
+      mockSelect.mockReturnValue(createMockQuery([mockDraftSub]));
+
+      const res = await gradeSubmission({ submissionId: 10, score: 8 });
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("bản nháp");
+    });
+
+    it("validates rubric criteria on server and derives total", async () => {
+      const mockRubricSub = {
+        id: 10,
+        status: "pending",
+        score: null,
+        feedback: null,
+        maxScore: 10,
+        passingScore: 60,
+        studentUserId: "user-student-1",
+        courseId: "c1",
+        courseTitle: "React",
+        lessonTitle: "Bài 1",
+        type: "assignment",
+        rubric: JSON.stringify([
+          { id: "ui", name: "Giao diện", points: 4 },
+          { id: "logic", name: "Logic", points: 6 },
+        ]),
+      };
+
+      mockSelect.mockReturnValue(createMockQuery([mockRubricSub]));
+
+      // Missing rubric scores
+      const missingRes = await gradeSubmission({
+        submissionId: 10,
+        score: 8,
+      });
+      expect(missingRes.success).toBe(false);
+      expect(missingRes.error).toContain("thang điểm (rubric)");
+
+      // Out of bounds rubric score
+      const outOfBoundsRes = await gradeSubmission({
+        submissionId: 10,
+        score: 11,
+        rubricScores: { ui: 5, logic: 6 }, // ui max is 4
+      });
+      expect(outOfBoundsRes.success).toBe(false);
+      expect(outOfBoundsRes.error).toContain("từ 0 đến 4");
+
+      // Score sum mismatch
+      const mismatchRes = await gradeSubmission({
+        submissionId: 10,
+        score: 7,
+        rubricScores: { ui: 4, logic: 6 }, // sum is 10 != 7
+      });
+      expect(mismatchRes.success).toBe(false);
+      expect(mismatchRes.error).toContain("không khớp");
+    });
+
+    it("grades pending submission successfully and notifies learner atomically (pending -> graded)", async () => {
       const mockSub = {
         id: 10,
         status: "pending",
@@ -242,44 +267,25 @@ describe("Lecturer Grading Server Actions", () => {
         courseId: "c1",
         courseTitle: "React",
         lessonTitle: "Bài 1",
+        rubric: null,
+        type: "assignment",
       };
 
       let queryCall = 0;
-      mockSelect.mockImplementation(() => ({
-        from: vi.fn().mockImplementation(() => {
-          queryCall++;
-          if (queryCall === 1) {
-            return {
-              innerJoin: vi.fn().mockReturnValue({
-                innerJoin: vi.fn().mockReturnValue({
-                  innerJoin: vi.fn().mockReturnValue({
-                    leftJoin: vi.fn().mockReturnValue({
-                      where: vi.fn().mockResolvedValue([mockSub]),
-                    }),
-                  }),
-                }),
-              }),
-            };
-          }
-          if (queryCall === 2) {
-            // nextPendingId
-            return {
-              innerJoin: vi.fn().mockReturnValue({
-                where: vi.fn().mockReturnValue({
-                  orderBy: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue([{ id: 11 }]),
-                  }),
-                }),
-              }),
-            };
-          }
-          return { where: vi.fn().mockResolvedValue([]) };
-        }),
-      }));
+      mockSelect.mockImplementation(() => {
+        queryCall++;
+        if (queryCall === 1) return createMockQuery([mockSub]); // initial check
+        if (queryCall === 2) return createMockQuery([mockSub]); // transaction fresh check
+        if (queryCall === 3) return createMockQuery([{ id: "c1" }]); // myCourseRows
+        if (queryCall === 4) return createMockQuery([{ id: 11 }]); // nextPendingId
+        return createMockQuery([]);
+      });
 
       mockUpdate.mockReturnValue({
         set: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue(undefined),
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 10 }]),
+          }),
         }),
       });
 
@@ -287,6 +293,7 @@ describe("Lecturer Grading Server Actions", () => {
         submissionId: 10,
         score: 8.5,
         feedback: "Làm tốt lắm em!",
+        courseFilter: "c1",
       });
 
       expect(res.success).toBe(true);
@@ -313,28 +320,11 @@ describe("Lecturer Grading Server Actions", () => {
         courseId: "c1",
         courseTitle: "React",
         lessonTitle: "Bài 1",
+        rubric: null,
+        type: "assignment",
       };
 
-      mockSelect.mockImplementation(() => ({
-        from: vi.fn().mockImplementation(() => ({
-          innerJoin: vi.fn().mockImplementation(() => ({
-            // If called with further innerJoin (sub query)
-            innerJoin: vi.fn().mockReturnValue({
-              innerJoin: vi.fn().mockReturnValue({
-                leftJoin: vi.fn().mockReturnValue({
-                  where: vi.fn().mockResolvedValue([mockSub]),
-                }),
-              }),
-            }),
-            // If called with where (nextPendingId query)
-            where: vi.fn().mockReturnValue({
-              orderBy: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([]),
-              }),
-            }),
-          })),
-        })),
-      }));
+      mockSelect.mockImplementation(() => createMockQuery([mockSub]));
 
       // Thay đổi điểm từ 7 lên 9 mà không có lý do -> thất bại
       const failRes = await gradeSubmission({
@@ -347,9 +337,21 @@ describe("Lecturer Grading Server Actions", () => {
       expect(failRes.error).toContain("lý do điều chỉnh");
 
       // Thay đổi điểm từ 7 lên 9 kèm lý do hợp lệ -> thành công và lưu lịch sử
+      let queryCall = 0;
+      mockSelect.mockImplementation(() => {
+        queryCall++;
+        if (queryCall === 1) return createMockQuery([mockSub]);
+        if (queryCall === 2) return createMockQuery([mockSub]);
+        if (queryCall === 3) return createMockQuery([{ id: "c1" }]);
+        if (queryCall === 4) return createMockQuery([]);
+        return createMockQuery([]);
+      });
+
       mockUpdate.mockReturnValue({
         set: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue(undefined),
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 10 }]),
+          }),
         }),
       });
 
@@ -367,10 +369,68 @@ describe("Lecturer Grading Server Actions", () => {
         "/dashboard/learner"
       );
     });
+
+    it("rejects concurrent modification when submission was altered in another session", async () => {
+      const initialSub = {
+        id: 10,
+        status: "pending",
+        score: null,
+        feedback: null,
+        maxScore: 10,
+        passingScore: 60,
+        studentUserId: "user-student-1",
+        courseId: "c1",
+        courseTitle: "React",
+        lessonTitle: "Bài 1",
+        rubric: null,
+        type: "assignment",
+      };
+
+      const concurrentAlteredSub = {
+        ...initialSub,
+        status: "graded", // already graded by another lecturer
+        score: 9,
+      };
+
+      let queryCall = 0;
+      mockSelect.mockImplementation(() => {
+        queryCall++;
+        if (queryCall === 1) return createMockQuery([initialSub]);
+        if (queryCall === 2) return createMockQuery([concurrentAlteredSub]); // conflict!
+        return createMockQuery([]);
+      });
+
+      const res = await gradeSubmission({
+        submissionId: 10,
+        score: 8,
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("phiên làm việc khác");
+    });
   });
 
   describe("getAiGradingDraft", () => {
-    it("generates suggested score and constructive feedback for submission", async () => {
+    it("returns error when submission has no content or link", async () => {
+      const mockEmptySub = {
+        id: 10,
+        answerText: "",
+        fileName: null,
+        linkUrl: null,
+        maxScore: 10,
+        instructions: "Viết component",
+        type: "assignment",
+        status: "pending",
+      };
+
+      mockSelect.mockReturnValue(createMockQuery([mockEmptySub]));
+
+      const res = await getAiGradingDraft(10);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("chưa nộp nội dung");
+    });
+
+    it("evaluates genuine submission with LLM and returns suggested score and constructive feedback", async () => {
       const mockSub = {
         id: 10,
         answerText: "Em đã hoàn thành bài tập với React hooks.",
@@ -378,23 +438,45 @@ describe("Lecturer Grading Server Actions", () => {
         linkUrl: "https://github.com/student/app",
         maxScore: 10,
         instructions: "Viết component",
+        rubric: null,
+        type: "assignment",
+        status: "pending",
       };
 
-      mockSelect.mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          innerJoin: vi.fn().mockReturnValue({
-            innerJoin: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue([mockSub]),
-            }),
-          }),
+      mockSelect.mockReturnValue(createMockQuery([mockSub]));
+
+      mockGenerateText.mockResolvedValue({
+        text: JSON.stringify({
+          suggestedScore: 8.5,
+          feedback: "Bài làm hoàn thành tốt các yêu cầu React hooks. Cần lưu ý thêm useCallback.",
         }),
       });
 
       const res = await getAiGradingDraft(10);
       expect(res.success).toBe(true);
-      expect(res.suggestedScore).toBeGreaterThanOrEqual(5);
-      expect(res.feedback).toContain("Bài làm đáp ứng tốt");
-      expect(res.feedback).toContain("github.com/student/app");
+      expect(res.suggestedScore).toBe(8.5);
+      expect(res.feedback).toContain("React hooks");
+    });
+
+    it("returns clear unavailable error when AI service is not configured or fails", async () => {
+      const mockSub = {
+        id: 10,
+        answerText: "Em nộp bài.",
+        fileName: null,
+        linkUrl: null,
+        maxScore: 10,
+        instructions: "Làm bài",
+        rubric: null,
+        type: "assignment",
+        status: "pending",
+      };
+
+      mockSelect.mockReturnValue(createMockQuery([mockSub]));
+      mockGenerateText.mockRejectedValue(new Error("AI service error"));
+
+      const res = await getAiGradingDraft(10);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("chưa khả dụng");
     });
   });
 });

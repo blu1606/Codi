@@ -29,6 +29,7 @@ import { Textarea } from "@codi-1/ui/components/textarea";
 import {
   createFeedbackSnippet,
   deleteFeedbackSnippet,
+  restoreFeedbackSnippet,
   updateFeedbackSnippet,
   type FeedbackSnippetItem,
 } from "./actions";
@@ -134,7 +135,26 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
     try {
       await deleteFeedbackSnippet(snippetToDelete.id);
       setSnippets((prev) => prev.filter((item) => item.id !== snippetToDelete.id));
-      toast.success("Đã xoá mẫu nhận xét.");
+      const targetSnippet = snippetToDelete;
+      toast("Đã xoá mẫu nhận xét.", {
+        action: {
+          label: "Hoàn tác",
+          onClick: async () => {
+            try {
+              const res = await restoreFeedbackSnippet({
+                title: targetSnippet.title,
+                body: targetSnippet.body,
+              });
+              if (res.success && res.snippet) {
+                setSnippets((prev) => [res.snippet!, ...prev]);
+                toast.success("Đã khôi phục mẫu nhận xét.");
+              }
+            } catch {
+              toast.error("Không thể khôi phục mẫu nhận xét.");
+            }
+          },
+        },
+      });
       setSnippetToDelete(null);
     } catch (cause) {
       toast.error(
@@ -331,8 +351,8 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
           if (!open) setSnippetToDelete(null);
         }}
         title="Xoá mẫu nhận xét"
-        consequence={`Mẫu "${snippetToDelete?.title || ""}" sẽ bị xoá vĩnh viễn.`}
-        reversible="Hành động này không thể hoàn tác."
+        consequence={`Mẫu "${snippetToDelete?.title || ""}" sẽ bị xoá khỏi danh sách.`}
+        reversible="Bạn có thể hoàn tác ngay sau khi xoá qua thông báo toast."
         danger={true}
         confirmLabel={isDeleting ? "Đang xoá..." : "Xoá"}
         onConfirm={handleDeleteConfirm}

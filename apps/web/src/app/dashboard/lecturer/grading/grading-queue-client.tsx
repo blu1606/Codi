@@ -75,6 +75,9 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
     courses,
     currentStatus,
     selectedCourseId,
+    selectedAssignmentId,
+    selectedDate,
+    assignments,
   } = data;
   const nextPendingId = selectedSubmission?.nextPendingId ?? null;
 
@@ -125,33 +128,50 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
     ? rubricCalc?.total ?? 0
     : parseFloat(scoreInput.replace(",", "."));
 
-  // Navigation handlers
-  const handleTabChange = (status: "pending" | "graded") => {
+  // Navigation helpers with preserved filter state
+  const navigateWithFilters = (overrides: {
+    status?: "pending" | "graded";
+    course?: string;
+    assignment?: string;
+    date?: string;
+    submissionId?: number | null;
+  }) => {
     startTransition(() => {
       const sp = new URLSearchParams();
-      sp.set("status", status);
-      if (selectedCourseId !== "all") sp.set("course", selectedCourseId);
+      const st = overrides.status ?? currentStatus;
+      const c = overrides.course !== undefined ? overrides.course : selectedCourseId;
+      const a = overrides.assignment !== undefined ? overrides.assignment : (selectedAssignmentId || "all");
+      const d = overrides.date !== undefined ? overrides.date : (selectedDate || "all");
+      const subId = overrides.submissionId !== undefined ? overrides.submissionId : selectedSubmission?.id;
+
+      sp.set("status", st);
+      if (c && c !== "all") sp.set("course", c);
+      if (a && a !== "all") sp.set("assignment", a);
+      if (d && d !== "all") sp.set("date", d);
+      if (subId) sp.set("submissionId", String(subId));
+
       router.push(`/dashboard/lecturer/grading?${sp.toString()}` as any);
     });
+  };
+
+  const handleTabChange = (status: "pending" | "graded") => {
+    navigateWithFilters({ status, submissionId: null });
   };
 
   const handleCourseFilterChange = (courseId: string) => {
-    startTransition(() => {
-      const sp = new URLSearchParams();
-      sp.set("status", currentStatus);
-      if (courseId !== "all") sp.set("course", courseId);
-      router.push(`/dashboard/lecturer/grading?${sp.toString()}` as any);
-    });
+    navigateWithFilters({ course: courseId, assignment: "all", submissionId: null });
+  };
+
+  const handleAssignmentFilterChange = (assignmentId: string) => {
+    navigateWithFilters({ assignment: assignmentId, submissionId: null });
+  };
+
+  const handleDateFilterChange = (date: string) => {
+    navigateWithFilters({ date, submissionId: null });
   };
 
   const handleSelectSubmission = (subId: number) => {
-    startTransition(() => {
-      const sp = new URLSearchParams();
-      sp.set("status", currentStatus);
-      if (selectedCourseId !== "all") sp.set("course", selectedCourseId);
-      sp.set("submissionId", String(subId));
-      router.push(`/dashboard/lecturer/grading?${sp.toString()}` as any);
-    });
+    navigateWithFilters({ submissionId: subId });
   };
 
   // AI draft handler
@@ -269,6 +289,9 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
         rubricScores: params.rubricScores,
         feedback: params.feedback,
         reason: params.reason,
+        courseFilter: selectedCourseId,
+        assignmentFilter: selectedAssignmentId,
+        dateFilter: selectedDate,
       });
 
       if (!res.success) {
@@ -278,19 +301,11 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
 
       toast.success("Đã lưu điểm và gửi thông báo cho học viên.");
 
-      startTransition(() => {
-        const sp = new URLSearchParams();
-        if (params.action === "next" && res.nextPendingId) {
-          sp.set("status", "pending");
-          if (selectedCourseId !== "all") sp.set("course", selectedCourseId);
-          sp.set("submissionId", String(res.nextPendingId));
-        } else {
-          sp.set("status", "graded");
-          if (selectedCourseId !== "all") sp.set("course", selectedCourseId);
-          sp.set("submissionId", String(selectedSubmission.id));
-        }
-        router.push(`/dashboard/lecturer/grading?${sp.toString()}` as any);
-      });
+      if (params.action === "next" && res.nextPendingId) {
+        navigateWithFilters({ status: "pending", submissionId: res.nextPendingId });
+      } else {
+        navigateWithFilters({ status: "graded", submissionId: selectedSubmission.id });
+      }
     } catch {
       setFormError("Có lỗi xảy ra khi lưu điểm.");
     } finally {
@@ -369,24 +384,67 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
           </button>
         </div>
 
-        {/* Course Filter Dropdown */}
-        <div className="flex items-center gap-2">
-          <label htmlFor="course-filter-select" className="sr-only">
-            Lọc theo khoá học
-          </label>
-          <select
-            id="course-filter-select"
-            value={selectedCourseId}
-            onChange={(e) => handleCourseFilterChange(e.target.value)}
-            className="h-9 px-3 rounded-md border border-input bg-background text-sm font-medium text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="all">Tất cả khoá học</option>
-            {courses.map((c: { id: string; title: string }) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
+        {/* Filters: Course, Assignment, Date */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Course Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="course-filter-select" className="sr-only">
+              Lọc theo khoá học
+            </label>
+            <select
+              id="course-filter-select"
+              value={selectedCourseId}
+              onChange={(e) => handleCourseFilterChange(e.target.value)}
+              className="h-9 px-3 rounded-md border border-input bg-background text-sm font-medium text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="all">Tất cả khoá học</option>
+              {courses.map((c: { id: string; title: string }) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Assignment Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="assignment-filter-select" className="sr-only">
+              Lọc theo bài tập
+            </label>
+            <select
+              id="assignment-filter-select"
+              value={selectedAssignmentId || "all"}
+              onChange={(e) => handleAssignmentFilterChange(e.target.value)}
+              className="h-9 px-3 rounded-md border border-input bg-background text-sm font-medium text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="all">Tất cả bài tập</option>
+              {(assignments || [])
+                .filter((a: any) => selectedCourseId === "all" || a.courseId === selectedCourseId)
+                .map((a: any) => (
+                  <option key={a.id} value={String(a.id)}>
+                    {a.title}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Date Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="date-filter-select" className="sr-only">
+              Lọc theo ngày nộp
+            </label>
+            <select
+              id="date-filter-select"
+              value={selectedDate || "all"}
+              onChange={(e) => handleDateFilterChange(e.target.value)}
+              className="h-9 px-3 rounded-md border border-input bg-background text-sm font-medium text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="all">Tất cả ngày nộp</option>
+              <option value="today">Hôm nay</option>
+              <option value="7days">7 ngày qua</option>
+              <option value="30days">30 ngày qua</option>
+            </select>
+          </div>
         </div>
       </div>
 

@@ -10,6 +10,8 @@ interface GradingPageProps {
   searchParams: Promise<{
     status?: string;
     course?: string;
+    assignment?: string;
+    date?: string;
     submissionId?: string;
   }>;
 }
@@ -24,12 +26,16 @@ export default async function LecturerGradingPage({ searchParams }: GradingPageP
   const resolved = await searchParams;
   const status = resolved.status === "graded" ? "graded" : "pending";
   const courseId = resolved.course || "all";
+  const assignmentId = resolved.assignment || "all";
+  const date = resolved.date || "all";
   const submissionId = resolved.submissionId ? Number(resolved.submissionId) : undefined;
 
   const [queueData, snippets] = await Promise.all([
     getGradingQueueData({
       status,
       courseId,
+      assignmentId,
+      date,
       submissionId: isNaN(submissionId as number) ? undefined : submissionId,
     }),
     getFeedbackSnippets(),

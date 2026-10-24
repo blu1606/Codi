@@ -41,6 +41,7 @@ import {
   createFeedbackSnippet,
   deleteFeedbackSnippet,
   getFeedbackSnippets,
+  restoreFeedbackSnippet,
   updateFeedbackSnippet,
 } from "./actions";
 
@@ -49,18 +50,18 @@ describe("Feedback Snippets Actions", () => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());
     mockGetSession.mockResolvedValue({
-      user: { id: "lecturer-1", name: "Thầy A" },
+      user: { id: "lecturer-1", name: "Giảng viên A", email: "gv@codi.vn" },
     });
     mockRequireRole.mockResolvedValue(undefined);
   });
 
   describe("getFeedbackSnippets", () => {
-    it("returns list of snippets for logged-in lecturer", async () => {
+    it("returns snippets belonging to the signed-in lecturer", async () => {
       const mockList = [
         {
           id: 1,
           title: "Khen ngợi",
-          body: "Bài làm rất tốt {{ten_hoc_vien}}, đạt {{diem}} điểm.",
+          body: "Bài làm rất tốt {{ten_hoc_vien}}!",
           createdAt: new Date("2026-10-18T10:00:00Z"),
         },
       ];
@@ -75,30 +76,30 @@ describe("Feedback Snippets Actions", () => {
 
       const res = await getFeedbackSnippets();
       expect(res).toHaveLength(1);
-      expect(res[0].id).toBe(1);
       expect(res[0].title).toBe("Khen ngợi");
+      expect(res[0].createdAt).toBe("2026-10-18T10:00:00.000Z");
     });
   });
 
   describe("createFeedbackSnippet", () => {
-    it("validates required title and body", async () => {
+    it("validates empty title or body", async () => {
       const res = await createFeedbackSnippet({ title: "", body: "" });
       expect(res.success).toBe(false);
       expect(res.errors?.title).toBeDefined();
       expect(res.errors?.body).toBeDefined();
     });
 
-    it("creates snippet successfully and revalidates paths", async () => {
-      const inserted = {
+    it("creates snippet successfully when input is valid", async () => {
+      const created = {
         id: 2,
         title: "Cần cải thiện",
         body: "Em xem lại cú pháp vòng lặp nhé.",
-        createdAt: new Date("2026-10-18T11:00:00Z"),
+        createdAt: new Date("2026-10-18T10:30:00Z"),
       };
 
       mockInsert.mockReturnValue({
         values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([inserted]),
+          returning: vi.fn().mockResolvedValue([created]),
         }),
       });
 
@@ -155,16 +156,38 @@ describe("Feedback Snippets Actions", () => {
     });
   });
 
-  describe("deleteFeedbackSnippet", () => {
-    it("deletes snippet owned by lecturer", async () => {
+  describe("deleteFeedbackSnippet & restoreFeedbackSnippet", () => {
+    it("deletes snippet owned by lecturer and returns deleted data for undo", async () => {
       mockDelete.mockReturnValue({
         where: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([{ id: 2 }]),
+          returning: vi.fn().mockResolvedValue([{ id: 2, title: "Tốt", body: "Làm tốt" }]),
         }),
       });
 
       const res = await deleteFeedbackSnippet(2);
       expect(res.success).toBe(true);
+      expect(res.deletedSnippet?.title).toBe("Tốt");
+      expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard/lecturer/snippets");
+    });
+
+    it("restores snippet for undo", async () => {
+      const restored = {
+        id: 3,
+        title: "Tốt",
+        body: "Làm tốt",
+        createdAt: new Date("2026-10-18T12:00:00Z"),
+      };
+
+      mockInsert.mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([restored]),
+        }),
+      });
+
+      const res = await restoreFeedbackSnippet({ title: "Tốt", body: "Làm tốt" });
+      expect(res.success).toBe(true);
+      expect(res.snippet?.id).toBe(3);
+      expect(res.snippet?.title).toBe("Tốt");
       expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard/lecturer/snippets");
     });
 

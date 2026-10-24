@@ -167,11 +167,11 @@ export async function updateFeedbackSnippet(
 }
 
 /**
- * Xoá một mẫu nhận xét.
+ * Xoá một mẫu nhận xét (trả về dữ liệu để hỗ trợ hoàn tác theo STATE-MACHINES §20).
  */
 export async function deleteFeedbackSnippet(
   id: number
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; deletedSnippet?: { id: number; title: string; body: string } }> {
   const user = await verifyLecturerSession();
 
   const [deleted] = await db
@@ -191,5 +191,44 @@ export async function deleteFeedbackSnippet(
   revalidatePath("/dashboard/lecturer/snippets");
   revalidatePath("/dashboard/lecturer/grading");
 
-  return { success: true };
+  return {
+    success: true,
+    deletedSnippet: {
+      id: deleted.id,
+      title: deleted.title,
+      body: deleted.body,
+    },
+  };
+}
+
+/**
+ * Khôi phục / hoàn tác mẫu nhận xét vừa xoá (STATE-MACHINES G1 & §20).
+ */
+export async function restoreFeedbackSnippet(snippet: {
+  title: string;
+  body: string;
+}): Promise<{ success: boolean; snippet: FeedbackSnippetDto }> {
+  const user = await verifyLecturerSession();
+
+  const [inserted] = await db
+    .insert(feedbackSnippets)
+    .values({
+      lecturerId: user.id,
+      title: snippet.title,
+      body: snippet.body,
+    })
+    .returning();
+
+  revalidatePath("/dashboard/lecturer/snippets");
+  revalidatePath("/dashboard/lecturer/grading");
+
+  return {
+    success: true,
+    snippet: {
+      id: inserted.id,
+      title: inserted.title,
+      body: inserted.body,
+      createdAt: inserted.createdAt.toISOString(),
+    },
+  };
 }
