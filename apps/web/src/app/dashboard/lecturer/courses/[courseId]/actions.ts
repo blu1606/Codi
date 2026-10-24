@@ -184,8 +184,8 @@ export async function updateCourseInfo(
         description: input.summary.trim(),
         category: input.category,
         level: input.level,
-        ...(input.proposedPrice !== undefined && input.proposedPrice !== null
-          ? { price: input.proposedPrice }
+        ...(input.proposedPrice !== undefined
+          ? { proposedPrice: input.proposedPrice }
           : {}),
         updatedAt: new Date(),
       })

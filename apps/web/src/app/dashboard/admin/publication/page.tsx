@@ -45,6 +45,7 @@ export default async function AdminPublicationPage({ searchParams }: AdminPublic
   return (
     <div className="container mx-auto max-w-7xl px-4 py-8">
       <PublicationReviewClient
+        key={`${selectedCourseId ?? "empty"}_${detail?.round?.id ?? "0"}`}
         queue={queue}
         selectedCourseId={selectedCourseId}
         detail={detail}

@@ -1,9 +1,17 @@
+"use server";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetSession = vi.fn();
-const mockRequireRole = vi.fn();
 const mockHeaders = vi.fn();
+const mockRequireRole = vi.fn();
 const mockRevalidatePath = vi.fn();
+
+const mockSelect = vi.fn();
+const mockInsert = vi.fn();
+const mockUpdate = vi.fn();
+const mockDelete = vi.fn();
+const mockTransaction = vi.fn();
 
 vi.mock("next/headers", () => ({
   headers: () => mockHeaders(),
@@ -14,15 +22,9 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@codi-1/auth", () => ({
-  ROLE: { LEARNER: "LEARNER", LECTURER: "LECTURER", ADMIN: "ADMIN" },
+  ROLE: { ADMIN: "ADMIN", LECTURER: "LECTURER" },
   requireRole: (...args: any[]) => mockRequireRole(...args),
 }));
-
-const mockTransaction = vi.fn();
-const mockSelect = vi.fn();
-const mockInsert = vi.fn();
-const mockUpdate = vi.fn();
-const mockDelete = vi.fn();
 
 vi.mock("@/services", () => ({
   auth: {
@@ -31,11 +33,11 @@ vi.mock("@/services", () => ({
     },
   },
   db: {
-    transaction: (cb: any) => mockTransaction(cb),
     select: (...args: any[]) => mockSelect(...args),
     insert: (...args: any[]) => mockInsert(...args),
     update: (...args: any[]) => mockUpdate(...args),
     delete: (...args: any[]) => mockDelete(...args),
+    transaction: (...args: any[]) => mockTransaction(...args),
   },
 }));
 
@@ -44,7 +46,6 @@ import {
   applyAutoCriteria,
   approvePublication,
   deleteReviewFlag,
-  getAdminCourseReview,
   getAdminPublicationQueue,
   rejectPublication,
   requestChanges,
@@ -69,9 +70,23 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());
     mockGetSession.mockResolvedValue({
-      user: { id: "admin-1" },
+      user: { id: "admin-1", email: "admin@codi.dev" },
     });
     mockRequireRole.mockResolvedValue(undefined);
+
+    // Default mock select returns active in_review request and pending course
+    mockSelect.mockImplementation(() =>
+      createMockQuery([
+        {
+          id: 10,
+          courseId: "c-1",
+          status: "in_review",
+          flag: { id: 88, status: "open" },
+          request: { id: 10, courseId: "c-1", status: "in_review" },
+          course: { id: "c-1", status: "pending", instructorId: "lec-1", title: "React" },
+        },
+      ])
+    );
   });
 
   describe("getAdminPublicationQueue", () => {
@@ -79,23 +94,28 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       let callCount = 0;
       mockSelect.mockImplementation(() => {
         callCount++;
-        if (callCount === 1) return createMockQuery([{ count: 2 }]); // pendingCount
-        if (callCount === 2) return createMockQuery([{ count: 1 }]); // changesCount
-        if (callCount === 3) return createMockQuery([{ count: 5 }]); // approvedCount
+        if (callCount === 1) return createMockQuery([{ count: 2 }]);
+        if (callCount === 2) return createMockQuery([{ count: 1 }]);
+        if (callCount === 3) return createMockQuery([{ count: 5 }]);
         if (callCount === 4) {
           return createMockQuery([
             {
               id: "c-1",
-              title: "Khóa học Python",
+              title: "React Chuyên Sâu",
               instructorId: "lec-1",
-              instructorName: "Nguyễn Văn A",
+              instructorName: "Giảng viên A",
               category: "Web",
-              level: "Beginner",
-              price: 500000,
+              level: "Advanced",
+              price: 590000,
               status: "pending",
-              updatedAt: new Date("2026-10-18T10:00:00Z"),
+              round: 1,
+              updatedAt: new Date(),
+              submittedAt: new Date().toISOString(),
             },
           ]);
+        }
+        if (callCount === 5) {
+          return createMockQuery([{ requestId: 1, count: 0 }]);
         }
         return createMockQuery([]);
       });
@@ -104,7 +124,7 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       expect(queue.counts.pending).toBe(2);
       expect(queue.counts.changes).toBe(1);
       expect(queue.counts.approved).toBe(5);
-      expect(queue.items.length).toBe(1);
+      expect(queue.items).toHaveLength(1);
       expect(queue.items[0].id).toBe("c-1");
     });
   });
@@ -116,11 +136,11 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       });
       mockInsert.mockReturnValue({ values: mockValues });
 
-      const res = await saveCriterionVerdict(1, "info", "pass", "Đầy đủ");
+      const res = await saveCriterionVerdict(10, "info", "pass", "Đầy đủ");
       expect(res.success).toBe(true);
       expect(mockValues).toHaveBeenCalledWith(
         expect.objectContaining({
-          requestId: 1,
+          requestId: 10,
           criterionId: "info",
           status: "pass",
           note: "Đầy đủ",
@@ -128,21 +148,33 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       );
     });
 
+    it("saveCriterionVerdict từ chối khi vòng duyệt đã kết luận", async () => {
+      mockSelect.mockImplementation(() =>
+        createMockQuery([{ id: 10, status: "approved" }])
+      );
+
+      await expect(
+        saveCriterionVerdict(10, "info", "pass", "Đầy đủ")
+      ).rejects.toThrow("Không thể thay đổi tiêu chí của vòng duyệt đã kết luận.");
+    });
+
     it("saveCriterionVerdict xoá tiêu chí khi status = null để đưa về chưa chấm", async () => {
       const mockWhere = vi.fn().mockResolvedValue(undefined);
       mockDelete.mockReturnValue({ where: mockWhere });
 
-      const res = await saveCriterionVerdict(1, "info", null);
+      const res = await saveCriterionVerdict(10, "info", null);
       expect(res.success).toBe(true);
       expect(mockDelete).toHaveBeenCalled();
     });
 
     it("applyAutoCriteria điền các tiêu chí chưa chấm theo gợi ý tự động", async () => {
-      // Mock fetchCourseDataForReview
       let callCount = 0;
       mockSelect.mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
+          return createMockQuery([{ id: 10, courseId: "c-1", status: "in_review" }]);
+        }
+        if (callCount === 2) {
           return createMockQuery([
             {
               id: "c-1",
@@ -200,6 +232,21 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       expect(mockRevalidatePath).toHaveBeenCalled();
     });
 
+    it("addReviewFlag từ chối khi vòng duyệt đã kết luận", async () => {
+      mockSelect.mockImplementation(() =>
+        createMockQuery([{ id: 10, courseId: "c-1", status: "rejected" }])
+      );
+
+      await expect(
+        addReviewFlag("c-1", 10, {
+          targetType: "lesson",
+          targetLabel: "Bài 1",
+          severity: "must",
+          comment: "Video bài học không mở được, vui lòng tải lại tệp.",
+        })
+      ).rejects.toThrow("Không thể thêm cờ góp ý vào vòng duyệt đã kết luận.");
+    });
+
     it("updateFlagStatus cập nhật trạng thái đóng/mở cờ", async () => {
       const mockSet = vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
@@ -209,6 +256,21 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       const res = await updateFlagStatus(88, "closed");
       expect(res.success).toBe(true);
       expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ status: "closed" }));
+    });
+
+    it("updateFlagStatus từ chối khi round của cờ đã kết luận", async () => {
+      mockSelect.mockImplementation(() =>
+        createMockQuery([
+          {
+            flag: { id: 88, status: "open" },
+            request: { id: 10, status: "approved" },
+          },
+        ])
+      );
+
+      await expect(updateFlagStatus(88, "closed")).rejects.toThrow(
+        "Không thể thay đổi trạng thái cờ của vòng duyệt đã kết luận."
+      );
     });
 
     it("deleteReviewFlag xoá cờ", async () => {
@@ -228,15 +290,54 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       );
     });
 
+    it("approvePublication từ chối khi requestId không khớp courseId (mismatch)", async () => {
+      mockSelect.mockImplementation(() =>
+        createMockQuery([{ id: 10, courseId: "c-other", status: "in_review" }])
+      );
+      mockTransaction.mockImplementation(async (cb) => cb({}));
+
+      await expect(approvePublication("c-1", 10, 500000)).rejects.toThrow(
+        "Yêu cầu duyệt không khớp với khoá học."
+      );
+    });
+
+    it("approvePublication từ chối khi request không ở trạng thái in_review (stale round)", async () => {
+      mockSelect.mockImplementation(() =>
+        createMockQuery([{ id: 10, courseId: "c-1", status: "approved" }])
+      );
+      mockTransaction.mockImplementation(async (cb) => cb({}));
+
+      await expect(approvePublication("c-1", 10, 500000)).rejects.toThrow(
+        "Yêu cầu duyệt đã được kết luận trước đó."
+      );
+    });
+
+    it("approvePublication từ chối khi khoá học không ở trạng thái pending", async () => {
+      let callCount = 0;
+      mockSelect.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1", status: "in_review" }]);
+        if (callCount === 2) return createMockQuery([{ id: "c-1", status: "published" }]);
+        return createMockQuery([]);
+      });
+      mockTransaction.mockImplementation(async (cb) => cb({}));
+
+      await expect(approvePublication("c-1", 10, 500000)).rejects.toThrow(
+        "Khoá học không ở trạng thái chờ duyệt (pending)."
+      );
+    });
+
     it("approvePublication chặn duyệt khi canApprove còn điều kiện chưa thoả mãn", async () => {
       let callCount = 0;
       mockSelect.mockImplementation(() => {
         callCount++;
-        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1" }]); // request
-        if (callCount === 2) return createMockQuery([{ criterionId: "info", status: "pass" }]); // criteria (unmarked)
-        if (callCount === 3) return createMockQuery([]); // flags
+        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1", status: "in_review" }]); // request
+        if (callCount === 2) return createMockQuery([{ id: "c-1", status: "pending" }]); // course
+        if (callCount === 3) return createMockQuery([{ criterionId: "info", status: "pass" }]); // criteria (unmarked remain)
+        if (callCount === 4) return createMockQuery([]); // flags
         return createMockQuery([]);
       });
+      mockTransaction.mockImplementation(async (cb) => cb({}));
 
       await expect(approvePublication("c-1", 10, 500000)).rejects.toThrow(
         "Chưa đủ điều kiện duyệt"
@@ -247,8 +348,9 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       let callCount = 0;
       mockSelect.mockImplementation(() => {
         callCount++;
-        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1" }]); // request
-        if (callCount === 2) {
+        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1", status: "in_review" }]); // request
+        if (callCount === 2) return createMockQuery([{ id: "c-1", status: "pending", title: "React", instructorId: "lec-1" }]); // course
+        if (callCount === 3) {
           // All 7 criteria marked pass
           return createMockQuery([
             { criterionId: "info", status: "pass" },
@@ -260,8 +362,7 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
             { criterionId: "rights", status: "pass" },
           ]);
         }
-        if (callCount === 3) return createMockQuery([]); // flags (none open)
-        if (callCount === 4) return createMockQuery([{ id: "c-1", title: "React", instructorId: "lec-1" }]); // courseRow
+        if (callCount === 4) return createMockQuery([]); // flags (none open)
         return createMockQuery([]);
       });
 
@@ -293,10 +394,13 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       let callCount = 0;
       mockSelect.mockImplementation(() => {
         callCount++;
-        if (callCount === 1) return createMockQuery([{ criterionId: "info", status: "pass" }]); // criteria: 0 fix
-        if (callCount === 2) return createMockQuery([]); // flags: 0 open
+        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1", status: "in_review" }]);
+        if (callCount === 2) return createMockQuery([{ id: "c-1", status: "pending" }]);
+        if (callCount === 3) return createMockQuery([{ criterionId: "info", status: "pass" }]); // criteria: 0 fix
+        if (callCount === 4) return createMockQuery([]); // flags: 0 open
         return createMockQuery([]);
       });
+      mockTransaction.mockImplementation(async (cb) => cb({}));
 
       await expect(requestChanges("c-1", 10, "Vui lòng xem lại nội dung tổng thể")).rejects.toThrow(
         "Chưa có tiêu chí 'Cần sửa' hay cờ nào để gửi"
@@ -307,9 +411,10 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
       let callCount = 0;
       mockSelect.mockImplementation(() => {
         callCount++;
-        if (callCount === 1) return createMockQuery([{ criterionId: "materials", status: "fix" }]);
-        if (callCount === 2) return createMockQuery([]);
-        if (callCount === 3) return createMockQuery([{ id: "c-1", title: "React", instructorId: "lec-1" }]);
+        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1", status: "in_review" }]);
+        if (callCount === 2) return createMockQuery([{ id: "c-1", status: "pending", title: "React", instructorId: "lec-1" }]);
+        if (callCount === 3) return createMockQuery([{ criterionId: "materials", status: "fix" }]);
+        if (callCount === 4) return createMockQuery([]);
         return createMockQuery([]);
       });
 
@@ -331,9 +436,13 @@ describe("Admin Publication Actions (S32 - Task #117)", () => {
     });
 
     it("rejectPublication chuyển khoá học sang rejected kèm lý do", async () => {
-      mockSelect.mockImplementation(() =>
-        createMockQuery([{ id: "c-1", title: "React", instructorId: "lec-1" }])
-      );
+      let callCount = 0;
+      mockSelect.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return createMockQuery([{ id: 10, courseId: "c-1", status: "in_review" }]);
+        if (callCount === 2) return createMockQuery([{ id: "c-1", status: "pending", title: "React", instructorId: "lec-1" }]);
+        return createMockQuery([]);
+      });
 
       const mockTx = {
         update: vi.fn().mockReturnValue({

@@ -17,6 +17,7 @@ import {
   notifications,
   publicationReviewCriteria,
   publicationReviewFlags,
+  quizOptions,
   quizQuestions,
   user,
   userRoles,
@@ -110,7 +111,8 @@ export async function fetchCourseDataForReview(courseId: string): Promise<{
   const entryAssessment = courseAssessments.find((a) => a.isDiagnostic);
   const assessmentIds = courseAssessments.map((a) => a.id);
 
-  // Quiz questions
+  // Quiz questions & options
+  let options: Array<typeof quizOptions.$inferSelect> = [];
   let questions: Array<typeof quizQuestions.$inferSelect> = [];
   if (assessmentIds.length > 0) {
     questions = await db
@@ -118,6 +120,15 @@ export async function fetchCourseDataForReview(courseId: string): Promise<{
       .from(quizQuestions)
       .where(inArray(quizQuestions.assessmentId, assessmentIds))
       .orderBy(asc(quizQuestions.position));
+
+    const questionIds = questions.map((q) => q.id);
+    if (questionIds.length > 0) {
+      options = await db
+        .select()
+        .from(quizOptions)
+        .where(inArray(quizOptions.questionId, questionIds))
+        .orderBy(asc(quizOptions.position));
+    }
   }
 
   // Coding exercises and test cases
@@ -168,14 +179,20 @@ export async function fetchCourseDataForReview(courseId: string): Promise<{
           quizObj = {
             id: lQuizAssessment.id,
             passingScore: lQuizAssessment.passingScore,
-            questions: qList.map((q) => ({
+            questions: qList.map((q) => {
+              const qOpts = options
+                .filter((o) => o.questionId === q.id)
+                .sort((a, b) => a.position - b.position);
+              return {
               id: q.id,
               text: q.text,
               explanation: q.explanation,
-              options: [],
-              aiGenerated: false,
-              aiReviewed: true,
-            })),
+                options: qOpts.map((o) => o.text),
+                correctIndex: qOpts.findIndex((o) => o.isCorrect),
+                aiGenerated: (q as any).aiGenerated ?? false,
+                aiReviewed: (q as any).aiReviewed ?? true,
+              };
+            }),
           };
         }
 
@@ -249,19 +266,25 @@ export async function fetchCourseDataForReview(courseId: string): Promise<{
     category: courseRow.category,
     level: courseRow.level,
     price: courseRow.price,
-    proposedPrice: courseRow.price,
+    proposedPrice: (courseRow as any).proposedPrice ?? courseRow.price,
     knowledgeMapStatus: courseRow.knowledgeMapStatus,
     chapters: transformedChapters,
     entryTest: entryAssessment
       ? {
-          questions: entryQuestions.map((q) => ({
+          questions: entryQuestions.map((q) => {
+            const qOpts = options
+              .filter((o) => o.questionId === q.id)
+              .sort((a, b) => a.position - b.position);
+            return {
             id: q.id,
             text: q.text,
             explanation: q.explanation,
-            options: [],
-            aiGenerated: false,
-            aiReviewed: true,
-          })),
+            options: qOpts.map((o) => o.text),
+            correctIndex: qOpts.findIndex((o) => o.isCorrect),
+            aiGenerated: (q as any).aiGenerated ?? false,
+            aiReviewed: (q as any).aiReviewed ?? true,
+          };
+        }),
         }
       : null,
   };
@@ -377,7 +400,7 @@ export async function getPublicationData(courseId: string): Promise<PublicationD
       description: courseRow.description,
       status: courseRow.status,
       price: courseRow.price,
-      proposedPrice: courseRow.price,
+      proposedPrice: (courseRow as any).proposedPrice ?? courseRow.price,
       rejectReason: latestRequest?.reviewNote || null,
       reviewOutcome:
         latestRequest?.status === "changes_requested"
@@ -544,22 +567,46 @@ export async function markFlagFixed(
     throw new Error("Vui lòng ghi rõ bạn đã chỉnh sửa nội dung gì (ít nhất 5 ký tự).");
   }
 
-  const [courseRow] = await db
-    .select()
-    .from(courses)
-    .where(eq(courses.id, courseId));
+  const [row] = await db
+    .select({
+      flag: publicationReviewFlags,
+      request: coursePublicationRequests,
+      course: courses,
+    })
+    .from(publicationReviewFlags)
+    .innerJoin(
+      coursePublicationRequests,
+      eq(publicationReviewFlags.requestId, coursePublicationRequests.id)
+    )
+    .innerJoin(
+      courses,
+      eq(coursePublicationRequests.courseId, courses.id)
+    )
+    .where(
+      and(
+        eq(publicationReviewFlags.id, flagId),
+        eq(coursePublicationRequests.courseId, courseId),
+        eq(courses.id, courseId)
+      )
+    );
 
-  if (!courseRow || courseRow.instructorId !== userSession.id) {
-    throw new Error("Không có quyền chỉnh sửa khoá học này.");
+  const course = (row as any)?.course ?? row;
+  const flag = (row as any)?.flag ?? row;
+
+  if (!row || course?.instructorId !== userSession.id) {
+    throw new Error("Không có quyền chỉnh sửa hoặc không tìm thấy góp ý này trong khoá học của bạn.");
   }
 
-  const [flag] = await db
-    .select()
-    .from(publicationReviewFlags)
-    .where(eq(publicationReviewFlags.id, flagId));
+  if (course?.status === "pending") {
+    throw new Error("Khoá học đang chờ quản trị viên duyệt, không thể thay đổi cờ góp ý.");
+  }
 
-  if (!flag) {
-    throw new Error("Không tìm thấy góp ý này.");
+  if (flag?.status === "closed") {
+    throw new Error("Góp ý này đã được quản trị viên đóng, không thể sửa đổi.");
+  }
+
+  if (flag?.status !== "open") {
+    throw new Error("Chỉ có thể đánh dấu đã sửa cho góp ý đang ở trạng thái cần sửa (open).");
   }
 
   await db
@@ -569,7 +616,12 @@ export async function markFlagFixed(
       lecturerReply: trimmedReply,
       updatedAt: new Date(),
     })
-    .where(eq(publicationReviewFlags.id, flagId));
+    .where(
+      and(
+        eq(publicationReviewFlags.id, flagId),
+        eq(publicationReviewFlags.status, "open")
+      )
+    );
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };
@@ -584,13 +636,46 @@ export async function reopenFlag(
 ): Promise<{ success: boolean }> {
   const userSession = await verifyLecturerSession();
 
-  const [courseRow] = await db
-    .select()
-    .from(courses)
-    .where(eq(courses.id, courseId));
+  const [row] = await db
+    .select({
+      flag: publicationReviewFlags,
+      request: coursePublicationRequests,
+      course: courses,
+    })
+    .from(publicationReviewFlags)
+    .innerJoin(
+      coursePublicationRequests,
+      eq(publicationReviewFlags.requestId, coursePublicationRequests.id)
+    )
+    .innerJoin(
+      courses,
+      eq(coursePublicationRequests.courseId, courses.id)
+    )
+    .where(
+      and(
+        eq(publicationReviewFlags.id, flagId),
+        eq(coursePublicationRequests.courseId, courseId),
+        eq(courses.id, courseId)
+      )
+    );
 
-  if (!courseRow || courseRow.instructorId !== userSession.id) {
-    throw new Error("Không có quyền chỉnh sửa khoá học này.");
+  const course = (row as any)?.course ?? row;
+  const flag = (row as any)?.flag ?? row;
+
+  if (!row || course?.instructorId !== userSession.id) {
+    throw new Error("Không có quyền chỉnh sửa hoặc không tìm thấy góp ý này trong khoá học của bạn.");
+  }
+
+  if (course?.status === "pending") {
+    throw new Error("Khoá học đang chờ quản trị viên duyệt, không thể mở lại cờ góp ý.");
+  }
+
+  if (flag?.status === "closed") {
+    throw new Error("Góp ý này đã được quản trị viên đóng, không thể mở lại.");
+  }
+
+  if (flag?.status !== "fixed") {
+    throw new Error("Chỉ có thể mở lại góp ý đang ở trạng thái đã sửa (fixed).");
   }
 
   await db
@@ -600,7 +685,12 @@ export async function reopenFlag(
       lecturerReply: null,
       updatedAt: new Date(),
     })
-    .where(eq(publicationReviewFlags.id, flagId));
+    .where(
+      and(
+        eq(publicationReviewFlags.id, flagId),
+        eq(publicationReviewFlags.status, "fixed")
+      )
+    );
 
   revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   return { success: true };

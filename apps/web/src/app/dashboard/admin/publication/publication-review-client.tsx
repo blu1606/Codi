@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   Check,
   CheckCircle2,
   Clock,
+  ChevronLeft,
+  ChevronRight,
+  Code2,
   ExternalLink,
   Eye,
   FileText,
@@ -17,6 +21,7 @@ import {
   HelpCircle,
   Info,
   ListTree,
+  Play,
   RotateCcw,
   Send,
   Sparkles,
@@ -160,6 +165,69 @@ export function PublicationReviewClient({
 
   // S32b Student preview modal state
   const [showStudentPreview, setShowStudentPreview] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"overview" | "player">("overview");
+  const [previewLessonId, setPreviewLessonId] = useState<string>("entry");
+
+  // Track course/round identity to reset draft state when queue selection changes (Finding 4)
+  const currentIdentity = `${detail?.course?.id ?? ""}:${detail?.round?.id ?? ""}`;
+  const lastIdentityRef = useRef<string>(currentIdentity);
+
+  useEffect(() => {
+    if (lastIdentityRef.current !== currentIdentity) {
+      lastIdentityRef.current = currentIdentity;
+      // Reset price draft
+      setPriceInput(
+        detail?.course?.proposedPrice !== undefined && detail?.course?.proposedPrice !== null
+          ? String(detail.course.proposedPrice)
+          : String(detail?.course?.price || "0")
+      );
+      setPriceError(null);
+
+      // Reset criteria notes
+      const notes: Record<string, string> = {};
+      if (detail?.round?.criteria) {
+        for (const [k, v] of Object.entries(detail.round.criteria)) {
+          notes[k] = v.note || "";
+        }
+      }
+      setCriteriaNotes(notes);
+
+      // Reset AI precheck runner
+      setAiSuggestions(null);
+      setIsRunningAi(false);
+
+      // Reset flag modal
+      setFlagModalTarget(null);
+      setFlagComment("");
+      setFlagError(null);
+      setIsAddingFlag(false);
+
+      // Reset decision modals
+      setShowApproveModal(false);
+      setIsApproving(false);
+      setApproveError(null);
+      setShowRequestModal(false);
+      setRequestReason("");
+      setIsRequesting(false);
+      setRequestError(null);
+      setShowRejectModal(false);
+      setRejectReason("");
+      setIsRejecting(false);
+      setRejectError(null);
+
+      // Reset selections
+      setSelectedLessonId("entry");
+      setActiveView("criteria");
+      setShowStudentPreview(false);
+      setPreviewMode("overview");
+      setPreviewLessonId("entry");
+    }
+  }, [
+    currentIdentity,
+    detail?.course?.proposedPrice,
+    detail?.course?.price,
+    detail?.round?.criteria,
+  ]);
 
   const isReadOnly = detail?.round?.status !== "in_review";
 
@@ -878,9 +946,11 @@ export function PublicationReviewClient({
 
                             <div className="space-y-4">
                               {(detail.course.entryTest?.questions || []).map((q, idx) => (
-                                <div key={q.id || idx} className="p-3 rounded-lg border border-border/50 bg-muted/10 text-xs space-y-2">
+                                <div key={q.id || idx} className="p-3.5 rounded-xl border border-border/60 bg-muted/10 text-xs space-y-2.5">
                                   <div className="flex items-start justify-between gap-2 font-medium text-foreground">
-                                    <span>Câu {idx + 1}: {q.text}</span>
+                                    <span className="font-semibold text-foreground leading-snug">
+                                      Câu {idx + 1}: {q.text}
+                                    </span>
                                     {!isReadOnly && (
                                       <button
                                         type="button"
@@ -891,15 +961,74 @@ export function PublicationReviewClient({
                                             targetLabel: `Câu ${idx + 1}: ${q.text.slice(0, 30)}`,
                                           })
                                         }
-                                        className="text-muted-foreground hover:text-warning"
+                                        className="text-muted-foreground hover:text-warning shrink-0 p-1"
+                                        title="Gắn cờ câu hỏi này"
                                       >
-                                        <Flag className="size-3" />
+                                        <Flag className="size-3.5" />
                                       </button>
                                     )}
                                   </div>
-                                  <p className="text-muted-foreground italic">
-                                    Giải thích: {q.explanation || "Chưa có"}
-                                  </p>
+
+                                  {/* AI metadata */}
+                                  {q.aiGenerated && (
+                                    <div className="flex items-center gap-2">
+                                      <Badge className="bg-primary/10 text-primary border-primary/20 text-2xs px-1.5 py-0 h-4 gap-1">
+                                        <Sparkles className="size-2.5" />
+                                        AI tạo
+                                      </Badge>
+                                      {q.aiReviewed ? (
+                                        <span className="text-2xs text-muted-foreground font-medium">✓ GV đã duyệt</span>
+                                      ) : (
+                                        <span className="text-2xs text-warning font-semibold">⚠ GV chưa duyệt</span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Real quiz options */}
+                                  {q.options && q.options.length > 0 ? (
+                                    <div className="space-y-1.5">
+                                      {q.options.map((opt, optIdx) => {
+                                        const isCorrect = q.correctIndex === optIdx;
+                                        const letter = String.fromCharCode(65 + optIdx);
+                                        return (
+                                          <div
+                                            key={optIdx}
+                                            className={`flex items-start justify-between gap-2 p-2 rounded-lg text-xs transition-colors ${
+                                              isCorrect
+                                                ? "bg-success/10 border border-success/30 text-foreground font-medium"
+                                                : "bg-background/80 border border-border/50 text-muted-foreground"
+                                            }`}
+                                          >
+                                            <div className="flex items-start gap-2">
+                                              <span
+                                                className={`inline-flex items-center justify-center size-5 rounded-full text-2xs font-semibold shrink-0 mt-0.5 ${
+                                                  isCorrect
+                                                    ? "bg-success text-success-foreground"
+                                                    : "bg-muted text-muted-foreground"
+                                                }`}
+                                              >
+                                                {letter}
+                                              </span>
+                                              <span className="leading-snug">{opt}</span>
+                                            </div>
+                                            {isCorrect && (
+                                              <Badge className="bg-success/20 text-success border-success/30 text-2xs px-1.5 py-0 h-4 shrink-0 font-medium">
+                                                Đáp án đúng
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <p className="text-destructive font-medium">Chưa có phương án trả lời.</p>
+                                  )}
+
+                                  {q.explanation && (
+                                    <div className="p-2 rounded bg-muted/20 border border-border/40 text-muted-foreground">
+                                      <strong className="text-foreground">Giải thích:</strong> {q.explanation}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -972,10 +1101,88 @@ export function PublicationReviewClient({
                                 </span>
                                 <div className="space-y-2">
                                   {currentSelectedLesson.quiz.questions.map((q, qi) => (
-                                    <div key={qi} className="p-2.5 rounded border border-border/40 bg-muted/10 space-y-1">
-                                      <p className="font-medium text-foreground">Câu {qi + 1}: {q.text}</p>
+                                    <div key={qi} className="p-3 rounded-xl border border-border/60 bg-muted/10 space-y-2">
+                                      <div className="flex items-start justify-between gap-2 font-medium text-foreground">
+                                        <span className="font-semibold text-foreground leading-snug">
+                                          Câu {qi + 1}: {q.text}
+                                        </span>
+                                        {!isReadOnly && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleOpenFlagModal({
+                                                targetType: "question",
+                                                lessonId: currentSelectedLesson.id,
+                                                targetLabel: `Quiz bài "${currentSelectedLesson.title}" - Câu ${qi + 1}`,
+                                              })
+                                            }
+                                            className="text-muted-foreground hover:text-warning shrink-0 p-1"
+                                            title="Gắn cờ câu hỏi này"
+                                          >
+                                            <Flag className="size-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {/* AI metadata */}
+                                      {q.aiGenerated && (
+                                        <div className="flex items-center gap-2">
+                                          <Badge className="bg-primary/10 text-primary border-primary/20 text-2xs px-1.5 py-0 h-4 gap-1">
+                                            <Sparkles className="size-2.5" />
+                                            AI tạo
+                                          </Badge>
+                                          {q.aiReviewed ? (
+                                            <span className="text-2xs text-muted-foreground font-medium">✓ GV đã duyệt</span>
+                                          ) : (
+                                            <span className="text-2xs text-warning font-semibold">⚠ GV chưa duyệt</span>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* Real quiz options */}
+                                      {q.options && q.options.length > 0 ? (
+                                        <div className="space-y-1.5">
+                                          {q.options.map((opt, optIdx) => {
+                                            const isCorrect = q.correctIndex === optIdx;
+                                            const letter = String.fromCharCode(65 + optIdx);
+                                            return (
+                                              <div
+                                                key={optIdx}
+                                                className={`flex items-start justify-between gap-2 p-2 rounded-lg text-xs transition-colors ${
+                                                  isCorrect
+                                                    ? "bg-success/10 border border-success/30 text-foreground font-medium"
+                                                    : "bg-background/80 border border-border/50 text-muted-foreground"
+                                                }`}
+                                              >
+                                                <div className="flex items-start gap-2">
+                                                  <span
+                                                    className={`inline-flex items-center justify-center size-5 rounded-full text-2xs font-semibold shrink-0 mt-0.5 ${
+                                                      isCorrect
+                                                        ? "bg-success text-success-foreground"
+                                                        : "bg-muted text-muted-foreground"
+                                                    }`}
+                                                  >
+                                                    {letter}
+                                                  </span>
+                                                  <span className="leading-snug">{opt}</span>
+                                                </div>
+                                                {isCorrect && (
+                                                  <Badge className="bg-success/20 text-success border-success/30 text-2xs px-1.5 py-0 h-4 shrink-0 font-medium">
+                                                    Đáp án đúng
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <p className="text-destructive font-medium">Chưa có phương án trả lời.</p>
+                                      )}
+
                                       {q.explanation && (
-                                        <p className="text-muted-foreground italic">Giải thích: {q.explanation}</p>
+                                        <div className="p-2 rounded bg-muted/20 border border-border/40 text-muted-foreground">
+                                          <strong className="text-foreground">Giải thích:</strong> {q.explanation}
+                                        </div>
                                       )}
                                     </div>
                                   ))}
@@ -1593,116 +1800,570 @@ export function PublicationReviewClient({
       {/* ─────────────────────────────────────────────────────────────
           MODAL XEM TRƯỚC NHƯ HỌC VIÊN (S32b preview as learner)
           ───────────────────────────────────────────────────────────── */}
-      {showStudentPreview && detail && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col justify-start items-center p-4 sm:p-6 overflow-y-auto">
-          {/* Thanh Preview Bar cố định trên cùng (Persistent Preview Bar) */}
-          <div className="sticky top-0 z-10 w-full max-w-4xl p-3 bg-primary text-primary-foreground rounded-xl shadow-lg flex items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2 text-xs sm:text-sm font-medium">
-              <Eye className="size-4 shrink-0" />
-              <span>
-                Đang xem trước với vai trò: <strong>Học viên</strong> · {detail.course.title}
-              </span>
-            </div>
+      {showStudentPreview && detail && (() => {
+        const previewItems = [
+          ...(detail.course.entryTest ? [{ id: "entry", title: "Bài kiểm tra đầu vào", type: "entry" }] : []),
+          ...allLessons.map((l) => ({ id: l.id, title: l.title, type: l.type })),
+        ];
+        const currentPreviewIndex = previewItems.findIndex((item) => item.id === previewLessonId);
+        const prevItem = currentPreviewIndex > 0 ? previewItems[currentPreviewIndex - 1] : null;
+        const nextItem =
+          currentPreviewIndex >= 0 && currentPreviewIndex < previewItems.length - 1
+            ? previewItems[currentPreviewIndex + 1]
+            : null;
+        const currentPreviewLesson =
+          allLessons.find((l) => l.id === previewLessonId) || allLessons[0];
+        const currentPreviewChapter = detail.course.chapters.find((ch) =>
+          ch.lessons.some((l) => l.id === currentPreviewLesson?.id)
+        );
 
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setShowStudentPreview(false)}
-              className="h-8 text-xs shrink-0 cursor-pointer"
-            >
-              <X className="size-3.5 mr-1" />
-              Thoát xem trước
-            </Button>
-          </div>
-
-          {/* Nội dung xem trước giao diện chi tiết khoá học */}
-          <div className="w-full max-w-4xl bg-card border border-border rounded-2xl p-6 sm:p-8 space-y-6 shadow-md text-foreground">
-            <div className="space-y-2 border-b border-border/50 pb-5">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-                <span>{detail.course.category}</span>
-                <span>·</span>
-                <span>{detail.course.level}</span>
-                <span>·</span>
-                <span className="text-primary font-bold">
-                  {Number(priceInput) > 0 ? `${Number(priceInput).toLocaleString("vi-VN")} đ` : "Miễn phí"}
+        return (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col justify-start items-center p-3 sm:p-5 overflow-y-auto">
+            {/* Persistent Preview Bar */}
+            <div className="sticky top-0 z-10 w-full max-w-5xl p-3 bg-primary text-primary-foreground rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5 text-xs sm:text-sm font-medium">
+                <Eye className="size-4 shrink-0" />
+                <span className="line-clamp-1">
+                  Đang xem trước với vai trò: <strong>Học viên</strong> · {detail.course.title}
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                {detail.course.title}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Giảng viên: <strong className="text-foreground">{detail.instructor?.name || "Chưa rõ"}</strong>
-              </p>
-            </div>
 
-            {/* Mô tả */}
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Giới thiệu khoá học
-              </h2>
-              <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-                {detail.course.description || detail.course.summary}
-              </p>
-            </div>
+              <div className="flex items-center gap-2.5 shrink-0">
+                {/* Mode Switcher */}
+                <div className="flex items-center bg-primary-foreground/15 rounded-lg p-0.5 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewMode("overview")}
+                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
+                      previewMode === "overview"
+                        ? "bg-primary-foreground text-primary shadow-xs"
+                        : "text-primary-foreground/80 hover:text-primary-foreground"
+                    }`}
+                  >
+                    Trang giới thiệu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewMode("player");
+                      if (!previewLessonId || previewLessonId === "entry") {
+                        setPreviewLessonId(detail.course.entryTest ? "entry" : (allLessons[0]?.id || "entry"));
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      previewMode === "player"
+                        ? "bg-primary-foreground text-primary shadow-xs"
+                        : "text-primary-foreground/80 hover:text-primary-foreground"
+                    }`}
+                  >
+                    <Play className="size-3" />
+                    Giao diện học (Player)
+                  </button>
+                </div>
 
-            {/* Bạn sẽ học được gì */}
-            {detail.details.learningOutcomes.length > 0 && (
-              <div className="space-y-2.5">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Bạn sẽ học được gì
-                </h2>
-                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {detail.details.learningOutcomes.map((item, idx) => (
-                    <li key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-muted/20 border border-border/40">
-                      <Check className="size-3.5 text-success shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowStudentPreview(false)}
+                  className="h-8 text-xs cursor-pointer shadow-xs"
+                >
+                  <X className="size-3.5 mr-1" />
+                  Thoát xem trước
+                </Button>
               </div>
-            )}
+            </div>
 
-            {/* Nội dung chương trình học */}
-            <div className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Nội dung khoá học ({detail.course.chapters.length} chương)
-              </h2>
-              <div className="space-y-2">
-                {detail.course.chapters.map((ch, ci) => (
-                  <div key={ch.id} className="border border-border/60 rounded-xl overflow-hidden text-xs">
-                    <div className="p-3 bg-muted/30 font-semibold text-foreground flex items-center justify-between">
-                      <span>{ch.title}</span>
-                      <span className="text-muted-foreground font-normal">{ch.lessons.length} bài</span>
+            {/* VIEW MODE 1: OVERVIEW / COURSE LANDING */}
+            {previewMode === "overview" && (
+              <div className="w-full max-w-5xl bg-card border border-border rounded-2xl p-6 sm:p-8 space-y-6 shadow-md text-foreground">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-5">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+                      <span>{detail.course.category}</span>
+                      <span>·</span>
+                      <span>{detail.course.level}</span>
+                      <span>·</span>
+                      <span className="text-primary font-bold">
+                        {Number(priceInput) > 0 ? `${Number(priceInput).toLocaleString("vi-VN")} đ` : "Miễn phí"}
+                      </span>
                     </div>
-                    <ul className="divide-y divide-border/40">
-                      {ch.lessons.map((ls) => (
-                        <li key={ls.id} className="p-3 flex items-center justify-between gap-2 text-muted-foreground">
-                          <span className="text-foreground font-medium">{ls.title}</span>
-                          <span className="uppercase text-[10px] font-mono">{ls.type}</span>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+                      {detail.course.title}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      Giảng viên: <strong className="text-foreground">{detail.instructor?.name || "Chưa rõ"}</strong>
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      setPreviewMode("player");
+                      setPreviewLessonId(detail.course.entryTest ? "entry" : (allLessons[0]?.id || "entry"));
+                    }}
+                    className="gap-2 text-xs shrink-0 cursor-pointer shadow-sm"
+                  >
+                    <Play className="size-3.5" />
+                    Vào học thử (Player)
+                  </Button>
+                </div>
+
+                {/* Giới thiệu */}
+                <div className="space-y-2">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    Giới thiệu khoá học
+                  </h2>
+                  <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+                    {detail.course.description || detail.course.summary}
+                  </p>
+                </div>
+
+                {/* Bạn sẽ học được gì */}
+                {detail.details.learningOutcomes.length > 0 && (
+                  <div className="space-y-2.5">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      Bạn sẽ học được gì
+                    </h2>
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {detail.details.learningOutcomes.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2 p-2.5 rounded-lg bg-muted/20 border border-border/40">
+                          <Check className="size-3.5 text-success shrink-0 mt-0.5" />
+                          <span>{item}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
-                ))}
-              </div>
-            </div>
+                )}
 
-            {/* Yêu cầu trước khi học */}
-            {detail.details.requirements.length > 0 && (
-              <div className="space-y-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Yêu cầu trước khi học
-                </h2>
-                <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-1">
-                  {detail.details.requirements.map((req, idx) => (
-                    <li key={idx}>{req}</li>
-                  ))}
-                </ul>
+                {/* Nội dung chương trình học */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      Nội dung khoá học ({detail.course.chapters.length} chương · {allLessons.length} bài)
+                    </h2>
+                  </div>
+                  <div className="space-y-2.5">
+                    {detail.course.chapters.map((ch, ci) => (
+                      <div key={ch.id} className="border border-border/60 rounded-xl overflow-hidden text-xs bg-card">
+                        <div className="p-3 bg-muted/30 font-semibold text-foreground flex items-center justify-between">
+                          <span>Chương {ci + 1}: {ch.title}</span>
+                          <span className="text-muted-foreground font-normal">{ch.lessons.length} bài</span>
+                        </div>
+                        <ul className="divide-y divide-border/40">
+                          {ch.lessons.map((ls) => (
+                            <li key={ls.id} className="p-3 flex items-center justify-between gap-3 hover:bg-muted/20 transition-colors">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {ls.type === "video" ? (
+                                  <Play className="size-3.5 text-primary shrink-0" />
+                                ) : ls.type === "quiz" ? (
+                                  <HelpCircle className="size-3.5 text-primary shrink-0" />
+                                ) : ls.type === "code" ? (
+                                  <Code2 className="size-3.5 text-primary shrink-0" />
+                                ) : ls.type === "assignment" ? (
+                                  <FileText className="size-3.5 text-primary shrink-0" />
+                                ) : (
+                                  <BookOpen className="size-3.5 text-primary shrink-0" />
+                                )}
+                                <span className="text-foreground font-medium truncate">{ls.title}</span>
+                                <span className="uppercase text-2xs font-mono text-muted-foreground shrink-0">{ls.type}</span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setPreviewLessonId(ls.id);
+                                  setPreviewMode("player");
+                                }}
+                                className="h-7 text-xs px-2.5 text-primary hover:text-primary cursor-pointer shrink-0"
+                              >
+                                Học thử bài này
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Yêu cầu trước khi học */}
+                {detail.details.requirements.length > 0 && (
+                  <div className="space-y-2">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      Yêu cầu trước khi học
+                    </h2>
+                    <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-1">
+                      {detail.details.requirements.map((req, idx) => (
+                        <li key={idx}>{req}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* VIEW MODE 2: LEARNER PLAYER LAYOUT (S32b player) */}
+            {previewMode === "player" && (
+              <div className="w-full max-w-5xl bg-card border border-border rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row min-h-[580px] max-h-[82vh]">
+                {/* Left Sidebar Curriculum */}
+                <div className="w-full md:w-80 shrink-0 border-b md:border-b-0 md:border-r border-border/60 bg-muted/20 flex flex-col">
+                  <div className="p-3.5 border-b border-border/60 bg-muted/30 flex items-center justify-between">
+                    <span className="font-semibold text-xs text-foreground uppercase tracking-wider">
+                      Chương trình học
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {allLessons.length} bài học
+                    </span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+                    {/* Entry test item if present */}
+                    {detail.course.entryTest && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewLessonId("entry")}
+                        className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-start gap-2.5 cursor-pointer ${
+                          previewLessonId === "entry"
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-card border-border/60 hover:bg-muted/40 text-foreground"
+                        }`}
+                      >
+                        <HelpCircle className="size-4 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold truncate">Bài kiểm tra đầu vào</p>
+                          <p className={`text-2xs ${previewLessonId === "entry" ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                            {detail.course.entryTest.questions.length} câu hỏi chuẩn đoán
+                          </p>
+                        </div>
+                      </button>
+                    )}
+
+                    {/* Chapters & Lessons */}
+                    {detail.course.chapters.map((ch, ci) => (
+                      <div key={ch.id} className="space-y-1.5">
+                        <p className="font-semibold text-2xs text-muted-foreground uppercase tracking-wider px-1">
+                          Chương {ci + 1}: {ch.title}
+                        </p>
+                        <div className="space-y-1">
+                          {ch.lessons.map((ls) => {
+                            const isSelected = previewLessonId === ls.id;
+                            return (
+                              <button
+                                key={ls.id}
+                                type="button"
+                                onClick={() => setPreviewLessonId(ls.id)}
+                                className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-start gap-2.5 cursor-pointer ${
+                                  isSelected
+                                    ? "bg-primary text-primary-foreground border-primary shadow-xs font-medium"
+                                    : "bg-card border-border/50 hover:bg-muted/40 text-foreground"
+                                }`}
+                              >
+                                {ls.type === "video" ? (
+                                  <Play className="size-3.5 shrink-0 mt-0.5" />
+                                ) : ls.type === "quiz" ? (
+                                  <HelpCircle className="size-3.5 shrink-0 mt-0.5" />
+                                ) : ls.type === "code" ? (
+                                  <Code2 className="size-3.5 shrink-0 mt-0.5" />
+                                ) : ls.type === "assignment" ? (
+                                  <FileText className="size-3.5 shrink-0 mt-0.5" />
+                                ) : (
+                                  <BookOpen className="size-3.5 shrink-0 mt-0.5" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="truncate leading-tight">{ls.title}</p>
+                                  <div className={`flex items-center gap-1.5 mt-1 text-2xs ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                                    <span className="uppercase font-mono">{ls.type}</span>
+                                    {ls.durationSeconds !== undefined && ls.durationSeconds !== null && ls.durationSeconds > 0 && (
+                                      <>
+                                        <span>·</span>
+                                        <span>{Math.max(1, Math.round(ls.durationSeconds / 60))} phút</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right Main Content Pane */}
+                <div className="flex-1 flex flex-col bg-card overflow-hidden">
+                  {/* Lesson Header */}
+                  <div className="p-4 border-b border-border/60 flex items-center justify-between gap-3 bg-card">
+                    <div>
+                      <p className="text-2xs text-muted-foreground font-medium">
+                        {previewLessonId === "entry"
+                          ? "Đánh giá đầu khoá"
+                          : currentPreviewChapter?.title || "Nội dung bài học"}
+                      </p>
+                      <h3 className="text-base font-bold text-foreground">
+                        {previewLessonId === "entry"
+                          ? "Bài kiểm tra đầu vào"
+                          : currentPreviewLesson?.title || "Bài học"}
+                      </h3>
+                    </div>
+                    {previewLessonId !== "entry" && currentPreviewLesson && (
+                      <Badge className="bg-primary/10 text-primary border-primary/20 text-xs font-mono uppercase">
+                        {currentPreviewLesson.type}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Lesson Body / Exercises */}
+                  <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 text-xs">
+                    {previewLessonId === "entry" ? (
+                      <div className="space-y-4">
+                        <div className="p-3.5 rounded-xl border border-primary/20 bg-primary/5 text-xs text-foreground space-y-1">
+                          <p className="font-semibold text-primary">Bài kiểm tra chuẩn đoán năng lực</p>
+                          <p className="text-muted-foreground">
+                            Học viên làm bài kiểm tra này để Codi xếp lộ trình học và thiết lập trạng thái bản đồ năng lực phù hợp.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {(detail.course.entryTest?.questions || []).map((q, idx) => (
+                            <div key={q.id || idx} className="p-3.5 rounded-xl border border-border/60 bg-muted/10 space-y-2.5">
+                              <p className="font-semibold text-foreground leading-snug">
+                                Câu {idx + 1}: {q.text}
+                              </p>
+                              <div className="space-y-1.5">
+                                {q.options.map((opt, optIdx) => {
+                                  const isCorrect = q.correctIndex === optIdx;
+                                  const letter = String.fromCharCode(65 + optIdx);
+                                  return (
+                                    <div
+                                      key={optIdx}
+                                      className={`flex items-start justify-between gap-2 p-2 rounded-lg text-xs transition-colors ${
+                                        isCorrect
+                                          ? "bg-success/10 border border-success/30 text-foreground font-medium"
+                                          : "bg-background border border-border/50 text-muted-foreground"
+                                      }`}
+                                    >
+                                      <div className="flex items-start gap-2">
+                                        <span className={`inline-flex items-center justify-center size-5 rounded-full text-2xs font-semibold shrink-0 mt-0.5 ${
+                                          isCorrect ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"
+                                        }`}>
+                                          {letter}
+                                        </span>
+                                        <span className="leading-snug">{opt}</span>
+                                      </div>
+                                      {isCorrect && (
+                                        <Badge className="bg-success/20 text-success border-success/30 text-2xs px-1.5 py-0 h-4 shrink-0 font-medium">
+                                          Đáp án đúng
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {q.explanation && (
+                                <p className="text-muted-foreground italic pt-1 border-t border-border/40">
+                                  Giải thích: {q.explanation}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : currentPreviewLesson ? (
+                      <div className="space-y-5">
+                        {/* Video / Slide Viewer */}
+                        {["video", "pdf", "slide"].includes(currentPreviewLesson.type) && (
+                          <div className="space-y-3">
+                            <div className="aspect-video bg-muted/80 rounded-2xl flex flex-col items-center justify-center border border-border/70 relative overflow-hidden group shadow-inner">
+                              <div className="size-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+                                <Play className="size-6 ml-0.5" />
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-3 font-medium">
+                                Trình phát xem trước video / tài liệu ({currentPreviewLesson.type})
+                              </p>
+                            </div>
+
+                            {currentPreviewLesson.materials && currentPreviewLesson.materials.length > 0 && (
+                              <div className="p-3 rounded-xl border border-border/60 bg-muted/20 space-y-1.5">
+                                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                  <FileText className="size-3.5 text-primary" /> Tệp tài liệu đính kèm:
+                                </span>
+                                <ul className="divide-y divide-border/40">
+                                  {currentPreviewLesson.materials.map((m, mi) => (
+                                    <li key={mi} className="py-1.5 flex items-center justify-between gap-2 text-muted-foreground">
+                                      <span>{m.title || m.fileName || m.url || "Tài liệu học tập"}</span>
+                                      {m.url && (
+                                        <a
+                                          href={m.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-primary hover:underline flex items-center gap-1 text-2xs"
+                                        >
+                                          Mở tệp <ExternalLink className="size-2.5" />
+                                        </a>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Reading content */}
+                        {currentPreviewLesson.body && (
+                          <div className="space-y-2">
+                            <span className="font-semibold text-foreground">Nội dung bài học:</span>
+                            <div className="p-4 rounded-xl border border-border/50 bg-muted/10 whitespace-pre-wrap leading-relaxed text-foreground">
+                              {currentPreviewLesson.body}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Quiz */}
+                        {currentPreviewLesson.quiz && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-foreground">
+                                Quiz bài học ({currentPreviewLesson.quiz.questions.length} câu):
+                              </span>
+                              <Badge className="bg-primary/10 text-primary border-primary/20 text-2xs">
+                                Điểm đạt: {currentPreviewLesson.quiz.passingScore}%
+                              </Badge>
+                            </div>
+                            <div className="space-y-3">
+                              {currentPreviewLesson.quiz.questions.map((q, qi) => (
+                                <div key={qi} className="p-3.5 rounded-xl border border-border/60 bg-muted/10 space-y-2">
+                                  <p className="font-semibold text-foreground leading-snug">
+                                    Câu {qi + 1}: {q.text}
+                                  </p>
+                                  <div className="space-y-1.5">
+                                    {q.options.map((opt, optIdx) => {
+                                      const isCorrect = q.correctIndex === optIdx;
+                                      const letter = String.fromCharCode(65 + optIdx);
+                                      return (
+                                        <div
+                                          key={optIdx}
+                                          className={`flex items-start justify-between gap-2 p-2 rounded-lg text-xs transition-colors ${
+                                            isCorrect
+                                              ? "bg-success/10 border border-success/30 text-foreground font-medium"
+                                              : "bg-background border border-border/50 text-muted-foreground"
+                                          }`}
+                                        >
+                                          <div className="flex items-start gap-2">
+                                            <span className={`inline-flex items-center justify-center size-5 rounded-full text-2xs font-semibold shrink-0 mt-0.5 ${
+                                              isCorrect ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"
+                                            }`}>
+                                              {letter}
+                                            </span>
+                                            <span className="leading-snug">{opt}</span>
+                                          </div>
+                                          {isCorrect && (
+                                            <Badge className="bg-success/20 text-success border-success/30 text-2xs px-1.5 py-0 h-4 shrink-0 font-medium">
+                                              Đáp án đúng
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  {q.explanation && (
+                                    <p className="text-muted-foreground italic pt-1 border-t border-border/40">
+                                      Giải thích: {q.explanation}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Coding challenge */}
+                        {currentPreviewLesson.code && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Code2 className="size-4 text-primary" /> Bài tập lập trình:
+                              </span>
+                              {currentPreviewLesson.code.solutionCheck?.ok ? (
+                                <Badge className="bg-success/10 text-success border-success/20">
+                                  Lời giải mẫu đạt {currentPreviewLesson.code.solutionCheck.passed}/{currentPreviewLesson.code.solutionCheck.total}
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-destructive/10 text-destructive border-destructive/20">
+                                  Lời giải chưa đạt test
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="p-3.5 rounded-xl border border-border/60 bg-muted/10 space-y-2">
+                              <p className="text-muted-foreground">
+                                Gồm {currentPreviewLesson.code.tests.length} test cases ({currentPreviewLesson.code.tests.filter((t) => t.hidden).length} test ẩn).
+                              </p>
+                              <div className="space-y-1">
+                                {currentPreviewLesson.code.tests.slice(0, 3).map((t, ti) => (
+                                  <div key={ti} className="p-2 rounded bg-background border border-border/50 font-mono text-2xs text-muted-foreground flex items-center justify-between">
+                                    <span>Test {ti + 1}: {t.name || "Test case"}</span>
+                                    <span>{t.hidden ? "Test ẩn" : "Mẫu"}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Assignment */}
+                        {currentPreviewLesson.assignment && (
+                          <div className="space-y-3">
+                            <span className="font-semibold text-foreground flex items-center gap-1.5">
+                              <FileText className="size-4 text-primary" /> Bài tập tự luận:
+                            </span>
+                            <div className="p-4 rounded-xl border border-border/60 bg-muted/10 space-y-2">
+                              <p className="text-foreground leading-relaxed">
+                                {currentPreviewLesson.assignment.instructions}
+                              </p>
+                              <p className="text-2xs text-muted-foreground">
+                                Thang chấm: {currentPreviewLesson.assignment.rubric?.length || 0} tiêu chí.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Player Navigation Footer */}
+                  <div className="p-3.5 border-t border-border/60 bg-muted/20 flex items-center justify-between gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!prevItem}
+                      onClick={() => prevItem && setPreviewLessonId(prevItem.id)}
+                      className="gap-1.5 text-xs cursor-pointer"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      Bài trước
+                    </Button>
+
+                    <span className="text-2xs text-muted-foreground font-mono">
+                      {currentPreviewIndex + 1} / {previewItems.length}
+                    </span>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!nextItem}
+                      onClick={() => nextItem && setPreviewLessonId(nextItem.id)}
+                      className="gap-1.5 text-xs cursor-pointer"
+                    >
+                      Bài tiếp theo
+                      <ChevronRight className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

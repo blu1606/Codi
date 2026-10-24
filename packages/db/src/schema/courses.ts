@@ -18,6 +18,8 @@ export const courses = pgTable("courses", {
   description: text("description").notNull(),
   // VND has no minor unit, so prices are whole numbers. Owned by Admin (UC-38).
   price: integer("price").default(0).notNull(),
+  // Lecturer proposes a price; Admin confirms/sets final price on approval (STATE-MACHINES §16).
+  proposedPrice: integer("proposed_price"),
   instructorId: text("instructor_id").references(() => user.id),
   rating: real("rating").default(0).notNull(),
   reviewCount: integer("review_count").default(0).notNull(),

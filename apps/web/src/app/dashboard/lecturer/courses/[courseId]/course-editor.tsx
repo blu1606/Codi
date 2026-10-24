@@ -103,7 +103,11 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   const [infoCategory, setInfoCategory] = useState(course.category || CATEGORIES[0]);
   const [infoLevel, setInfoLevel] = useState(course.level || "Beginner");
   const [infoPrice, setInfoPrice] = useState(
-    course.price !== undefined && course.price !== null ? String(course.price) : "0"
+    (course as any).proposedPrice !== undefined && (course as any).proposedPrice !== null
+      ? String((course as any).proposedPrice)
+      : course.price !== undefined && course.price !== null
+        ? String(course.price)
+        : "0"
   );
   const [infoOutcomes, setInfoOutcomes] = useState((details.learningOutcomes || []).join("\n"));
   const [infoRequirements, setInfoRequirements] = useState((details.requirements || []).join("\n"));
@@ -772,8 +776,13 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                   }}
                   className="max-w-[280px]"
                 />
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground block">
                   Quản trị viên sẽ kiểm tra và xác nhận giá bán cuối cùng khi duyệt xuất bản. Nhập 0 cho khoá học miễn phí.
+                  {course.status === "published" && (
+                    <span className="block mt-0.5 font-medium text-foreground">
+                      Giá đang bán chính thức: {course.price.toLocaleString("vi-VN")} đ. Sửa đổi giá tại đây chỉ là đề xuất và giữ nguyên giá bán đến khi Admin duyệt.
+                    </span>
+                  )}
                 </span>
                 {infoErrors.price && (
                   <p className="text-xs text-destructive flex items-center gap-1 font-medium">

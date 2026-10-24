@@ -218,11 +218,16 @@ describe("Lecturer Publication Actions (S25 - Task #117)", () => {
 
     it("markFlagFixed cập nhật trạng thái cờ thành fixed và lưu phản hồi", async () => {
       mockSelect.mockImplementation(() =>
-        createMockQuery([{ id: 101, instructorId: "lecturer-1" }])
+        createMockQuery([
+          {
+            flag: { id: 101, status: "open" },
+            course: { id: "c-1", instructorId: "lecturer-1", status: "rejected" },
+          },
+        ])
       );
 
       const mockSet = vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(undefined),
+        where: vi.fn().mockResolvedValue([{ id: 101 }]),
       });
       mockUpdate.mockReturnValue({ set: mockSet });
 
@@ -236,13 +241,74 @@ describe("Lecturer Publication Actions (S25 - Task #117)", () => {
       );
     });
 
+    it("từ chối khi cờ thuộc khoá học khác (cross-course)", async () => {
+      // Mock join returns empty because flagId 101 belongs to c-2, not c-1
+      mockSelect.mockImplementation(() => createMockQuery([]));
+
+      await expect(
+        markFlagFixed("c-1", 101, "Sửa cờ khoá khác")
+      ).rejects.toThrow("Không có quyền chỉnh sửa hoặc không tìm thấy góp ý này trong khoá học của bạn.");
+    });
+
+    it("từ chối khi cờ đã được admin đóng (closed)", async () => {
+      mockSelect.mockImplementation(() =>
+        createMockQuery([
+          {
+            flag: { id: 101, status: "closed" },
+            course: { id: "c-1", instructorId: "lecturer-1", status: "rejected" },
+          },
+        ])
+      );
+
+      await expect(
+        markFlagFixed("c-1", 101, "Đã sửa cờ closed")
+      ).rejects.toThrow("Góp ý này đã được quản trị viên đóng, không thể sửa đổi.");
+
+      await expect(
+        reopenFlag("c-1", 101)
+      ).rejects.toThrow("Góp ý này đã được quản trị viên đóng, không thể mở lại.");
+    });
+
+    it("từ chối khi khoá học đang pending", async () => {
+      mockSelect.mockImplementation(() =>
+        createMockQuery([
+          {
+            flag: { id: 101, status: "open" },
+            course: { id: "c-1", instructorId: "lecturer-1", status: "pending" },
+          },
+        ])
+      );
+
+      await expect(
+        markFlagFixed("c-1", 101, "Đã sửa cờ khi pending")
+      ).rejects.toThrow("Khoá học đang chờ quản trị viên duyệt, không thể thay đổi cờ góp ý.");
+
+      mockSelect.mockImplementation(() =>
+        createMockQuery([
+          {
+            flag: { id: 101, status: "fixed" },
+            course: { id: "c-1", instructorId: "lecturer-1", status: "pending" },
+          },
+        ])
+      );
+
+      await expect(
+        reopenFlag("c-1", 101)
+      ).rejects.toThrow("Khoá học đang chờ quản trị viên duyệt, không thể mở lại cờ góp ý.");
+    });
+
     it("reopenFlag chuyển cờ về open và xoá phản hồi", async () => {
       mockSelect.mockImplementation(() =>
-        createMockQuery([{ id: 101, instructorId: "lecturer-1" }])
+        createMockQuery([
+          {
+            flag: { id: 101, status: "fixed" },
+            course: { id: "c-1", instructorId: "lecturer-1", status: "rejected" },
+          },
+        ])
       );
 
       const mockSet = vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(undefined),
+        where: vi.fn().mockResolvedValue([{ id: 101 }]),
       });
       mockUpdate.mockReturnValue({ set: mockSet });
 
