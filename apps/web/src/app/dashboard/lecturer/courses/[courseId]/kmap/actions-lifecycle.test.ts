@@ -27,6 +27,8 @@ let storedCourse: {
   id: string; title: string; instructorId: string; status: string;
   knowledgeMapStatus: MapStatus; knowledgeMapGeneratedAt: Date | null;
   confirmedKnowledgeMap?: object | null;
+  knowledgeMapContentGeneration?: number;
+  knowledgeMapAnalysisGeneration?: number | null;
 } | undefined;
 let chapters: { id: string; title: string; position: number }[];
 let lessons: { id: string; chapterId: string; title: string; position: number }[];
@@ -64,6 +66,17 @@ beforeEach(() => {
 });
 
 describe("knowledge map content availability", () => {
+  it.each([[0, null, false], [1, null, true], [2, 1, true], [2, 2, false]] as const)(
+    "projects confirmation availability for content %s / analysis %s without stamping a generation", async (content, analysis, unavailable) => {
+      storedCourse!.knowledgeMapStatus = "ready";
+      storedCourse!.knowledgeMapContentGeneration = content;
+      storedCourse!.knowledgeMapAnalysisGeneration = analysis;
+      lessons.push({ id: "lesson-1", chapterId: "chapter-1", title: "Lesson", position: 0 });
+      expect((await getKnowledgeMapData("owned")).course.confirmationUnavailable).toBe(unavailable);
+      expect(storedCourse!.knowledgeMapAnalysisGeneration).toBe(analysis);
+      expectReadOnly();
+    },
+  );
   it("projects an empty map to ready after its first lesson exists without fabricating analysis", async () => {
     const before = await getKnowledgeMapData("owned");
     expect(before.course.knowledgeMapStatus).toBe("empty");
@@ -150,7 +163,7 @@ describe("knowledge map content availability", () => {
   });
 
   it("rejects analysis with no lessons before writes", async () => {
-    await expect(runKnowledgeMapAnalysis("owned")).rejects.toThrow("Khoá học chưa có bài học nào để phân tích.");
+    await expect(runKnowledgeMapAnalysis("owned")).rejects.toThrow("Phân tích AI chưa khả dụng");
     expectReadOnly();
   });
 
