@@ -349,6 +349,18 @@ describe("Lecturer Grading Server Actions", () => {
       expect(mockNotify).not.toHaveBeenCalled();
     });
 
+    it.each([
+      "previous\n\n<!--grading_record_v2:broken",
+      `previous\n\n<!--grading_meta_b64:${Buffer.from(JSON.stringify({ history: [] })).toString("base64")}!-->`,
+      "previous\n\n<!--grading_history:{broken-->",
+    ])("refuses corrupt stored frames before grading or notification: %s", async raw => {
+      row.feedback = raw;
+      expect((await save()).success).toBe(false);
+      expect(row.feedback).toBe(raw);
+      expect(row.score).toBe(7);
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
+
     it("grades pending work, persists rubric and preserves next-item filter inputs", async () => {
       row.status = "pending"; row.score = null;
       assessment.rubric = JSON.stringify([{ id: "logic", points: 10 }]);

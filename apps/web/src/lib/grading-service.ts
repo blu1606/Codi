@@ -3,6 +3,8 @@
  * Handles history parsing, rubric calculation, placeholder replacement, and validation guards.
  */
 
+import { frameGradingFeedback, splitGradingFeedback } from "./grading-feedback-frame";
+
 export interface GradingHistoryEntry {
   oldScore: number;
   newScore: number;
@@ -42,39 +44,25 @@ export function parseFeedbackAndHistory(rawFeedback: string | null | undefined, 
 } {
   const raw = rawFeedback || "";
   const empty = { feedback: raw.trim(), history: [] as GradingHistoryEntry[], rubricScores: null };
-  const marker = "<!--grading_record_v2:";
-  let feedback = raw.trim();
+  const frame = splitGradingFeedback(raw);
+  if (!frame) return empty;
+  const feedback = frame.feedback;
   try {
+    if (!frame.canonical || !frame.closed) throw new Error("invalid envelope");
     let payload: any;
-    const recordIndex = raw.lastIndexOf("\n\n" + marker);
-    if (recordIndex >= 0) {
-      const match = raw.slice(recordIndex + 2).match(/^<!--grading_record_v2:([A-Za-z0-9+/=]+)-->\s*$/);
-      if (!match) throw new Error("invalid envelope");
-      const encoded = match[1]!;
+    if (frame.format === "legacy") {
+      payload = JSON.parse(frame.payload);
+    } else {
+      const encoded = frame.payload;
+      if (!/^[A-Za-z0-9+/=]+$/.test(encoded)) throw new Error("invalid encoding");
       const decoded = Buffer.from(encoded, "base64");
       if (decoded.toString("base64") !== encoded) throw new Error("invalid encoding");
       payload = JSON.parse(decoded.toString("utf8"));
-      if (typeof payload.feedback !== "string") throw new Error("invalid feedback");
-      if (payload.feedback !== raw.slice(0, recordIndex).trim()) throw new Error("feedback mismatch");
-      feedback = payload.feedback;
-    } else {
-      // Legacy metadata was a suffix; choose the final appended envelope, not a literal in visible text.
-      const b64 = raw.lastIndexOf("\n\n<!--grading_meta_b64:");
-      const legacy = raw.lastIndexOf("\n\n<!--grading_history:");
-      const index = Math.max(b64, legacy);
-      if (index < 0) {
-        if (strict && /<!--grading_(?:record_v2|meta_b64|history):/.test(raw)) throw new Error("ambiguous legacy metadata");
-        return empty;
-      }
-      const isB64 = index === b64;
-      const prefix = isB64 ? "\n\n<!--grading_meta_b64:" : "\n\n<!--grading_history:";
-      const tail = raw.slice(index + prefix.length).trimEnd();
-      if (!tail.endsWith("-->")) throw new Error("invalid suffix");
-      const value = tail.slice(0, -3);
-      payload = JSON.parse(isB64 ? Buffer.from(value, "base64").toString("utf8") : value);
-      if (Array.isArray(payload)) payload = { history: payload };
-      feedback = raw.slice(0, index).trim();
     }
+    if (frame.format === "record") {
+      if (typeof payload.feedback !== "string") throw new Error("invalid feedback");
+      if (payload.feedback !== feedback) throw new Error("feedback mismatch");
+    } else if (Array.isArray(payload)) payload = { history: payload };
     if (!Array.isArray(payload?.history) || !payload.history.every((entry: any) =>
       entry && Number.isFinite(entry.oldScore) && Number.isFinite(entry.newScore) &&
       typeof entry.at === "string" &&
@@ -89,7 +77,7 @@ export function parseFeedbackAndHistory(rawFeedback: string | null | undefined, 
   } catch {
     if (strict) throw new Error("Lịch sử chấm điểm không hợp lệ. Không thể ghi đè; vui lòng liên hệ hỗ trợ.");
     // Reading does not erase the stored value. Mutations must use strict mode.
-    return { ...empty, feedback: raw.split("\n\n<!--grading_")[0]!.trim() };
+    return { ...empty, feedback };
   }
 }
 
@@ -100,7 +88,7 @@ export function serializeFeedbackAndHistory(
   rubricScores?: Record<string, number> | null
 ): string {
   const payload = { feedback: (feedback || "").trim(), history, rubricScores: rubricScores ?? null };
-  return `${payload.feedback}\n\n<!--grading_record_v2:${Buffer.from(JSON.stringify(payload), "utf8").toString("base64")}-->`;
+  return frameGradingFeedback(payload.feedback, Buffer.from(JSON.stringify(payload), "utf8").toString("base64"));
 }
 
 /**

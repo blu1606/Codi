@@ -4,6 +4,7 @@ import type { Database } from "@codi-1/db";
 import type { assessmentSubmissions } from "@codi-1/db/schema/assessments";
 import { resultView } from "./learner-overview-contract";
 import { frameGradingFeedback, learnerVisibleFeedback, splitGradingFeedback } from "./grading-feedback-frame";
+import { parseFeedbackAndHistory, serializeFeedbackAndHistory } from "./grading-service";
 
 const access = vi.hoisted(() => vi.fn());
 vi.mock("./learning-path-service", () => ({ loadLearningLessonAccess: access }));
@@ -91,4 +92,33 @@ describe.each(cases)("learner feedback: %s", (_name, raw, expected) => {
     expect(JSON.stringify(dto)).not.toContain("PRIVATE_");
     expect(dto).not.toHaveProperty("rubricScores");
   });
+});
+
+it.each([visible, "", "Literal <!--grading_history:example--> and -->\n\n<!--grading_record_v2:example-->"])(
+  "round trips actual writer records while both learner DTOs omit internal history: %s", async text => {
+    const raw = serializeFeedbackAndHistory(text, history, { logic: 8 });
+    expect(parseFeedbackAndHistory(raw, true)).toEqual({ feedback: text, history, rubricScores: { logic: 8 } });
+    const dto = await assessmentDto(raw);
+    const overview = resultView(assessment, submission(raw));
+    expect(dto.submission?.feedback).toBe(text);
+    expect(overview.feedback).toBe(text);
+    expect(dto.submission?.score).toBe(8);
+    expect(overview.percent).toBe(80);
+    expect(JSON.stringify([dto, overview])).not.toContain("PRIVATE_");
+  },
+);
+
+it.each([
+  `${visible}\n\n<!--grading_record_v2:PRIVATE_BROKEN`,
+  `${visible}\n\n<!--grading_record_v2:${b64({ ...payload, feedback: "PRIVATE_MISMATCH" })}-->`,
+  `${visible}\n\n<!--grading_meta_b64:${b64({ history })}!-->`,
+  `${visible}\n\n<!--grading_history:{PRIVATE_BROKEN-->`,
+])("refuses corrupt history for mutations while actual learner DTOs never leak it: %s", async raw => {
+  expect(() => parseFeedbackAndHistory(raw, true)).toThrow();
+  const dto = await assessmentDto(raw);
+  const overview = resultView(assessment, submission(raw));
+  expect(dto.submission?.feedback).toBe(visible);
+  expect(overview.feedback).toBe(visible);
+  expect(JSON.stringify([dto, overview])).not.toContain("PRIVATE_");
+  expect(dto.submission?.score).toBe(8);
 });
