@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { ArrowRight, BookOpen, Plus } from "lucide-react";
 
 import { getActiveRoles, ROLE } from "@codi-1/auth";
-import { Button, buttonVariants } from "@codi-1/ui/components/button";
+import { buttonVariants } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
 import {
   Empty,
@@ -145,9 +145,12 @@ export default async function LecturerCoursesPage({ searchParams }: CoursesPageP
               <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-semibold text-foreground text-base">
+                    <Link
+                      href={`/dashboard/lecturer/courses/${c.id}`}
+                      className="font-semibold text-foreground text-base hover:underline hover:text-primary transition-colors"
+                    >
                       {c.title}
-                    </span>
+                    </Link>
                     <StatusBadge kind="course" status={c.status} />
                   </div>
                   <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -176,28 +179,25 @@ export default async function LecturerCoursesPage({ searchParams }: CoursesPageP
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {c.status === "rejected" ? (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      disabled
-                      className="gap-1 cursor-not-allowed opacity-70"
-                      title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
-                    >
-                      Sửa và gửi lại
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled
-                      className="gap-1 cursor-not-allowed opacity-70"
-                      title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
-                    >
-                      Mở
-                      <ArrowRight className="size-3.5" />
-                    </Button>
-                  )}
+                  <Link
+                    href={`/dashboard/lecturer/courses/${c.id}`}
+                    className={cn(
+                      buttonVariants({
+                        variant: c.status === "rejected" ? "default" : "outline",
+                        size: "sm",
+                      }),
+                      "gap-1 cursor-pointer"
+                    )}
+                  >
+                    {c.status === "rejected" ? (
+                      "Sửa và gửi lại"
+                    ) : (
+                      <>
+                        Mở
+                        <ArrowRight className="size-3.5" />
+                      </>
+                    )}
+                  </Link>
                 </div>
               </CardContent>
             </Card>

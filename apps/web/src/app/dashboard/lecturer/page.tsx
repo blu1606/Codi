@@ -13,7 +13,7 @@ import {
 
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
-import { Button, buttonVariants } from "@codi-1/ui/components/button";
+import { buttonVariants } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
 import {
   Empty,
@@ -69,16 +69,16 @@ export default async function LecturerDashboardPage() {
           </AlertTitle>
           <AlertDescription className="mt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span>Lý do từ chối: {rejectedCourseAlert.rejectReason}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled
-              className="shrink-0 gap-1.5 cursor-not-allowed opacity-70"
-              title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
+            <Link
+              href={`/dashboard/lecturer/courses/${rejectedCourseAlert.id}`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "shrink-0 gap-1.5 cursor-pointer"
+              )}
             >
               Sửa và gửi lại
               <ArrowRight className="size-3.5" />
-            </Button>
+            </Link>
           </AlertDescription>
         </Alert>
       )}
@@ -235,9 +235,12 @@ export default async function LecturerDashboardPage() {
                 <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      <span className="font-semibold text-foreground text-base">
+                      <Link
+                        href={`/dashboard/lecturer/courses/${c.id}`}
+                        className="font-semibold text-foreground text-base hover:underline hover:text-primary transition-colors"
+                      >
                         {c.title}
-                      </span>
+                      </Link>
                       <StatusBadge kind="course" status={c.status} />
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -264,28 +267,25 @@ export default async function LecturerDashboardPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {c.status === "rejected" ? (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        disabled
-                        className="gap-1 cursor-not-allowed opacity-70"
-                        title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
-                      >
-                        Sửa và gửi lại
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled
-                        className="gap-1 cursor-not-allowed opacity-70"
-                        title="Trình chỉnh sửa khoá học sẽ mở ở bước tiếp theo (#130)"
-                      >
-                        Mở
-                        <ArrowRight className="size-3.5" />
-                      </Button>
-                    )}
+                    <Link
+                      href={`/dashboard/lecturer/courses/${c.id}`}
+                      className={cn(
+                        buttonVariants({
+                          variant: c.status === "rejected" ? "default" : "outline",
+                          size: "sm",
+                        }),
+                        "gap-1 cursor-pointer"
+                      )}
+                    >
+                      {c.status === "rejected" ? (
+                        "Sửa và gửi lại"
+                      ) : (
+                        <>
+                          Mở
+                          <ArrowRight className="size-3.5" />
+                        </>
+                      )}
+                    </Link>
                   </div>
                 </CardContent>
               </Card>

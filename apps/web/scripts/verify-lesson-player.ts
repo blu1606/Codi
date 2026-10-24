@@ -282,6 +282,7 @@ async function main() {
         .insert(assessmentSubmissions)
         .values({
           assessmentId: quiz.id,
+          quizRevision: quiz.currentQuizRevision,
           enrollmentId: e.id,
           attempt: 1,
           status: "graded",
@@ -303,6 +304,7 @@ async function main() {
         .insert(assessmentSubmissions)
         .values({
           assessmentId: quiz.id,
+          quizRevision: quiz.currentQuizRevision,
           enrollmentId: e.id,
           attempt: 2,
           status: "draft",
