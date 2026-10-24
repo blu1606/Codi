@@ -184,6 +184,7 @@ async function main() {
         {
           ...submitted,
           assessmentId: f.quizId,
+          quizRevision: f.questions[0]!.quizRevision,
           attempt: 1,
           score: 100,
           quizPercent: 100,
@@ -192,6 +193,7 @@ async function main() {
         {
           ...submitted,
           assessmentId: f.quizId,
+          quizRevision: f.questions[0]!.quizRevision,
           attempt: 2,
           score: 33,
           quizPercent: 33,

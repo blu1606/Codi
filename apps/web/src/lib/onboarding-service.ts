@@ -55,7 +55,7 @@ async function context(
     .from(courses)
     .where(eq(courses.id, courseId));
   if (!course) throw new OnboardingError("Không tìm thấy khoá học.", 404);
-  const [diagnostic] = await store
+  const diagnosticQuery = store
     .select()
     .from(assessments)
     .where(
@@ -65,11 +65,32 @@ async function context(
         eq(assessments.status, "published"),
       ),
     );
+  // Enrollment -> assessment is the same lock order as ordinary quiz writers.
+  // A publisher's UPDATE lock serializes with this read through attempt creation.
+  const [diagnostic] = await (lock ? diagnosticQuery.for("share") : diagnosticQuery);
+  const [attempt] = diagnostic
+    ? await store
+        .select()
+        .from(assessmentSubmissions)
+        .where(
+          and(
+            eq(assessmentSubmissions.enrollmentId, enrollment.id),
+            eq(assessmentSubmissions.assessmentId, diagnostic.id),
+          ),
+        )
+        .orderBy(desc(assessmentSubmissions.attempt))
+        .limit(1)
+    : [];
+  const pinnedAttempt = attempt && ["in-progress", "done"].includes(enrollment.diagnosticStatus);
+  const quizRevision = pinnedAttempt ? attempt.quizRevision : diagnostic?.currentQuizRevision;
+  if (diagnostic && (!Number.isInteger(quizRevision) || quizRevision! < 1)) {
+    throw new OnboardingError("Không tìm thấy phiên bản bài kiểm tra. Vui lòng liên hệ quản trị viên.");
+  }
   const questions = diagnostic
     ? await store
         .select()
         .from(quizQuestions)
-        .where(eq(quizQuestions.assessmentId, diagnostic.id))
+        .where(and(eq(quizQuestions.assessmentId, diagnostic.id), eq(quizQuestions.quizRevision, quizRevision!)))
         .orderBy(asc(quizQuestions.position), asc(quizQuestions.id))
     : [];
   const options = questions.length
@@ -83,19 +104,6 @@ async function context(
           ),
         )
         .orderBy(asc(quizOptions.position), asc(quizOptions.id))
-    : [];
-  const [attempt] = diagnostic
-    ? await store
-        .select()
-        .from(assessmentSubmissions)
-        .where(
-          and(
-            eq(assessmentSubmissions.enrollmentId, enrollment.id),
-            eq(assessmentSubmissions.assessmentId, diagnostic.id),
-          ),
-        )
-        .orderBy(desc(assessmentSubmissions.attempt))
-        .limit(1)
     : [];
   const answers = attempt
     ? await store
@@ -466,6 +474,7 @@ export function createOnboardingService(db: Database) {
               .values({
                 enrollmentId: e.id,
                 assessmentId: diagnostic.id,
+                quizRevision: diagnostic.currentQuizRevision,
                 attempt: (attempt?.attempt ?? 0) + 1,
               });
           } else if (
