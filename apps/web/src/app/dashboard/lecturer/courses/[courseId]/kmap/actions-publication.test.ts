@@ -68,7 +68,7 @@ beforeEach(() => {
       update: (table: unknown) => ({ set: (values: any) => ({ where: async () => {
         writes.push({ table, values });
         if (table === courses) Object.assign(course, values);
-        // Rename/reanalysis tests address all concepts; publication must remain independent.
+        // Rename/rejected-analysis tests address all concepts; publication must remain independent.
         if (table === skills) concepts.forEach((row) => Object.assign(row, values));
       } }) }),
       insert: (table: unknown) => ({ values: async (values: any) => {
@@ -82,7 +82,7 @@ beforeEach(() => {
 });
 
 describe("confirmed publication actions", () => {
-  it("publishes canonical IDs once and preserves the payload through rename and reanalysis", async () => {
+  it("publishes canonical IDs once and preserves the payload through rename and rejected analysis", async () => {
     await confirmKnowledgeMap("course");
     const publication = structuredClone(course.confirmedKnowledgeMap);
     expect(publication.skills.map((skill: any) => skill.id)).toEqual([101, 102]);
@@ -91,10 +91,30 @@ describe("confirmed publication actions", () => {
     await renameKnowledgeMapConcept("course", 101, "Draft name");
     expect(course.knowledgeMapStatus).toBe("ready");
     expect(course.confirmedKnowledgeMap).toEqual(publication);
-    await runKnowledgeMapAnalysis("course");
+    await expect(runKnowledgeMapAnalysis("course")).rejects.toThrow("Phân tích AI chưa khả dụng");
     expect(course.confirmedKnowledgeMap).toEqual(publication);
     expect(concepts.map((skill) => skill.id)).toEqual([101, 102]);
     expect(writes.filter((write) => write.table === enrollmentSkillMastery || write.table === lessonProgress)).toEqual([]);
+  });
+  it.each(["empty", "ready", "confirmed", "stale", "failed", "analysing"])("unavailable analysis leaves %s graph, publication and audit state untouched", async (status) => {
+    course.knowledgeMapStatus = status;
+    course.confirmedKnowledgeMap = { publicationId: "existing" };
+    const before = structuredClone({ course, concepts, edges });
+    await expect(runKnowledgeMapAnalysis("course")).rejects.toThrow("Phân tích AI chưa khả dụng");
+    expect({ course, concepts, edges }).toEqual(before);
+    expect(writes).toEqual([]);
+    expect(boundary.refresh).not.toHaveBeenCalled();
+  });
+  it("refuses confirmation of an empty graph without manufacturing skills", async () => {
+    concepts = []; edges = [];
+    await expect(confirmKnowledgeMap("course")).rejects.toThrow("Cần ít nhất một khái niệm");
+    expect(writes).toEqual([]);
+  });
+  it("retains eligible legacy NULL-as-zero manual confirmation", async () => {
+    course.knowledgeMapAnalysisGeneration = null;
+    await confirmKnowledgeMap("course");
+    expect(course.confirmedKnowledgeMap.skills.map((skill: any) => skill.id)).toEqual([101, 102]);
+    expect(course.knowledgeMapAnalysisGeneration).toBeNull();
   });
   it.each(["pending", "foreign-owner", "stale-generation"])("rechecks %s after waiting for the lock", async (change) => {
     let release!: () => void;
@@ -165,7 +185,7 @@ describe("confirmed publication actions", () => {
     const writer = renameLesson("course", "lesson-1", "Changed title");
     await Promise.resolve();
     const confirm = confirmKnowledgeMap("course");
-    const rejected = expect(confirm).rejects.toThrow("phân tích lại");
+    const rejected = expect(confirm).rejects.toThrow("chưa hỗ trợ");
     await Promise.resolve();
     release();
     await writer;

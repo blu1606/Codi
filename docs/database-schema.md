@@ -64,6 +64,24 @@ before deploying the new code and fence old graph/content writers during rollout
 an old binary does not participate in this protocol. No automatic backfill or
 history/recovery framework is provided.
 
+### Nonbillable knowledge-map prototype
+
+AI analysis is unavailable: its server action rejects without creating skills,
+edges, audit success records, notifications or analysis-generation stamps. The
+lecturer UI does not offer analysis/retry and treats historical AI metadata as
+unverified, not evidence of an extraction. Existing database history is retained.
+
+Existing graphs can still be reviewed, renamed and explicitly confirmed under
+the current ownership, review, cycle, membership and generation guards. The
+accepted legacy NULL analysis generation is treated as zero only for unchanged
+generation-zero graphs. New/empty graphs cannot be generated, and stale or
+content-changed graphs cannot be revalidated in this prototype. There is no
+manual concept/link creation or replacement revalidation workflow. Such courses
+cannot satisfy a confirmed-map prerequisite for publication; readiness must not
+be bypassed. Existing published payloads, canonical IDs, mastery and evidence
+are retained. No provider, billing, migration or history rewrite is introduced.
+Unavailable analysis does not fulfill a content-hash or no-op-analysis contract.
+
 ## Changing the schema
 
 1. Edit the Drizzle files in `packages/db/src/schema/` (keep enums in sync with `STATE-MACHINES.md`).

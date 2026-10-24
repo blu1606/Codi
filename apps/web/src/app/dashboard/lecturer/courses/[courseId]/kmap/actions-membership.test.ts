@@ -165,12 +165,10 @@ describe("knowledge-map course membership", () => {
     },
   );
 
-  it("scopes both endpoints when resetting existing edges for reanalysis", async () => {
-    await runKnowledgeMapAnalysis("c-1");
-    const update = writes.find((w) => w.table === skillPrerequisites)!;
-    const query = dialect.sqlToQuery(update.condition!);
-    expect(query.sql).toBe('(("skill_prerequisites"."skill_id" in ($1, $2)) and ("skill_prerequisites"."prerequisite_skill_id" in ($3, $4)))');
-    expect(query.params).toEqual([101, 102, 101, 102]);
+  it("unavailable reanalysis never resets existing edge reviews", async () => {
+    await expect(runKnowledgeMapAnalysis("c-1")).rejects.toThrow("Phân tích AI chưa khả dụng");
+    expect(writes).toEqual([]);
+    expect(boundary.refresh).not.toHaveBeenCalled();
   });
 
   it("scopes both endpoints when loading edges for accept-all", async () => {
