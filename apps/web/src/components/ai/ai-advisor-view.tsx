@@ -101,37 +101,25 @@ export function AiAdvisorView({
   const [ownershipMap, setOwnershipMap] = useState<Record<string, CourseOwnershipDetail>>({});
   const [actionBusyCourseId, setActionBusyCourseId] = useState<string | null>(null);
 
-  // Intake answers stored in state and persisted in localStorage for onboarding reuse
-  const [intake, setIntake] = useState<IntakeState>(() => {
-    if (typeof window === "undefined") return { skipped: [] };
-    try {
-      const saved = localStorage.getItem("codi_advisor_intake");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return { skipped: [] };
-  });
+  // Guest answers stay in this component; signed-in restoration comes from the server.
+  const [intake, setIntake] = useState<IntakeState>({ skipped: [] });
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const pendingActionHandledRef = useRef(false);
+  const initialPromptHandledRef = useRef(false);
 
-  // Sync intake to localStorage
-  const updateIntake = (updater: (prev: IntakeState) => IntakeState) => {
-    setIntake((prev) => {
-      const next = updater(prev);
-      try {
-        localStorage.setItem("codi_advisor_intake", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
+  const updateIntake = setIntake;
 
   // Load context on mount
   useEffect(() => {
     let active = true;
     fetch("/api/ai")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Không thể tải ngữ cảnh gợi ý khoá học.");
+        return res.json();
+      })
       .then((data) => {
         if (!active) return;
         setInitData({
@@ -139,27 +127,14 @@ export function AiAdvisorView({
           currentCourse: data.currentCourse ?? null,
         });
 
-        // Hydrate intake from backend savedIntake if local intake is empty
-        if (data.savedIntake) {
-          setIntake((prev) => {
-            const next = { ...prev };
-            if (!next.goal && data.savedIntake.goal) next.goal = data.savedIntake.goal;
-            if (!next.level && data.savedIntake.level) next.level = data.savedIntake.level;
-            if (!next.hoursPerWeek && data.savedIntake.hoursPerWeek) next.hoursPerWeek = data.savedIntake.hoursPerWeek;
-            try {
-              localStorage.setItem("codi_advisor_intake", JSON.stringify(next));
-            } catch {}
-            return next;
-          });
-        }
+        setIntake({
+          goal: data.user ? data.savedIntake?.goal ?? null : null,
+          level: data.user ? data.savedIntake?.level ?? null : null,
+          hoursPerWeek: data.user ? data.savedIntake?.hoursPerWeek ?? null : null,
+          skipped: [],
+        });
 
         setLoadingContext(false);
-
-        if (initialPrompt && messages.length === 0) {
-          setTimeout(() => {
-            handleSend(initialPrompt);
-          }, 0);
-        }
       })
       .catch((err) => {
         console.error("Failed to load /api/ai context", err);
@@ -230,6 +205,7 @@ export function AiAdvisorView({
   };
 
   const executeAIQuery = async (queryText: string, overrideIntake?: IntakeState) => {
+    if (loadingContext || !initData) return;
     setBusy(true);
     const thinkingId = `msg-${Date.now()}`;
     const thinkingMessage: ChatMessage = {
@@ -330,7 +306,7 @@ export function AiAdvisorView({
 
   const handleSend = (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || busy || loadingContext || !initData) return;
 
     // Append user message
     const userMessage: ChatMessage = {
@@ -360,6 +336,13 @@ export function AiAdvisorView({
 
     void executeAIQuery(trimmed);
   };
+
+  // Dispatch from the resolved render, not the mount-time closure's empty intake.
+  useEffect(() => {
+    if (!initialPrompt || loadingContext || !initData || initialPromptHandledRef.current) return;
+    initialPromptHandledRef.current = true;
+    handleSend(initialPrompt);
+  }, [initialPrompt, loadingContext, initData]);
 
   const handleIntakeAnswer = (key: IntakeKey, answer: string) => {
     const nextIntake: IntakeState = {
@@ -753,6 +736,13 @@ export function AiAdvisorView({
           )}
         </header>
 
+        {!loadingContext && !initData && (
+          <Alert variant="destructive">
+            <AlertTitle>Không thể tải ngữ cảnh gợi ý khoá học</AlertTitle>
+            <AlertDescription>Vui lòng tải lại trang trước khi gửi câu hỏi.</AlertDescription>
+          </Alert>
+        )}
+
         {/* Guest prompt line */}
         {!user && messages.length === 0 && (
           <p className="text-sm text-muted-foreground -mt-3">
@@ -812,6 +802,7 @@ export function AiAdvisorView({
                     <button
                       type="button"
                       onClick={() => handleSend(s.prompt)}
+                      disabled={loadingContext || !initData}
                       className="flex h-full w-full items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <IconComponent className="size-5 shrink-0 text-primary mt-0.5" />
@@ -1145,13 +1136,13 @@ export function AiAdvisorView({
                   : "Hỏi tiếp…"
               }
               autoComplete="off"
-              disabled={busy}
+              disabled={busy || loadingContext || !initData}
               className="flex-1 min-w-0 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
             <Button
               type="submit"
               size="sm"
-              disabled={busy || !inputText.trim()}
+              disabled={busy || loadingContext || !initData || !inputText.trim()}
               className="gap-1.5"
             >
               <Send className="size-4" />
