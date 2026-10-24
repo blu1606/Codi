@@ -303,3 +303,150 @@ export async function getUserImpactCounts(targetUserId: string): Promise<UserImp
     taughtCourses: Number(taughtRes?.val ?? 0),
   };
 }
+
+export type AdminDashboardData = {
+  kpis: {
+    revenue30d: number;
+    paidOrders30d: number;
+    allOrders30d: number;
+    newLearners30d: number;
+    publishedCourses: number;
+  };
+  todo: {
+    pendingCoursesCount: number;
+    overdueOrdersCount: number;
+    expiringVouchersCount: number;
+    inactiveUsersCount: number;
+  };
+  recentOrders: Array<{
+    id: number;
+    code: string;
+    buyerName: string;
+    buyerEmail: string;
+    totalAmount: number;
+    status: string;
+    createdAt: Date;
+    isOverdue: boolean;
+  }>;
+};
+
+export async function getAdminDashboardData(): Promise<AdminDashboardData> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) throw new Error("Unauthorized");
+  await requireRole(db, session.user.id, ROLE.ADMIN);
+
+  const { courses } = await import("@codi-1/db/schema/courses");
+  const { orders } = await import("@codi-1/db/schema/commerce");
+  const { vouchers } = await import("@codi-1/db/schema/commerce");
+  const { gte, sql, desc } = await import("drizzle-orm");
+
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  // KPIs:
+  // 1. Paid orders in last 30d (revenue + count)
+  const paidOrders30dRes = await db
+    .select({
+      totalRevenue: sql<number>`coalesce(sum(${orders.totalAmount}), 0)`,
+      count: count(),
+    })
+    .from(orders)
+    .where(and(eq(orders.status, "paid"), gte(orders.paidAt, thirtyDaysAgo)));
+
+  // 2. All orders in last 30d
+  const [allOrders30dRes] = await db
+    .select({ count: count() })
+    .from(orders)
+    .where(gte(orders.createdAt, thirtyDaysAgo));
+
+  // 3. New learners in last 30d
+  const [newLearnersRes] = await db
+    .select({ count: count() })
+    .from(user)
+    .innerJoin(userRoles, and(eq(userRoles.userId, user.id), eq(userRoles.roleId, ROLE.LEARNER), isNull(userRoles.revokedAt)))
+    .where(gte(user.createdAt, thirtyDaysAgo));
+
+  // 4. Published courses
+  const [publishedCoursesRes] = await db
+    .select({ count: count() })
+    .from(courses)
+    .where(eq(courses.status, "published"));
+
+  // Todo / Can xu ly:
+  // 1. Khoa hoc cho duyet (courses with status = 'pending')
+  const [pendingCoursesRes] = await db
+    .select({ count: count() })
+    .from(courses)
+    .where(eq(courses.status, "pending"));
+
+  // 2. Don cho thanh toan qua han (>= 24h)
+  const [overdueOrdersRes] = await db
+    .select({ count: count() })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.status, "pending"),
+        sql`${orders.createdAt} <= ${oneDayAgo}`
+      )
+    );
+
+  // 3. Same usage-exhaustion predicate as the voucher queue (not date expiry).
+  const { nearLimitVoucherPredicate } = await import("@/lib/admin-vouchers-service");
+  const [expiringVouchersRes] = await db
+    .select({ count: count() })
+    .from(vouchers)
+    .where(
+      nearLimitVoucherPredicate()
+    );
+
+  // 4. Tai khoan bi vo hieu hoa (banned = true)
+  const [inactiveUsersRes] = await db
+    .select({ count: count() })
+    .from(user)
+    .where(eq(user.banned, true));
+
+  // Recent 5 orders
+  const recentOrdersRaw = await db
+    .select({
+      id: orders.id,
+      code: orders.code,
+      totalAmount: orders.totalAmount,
+      status: orders.status,
+      createdAt: orders.createdAt,
+      buyerName: user.name,
+      buyerEmail: user.email,
+    })
+    .from(orders)
+    .leftJoin(user, eq(orders.userId, user.id))
+    .orderBy(desc(orders.createdAt))
+    .limit(5);
+
+  const recentOrders = recentOrdersRaw.map((o) => ({
+    id: o.id,
+    code: o.code,
+    buyerName: o.buyerName ?? "Người dùng",
+    buyerEmail: o.buyerEmail ?? "",
+    totalAmount: o.totalAmount,
+    status: o.status,
+    createdAt: o.createdAt,
+    isOverdue: o.status === "pending" && new Date(o.createdAt).getTime() <= oneDayAgo.getTime(),
+  }));
+
+  return {
+    kpis: {
+      revenue30d: Number(paidOrders30dRes[0]?.totalRevenue ?? 0),
+      paidOrders30d: Number(paidOrders30dRes[0]?.count ?? 0),
+      allOrders30d: Number(allOrders30dRes?.count ?? 0),
+      newLearners30d: Number(newLearnersRes?.count ?? 0),
+      publishedCourses: Number(publishedCoursesRes?.count ?? 0),
+    },
+    todo: {
+      pendingCoursesCount: Number(pendingCoursesRes?.count ?? 0),
+      overdueOrdersCount: Number(overdueOrdersRes?.count ?? 0),
+      expiringVouchersCount: Number(expiringVouchersRes?.count ?? 0),
+      inactiveUsersCount: Number(inactiveUsersRes?.count ?? 0),
+    },
+    recentOrders,
+  };
+}
