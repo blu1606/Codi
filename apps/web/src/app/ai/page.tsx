@@ -14,7 +14,7 @@ export default async function AIPage({ searchParams }: PageProps) {
   const { topic, prompt, action, courseId } = await searchParams;
 
   return (
-    <Suspense fallback={<div className="p-8 text-center text-sm text-muted-foreground">Đang tải Codi AI...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-sm text-muted-foreground">Đang tải gợi ý danh mục...</div>}>
       <AiAdvisorView
         initialTopic={topic}
         initialPrompt={prompt}

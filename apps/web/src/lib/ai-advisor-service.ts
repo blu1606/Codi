@@ -472,7 +472,7 @@ export function buildAdvisorAnswer(params: {
     ]);
 
     return {
-      text: "Đây là bảng so sánh các khoá phù hợp nhất với bạn. Cột cuối là gợi ý của Codi.",
+      text: "Đây là bảng so sánh các khoá theo quy tắc danh mục. Cột cuối là gợi ý theo trình độ khoá học.",
       table: { headers, rows },
       courses: pick.map((c, idx) => toCard(c, undefined, idx === 0)),
       order: [],
@@ -492,15 +492,15 @@ export function buildAdvisorAnswer(params: {
       id: c.id,
       slug: c.slug,
       title: c.title,
-      reason: i === 0 ? "nền tảng, học trước" : "dựa trên khoá trước",
+      reason: i === 0 ? "trình độ nền tảng, xếp trước" : "xếp theo trình độ khoá học",
     }));
 
     return {
-      text: `Lộ trình gợi ý${intake.hoursPerWeek ? ` với ${intake.hoursPerWeek}/tuần` : ""}: học lần lượt, khoá sau dựa trên kiến thức khoá trước.`,
+      text: `Thứ tự tham khảo theo trình độ khoá học${intake.hoursPerWeek ? ` (bạn chọn ${intake.hoursPerWeek}/tuần)` : ""}; chưa phân tích quan hệ tiên quyết hay ước tính thời gian hoàn thành.`,
       courses: unownedOrder.map((c, idx) =>
         toCard(
           c,
-          idx === 0 ? "Nền tảng, nên học trước" : "Nâng cao, học tiếp theo",
+          idx === 0 ? "Xếp trước theo trình độ khoá học" : "Xếp tiếp theo trình độ khoá học",
           idx === 0
         )
       ),
@@ -531,7 +531,7 @@ export function buildAdvisorAnswer(params: {
       .join(", ") || "câu hỏi của bạn";
 
   return {
-    text: `Dựa trên ${contextSummary}, đây là các khoá phù hợp:`,
+    text: `Thông tin bạn cung cấp: ${contextSummary}. Đây là gợi ý theo quy tắc danh mục (ưu tiên khoá chưa sở hữu và trình độ), không phải phân tích mục tiêu bằng AI:`,
     courses: pick.map((c, idx) => toCard(c, undefined, idx === 0)),
     table: null,
     order: [],
@@ -560,7 +560,7 @@ export async function logAdvisorInteraction(
       .values({
         userId: params.userId,
         requestType: "ask_advisor",
-        model: "codi-advisor-v1",
+        model: "codi-catalog-rules-v1",
         userPrompt: params.userPrompt,
         aiResponse: params.aiResponse,
         latencyMs: params.latencyMs,

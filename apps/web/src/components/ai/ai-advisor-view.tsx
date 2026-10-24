@@ -728,7 +728,10 @@ export function AiAdvisorView({
         {/* Header */}
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Tư vấn khoá học cùng AI</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Gợi ý khoá học từ danh mục</h1>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Bản thử nghiệm dùng quy tắc đối chiếu danh mục khoá học đã xuất bản; không dùng mô hình AI để phân tích.
+            </p>
             {messages.length === 0 ? (
               <p className="text-muted-foreground text-sm mt-1">
                 {user && currentCourse
@@ -757,7 +760,7 @@ export function AiAdvisorView({
             <Link href="/login?callbackURL=/ai" className="text-primary font-medium underline">
               Đăng nhập
             </Link>{" "}
-            để Codi gợi ý theo tiến độ học của bạn.
+            để xem tiến độ và ưu tiên khoá học chưa sở hữu.
           </p>
         )}
 
@@ -822,7 +825,7 @@ export function AiAdvisorView({
               })}
             </ul>
             <p className="text-xs text-muted-foreground pt-1">
-              AI có thể trả lời sai. Hãy xem kỹ trang chi tiết khoá học trước khi mua.
+              Gợi ý theo quy tắc có thể chưa phù hợp với bạn. Hãy xem kỹ trang chi tiết khoá học trước khi mua.
             </p>
           </section>
         )}
@@ -854,7 +857,7 @@ export function AiAdvisorView({
                     aria-busy="true"
                   >
                     <span className="inline-block size-2 animate-ping rounded-full bg-primary" />
-                    <span>Codi đang suy nghĩ…</span>
+                    <span>Đang đối chiếu danh mục…</span>
                     <Button
                       type="button"
                       variant="ghost"
@@ -945,9 +948,12 @@ export function AiAdvisorView({
                 );
               }
 
-              // AI Answer message
+              // Catalog-rules answer message
               return (
                 <div key={m.id} className="flex flex-col gap-4 text-sm leading-relaxed">
+                  <p className="text-xs text-muted-foreground">
+                    Gợi ý theo quy tắc danh mục · Không phải phân tích từ mô hình AI.
+                  </p>
                   {m.text && (
                     <div className="whitespace-pre-line text-foreground">{m.text}</div>
                   )}

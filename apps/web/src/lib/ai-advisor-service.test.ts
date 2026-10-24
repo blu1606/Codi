@@ -7,6 +7,7 @@ import {
   levelLabel,
   getLearnerProgressContext,
   syncLearnerIntakeGoalDraft,
+  logAdvisorInteraction,
   type AdvisorCourseItem,
 } from "./ai-advisor-service";
 import type { IntakeState } from "./ai-advisor-contract";
@@ -100,7 +101,7 @@ describe("ai-advisor-service business logic", () => {
       ownedCourseIds: [],
     });
 
-    expect(res.text).toContain("Đây là bảng so sánh các khoá phù hợp nhất với bạn");
+    expect(res.text).toContain("bảng so sánh các khoá theo quy tắc danh mục");
     expect(res.table).not.toBeNull();
     expect(res.table?.headers).toEqual([
       "Khoá học",
@@ -128,7 +129,8 @@ describe("ai-advisor-service business logic", () => {
       ownedCourseIds: ["course-react-001"],
     });
 
-    expect(res.text).toContain("Lộ trình gợi ý với 5-10 giờ/tuần");
+    expect(res.text).toContain("Thứ tự tham khảo theo trình độ khoá học (bạn chọn 5-10 giờ/tuần)");
+    expect(res.text).toContain("chưa phân tích quan hệ tiên quyết hay ước tính thời gian hoàn thành");
     expect(res.order.length).toBeGreaterThan(0);
     // Unowned courses only in order recommendations
     expect(res.order.some((o) => o.id === "course-react-001")).toBe(false);
@@ -216,6 +218,16 @@ describe("ai-advisor-service business logic", () => {
 });
 
 describe("advisor intake owner storage", () => {
+  it("identifies successful local catalog rules without claiming a provider model", async () => {
+    const values = vi.fn(() => ({ returning: async () => [{ id: 42 }] }));
+    const db: any = { insert: () => ({ values }) };
+    expect(await logAdvisorInteraction(db, {
+      userId: null, userPrompt: "So sánh khoá học", aiResponse: "catalog result", latencyMs: 5, isSuccess: true,
+    })).toBe(42);
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({
+      model: "codi-catalog-rules-v1", isSuccess: true, requestType: "ask_advisor",
+    }));
+  });
   it("records intake for the session owner even before any enrollment exists", async () => {
     const values = vi.fn().mockResolvedValue([]);
     const insert = vi.fn(() => ({ values }));
