@@ -172,15 +172,25 @@ describe("Lecturer Dashboard & Course Actions", () => {
       expect(mockRevalidatePath).toHaveBeenCalledWith("/dashboard/lecturer/courses");
     });
 
-    it("tự động retry và thành công khi gặp lỗi trùng slug (23505)", async () => {
+    it("tự động retry và thành công khi gặp lỗi trùng slug (23505 bọc trong Drizzle cause)", async () => {
       let attempts = 0;
       const mockTxInsert = vi.fn().mockImplementation(() => ({
         values: vi.fn().mockImplementation((val) => {
           attempts++;
           if (attempts === 1) {
-            const err: any = new Error("duplicate key value violates unique constraint");
-            err.code = "23505";
-            throw err;
+            const causeErr: any = new Error(
+              'duplicate key value violates unique constraint "courses_slug_unique"'
+            );
+            causeErr.code = "23505";
+            causeErr.constraint = "courses_slug_unique";
+            causeErr.detail = "Key (slug)=(typescript-cb) already exists.";
+
+            const drizzleErr: any = new Error(
+              'Failed query: insert into "courses" ("id", "slug", ...)'
+            );
+            drizzleErr.cause = causeErr;
+            throw drizzleErr;
+
           }
           return Promise.resolve();
         }),
@@ -199,6 +209,35 @@ describe("Lecturer Dashboard & Course Actions", () => {
 
       expect(res.success).toBe(true);
       expect(attempts).toBeGreaterThanOrEqual(2);
+    });
+
+    it("không retry và ném lỗi khi gặp lỗi cơ sở dữ liệu không phải trùng slug", async () => {
+      let attempts = 0;
+      const mockTxInsert = vi.fn().mockImplementation(() => ({
+        values: vi.fn().mockImplementation(() => {
+          attempts++;
+          const causeErr: any = new Error("foreign key constraint violation");
+          causeErr.code = "23503";
+          const drizzleErr: any = new Error("Failed query");
+          drizzleErr.cause = causeErr;
+          throw drizzleErr;
+        }),
+      }));
+
+      mockTransaction.mockImplementation(async (cb: any) => {
+        return cb({ insert: mockTxInsert });
+      });
+
+      await expect(
+        createCourseDraft({
+          title: "Khoá học TypeScript Nâng Cao",
+          summary: "Nắm vững Type System, Generics và Design Patterns trong TypeScript.",
+          category: "Backend",
+          level: "Intermediate",
+        })
+      ).rejects.toThrow();
+
+      expect(attempts).toBe(1);
     });
   });
 

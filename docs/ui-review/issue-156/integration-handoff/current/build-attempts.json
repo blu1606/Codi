@@ -1,0 +1,41 @@
+{
+  "runtimeCommit": "c20c4ef21c6463f85f374a42f0b7c43d38d28ccd",
+  "freshSuccessfulFullBuild": false,
+  "attempts": [
+    {
+      "log": "build-sandbox-denied.log",
+      "outcome": "EPERM reading Varlock configuration before compilation",
+      "exitMetadata": "build-sandbox-denied-exit.json"
+    },
+    {
+      "log": "build-turbopack-interrupted.log",
+      "outcome": "Route table complete; CLI remained running and was interrupted",
+      "observedToolExitCodeAfterInterrupt": 1
+    },
+    {
+      "log": "build-webpack-user-interrupted.log",
+      "outcome": "Interrupted when user requested pause; compilation incomplete",
+      "observedToolExitCodeAfterInterrupt": 1
+    },
+    {
+      "log": "build-turbopack-telemetry-disabled-interrupted.log",
+      "outcome": "Route table complete; CLI remained running and was interrupted",
+      "observedToolExitCodeAfterInterrupt": 1
+    },
+    {
+      "log": "build-webpack-type-failure.log",
+      "outcome": "Failed generated route-props type check for GithubProfilePage",
+      "exitMetadata": "build-webpack-type-failure.log.json"
+    },
+    {
+      "log": "build.log",
+      "outcome": "Compile, type check and 44 pages complete; CLI remained running during browser checks and was interrupted afterward",
+      "observedToolExitCodeAfterInterrupt": 1,
+      "environment": {
+        "NEXT_TELEMETRY_DISABLED": "1",
+        "NEXT_USE_POST_BUILD": "1",
+        "NEXT_TURBOPACK_USE_WORKER": "0"
+      }
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "createdAt": "2026-10-22T12:52:04.453Z",
+  "artifacts": [
+    {
+      "path": ".gitattributes",
+      "sha256": "9d7811232ae351fa341d8dbee015d6e8a81c7af61a36e1242485000de8ba45a3",
+      "bytes": 119
+    },
+    {
+      "path": "README.md",
+      "sha256": "fb7df2bf8ef7fec3c2595944547ede9542656bd99f60ed6238b53d928999f580",
+      "bytes": 6042
+    },
+    {
+      "path": "attempts/strict-post-observer/browser-report.json",
+      "sha256": "2452019bda80dda2f0d3af30f61b89385a434af9f72b2deeb536bbf738d6f0d4",
+      "bytes": 5526
+    },
+    {
+      "path": "attempts/strict-post-observer/browser.log",
+      "sha256": "6a3979df1f07e097475e638d78685c136ecd0a95117017450438722392b46ad7",
+      "bytes": 424
+    },
+    {
+      "path": "attempts/strict-post-observer/browser.log.json",
+      "sha256": "4cac2caf7b4ad232d625a6ee0edbdf5f6530c574fac73deed866b75a78ce66f3",
+      "bytes": 371
+    },
+    {
+      "path": "browser-report.json",
+      "sha256": "8d60ba1a065e18ff6c414b47dbf4128477fc3a9c75a8afa9c6991c3f5e62570e",
+      "bytes": 5654
+    },
+    {
+      "path": "browser.log",
+      "sha256": "58b508bb6dff79e122f6744dc624738f50e900f2ac6d2dd8a1f03d0b9b65855e",
+      "bytes": 345
+    },
+    {
+      "path": "browser.log.json",
+      "sha256": "3c1dc62c480eeb5becdd8eb8155943e5613844f2ddd82cd48eb7acd164481cc0",
+      "bytes": 371
+    },
+    {
+      "path": "course-home-enrolled.png",
+      "sha256": "547e938f49051b2a9d80a171f5bbddb505ac12972e7b2dba8e219c0b15d926c7",
+      "bytes": 120659
+    },
+    {
+      "path": "dashboard-empty-1280-dark.png",
+      "sha256": "14f58e3473216d07edbfded78f0905fdfd6208f5cca82fa1b2fa7ae85dcc2c6e",
+      "bytes": 56938
+    },
+    {
+      "path": "dashboard-empty-1280-light.png",
+      "sha256": "65df7bf6e5fc924ef5055effe536c9a6d766768f6673be1ca578a7a4022ac530",
+      "bytes": 54957
+    },
+    {
+      "path": "dashboard-empty-375-dark.png",
+      "sha256": "7fe125bff2dab72df5b311ce065ec4a1916a5ee4aaddb439e42b1fb716d6ddca",
+      "bytes": 47913
+    },
+    {
+      "path": "dashboard-empty-375-light.png",
+      "sha256": "cf5a8546cce6b3bf66e51971e5e563ff1a9d3df8ac9302e704362f10df903bb7",
+      "bytes": 45914
+    },
+    {
+      "path": "dashboard-enrolled-1280-dark.png",
+      "sha256": "8ae5546a76cd0e7d70b9f66ab9210aef9a9daade3e0efeb80cce037af78fcb97",
+      "bytes": 174937
+    },
+    {
+      "path": "dashboard-enrolled-1280-light.png",
+      "sha256": "5c59d29ae6b39065f8c7d9934a4dd8f0a7c622ca9aa64a7a9ffcf4b0f3036da3",
+      "bytes": 171393
+    },
+    {
+      "path": "dashboard-enrolled-375-dark.png",
+      "sha256": "2418663be63390874f029fbc1b5da161eefe2c453277f38a456a278e44b631de",
+      "bytes": 177863
+    },
+    {
+      "path": "dashboard-enrolled-375-light.png",
+      "sha256": "3e8343428cced8e034c59ca9388ed4f035ff57288a3c0f55b0363c5bf7172106",
+      "bytes": 172681
+    },
+    {
+      "path": "profile-enrolled.png",
+      "sha256": "c37178ba1984d3fa50cbcf86bfa0fb31cdda6ed1698eb38ec559dc04105edb09",
+      "bytes": 107614
+    },
+    {
+      "path": "server.log",
+      "sha256": "58505557a4a0d65f728b30f2b14e414fbe7bbaee1d771acdbf0fba4092bf2383",
+      "bytes": 1334
+    },
+    {
+      "path": "server.log.json",
+      "sha256": "d89de3d729c6ad94a112abc9b7b5eb88db0bc62fffc571914357252d57f49222",
+      "bytes": 423
+    }
+  ]
+}

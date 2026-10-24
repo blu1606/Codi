@@ -21,10 +21,10 @@ export default async function ProfilePage() {
   const activeRoles = await getActiveRoles(db, session.user.id);
 
   return (
-    <main className="min-h-screen bg-background py-8 px-4 sm:px-6">
+    <main className="min-h-screen min-w-0 bg-background py-8 px-4 sm:px-6">
       <div className="mx-auto w-full max-w-[1440px] space-y-6 px-2 sm:px-4 lg:px-8">
         {/* Navigation Breadcrumb / Back Action */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="gap-2 cursor-pointer text-muted-foreground hover:text-foreground">
               <ArrowLeft className="w-4 h-4" />
@@ -55,8 +55,8 @@ export default async function ProfilePage() {
         />
 
         {/* Profile Card (Edit Name, Cloudflare R2 Avatar Upload, Roles) */}
-        <div className="grid items-start gap-8 lg:grid-cols-[360px_minmax(0,1fr)] xl:gap-12">
-          <div className="space-y-4">
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[360px_minmax(0,1fr)] xl:gap-12">
+          <div className="min-w-0 space-y-4">
             <ProfileCard user={session.user} roles={activeRoles} />
             <ProfileStats />
           </div>

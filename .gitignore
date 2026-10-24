@@ -95,3 +95,6 @@ apps/web/src/routeTree.gen.ts
 
 # Working notes for this session/agent — not a shared deliverable
 plans/
+
+# Playwright e2e (apps/web/e2e): signed-in storage states
+apps/web/e2e/.auth/

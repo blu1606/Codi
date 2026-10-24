@@ -1,0 +1,29 @@
+{
+  "provenance": "Original tool result chunks recovered from saved execution history; not reconstructed stdout.",
+  "outputs": [
+    {
+      "timestamp": "2026-10-21T14:01:48.161Z",
+      "callId": "call_1f60db939f4841f48d0be9ae6efb26a4",
+      "invokedAt": "2026-10-21T14:01:23.435Z",
+      "result": {
+        "chunk_id": "c37153",
+        "wall_time_seconds": 10.0163253,
+        "session_id": 89226,
+        "original_token_count": 29,
+        "output": "▲ Next.js 16.3.5 (Turbopack)\n✓ Running next.config.ts took 358ms\n\n  Creating an optimized production build ...\n"
+      }
+    },
+    {
+      "timestamp": "2026-10-21T14:04:15.112Z",
+      "callId": "call_7b52c2dd6d2c42fcbf8574c49a220be5",
+      "invokedAt": "2026-10-21T14:04:03.432Z",
+      "result": {
+        "chunk_id": "5de677",
+        "wall_time_seconds": 0.0000114,
+        "exit_code": 0,
+        "original_token_count": 605,
+        "output": "✓ Compiled successfully in 45s\n  Running TypeScript ...\n  Finished TypeScript in 57s ...\n  Collecting page data using 7 workers ...\n  Generating static pages using 7 workers (0/44) ...\n  Generating static pages using 7 workers (11/44) \r\n  Generating static pages using 7 workers (22/44) \r\n  Generating static pages using 7 workers (33/44) \r\n✓ Generating static pages using 7 workers (44/44) in 1355ms\n  Finalizing page optimization ...\n\nRoute (app)\n┌ ○ /\n├ ○ /_not-found\n├ ○ /ai\n├ ƒ /api/ai\n├ ƒ /api/auth/[...all]\n├ ƒ /api/avatar\n├ ƒ /api/courses\n├ ƒ /api/courses/[slug]\n├ ƒ /api/courses/enroll-free\n├ ƒ /api/courses/ownership\n├ ƒ /api/github-profile\n├ ƒ /api/insights/knowledge-map\n├ ƒ /api/learn/[courseId]/access/[lessonId]\n├ ƒ /api/learn/[courseId]/lessons/[lessonId]\n├ ƒ /api/learn/[courseId]/lessons/[lessonId]/activity\n├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]\n├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]/coding\n├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]/file\n├ ƒ /api/learn/[courseId]/lessons/[lessonId]/assessments/[assessmentId]/tutorial\n├ ƒ /api/learn/[courseId]/onboarding\n├ ƒ /api/learn/[courseId]/path\n├ ƒ /api/learner/overview\n├ ƒ /api/notifications\n├ ƒ /api/orders/buy-now\n├ ƒ /api/orders/cancel\n├ ƒ /api/orders/checkout\n├ ƒ /api/payments/check-transaction/[id]\n├ ƒ /api/payments/create-transaction\n├ ƒ /api/payments/sepay/callback\n├ ƒ /api/student/cart\n├ ƒ /api/student/profile\n├ ƒ /api/user/avatar\n├ ƒ /api/user/profile\n├ ƒ /api/user/roles\n├ ƒ /api/vouchers/validate\n├ ○ /cart\n├ ƒ /checkout\n├ ○ /courses\n├ ƒ /courses/[slug]\n├ ƒ /courses/[slug]/checkout\n├ ƒ /dashboard\n├ ƒ /dashboard/admin\n├ ƒ /dashboard/admin/users\n├ ƒ /dashboard/learner\n├ ƒ /dashboard/lecturer\n├ ƒ /dashboard/lecturer/courses\n├ ƒ /dashboard/lecturer/new\n├ ○ /dev/foundation\n├ ƒ /dev/lesson-player/[filename]\n├ ○ /forgot-password\n├ ƒ /insights/knowledge-map\n├ ƒ /learn/[courseId]\n├ ƒ /learn/[courseId]/[lessonId]\n├ ƒ /learn/[courseId]/onboarding\n├ ○ /login\n├ ƒ /profile\n├ ƒ /profile/github\n├ ƒ /progress\n├ ○ /reset-password\n└ ƒ /settings\n\n\nƒ Proxy (Middleware)\n\n○  (Static)   prerendered as static content\nƒ  (Dynamic)  server-rendered on demand\n\n"
+      }
+    }
+  ]
+}
