@@ -32,3 +32,16 @@ export async function verifyLecturerSession(
   await requireRole(executor as typeof db, authenticated.user.id, ROLE.LECTURER);
   return authenticated.user;
 }
+
+/**
+ * Xác thực phiên đăng nhập và đảm bảo người dùng có vai trò LECTURER hoặc ADMIN.
+ * Phục vụ các thao tác điều hành hội thoại theo Decision D9 & STATE-MACHINES §14.2.
+ */
+export async function verifyLecturerOrAdminSession() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    throw new Error("Unauthorized");
+  }
+  await requireRole(db, session.user.id, ROLE.LECTURER, ROLE.ADMIN);
+  return session.user;
+}
