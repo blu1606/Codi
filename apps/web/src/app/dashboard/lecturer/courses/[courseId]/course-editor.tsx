@@ -232,7 +232,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     ) {
       return;
     }
-    if (!confirm(`Bạn có chắc chắn muốn xoá ${title} cùng toàn bộ bài học bên trong?`)) return;
+    if (!confirm(`Chỉ có thể xoá chương trống. Bạn có chắc chắn muốn xoá ${title}?`)) return;
     try {
       await deleteChapter(courseId, chapterId);
       toast.success("Đã xoá chương.");

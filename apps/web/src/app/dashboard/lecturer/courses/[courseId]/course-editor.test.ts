@@ -5,13 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CourseEditor } from "./course-editor";
 
 const boundary = vi.hoisted(() => ({
-  details: vi.fn(), save: vi.fn(), refresh: vi.fn(), error: vi.fn(), success: vi.fn(),
+  details: vi.fn(), save: vi.fn(), deleteChapter: vi.fn(), refresh: vi.fn(), error: vi.fn(), success: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: boundary.refresh }) }));
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: boundary.error, success: boundary.success }) }));
 vi.mock("./actions", () => ({
   getLessonDetails: boundary.details, updateLesson: boundary.save,
-  addChapter: vi.fn(), addLesson: vi.fn(), deleteChapter: vi.fn(), deleteLesson: vi.fn(),
+  addChapter: vi.fn(), addLesson: vi.fn(), deleteChapter: boundary.deleteChapter, deleteLesson: vi.fn(),
   moveChapter: vi.fn(), moveLesson: vi.fn(), renameChapter: vi.fn(), renameLesson: vi.fn(),
   restoreLesson: vi.fn(), updateCourseInfo: vi.fn(),
 }));
@@ -59,6 +59,30 @@ afterEach(async () => {
   await act(async () => root.unmount());
   document.body.innerHTML = "";
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+describe("chapter deletion confirmation", () => {
+  it.each([false, true])("explains empty-only deletion and preserves the confirm result %s", async (confirmed) => {
+    const confirm = vi.fn().mockReturnValue(confirmed);
+    vi.stubGlobal("confirm", confirm);
+    boundary.deleteChapter.mockRejectedValue(new Error("Không thể xoá chương còn bài học. Hãy xoá từng bài học đủ điều kiện trước, rồi xoá chương trống."));
+    await act(async () => document.querySelector<HTMLButtonElement>('button[title="Xoá chương"]')!.click());
+    expect(confirm).toHaveBeenCalledOnce();
+    const message = confirm.mock.calls[0]![0];
+    expect(message).toContain("Chỉ có thể xoá chương trống");
+    expect(message).toContain("Chapter");
+    expect(message).not.toMatch(/cùng toàn bộ bài học|xoá.*bài học bên trong/i);
+    if (confirmed) {
+      expect(boundary.deleteChapter).toHaveBeenCalledWith("course", "chapter");
+      expect(boundary.error).toHaveBeenCalledWith(expect.stringContaining("Hãy xoá từng bài học"));
+    } else {
+      expect(boundary.deleteChapter).not.toHaveBeenCalled();
+      expect(boundary.error).not.toHaveBeenCalled();
+    }
+    expect(boundary.success).not.toHaveBeenCalled();
+    expect(boundary.refresh).not.toHaveBeenCalled();
+  });
 });
 
 describe("lesson editor detail safety", () => {
