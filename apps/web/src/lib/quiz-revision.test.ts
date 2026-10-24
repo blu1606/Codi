@@ -5,11 +5,11 @@ import { assessments, assessmentSubmissions, courseLessons, quizQuestions, skill
 import type { Database } from "@codi-1/db";
 
 const mocks = vi.hoisted(() => ({
-  select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+  execute: vi.fn(), select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
   transaction: vi.fn(), revalidate: vi.fn(), verifySession: vi.fn(), lock: vi.fn(),
 }));
 vi.mock("@/services", () => ({ db: mocks }));
-vi.mock("@/lib/lecturer-auth", () => ({ verifyLecturerSession: mocks.verifySession }));
+vi.mock("@/lib/lecturer-auth", () => ({ readLecturerIdentity: async () => ({ user: await (mocks.verifySession)(), session: { id: "session-1" } }), verifyLecturerSession: mocks.verifySession }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 
 import { getQuizBuilderData, saveQuizData } from "@/app/dashboard/lecturer/courses/[courseId]/actions";
@@ -119,7 +119,7 @@ beforeEach(() => {
   nextId = 100;
   tables = {
     courses: [{ id: "own", instructorId: "lecturer", status: "published", knowledgeMapStatus: "confirmed", title: "Course" }],
-    course_lessons: [{ id: "lesson", chapterId: "chapter", courseId: "own", title: "Lesson" }],
+    course_lessons: [{ id: "lesson", chapterId: "chapter", courseId: "own", isPublished: true, title: "Lesson" }],
     student_enrollments: [{ id: 1, userId: "learner", courseId: "own", status: "active", diagnosticStatus: "in-progress", diagnosticQuestionIndex: 0, goalSetAt: new Date(), pathStatus: "none", progress: 40 }],
     assessments: [{ id: 10, courseId: "own", lessonId: null, type: "quiz", isDiagnostic: true, status: "published", currentQuizRevision: 1, passingScore: 70, maxScore: 100 }],
     quiz_questions: [
@@ -138,6 +138,11 @@ beforeEach(() => {
     skills: [{ id: 50, courseId: "own", lessonId: "lesson", review: "accepted", name: "Skill", bktPInit: 0.2, bktPLearn: 0.1, bktPGuess: 0.2, bktPSlip: 0.1 }],
     enrollment_skill_mastery: [{ enrollmentId: 1, skillId: 50, pMastery: 0.2, evidenceCount: 0, correctCount: 0 }],
     learning_path_evidence: [{ submissionId: 99, observationKey: "question:90" }],
+  };
+  tables.courses![0]!.confirmedKnowledgeMap = {
+    version: 1, publicationId: "published-1", contentGeneration: 0, publishedAt: "2026-10-24T00:00:00.000Z",
+    skills: [{ id: 50, name: "Skill", bktPInit: 0.2, bktPLearn: 0.1, bktPGuess: 0.2, bktPSlip: 0.1 }],
+    edges: [], links: [{ lessonId: "lesson", skillId: 50 }],
   };
   mocks.verifySession.mockResolvedValue({ id: "lecturer" });
   mocks.select.mockImplementation(select);

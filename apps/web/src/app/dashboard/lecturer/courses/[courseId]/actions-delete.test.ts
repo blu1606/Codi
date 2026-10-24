@@ -3,9 +3,9 @@ import { getTableName, type SQL, type Table } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { courseLessons } from "@codi-1/db";
 
-const boundary = vi.hoisted(() => ({ db: { select: vi.fn(), delete: vi.fn(), update: vi.fn(), transaction: vi.fn() }, revalidate: vi.fn() }));
+const boundary = vi.hoisted(() => ({ db: { execute: vi.fn(), select: vi.fn(), delete: vi.fn(), update: vi.fn(), transaction: vi.fn() }, revalidate: vi.fn() }));
 vi.mock("@/services", () => ({ db: boundary.db }));
-vi.mock("@/lib/lecturer-auth", () => ({ verifyLecturerSession: async () => ({ id: "lecturer" }) }));
+vi.mock("@/lib/lecturer-auth", () => ({ readLecturerIdentity: async () => ({ user: await (async () => ({ id: "lecturer" }))(), session: { id: "session-1" } }), verifyLecturerSession: async () => ({ id: "lecturer" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: boundary.revalidate }));
 import { deleteChapter, deleteLesson } from "./actions";
 
@@ -14,6 +14,7 @@ const dialect = new PgDialect();
 let tables: Record<string, Row[]>;
 let events: string[];
 let afterLock: (() => void) | undefined;
+let transactionDepth: number;
 function matches(predicate: SQL | undefined, row: Row, table: string) {
   if (!predicate) return true;
   const query = dialect.sqlToQuery(predicate);
@@ -50,6 +51,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   events = [];
   afterLock = undefined;
+  transactionDepth = 0;
   tables = {
     courses: [{ id: "course", instructorId: "lecturer", status: "published", knowledgeMapStatus: "confirmed" }],
     course_chapters: [{ id: "chapter", courseId: "course" }],
@@ -60,9 +62,11 @@ beforeEach(() => {
   boundary.db.select.mockImplementation(select);
   boundary.db.transaction.mockImplementation(async (run: (tx: typeof boundary.db) => unknown) => {
     const before = structuredClone(tables);
-    events.push("begin");
-    try { const result = await run(boundary.db); events.push("commit"); return result; }
-    catch (error) { tables = before; events.push("rollback"); throw error; }
+    const outer = transactionDepth++ === 0;
+    events.push(outer ? "begin" : "savepoint");
+    try { const result = await run(boundary.db); events.push(outer ? "commit" : "release-savepoint"); return result; }
+    catch (error) { tables = before; events.push(outer ? "rollback" : "rollback-savepoint"); throw error; }
+    finally { transactionDepth--; }
   });
   boundary.db.delete.mockImplementation((value: Table) => ({ where: async (predicate: SQL) => {
     const table = getTableName(value);

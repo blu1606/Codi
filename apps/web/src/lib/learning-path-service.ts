@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import type { Database } from "@codi-1/db";
+import { lockKnowledgeMap, readConfirmedKnowledgeMap } from "./confirmed-knowledge-map";
 import { courses } from "@codi-1/db/schema/courses";
 import {
   courseChapters,
@@ -32,11 +33,6 @@ import {
   learningPathEvidence,
   learningPathJobs,
 } from "@codi-1/db/schema/learning-path-runtime";
-import {
-  lessonSkills,
-  skillPrerequisites,
-  skills,
-} from "@codi-1/db/schema/knowledge-map";
 import {
   assessmentAnswers,
   assessmentSubmissions,
@@ -70,7 +66,7 @@ import {
   type PathProposal,
 } from "./learning-path-contract";
 
-type Store = Pick<Database, "select" | "insert" | "update">;
+type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 type GenerationResult = {
   proposal: PathProposal;
   model: string;
@@ -111,6 +107,7 @@ async function context(
   const [enrollment] = await (lock ? query.for("update") : query);
   if (!enrollment || enrollment.status === "suspended")
     throw new LearningPathError("Bạn chưa có quyền học khoá học này.", 403);
+  if (lock) await lockKnowledgeMap(store, courseId, "read");
   const [course] = await store
     .select()
     .from(courses)
@@ -144,62 +141,16 @@ async function context(
       asc(courseLessons.position),
       asc(courseLessons.id),
     );
-  // PO Policy: Chỉ sử dụng đồ thị kỹ năng khi bản đồ kiến thức đã được xác nhận rõ ràng.
-  // Tuyệt đối không đọc draft skills/edges khi chưa confirmed, tránh rò rỉ đề xuất nháp sang learner.
-  const isMapConfirmed = course.knowledgeMapStatus === "confirmed";
-  const concepts = isMapConfirmed
-    ? await store
-        .select({ skill: skills, mastery: enrollmentSkillMastery })
-        .from(skills)
-        .leftJoin(
-          enrollmentSkillMastery,
-          and(
-            eq(enrollmentSkillMastery.skillId, skills.id),
-            eq(enrollmentSkillMastery.enrollmentId, enrollment.id),
-          ),
-        )
-        .where(
-          and(
-            eq(skills.courseId, courseId),
-            inArray(skills.review, ["accepted", "edited"]),
-          ),
-        )
-        .orderBy(asc(skills.id))
-    : [];
-  const conceptIds = concepts.map((c) => c.skill.id);
-  const edges =
-    isMapConfirmed && conceptIds.length
-      ? await store
-          .select()
-          .from(skillPrerequisites)
-          .where(
-            and(
-              inArray(skillPrerequisites.skillId, conceptIds),
-              inArray(skillPrerequisites.prerequisiteSkillId, conceptIds),
-              inArray(skillPrerequisites.review, ["accepted", "edited"]),
-            ),
-          )
-          .orderBy(
-            asc(skillPrerequisites.skillId),
-            asc(skillPrerequisites.prerequisiteSkillId),
-          )
-      : [];
-  const links =
-    isMapConfirmed && lessons.length && conceptIds.length
-      ? await store
-          .select()
-          .from(lessonSkills)
-          .where(
-            and(
-              inArray(
-                lessonSkills.lessonId,
-                lessons.map((l) => l.lesson.id),
-              ),
-              inArray(lessonSkills.skillId, conceptIds),
-            ),
-          )
-          .orderBy(asc(lessonSkills.skillId))
-      : [];
+  const publication = readConfirmedKnowledgeMap(course, lessons.map((row) => row.lesson.id));
+  const ids = publication?.skills.map((skill) => skill.id) ?? [];
+  const masteryRows = ids.length ? await store.select().from(enrollmentSkillMastery)
+    .where(and(eq(enrollmentSkillMastery.enrollmentId, enrollment.id),
+      inArray(enrollmentSkillMastery.skillId, ids))) : [];
+  const concepts = (publication?.skills ?? []).map((skill) => ({
+    skill, mastery: masteryRows.find((row) => row.skillId === skill.id),
+  }));
+  const edges = publication?.edges ?? [];
+  const links = publication?.links ?? [];
   const [path] = accessOnly
     ? []
     : await store
@@ -219,6 +170,8 @@ async function context(
         .orderBy(asc(pathItems.position))
     : [];
   const input: PathInput = {
+    publicationId: publication?.publicationId ?? null,
+    contentGeneration: course.knowledgeMapContentGeneration,
     goal: enrollment.learningGoal,
     level: enrollment.selfAssessedLevel,
     hours: enrollment.weeklyGoalMinutes
@@ -242,7 +195,7 @@ async function context(
       probability: mastery?.evidenceCount ? mastery.pMastery : null,
       evidenceCount: mastery?.evidenceCount ?? 0,
     })),
-    edges: edges.map((e) => ({ from: e.prerequisiteSkillId, to: e.skillId })),
+    edges,
     previous: items.map((p) => ({
       lessonId: p.lessonId,
       reason: p.reason ?? "Theo thứ tự bài học tiên quyết.",
@@ -255,6 +208,7 @@ async function context(
     path,
     input,
     skills: concepts.map((c) => c.skill),
+    publication,
     lessonRows: lessons,
   };
 }
@@ -613,7 +567,7 @@ async function consumeEvidence(store: Store, ctx: Context) {
   );
   for (const observation of observations) {
     const lesson = ctx.input.lessons.find((l) => l.id === observation.lessonId);
-    if (!lesson || observation.correct === null) continue;
+    if (!lesson || !lesson.skillIds.length || observation.correct === null) continue;
     // Keep the unique ledger insert as the final concurrency guard, even after the anti-join.
     const inserted = await store
       .insert(learningPathEvidence)
@@ -881,7 +835,7 @@ export function createLearningPathService(
             courseId: selected.id,
             title: selected.title,
           };
-          if (ctx.course.knowledgeMapStatus !== "confirmed")
+          if (!ctx.publication)
             return { ...base, confirmed: false, nodes: [], edges: [] };
           graphLayers(
             ctx.input.concepts.map((c) => c.id),

@@ -4,11 +4,11 @@ import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { assessments, courseLessons } from "@codi-1/db";
 
 const mocks = vi.hoisted(() => ({
-  select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+  execute: vi.fn(), select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
   transaction: vi.fn(), revalidate: vi.fn(), verifySession: vi.fn(),
 }));
 vi.mock("@/services", () => ({ db: mocks }));
-vi.mock("@/lib/lecturer-auth", () => ({ verifyLecturerSession: mocks.verifySession }));
+vi.mock("@/lib/lecturer-auth", () => ({ readLecturerIdentity: async () => ({ user: await (mocks.verifySession)(), session: { id: "session-1" } }), verifyLecturerSession: mocks.verifySession }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 
 import { getQuizBuilderData, saveQuizData } from "./actions";
@@ -189,7 +189,9 @@ describe("entry-diagnostic persistence", () => {
     const snapshot = structuredClone(tables);
     await expect(saveQuizData("own", "entry", input)).rejects.toThrow(state === "pending" ? "chỉ đọc" : "quản lý");
     expect(tables).toEqual(snapshot);
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.delete).not.toHaveBeenCalled();
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 
@@ -198,7 +200,9 @@ describe("entry-diagnostic persistence", () => {
     const snapshot = structuredClone(tables);
     await expect(saveQuizData("own", "entry", { ...input, questions: [] })).rejects.toThrow("Cần ít nhất một câu hỏi.");
     expect(tables).toEqual(snapshot);
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.delete).not.toHaveBeenCalled();
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 });

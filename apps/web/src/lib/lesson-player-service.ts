@@ -34,7 +34,7 @@ import {
   type LessonMediaUpdate,
 } from "./lesson-player-contract";
 
-type Store = Pick<Database, "select" | "insert" | "update">;
+type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 
 async function context(
   store: Store,

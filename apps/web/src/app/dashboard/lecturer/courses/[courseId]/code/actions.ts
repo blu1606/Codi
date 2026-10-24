@@ -14,6 +14,8 @@ import {
 import { runJavaScript, type RunPhase } from "@codi-1/coding-runner";
 import { canonical, requireCodingTests } from "@/lib/coding-contract";
 import { db } from "@/services";
+import { lockKnowledgeMap } from "@/lib/confirmed-knowledge-map";
+import { readLecturerIdentity } from "@/lib/lecturer-auth";
 import {
   getEditableCourse,
   getOwnedCourse,
@@ -430,8 +432,12 @@ export async function saveCodingExercise(
   }
 
   const verifiedAt = new Date();
+  const identity = await readLecturerIdentity();
 
   const testIds = await db.transaction(async (tx) => {
+    await lockKnowledgeMap(tx, courseId, "write");
+    const { course: currentCourse } = await getEditableCourse(courseId, tx, identity);
+    await requireCourseLesson(courseId, lessonId, tx);
     // 4. Tìm hoặc tạo assessment coding
     const [existingAssessment] = await tx
       .select()
@@ -579,7 +585,7 @@ export async function saveCodingExercise(
     }
 
     // 7. Đánh dấu bản đồ kiến thức là stale nếu khoá học đã xuất bản
-    await markKnowledgeMapStaleIfPublished(course, tx);
+    await markKnowledgeMapStaleIfPublished(currentCourse, tx);
     return savedTestIds;
   });
 

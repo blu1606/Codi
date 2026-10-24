@@ -18,7 +18,8 @@ import {
   pathItems,
   personalizedLearningPaths,
 } from "@codi-1/db/schema/learning";
-import { lessonSkills, skills } from "@codi-1/db/schema/knowledge-map";
+import { loadConfirmedKnowledgeMap, lockKnowledgeMap } from "./confirmed-knowledge-map";
+import type { ConfirmedKnowledgeMap } from "@codi-1/db/schema/confirmed-knowledge-map";
 import {
   assertOnboardingAccess,
   canRequestDiagnosticPath,
@@ -31,7 +32,7 @@ import {
   type OnboardingView,
 } from "./onboarding-contract";
 
-type Store = Pick<Database, "select" | "insert" | "update">;
+type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 
 async function context(
   store: Store,
@@ -50,11 +51,13 @@ async function context(
     );
   const [row] = await (lock ? query.for("update") : query);
   const enrollment = assertOnboardingAccess(row);
+  if (lock) await lockKnowledgeMap(store, courseId, "read");
   const [course] = await store
-    .select({ id: courses.id, title: courses.title })
+    .select()
     .from(courses)
     .where(eq(courses.id, courseId));
   if (!course) throw new OnboardingError("Không tìm thấy khoá học.", 404);
+  const publication = await loadConfirmedKnowledgeMap(store, course);
   const diagnosticQuery = store
     .select()
     .from(assessments)
@@ -123,6 +126,7 @@ async function context(
   return {
     enrollment,
     course,
+    publication,
     diagnostic,
     hasDiagnostic: !!diagnostic,
     questions,
@@ -149,32 +153,17 @@ async function view(store: Store, ctx: Context): Promise<OnboardingView> {
     const testedLessons = questions.flatMap((q) =>
       q.lessonId ? [q.lessonId] : [],
     );
-    const concepts = testedLessons.length
-      ? await store
-          .select({
-            id: skills.id,
-            name: skills.name,
-            probability: enrollmentSkillMastery.pMastery,
-            evidenceCount: enrollmentSkillMastery.evidenceCount,
-          })
-          .from(skills)
-          .innerJoin(lessonSkills, eq(lessonSkills.skillId, skills.id))
-          .leftJoin(
-            enrollmentSkillMastery,
-            and(
-              eq(enrollmentSkillMastery.skillId, skills.id),
-              eq(enrollmentSkillMastery.enrollmentId, e.id),
-            ),
-          )
-          .where(
-            and(
-              eq(skills.courseId, course.id),
-              inArray(skills.review, ["accepted", "edited"]),
-              inArray(lessonSkills.lessonId, testedLessons),
-            ),
-          )
-          .orderBy(asc(skills.id))
-      : [];
+    const tested = new Set(testedLessons);
+    const ids = new Set(ctx.publication?.links.filter((link) => tested.has(link.lessonId)).map((link) => link.skillId));
+    const mastery = ids.size ? await store.select().from(enrollmentSkillMastery)
+      .where(and(eq(enrollmentSkillMastery.enrollmentId, e.id),
+        inArray(enrollmentSkillMastery.skillId, [...ids]))) : [];
+    const concepts = (ctx.publication?.skills ?? []).filter((skill) => ids.has(skill.id))
+      .map((skill) => {
+        const row = mastery.find((entry) => entry.skillId === skill.id);
+        return { id: skill.id, name: skill.name, probability: row?.pMastery ?? null,
+          evidenceCount: row?.evidenceCount ?? 0 };
+      });
     result = {
       right: 0,
       wrong: 0,
@@ -214,7 +203,7 @@ async function view(store: Store, ctx: Context): Promise<OnboardingView> {
       pathStatus: e.pathStatus,
       pathSource: e.pathSource,
     },
-    course,
+    course: { id: course.id, title: course.title },
     diagnostic: diagnostic
       ? {
           id: diagnostic.id,
@@ -318,7 +307,7 @@ async function grade(store: Store, ctx: Context) {
   const bySkill = new Map<
     number,
     {
-      params: typeof skills.$inferSelect;
+      params: ConfirmedKnowledgeMap["skills"][number];
       probability: number;
       evidence: number;
       correct: number;
@@ -352,19 +341,9 @@ async function grade(store: Store, ctx: Context) {
           eq(assessmentAnswers.questionId, question.id),
         ),
       );
-    const concepts = question.lessonId
-      ? await store
-          .select({ skill: skills })
-          .from(skills)
-          .innerJoin(lessonSkills, eq(lessonSkills.skillId, skills.id))
-          .where(
-            and(
-              eq(lessonSkills.lessonId, question.lessonId),
-              eq(skills.courseId, enrollment.courseId),
-              inArray(skills.review, ["accepted", "edited"]),
-            ),
-          )
-      : [];
+    const ids = new Set(ctx.publication?.links.filter((link) => link.lessonId === question.lessonId)
+      .map((link) => link.skillId));
+    const concepts = (ctx.publication?.skills ?? []).filter((skill) => ids.has(skill.id)).map((skill) => ({ skill }));
     for (const { skill } of concepts) {
       let state = bySkill.get(skill.id);
       if (!state) {

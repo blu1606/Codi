@@ -4,7 +4,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { courseLessons, type Database } from "@codi-1/db";
 
 const mocks = vi.hoisted(() => ({
-  select: vi.fn(),
+  execute: vi.fn(), select: vi.fn(),
   insert: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock("./learning-path-service", () => ({
 }));
 vi.mock("@/services", () => ({ db: mocks }));
 vi.mock("@/lib/lecturer-auth", () => ({
-  verifyLecturerSession: mocks.lecturer,
+  readLecturerIdentity: async () => ({ user: await (mocks.lecturer)(), session: { id: "session-1" } }), verifyLecturerSession: mocks.lecturer,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 

@@ -25,7 +25,7 @@ import {
   type CodingView,
 } from "./coding-contract";
 
-type Store = Pick<Database, "select" | "insert" | "update">;
+type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 type Scope = {
   userId: string;
   courseId: string;

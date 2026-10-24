@@ -450,6 +450,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
         course: {
           ...prev.course,
           knowledgeMapStatus: "confirmed",
+          requiresReconfirmation: false,
         },
       }));
       toast.success("Đã xác nhận bản đồ kiến thức.");
@@ -466,6 +467,15 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
       {/* ─────────────────────────────────────────────────────────────
           1. HEADER & STATUS BANNERS (STATE-MACHINES §18, PRODUCT S24)
           ───────────────────────────────────────────────────────────── */}
+      {course.requiresReconfirmation && (
+        <Alert variant="info">
+          <AlertTitle>Cần xác nhận lại để áp dụng cho học viên</AlertTitle>
+          <AlertDescription>
+            Bản đồ cũ chưa có bản phát hành đã xác nhận. Hãy kiểm tra và xác nhận lại;
+            dữ liệu thành thạo và tiến độ hiện có không bị đặt lại.
+          </AlertDescription>
+        </Alert>
+      )}
       {course.knowledgeMapStatus === "empty" && (
         <Card className="border border-dashed border-border/80">
           <CardContent className="p-0">

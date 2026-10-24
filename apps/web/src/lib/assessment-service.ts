@@ -28,7 +28,7 @@ import {
   verifyUploadTicket,
 } from "./assessment-upload-ticket";
 
-type Store = Pick<Database, "select" | "insert" | "update" | "delete">;
+type Store = Pick<Database, "select" | "insert" | "update" | "delete" | "execute">;
 type Scope = {
   userId: string;
   courseId: string;

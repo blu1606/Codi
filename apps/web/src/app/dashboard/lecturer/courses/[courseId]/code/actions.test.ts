@@ -181,6 +181,7 @@ function setupDb({
 
   mockTransaction.mockImplementation(async (cb: any) => {
     return cb({
+      execute: vi.fn(),
       select: mockSelect,
       insert: mockInsertChain,
       update: mockUpdateChain,
@@ -842,3 +843,18 @@ describe("Coding Exercise Builder Actions", () => {
     });
   });
 });
+
+// Session transport is a boundary here; transactional revalidation has its own tests.
+vi.mock("@/lib/lecturer-auth", () => ({
+  readLecturerIdentity: async () => {
+    const identity = await mockGetSession();
+    if (!identity?.user) throw new Error("Unauthorized");
+    return identity;
+  },
+  verifyLecturerSession: async (_store: unknown, identity?: any) => {
+    const authenticated = identity ?? await mockGetSession();
+    if (!authenticated?.user) throw new Error("Unauthorized");
+    await mockRequireRole();
+    return authenticated.user;
+  },
+}));

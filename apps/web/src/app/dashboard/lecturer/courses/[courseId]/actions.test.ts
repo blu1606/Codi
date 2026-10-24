@@ -37,7 +37,10 @@ vi.mock("@/services", () => ({
     },
   },
   db: {
-    transaction: (cb: any) => mockTransaction(cb),
+    transaction: (cb: any) => cb({
+      select: mockSelect, insert: mockInsert, update: mockUpdate, delete: mockDelete,
+      execute: vi.fn(), transaction: mockTransaction,
+    }),
     select: (...args: any[]) => mockSelect(...args),
     insert: (...args: any[]) => mockInsert(...args),
     update: (...args: any[]) => mockUpdate(...args),
@@ -93,6 +96,7 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
       user: { id: "lecturer-1" },
     });
     mockRequireRole.mockResolvedValue(undefined);
+    mockUpdate.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) });
   });
 
   describe("getEditableCourse guard", () => {
@@ -578,3 +582,18 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
     });
   });
 });
+
+// Session transport is a boundary here; transactional revalidation has its own tests.
+vi.mock("@/lib/lecturer-auth", () => ({
+  readLecturerIdentity: async () => {
+    const identity = await mockGetSession();
+    if (!identity?.user) throw new Error("Unauthorized");
+    return identity;
+  },
+  verifyLecturerSession: async (_store: unknown, identity?: any) => {
+    const authenticated = identity ?? await mockGetSession();
+    if (!authenticated?.user) throw new Error("Unauthorized");
+    await mockRequireRole();
+    return authenticated.user;
+  },
+}));

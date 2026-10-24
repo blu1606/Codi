@@ -4,11 +4,11 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { courseLessons } from "@codi-1/db";
 
 const mocks = vi.hoisted(() => ({
-  select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
+  execute: vi.fn(), select: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(),
   transaction: vi.fn(), revalidate: vi.fn(), verifySession: vi.fn(),
 }));
 vi.mock("@/services", () => ({ db: mocks }));
-vi.mock("@/lib/lecturer-auth", () => ({ verifyLecturerSession: mocks.verifySession }));
+vi.mock("@/lib/lecturer-auth", () => ({ readLecturerIdentity: async () => ({ user: await (mocks.verifySession)(), session: { id: "session-1" } }), verifyLecturerSession: mocks.verifySession }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 
 import {
@@ -173,9 +173,11 @@ describe("course-editor child membership", () => {
 
   it("moves only the two own-course sibling lessons", async () => {
     await moveLesson("own", "own-lesson", 1);
-    expect(writes).toHaveLength(2);
-    expect(writes.map((write) => write.values?.position)).toEqual([1, 0]);
-    for (const [index, write] of writes.entries()) {
+    const moves = writes.filter((write) => write.table === "course_lessons");
+    expect(moves).toHaveLength(2);
+    expect(writes.filter((write) => write.table === "courses")).toHaveLength(1);
+    expect(moves.map((write) => write.values?.position)).toEqual([1, 0]);
+    for (const [index, write] of moves.entries()) {
       expect(write.table).toBe("course_lessons");
       const { params } = dialect.sqlToQuery(write.predicate!);
       expect(params).toEqual([index === 0 ? "own-lesson" : "own-next-lesson", "own-chapter"]);
@@ -184,8 +186,10 @@ describe("course-editor child membership", () => {
 
   it("scopes both chapter movement endpoints to the authorized course", async () => {
     await moveChapter("own", "own-chapter", 1);
-    expect(writes).toHaveLength(2);
-    expect(writes.map((write) => dialect.sqlToQuery(write.predicate!).params)).toEqual([
+    const moves = writes.filter((write) => write.table === "course_chapters");
+    expect(moves).toHaveLength(2);
+    expect(writes.filter((write) => write.table === "courses")).toHaveLength(1);
+    expect(moves.map((write) => dialect.sqlToQuery(write.predicate!).params)).toEqual([
       ["own-chapter", "own"], ["own-next-chapter", "own"],
     ]);
   });
