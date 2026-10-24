@@ -1,0 +1,58 @@
+{
+  "runtimeCommit": "c20c4ef21c6463f85f374a42f0b7c43d38d28ccd",
+  "stats": {
+    "startTime": "2026-10-21T15:20:03.545Z",
+    "duration": 76761.204,
+    "expected": 4,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "rawSha256": "dca9928b540fb5699e6b49369cfc2b0f2843eae889f526a13d3806f671d8771e",
+  "tests": [
+    {
+      "title": "unconfirmed map and concept without lessons desktop-light",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 20323,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "title": "unconfirmed map and concept without lessons desktop-dark",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 18348,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "title": "unconfirmed map and concept without lessons mobile-light",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 18147,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "title": "unconfirmed map and concept without lessons mobile-dark",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 18104,
+          "errors": []
+        }
+      ]
+    }
+  ]
+}

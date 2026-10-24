@@ -1,0 +1,222 @@
+{
+  "startedAt": "2026-10-22T11:58:43.842Z",
+  "origin": "http://localhost:3144",
+  "scope": "heartbeats and header/mobile",
+  "browserVersion": "149.0.7827.55",
+  "passed": false,
+  "failure": {
+    "stage": "lesson player / reload / mobile-dark",
+    "stack": "AssertionError [ERR_ASSERTION]: No page errors, failed application responses, or generation requests\n+ actual - expected\n\n+ [\n+   'fixture: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'real login: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7'\n+ ]\n- []\n\n    at main (E:\\Code\\AI Study\\Codi-102-dashboard-progress\\apps\\web\\scripts\\verify-study-activity-browser.ts:725:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)",
+    "message": "No page errors, failed application responses, or generation requests\n+ actual - expected\n\n+ [\n+   'fixture: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'real login: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / desktop-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-light: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'header and learner UI / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7',\n+   'lesson player / reload / mobile-dark: ReferenceError: __name is not defined\\n' +\n+     '    at <anonymous>:2:28\\n' +\n+     '    at <anonymous>:2:351\\n' +\n+     '    at <anonymous>:3:7'\n+ ]\n- []\n"
+  },
+  "cleanup": "Owned QA user/course/activity removed; zero sessions or study clocks/days remain.",
+  "accounting": [
+    {
+      "sameLesson": true,
+      "staleStartRecorded": false,
+      "staleStopRecorded": false,
+      "ticks": [
+        {
+          "tick": 1,
+          "intervalMs": 28902,
+          "addedSeconds": 28,
+          "totalSinceStart": 28,
+          "ownerPreserved": true,
+          "recorded": true
+        },
+        {
+          "tick": 2,
+          "intervalMs": 30035,
+          "addedSeconds": 31,
+          "totalSinceStart": 59,
+          "ownerPreserved": true,
+          "recorded": true
+        }
+      ],
+      "ownerStopRecorded": true
+    },
+    {
+      "sameLesson": false,
+      "staleStartRecorded": false,
+      "staleStopRecorded": false,
+      "ticks": [
+        {
+          "tick": 1,
+          "intervalMs": 29048,
+          "addedSeconds": 29,
+          "totalSinceStart": 29,
+          "ownerPreserved": true,
+          "recorded": true
+        },
+        {
+          "tick": 2,
+          "intervalMs": 30007,
+          "addedSeconds": 30,
+          "totalSinceStart": 59,
+          "ownerPreserved": true,
+          "recorded": true
+        }
+      ],
+      "ownerStopRecorded": true
+    }
+  ],
+  "visual": [
+    {
+      "route": "dashboard",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "desktop-light",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 29,
+      "headerWithinViewport": true,
+      "overflow": false
+    },
+    {
+      "route": "dashboard",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "desktop-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "desktop-dark",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 29,
+      "headerWithinViewport": true,
+      "overflow": false
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-light",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "mobile-light",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 29,
+      "headerWithinViewport": true,
+      "overflow": false
+    },
+    {
+      "route": "dashboard",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "progress",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "profile",
+      "variant": "mobile-dark",
+      "overflow": false,
+      "headerWithinViewport": true,
+      "roleMenuReady": true
+    },
+    {
+      "route": "lesson",
+      "variant": "mobile-dark",
+      "reloaded": true,
+      "newOwnerAcquired": true,
+      "heartbeatRecorded": true,
+      "addedSeconds": 29,
+      "headerWithinViewport": true,
+      "overflow": false
+    }
+  ],
+  "errors": [
+    "fixture: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "real login: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / same lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "two tabs / delayed initial start / different lesson: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / desktop-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / desktop-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / desktop-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / desktop-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / desktop-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / desktop-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / desktop-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / desktop-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / desktop-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / desktop-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / mobile-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / mobile-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / mobile-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / mobile-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / mobile-light: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / mobile-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / mobile-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "header and learner UI / mobile-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / mobile-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7",
+    "lesson player / reload / mobile-dark: ReferenceError: __name is not defined\n    at <anonymous>:2:28\n    at <anonymous>:2:351\n    at <anonymous>:3:7"
+  ],
+  "finishedAt": "2026-10-22T12:04:15.396Z"
+}

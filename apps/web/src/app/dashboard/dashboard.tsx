@@ -25,7 +25,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { authClient } from "@/lib/auth-client";
+import { authClient, signOutSession } from "@/lib/auth-client";
 
 export type DashboardNavItem = { label: string; href?: string; disabled?: boolean };
 
@@ -46,6 +46,7 @@ function DashboardInner({
 }) {
   const router = useRouter();
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const handleResendVerification = async () => {
     try {
@@ -71,14 +72,21 @@ function DashboardInner({
   };
 
   const handleSignOut = async () => {
-    await authClient.signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          router.push("/login");
-          toast.success("Đã đăng xuất tài khoản.");
-        },
-      },
-    });
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const result = await signOutSession(session.session.id);
+      if (result.error) {
+        toast.error("Không thể đăng xuất. Vui lòng thử lại.");
+        return;
+      }
+      router.push("/login");
+      toast.success("Đã đăng xuất tài khoản.");
+    } catch {
+      toast.error("Không thể đăng xuất. Vui lòng thử lại.");
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   return (
@@ -126,7 +134,7 @@ function DashboardInner({
             <User className="w-4 h-4 text-muted-foreground" />
             Hồ sơ cá nhân
           </Button>
-          <Button variant="outline" size="sm" onClick={handleSignOut} className="gap-1.5 cursor-pointer">
+          <Button variant="outline" size="sm" onClick={handleSignOut} disabled={signingOut} className="gap-1.5 cursor-pointer">
             <LogOut className="w-4 h-4" />
             Đăng xuất
           </Button>
