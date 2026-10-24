@@ -12,7 +12,7 @@ import UsersClient, { type AdminUserRow } from "./users-client";
 export default async function AdminUsersPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ status?: string; role?: string; q?: string }>;
+  searchParams?: Promise<{ status?: string | string[]; role?: string | string[]; q?: string | string[] }>;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/login");
@@ -21,6 +21,9 @@ export default async function AdminUsersPage({
   if (!active.includes(ROLE.ADMIN)) redirect("/dashboard");
 
   const resolvedSearchParams = searchParams ? await searchParams : {};
+  const initialStatus = typeof resolvedSearchParams.status === "string" ? resolvedSearchParams.status : undefined;
+  const initialRole = typeof resolvedSearchParams.role === "string" ? resolvedSearchParams.role : undefined;
+  const initialQuery = typeof resolvedSearchParams.q === "string" ? resolvedSearchParams.q : "";
 
   const rows = await db
     .select({
@@ -57,9 +60,9 @@ export default async function AdminUsersPage({
       <UsersClient
         users={users}
         currentUserId={session.user.id}
-        initialStatus={resolvedSearchParams.status}
-        initialRole={resolvedSearchParams.role}
-        initialQuery={resolvedSearchParams.q}
+        initialStatus={initialStatus}
+        initialRole={initialRole}
+        initialQuery={initialQuery}
       />
     </div>
   );
