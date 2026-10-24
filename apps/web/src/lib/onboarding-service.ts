@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
-import { studentEnrollments } from "@codi-1/db/schema/student-profile";
+import { studentActivities, studentEnrollments } from "@codi-1/db/schema/student-profile";
 import { courses } from "@codi-1/db/schema/courses";
 import {
   assessments,
@@ -51,6 +51,41 @@ async function context(
     );
   const [row] = await (lock ? query.for("update") : query);
   const enrollment = assertOnboardingAccess(row);
+
+  // If enrollment goal is not set and draft is empty, check for persisted advisor intake
+  if (!enrollment.goalSetAt && (!enrollment.goalDraft || Object.keys(enrollment.goalDraft).length === 0)) {
+    try {
+      const [activity] = await store
+        .select({ metadata: studentActivities.metadata })
+        .from(studentActivities)
+        .where(
+          and(
+            eq(studentActivities.userId, userId),
+            eq(studentActivities.type, "course_view"),
+            like(studentActivities.metadata, "%advisor_intake%")
+          )
+        )
+        .orderBy(desc(studentActivities.occurredAt))
+        .limit(1);
+
+      if (activity?.metadata) {
+        const parsed = JSON.parse(activity.metadata);
+        if (parsed?.draft && Object.keys(parsed.draft).length > 0) {
+          enrollment.goalDraft = parsed.draft;
+          // Only persist back to enrollment if running inside an exclusive writable transaction
+          if (lock) {
+            await store
+              .update(studentEnrollments)
+              .set({ goalDraft: parsed.draft })
+              .where(eq(studentEnrollments.id, enrollment.id));
+          }
+        }
+      }
+    } catch {
+      // Ignore background hydration failures
+    }
+  }
+
   if (lock) await lockKnowledgeMap(store, courseId, "read");
   const [course] = await store
     .select()
