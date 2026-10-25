@@ -53,7 +53,7 @@ export default async function AdminUsersPage({
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Quản lý người dùng</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {users.length} tài khoản · Xem danh sách, thay đổi vai trò (Learner / Lecturer / Admin) và vô hiệu hoá / kích hoạt lại tài khoản.
+          {users.length} tài khoản · Xem danh sách, thay đổi vai trò (Học viên / Giảng viên / Quản trị viên) và vô hiệu hoá / kích hoạt lại tài khoản.
         </p>
       </div>
 
