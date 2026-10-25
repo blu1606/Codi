@@ -24,6 +24,10 @@
     },
     "alreadyOwned": {
       "kind": "already-owned"
+    },
+    "pendingPayment": {
+      "kind": "pending-payment",
+      "orderCode": "CODI-12345"
     }
   },
   "errors": {

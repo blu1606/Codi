@@ -73,6 +73,15 @@ export async function POST(request: Request) {
     if (result.kind === "already-owned") {
       return NextResponse.json({ error: "Bạn đã sở hữu khóa học này" }, { status: 409 });
     }
+    if (result.kind === "pending-payment") {
+      return NextResponse.json(
+        {
+          error: "Khóa học này đang có đơn hàng chờ thanh toán. Vui lòng thanh toán hoặc huỷ đơn cũ.",
+          orderCode: result.orderCode,
+        },
+        { status: 409 },
+      );
+    }
     const added = result.kind === "added";
     return NextResponse.json({ courseId, added }, { status: added ? 201 : 200 });
   } catch (error) {
