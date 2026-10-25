@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { courses, orderItems, orders, studentCart, studentEnrollments, studentTransactions } from "@codi-1/db";
 import { db } from "@/services";
 
@@ -36,15 +36,19 @@ export async function addCourseToCart(userId: string, courseId: string): Promise
     return { kind: "pending-payment", orderCode: pendingOrder.code };
   }
 
-  // Also check legacy studentTransactions for fallback
+  // Check legacy studentTransactions for fallback only if there is no terminal/primary order
+  // (i.e. a mirror pending record must not override an order that failed/expired/cancelled)
   const [legacyTx] = await db
     .select({ id: studentTransactions.id })
     .from(studentTransactions)
+    .leftJoin(orders, eq(orders.code, studentTransactions.id))
     .where(
       and(
         eq(studentTransactions.userId, userId),
         eq(studentTransactions.status, "pending"),
-        eq(studentTransactions.courseId, courseId)
+        eq(studentTransactions.courseId, courseId),
+        // If an associated canonical order exists, it must not be in a terminal (non-pending) state.
+        or(isNull(orders.id), eq(orders.status, "pending"))
       )
     )
     .limit(1);

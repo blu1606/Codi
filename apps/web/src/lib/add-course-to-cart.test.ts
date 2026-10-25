@@ -3,7 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { studentCart } from "@codi-1/db";
 
 const mocks = vi.hoisted(() => ({
-  select: vi.fn(), from: vi.fn(), innerJoin: vi.fn(), where: vi.fn(), limit: vi.fn(),
+  select: vi.fn(), from: vi.fn(), innerJoin: vi.fn(), leftJoin: vi.fn(), where: vi.fn(), limit: vi.fn(),
   insert: vi.fn(), values: vi.fn(), onConflictDoNothing: vi.fn(), returning: vi.fn(),
 }));
 vi.mock("@/services", () => ({ db: { select: mocks.select, insert: mocks.insert } }));
@@ -35,8 +35,9 @@ const fixtures = loadTestData<AddCourseToCartFixtures>("add-course-to-cart-fixtu
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.select.mockReturnValue({ from: mocks.from });
-  mocks.from.mockReturnValue({ where: mocks.where, innerJoin: mocks.innerJoin });
+  mocks.from.mockReturnValue({ where: mocks.where, innerJoin: mocks.innerJoin, leftJoin: mocks.leftJoin });
   mocks.innerJoin.mockReturnValue({ where: mocks.where });
+  mocks.leftJoin.mockReturnValue({ where: mocks.where });
   mocks.where.mockReturnValue({ limit: mocks.limit });
   mocks.limit
     .mockResolvedValueOnce([{ id: fixtures.courses.available.id }]) // course lookup
@@ -110,6 +111,18 @@ describe("addCourseToCart", () => {
     await expect(addCourseToCart(fixtures.user.id, fixtures.courses.available.id))
       .resolves.toEqual(fixtures.expectedResults.pendingPayment);
     expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("allows adding to cart when corresponding canonical order is terminal (failed/expired)", async () => {
+    mocks.limit.mockReset()
+      .mockResolvedValueOnce([{ id: fixtures.courses.available.id }]) // course found
+      .mockResolvedValueOnce([]) // not enrolled
+      .mockResolvedValueOnce([]) // no pending order
+      .mockResolvedValueOnce([]); // legacy query filtered out because order is terminal
+
+    await expect(addCourseToCart(fixtures.user.id, fixtures.courses.available.id))
+      .resolves.toEqual(fixtures.expectedResults.added);
+    expect(mocks.insert).toHaveBeenCalledWith(studentCart);
   });
 
   it("propagates a persistence failure to the caller", async () => {
