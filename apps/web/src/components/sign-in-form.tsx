@@ -1,6 +1,7 @@
 "use client";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Alert } from "@codi-1/ui/components/alert";
 import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
@@ -20,6 +21,7 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { safeNext } from "@/lib/safe-redirect";
+import { mapSignInError } from "@/lib/sign-in-error";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
@@ -42,6 +44,7 @@ export default function SignInForm({
   const router = useRouter();
   const { isPending } = authClient.useSession();
   const [rememberMe, setRememberMe] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm({
     defaultValues: {
@@ -49,6 +52,7 @@ export default function SignInForm({
       password: "",
     },
     onSubmit: async ({ value }) => {
+      setServerError(null);
       await authClient.signIn.email(
         {
           email: value.email,
@@ -56,6 +60,7 @@ export default function SignInForm({
         },
         {
           onSuccess: () => {
+            setServerError(null);
             try {
               if (rememberMe) {
                 localStorage.setItem(REMEMBER_EMAIL_KEY, value.email);
@@ -79,11 +84,9 @@ export default function SignInForm({
             }
           },
           onError: (error) => {
-            toast.error(
-              error.error.message ||
-                error.error.statusText ||
-                "Đăng nhập thất bại",
-            );
+            const errorMessage = mapSignInError(error);
+            setServerError(errorMessage);
+            toast.error(errorMessage);
           },
         },
       );
@@ -166,6 +169,12 @@ export default function SignInForm({
             }}
             className="space-y-3"
           >
+            {serverError && (
+              <Alert variant="destructive" className="py-2.5 px-3 text-xs">
+                {serverError}
+              </Alert>
+            )}
+
             <div>
               <form.Field name="email">
                 {(field) => (
