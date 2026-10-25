@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Search, UserX } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { Input } from "@codi-1/ui/components/input";
-import { ROLE, type RoleId } from "@codi-1/auth";
+import { ROLE, type RoleId } from "@codi-1/auth/roles";
 
 import RoleSelect from "./role-select";
 import BanToggle from "./ban-toggle";
