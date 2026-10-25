@@ -21,6 +21,7 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { safeNext } from "@/lib/safe-redirect";
+import { mapSignInError } from "@/lib/sign-in-error";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
@@ -83,22 +84,7 @@ export default function SignInForm({
             }
           },
           onError: (error) => {
-            const rawMessage = error.error.message || error.error.statusText || "";
-            const errorCode = (error.error as { code?: string })?.code;
-
-            // Only map specific credential error codes or standard Better Auth invalid credential messages
-            const isInvalidCredential =
-              errorCode === "INVALID_EMAIL_OR_PASSWORD" ||
-              errorCode === "INVALID_PASSWORD" ||
-              errorCode === "INVALID_EMAIL" ||
-              rawMessage === "Invalid email or password" ||
-              rawMessage === "Invalid password" ||
-              rawMessage === "Invalid email";
-
-            const errorMessage = isInvalidCredential
-              ? "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại."
-              : rawMessage || "Đăng nhập thất bại. Vui lòng thử lại.";
-
+            const errorMessage = mapSignInError(error);
             setServerError(errorMessage);
             toast.error(errorMessage);
           },

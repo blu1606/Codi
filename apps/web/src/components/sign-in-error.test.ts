@@ -1,23 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mapSignInError } from "@/lib/sign-in-error";
 
-function mapSignInError(error: { error: { message?: string; statusText?: string; code?: string; status?: number } }): string {
-  const rawMessage = error.error.message || error.error.statusText || "";
-  const errorCode = error.error.code;
-
-  const isInvalidCredential =
-    errorCode === "INVALID_EMAIL_OR_PASSWORD" ||
-    errorCode === "INVALID_PASSWORD" ||
-    errorCode === "INVALID_EMAIL" ||
-    rawMessage === "Invalid email or password" ||
-    rawMessage === "Invalid password" ||
-    rawMessage === "Invalid email";
-
-  return isInvalidCredential
-    ? "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại."
-    : rawMessage || "Đăng nhập thất bại. Vui lòng thử lại.";
-}
-
-describe("sign-in error mapping", () => {
+describe("sign-in error mapping helper", () => {
   it("translates invalid credential code to friendly Vietnamese copy", () => {
     expect(
       mapSignInError({
