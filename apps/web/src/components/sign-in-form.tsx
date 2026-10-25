@@ -1,6 +1,7 @@
 "use client";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Alert } from "@codi-1/ui/components/alert";
 import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
@@ -42,6 +43,7 @@ export default function SignInForm({
   const router = useRouter();
   const { isPending } = authClient.useSession();
   const [rememberMe, setRememberMe] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm({
     defaultValues: {
@@ -49,6 +51,7 @@ export default function SignInForm({
       password: "",
     },
     onSubmit: async ({ value }) => {
+      setServerError(null);
       await authClient.signIn.email(
         {
           email: value.email,
@@ -56,6 +59,7 @@ export default function SignInForm({
         },
         {
           onSuccess: () => {
+            setServerError(null);
             try {
               if (rememberMe) {
                 localStorage.setItem(REMEMBER_EMAIL_KEY, value.email);
@@ -79,11 +83,19 @@ export default function SignInForm({
             }
           },
           onError: (error) => {
-            toast.error(
-              error.error.message ||
-                error.error.statusText ||
-                "Đăng nhập thất bại",
-            );
+            const rawMessage = error.error.message || error.error.statusText || "";
+            // Vietnamese translation / mapping for credential error
+            const errorMessage =
+              rawMessage.toLowerCase().includes("invalid") ||
+              rawMessage.toLowerCase().includes("credential") ||
+              rawMessage.toLowerCase().includes("password") ||
+              rawMessage.toLowerCase().includes("email") ||
+              error.error.status === 401
+                ? "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại."
+                : rawMessage || "Đăng nhập thất bại. Vui lòng thử lại.";
+
+            setServerError(errorMessage);
+            toast.error(errorMessage);
           },
         },
       );
@@ -166,6 +178,12 @@ export default function SignInForm({
             }}
             className="space-y-3"
           >
+            {serverError && (
+              <Alert variant="destructive" className="py-2.5 px-3 text-xs">
+                {serverError}
+              </Alert>
+            )}
+
             <div>
               <form.Field name="email">
                 {(field) => (
