@@ -85,6 +85,8 @@ describe("account password recovery", () => {
     const previousSessions = state.storage.session?.length ?? 0;
     const response = await auth.api.signInEmail({ body: { email, password: originalPassword }, asResponse: true });
     expect(response.status).toBe(401);
+    const body = await response.json();
+    expect(body).toMatchObject({ message: "Tài khoản đã bị vô hiệu hoá." });
     expect(state.storage.session).toHaveLength(previousSessions);
   });
 
