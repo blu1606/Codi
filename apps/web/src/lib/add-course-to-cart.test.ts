@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { studentCart } from "@codi-1/db";
+import { orders, studentCart, studentTransactions } from "@codi-1/db";
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn(), from: vi.fn(), innerJoin: vi.fn(), leftJoin: vi.fn(), where: vi.fn(), limit: vi.fn(),
@@ -123,6 +123,29 @@ describe("addCourseToCart", () => {
     await expect(addCourseToCart(fixtures.user.id, fixtures.courses.available.id))
       .resolves.toEqual(fixtures.expectedResults.added);
     expect(mocks.insert).toHaveBeenCalledWith(studentCart);
+
+    // Verify query structure for legacy fallback and terminal order exclusion
+    expect(mocks.from).toHaveBeenNthCalledWith(4, studentTransactions);
+    expect(mocks.leftJoin).toHaveBeenCalledWith(orders, expect.anything());
+
+    const dialect = new PgDialect();
+    const joinOn = dialect.sqlToQuery(mocks.leftJoin.mock.calls[0][1]);
+    expect(joinOn.sql).toContain('"orders"."code"');
+    expect(joinOn.sql).toContain('"student_transactions"."id"');
+
+    const legacyWhere = dialect.sqlToQuery(mocks.where.mock.calls[3][0]);
+    expect(legacyWhere.params).toEqual([
+      fixtures.user.id,
+      "pending",
+      fixtures.courses.available.id,
+      "pending",
+    ]);
+    expect(legacyWhere.sql).toContain('"student_transactions"."user_id"');
+    expect(legacyWhere.sql).toContain('"student_transactions"."status"');
+    expect(legacyWhere.sql).toContain('"student_transactions"."course_id"');
+    expect(legacyWhere.sql).toContain('"orders"."id" is null');
+    expect(legacyWhere.sql).toContain('"orders"."status"');
+    expect(legacyWhere.sql).toContain("or");
   });
 
   it("propagates a persistence failure to the caller", async () => {
