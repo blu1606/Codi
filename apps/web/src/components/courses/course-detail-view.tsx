@@ -326,6 +326,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
       const successText = `Đã đăng ký “${detail.course.title}”.`;
       setCartMessage(successText);
       toast.success(successText);
+      router.push(`/learn/${detail.course.id}/onboarding` as any);
     } catch (err: unknown) {
       const msg =
         err instanceof Error
