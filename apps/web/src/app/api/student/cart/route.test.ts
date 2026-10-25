@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   from: vi.fn(),
   innerJoin: vi.fn(),
+  leftJoin: vi.fn(),
   where: vi.fn(),
   limit: vi.fn(),
   insert: vi.fn(),
@@ -69,8 +70,9 @@ beforeEach(() => {
   mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
   mocks.requireRole.mockResolvedValue(undefined);
   mocks.select.mockReturnValue({ from: mocks.from });
-  mocks.from.mockReturnValue({ where: mocks.where, innerJoin: mocks.innerJoin });
+  mocks.from.mockReturnValue({ where: mocks.where, innerJoin: mocks.innerJoin, leftJoin: mocks.leftJoin });
   mocks.innerJoin.mockReturnValue({ where: mocks.where });
+  mocks.leftJoin.mockReturnValue({ where: mocks.where });
   mocks.where.mockReturnValue({ limit: mocks.limit });
   mocks.limit
     .mockResolvedValueOnce([{ id: "course-1" }])
