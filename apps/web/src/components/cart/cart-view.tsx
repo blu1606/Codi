@@ -48,7 +48,15 @@ export function CartView() {
       const res = await fetch(url);
       if (!res.ok) {
         if (res.status === 401) {
-          router.push("/login?returnTo=/cart");
+          setData({
+            items: [],
+            subtotal: 0,
+            discount: 0,
+            total: 0,
+            voucher: null,
+            removedOwnedTitles: [],
+            pendingOrder: null,
+          });
           return;
         }
         const errData = await res.json().catch(() => ({}));
