@@ -84,15 +84,20 @@ export default function SignInForm({
           },
           onError: (error) => {
             const rawMessage = error.error.message || error.error.statusText || "";
-            // Vietnamese translation / mapping for credential error
-            const errorMessage =
-              rawMessage.toLowerCase().includes("invalid") ||
-              rawMessage.toLowerCase().includes("credential") ||
-              rawMessage.toLowerCase().includes("password") ||
-              rawMessage.toLowerCase().includes("email") ||
-              error.error.status === 401
-                ? "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại."
-                : rawMessage || "Đăng nhập thất bại. Vui lòng thử lại.";
+            const errorCode = (error.error as { code?: string })?.code;
+
+            // Only map specific credential error codes or standard Better Auth invalid credential messages
+            const isInvalidCredential =
+              errorCode === "INVALID_EMAIL_OR_PASSWORD" ||
+              errorCode === "INVALID_PASSWORD" ||
+              errorCode === "INVALID_EMAIL" ||
+              rawMessage === "Invalid email or password" ||
+              rawMessage === "Invalid password" ||
+              rawMessage === "Invalid email";
+
+            const errorMessage = isInvalidCredential
+              ? "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại."
+              : rawMessage || "Đăng nhập thất bại. Vui lòng thử lại.";
 
             setServerError(errorMessage);
             toast.error(errorMessage);
