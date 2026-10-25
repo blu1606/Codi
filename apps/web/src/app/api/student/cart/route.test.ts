@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
   select: vi.fn(),
   from: vi.fn(),
+  innerJoin: vi.fn(),
   where: vi.fn(),
   limit: vi.fn(),
   insert: vi.fn(),
@@ -68,9 +69,14 @@ beforeEach(() => {
   mocks.getSession.mockResolvedValue({ user: { id: "learner-1" } });
   mocks.requireRole.mockResolvedValue(undefined);
   mocks.select.mockReturnValue({ from: mocks.from });
-  mocks.from.mockReturnValue({ where: mocks.where });
+  mocks.from.mockReturnValue({ where: mocks.where, innerJoin: mocks.innerJoin });
+  mocks.innerJoin.mockReturnValue({ where: mocks.where });
   mocks.where.mockReturnValue({ limit: mocks.limit });
-  mocks.limit.mockResolvedValueOnce([{ id: "course-1" }]).mockResolvedValueOnce([]);
+  mocks.limit
+    .mockResolvedValueOnce([{ id: "course-1" }])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([]);
   mocks.insert.mockReturnValue({ values: mocks.values });
   mocks.values.mockReturnValue({ onConflictDoNothing: mocks.onConflictDoNothing });
   mocks.onConflictDoNothing.mockReturnValue({ returning: mocks.returning });
@@ -163,6 +169,37 @@ describe("POST /api/student/cart core scenarios", () => {
   it("rejects a course the learner already owns", async () => {
     mocks.limit.mockReset().mockResolvedValueOnce([{ id: "course-1" }]).mockResolvedValueOnce([{ courseId: "course-1" }]);
     expect((await POST(postRequest())).status).toBe(409);
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a course if the learner has an active pending order containing this course", async () => {
+    mocks.limit.mockReset()
+      .mockResolvedValueOnce([{ id: "course-1" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ code: "CODI-99999" }]);
+
+    const response = await POST(postRequest({ courseId: "course-1" }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "Khóa học này đang có đơn hàng chờ thanh toán. Vui lòng thanh toán hoặc huỷ đơn cũ.",
+      orderCode: "CODI-99999",
+    });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a course if the learner has an active legacy pending transaction", async () => {
+    mocks.limit.mockReset()
+      .mockResolvedValueOnce([{ id: "course-1" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "TX-LEGACY-1" }]);
+
+    const response = await POST(postRequest({ courseId: "course-1" }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "Khóa học này đang có đơn hàng chờ thanh toán. Vui lòng thanh toán hoặc huỷ đơn cũ.",
+      orderCode: "TX-LEGACY-1",
+    });
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 });
