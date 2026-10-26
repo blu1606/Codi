@@ -18,7 +18,13 @@ import { ENV } from "@/env";
 
 // Recent turns so follow-ups ("so sánh 2 khoá vừa rồi") have context; invalid history is ignored.
 const historySchema = z
-  .array(z.object({ role: z.enum(["user", "ai"]), text: z.string().max(4000) }))
+  .array(
+    z.object({
+      role: z.enum(["user", "ai"]),
+      text: z.string().max(4000),
+      courseIds: z.array(z.string().max(200)).max(12).optional(),
+    }),
+  )
   .max(20);
 
 export const maxDuration = 30;

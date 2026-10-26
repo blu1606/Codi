@@ -3,6 +3,7 @@ import { studentActivities, studentEnrollments } from "@codi-1/db";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
   ADVISOR_NO_MATCH,
+  advisorCatalogSlice,
   advisorPrompt,
   toAdvisorAnswer,
   formatVnd,
@@ -243,5 +244,39 @@ describe("advisor intake owner storage", () => {
     const activityQuery = new PgDialect().sqlToQuery(predicates[1] as any);
     expect(activityQuery.params).toEqual(["saved-owner", "course_view", "%advisor_intake%"]);
     expect(activityQuery.sql).toContain('"student_activities"."user_id"');
+  });
+});
+
+describe("advisor context sent to the model", () => {
+  it("names the courses an earlier answer showed, so follow-ups can refer to them", () => {
+    const { prompt } = advisorPrompt({
+      prompt: "So sánh 2 khoá vừa rồi",
+      catalog: mockCatalog,
+      intake: { skipped: [] },
+      ownedCourseIds: [],
+      currentCourse: null,
+      history: [
+        { role: "user", text: "Mình muốn làm web" },
+        { role: "ai", text: "Đây là 2 khoá hợp với bạn", courseIds: ["course-react-001", "fake", "course-node-002"] },
+      ],
+    });
+    expect(prompt).toContain(
+      "Codi: Đây là 2 khoá hợp với bạn (khoá đã gợi ý: React cơ bản [course-react-001], Node.js & Express [course-node-002])",
+    );
+    expect(prompt).not.toContain("fake");
+  });
+
+  it("keeps a large catalogue relevant: ranks by the question and keeps mentioned courses", () => {
+    const many: AdvisorCourseItem[] = Array.from({ length: 100 }, (_, i) => ({
+      ...mockCatalog[0]!,
+      id: `c-${i}`,
+      slug: `khoa-${i}`,
+      title: `Khoá ${String(i).padStart(3, "0")}`,
+      description: i === 95 ? "Lập trình Elixir và Phoenix" : "Nền tảng lập trình",
+    }));
+    const picked = advisorCatalogSlice(many, "Có khoá Elixir không?", new Set(["c-99"]), 10);
+    expect(picked).toHaveLength(10);
+    expect(picked.map((c) => c.id)).toEqual(expect.arrayContaining(["c-95", "c-99"]));
+    expect(advisorCatalogSlice(mockCatalog, "bất kỳ", new Set(), 10)).toBe(mockCatalog);
   });
 });

@@ -231,7 +231,16 @@ export function AiAdvisorView({
           history: messages
             .filter((m) => (m.role === "user" || m.role === "ai") && m.text && !m.stopped)
             .slice(-6)
-            .map((m) => ({ role: m.role, text: m.text })),
+            .map((m) => ({
+              role: m.role,
+              text: m.text,
+              courseIds: [
+                ...new Set([
+                  ...(m.courses ?? []).map((c) => c.id),
+                  ...(m.order ?? []).map((o) => o.id),
+                ]),
+              ],
+            })),
         }),
         signal: abortControllerRef.current.signal,
       });
