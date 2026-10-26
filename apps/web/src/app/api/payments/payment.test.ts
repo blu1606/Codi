@@ -241,8 +241,8 @@ it.each([
     paidAt: status === "paid" ? new Date("2026-10-01T00:00:00Z") : null,
   };
   const paidAt = order.paidAt;
-  const legacy = {
-    id: order.code, userId: order.userId, courseId: "course-1", amount: order.totalAmount, status: status === "paid" ? "success" : status,
+  const legacy: Pick<typeof studentTransactions.$inferSelect, "id" | "userId" | "courseId" | "amount" | "status"> = {
+    id: order.code, userId: order.userId, courseId: "course-1", amount: order.totalAmount, status,
   };
   const receipts: Record<string, unknown>[] = [];
   const events: Record<string, unknown>[] = [];
@@ -325,7 +325,7 @@ it.each([
   expect(events).toHaveLength(2);
   expect(updateOrder).toHaveBeenCalledTimes(2);
   expect(unexpectedInsert).not.toHaveBeenCalled();
-  expect(legacy.status).toBe(status === "paid" ? "success" : status);
+  expect(legacy.status).toBe(status);
 });
 
 it("reuses and validates orderCode in create-transaction", async () => {
@@ -1095,22 +1095,22 @@ it("P1: cancels concurrent callback and persists payment failure and reconciliat
   const updateTxMock = vi.fn();
   const enrollMock = vi.fn();
   const eventLabels: string[] = [];
-  let selectCallCount = 0;
+  let orderReadCount = 0;
 
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => ({
           where: vi.fn().mockImplementation(() => {
-            selectCallCount++;
             return {
               limit: vi.fn().mockImplementation(() => {
-                if (selectCallCount === 1) {
-                  // Idempotency check: providerTxCode not processed yet
+                if (table === payments) {
                   return Promise.resolve([]);
                 }
-                if (selectCallCount === 2) {
+                expect(table).toBe(orders);
+                orderReadCount++;
+                if (orderReadCount === 1) {
                   // Initial check sees order pending before cancellation commits
                   return Promise.resolve([
                     {

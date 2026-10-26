@@ -14,6 +14,13 @@ function verifyApiKey(authHeader: string | null, secret: string): boolean {
   return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
 }
 
+function usableReceiptIdentity(value: unknown): string | null {
+  // Validate blankness without rewriting existing nonblank ledger keys.
+  if (typeof value === "string") return value.trim() ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     // Authenticate the webhook request
@@ -52,7 +59,6 @@ export async function POST(req: Request) {
     }
 
     const txId = match[0].toUpperCase();
-    const providerTxCode = data.id != null ? String(data.id) : (data.referenceCode != null ? String(data.referenceCode) : null);
 
     // Find the transaction in DB
     const [tx] = await db.select().from(studentTransactions).where(eq(studentTransactions.id, txId)).limit(1);
@@ -69,19 +75,6 @@ export async function POST(req: Request) {
       // Serialize concurrent transfers for this transaction/order code
       await txDB.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${txId}))`);
 
-      // Idempotency check on provider transactionCode if available
-      if (providerTxCode) {
-        const [existingPayment] = await txDB
-          .select({ id: payments.id })
-          .from(payments)
-          .where(eq(payments.transactionCode, providerTxCode))
-          .limit(1);
-
-        if (existingPayment) {
-          return { alreadyProcessed: true };
-        }
-      }
-
       // 1. Check if there is an associated order in the `orders` table
       const [existingOrder] = await txDB
         .select({
@@ -97,6 +90,25 @@ export async function POST(req: Request) {
         .from(orders)
         .where(eq(orders.code, txId))
         .limit(1);
+
+      // Extra receipts on settled orders must be identifiable before accounting.
+      // Other branches retain their existing identifier and missing-ID behavior.
+      const providerTxCode = existingOrder?.status === "paid"
+        ? usableReceiptIdentity(data.id) ?? usableReceiptIdentity(data.referenceCode)
+        : (data.id != null ? String(data.id) : (data.referenceCode != null ? String(data.referenceCode) : null));
+      if (existingOrder?.status === "paid" && !providerTxCode) {
+        return { invalidPaidReceiptIdentity: true };
+      }
+
+      // Read the receipt ledger under the same code lock, before any writes.
+      if (providerTxCode) {
+        const [existingPayment] = await txDB
+          .select({ id: payments.id })
+          .from(payments)
+          .where(eq(payments.transactionCode, providerTxCode))
+          .limit(1);
+        if (existingPayment) return { alreadyProcessed: true };
+      }
 
       let isLateHonoured = false;
 
@@ -642,6 +654,13 @@ export async function POST(req: Request) {
 
       return { success: true };
     });
+
+    if (processResult.invalidPaidReceiptIdentity) {
+      return NextResponse.json(
+        { success: false, message: "Paid-order receipts require a valid provider transaction identifier" },
+        { status: 400 },
+      );
+    }
 
     if (processResult.alreadyProcessed) {
       return NextResponse.json({ success: true, message: "Already processed" });
