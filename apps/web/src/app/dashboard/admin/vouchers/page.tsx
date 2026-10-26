@@ -31,7 +31,7 @@ export default async function AdminVouchersPage({ searchParams }: {
           <ArrowLeft className="size-3.5" /> Quay lại Bàn làm việc
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Voucher</h1>
+          <h1 className="text-2xl tracking-tight">Voucher</h1>
           <p className="text-sm text-muted-foreground">
             Mã giảm giá áp dụng ở giỏ hàng. Tắt mã để ngừng áp dụng cho đơn mới.
           </p>
