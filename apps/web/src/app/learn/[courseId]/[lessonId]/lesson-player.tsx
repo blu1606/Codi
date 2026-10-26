@@ -13,6 +13,8 @@ import {
   List,
   LoaderCircle,
   LockKeyhole,
+  MessageCircle,
+  Sparkles,
   Star,
 } from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
@@ -42,6 +44,9 @@ import type {
 } from "@/lib/lesson-player-contract";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 import { ReviewForm } from "../course-home";
+import { AITutorPanel } from "@/components/tutor/ai-tutor-panel";
+import { LessonQAPanel } from "@/components/tutor/lesson-qa-panel";
+import { InlineSelectionToolbar } from "@/components/tutor/inline-selection-toolbar";
 
 export default function LessonPlayer({
   courseId,
@@ -54,6 +59,8 @@ export default function LessonPlayer({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sidebar, setSidebar] = useState(false);
+  const [tutorOpen, setTutorOpen] = useState(false);
+  const [qaOpen, setQaOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [materialId, setMaterialId] = useState<number | null>(null);
@@ -366,12 +373,38 @@ export default function LessonPlayer({
               <ArrowRight className="size-4" />
             </Link>
           )}
-          <Link
-            href={courseHome}
-            className="ml-auto inline-flex min-h-11 items-center text-sm text-primary lg:hidden"
-          >
-            Về lộ trình
-          </Link>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => {
+                setQaOpen(false);
+                setTutorOpen(true);
+              }}
+            >
+              <Sparkles className="size-3.5 text-primary" />
+              AI trợ lý
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => {
+                setTutorOpen(false);
+                setQaOpen(true);
+              }}
+            >
+              <MessageCircle className="size-3.5" />
+              Hỏi đáp
+            </Button>
+            <Link
+              href={courseHome}
+              className="inline-flex min-h-11 items-center text-sm text-primary lg:hidden"
+            >
+              Về lộ trình
+            </Link>
+          </div>
         </nav>
         {errorAlert}
         <div className="space-y-2 lg:hidden">
@@ -699,6 +732,27 @@ export default function LessonPlayer({
           }}
         />
       )}
+      <InlineSelectionToolbar />
+      <AITutorPanel
+        open={tutorOpen}
+        onOpenChange={setTutorOpen}
+        courseId={courseId}
+        lessonId={lessonId}
+        lessonTitle={data.lesson.title}
+        isCodeLesson={kind === "coding" || kind === "tutorial"}
+        context={{
+          lessonTitle: data.lesson.title,
+          chapterTitle: data.lesson.chapterTitle,
+          isCodeLesson: kind === "coding" || kind === "tutorial",
+        }}
+      />
+      <LessonQAPanel
+        open={qaOpen}
+        onOpenChange={setQaOpen}
+        courseId={courseId}
+        lessonId={lessonId}
+        lessonTitle={data.lesson.title}
+      />
     </main>
   );
 }

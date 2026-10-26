@@ -214,6 +214,43 @@ export default function LessonCoding({
       setError("Chưa thể định dạng. Hãy sửa lỗi cú pháp trước.");
     }
   }
+  useEffect(() => {
+    function handleLine(e: Event) {
+      const line = (e as CustomEvent<{ line: number }>).detail?.line;
+      if (!line || !editor.current) return;
+      const lines = editor.current.value.split("\n");
+      const idx = Math.min(Math.max(line, 1), lines.length) - 1;
+      const start = lines.slice(0, idx).reduce((s, x) => s + x.length + 1, 0);
+      editor.current.focus({ preventScroll: true });
+      editor.current.setSelectionRange(start, start + lines[idx].length);
+      editor.current.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+
+    function handleDiff(e: Event) {
+      const { op, diff } = (e as CustomEvent<{ op: string; diff: { at: number; add: string; original: string | null } }>).detail || {};
+      if (!editor.current || !diff) return;
+      if (op === "apply") {
+        const lines = editor.current.value.split("\n");
+        lines.splice(Math.min(diff.at - 1, lines.length), 0, diff.add);
+        change(lines.join("\n"));
+      } else if (op === "undo" && diff.original !== null) {
+        change(diff.original);
+      }
+    }
+
+    function handleRerun() {
+      void execute("submit");
+    }
+
+    window.addEventListener("codi:tutor-line", handleLine);
+    window.addEventListener("codi:tutor-diff", handleDiff);
+    window.addEventListener("codi:tutor-rerun", handleRerun);
+    return () => {
+      window.removeEventListener("codi:tutor-line", handleLine);
+      window.removeEventListener("codi:tutor-diff", handleDiff);
+      window.removeEventListener("codi:tutor-rerun", handleRerun);
+    };
+  }, []);
   function explain(testId?: number) {
     const test = data?.tests.find((t) => t.id === testId);
     const outcome = data?.lastRun?.outcomes.find((t) => t.id === testId);
@@ -223,8 +260,20 @@ export default function LessonCoding({
     const prompt = `Hãy giúp tôi hiểu lỗi bằng gợi ý, đừng đưa lời giải đầy đủ.\n${context}\n\nCode hiện tại:\n${value.current}`;
     setHelp(prompt);
     window.dispatchEvent(
-      new CustomEvent("codi:tutor-context", {
-        detail: { assessmentId: data?.id, prompt },
+      new CustomEvent("codi:tutor-open", {
+        detail: {
+          testName: test ? (test.input || test.expectedOutput) : undefined,
+          expected: test?.expectedOutput,
+          actual: outcome?.error ?? outcome?.actual,
+          runError: data?.lastRun?.outcomes.find((o) => o.error)?.error,
+          runPhase: data?.lastRun?.phase,
+          code: value.current,
+          isCodeLesson: true,
+          ask: test
+            ? `Giải thích giúp mình vì sao test "${test.input || test.expectedOutput}" chưa đạt?`
+            : "Giải thích giúp mình lỗi ở lần chạy gần nhất?",
+          prompt,
+        },
       }),
     );
   }
