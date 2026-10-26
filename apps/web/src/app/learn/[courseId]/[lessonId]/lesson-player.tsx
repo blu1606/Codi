@@ -13,6 +13,7 @@ import {
   List,
   LoaderCircle,
   LockKeyhole,
+  MessageCircle,
   Sparkles,
   Star,
 } from "lucide-react";
@@ -43,6 +44,7 @@ import type {
 } from "@/lib/lesson-player-contract";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 import { ReviewForm } from "../course-home";
+import { LessonQAPanel } from "@/components/tutor/lesson-qa-panel";
 import {
   TutorBridgeContext,
   type TutorBridge,
@@ -74,6 +76,7 @@ export default function LessonPlayer({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sidebar, setSidebar] = useState(false);
+  const [qaOpen, setQaOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [materialId, setMaterialId] = useState<number | null>(null);
@@ -438,10 +441,26 @@ export default function LessonPlayer({
             Về lộ trình
           </Link>
           <Button
-            variant={tutorOpen ? "secondary" : "outline"}
+            variant={qaOpen ? "secondary" : "outline"}
             className="lg:ml-auto"
+            aria-pressed={qaOpen}
+            onClick={() => {
+              const next = !qaOpen;
+              setQaOpen(next);
+              if (next) toggleTutor(false);
+            }}
+          >
+            <MessageCircle className="size-4" />
+            Hỏi đáp
+          </Button>
+          <Button
+            variant={tutorOpen ? "secondary" : "outline"}
             aria-pressed={tutorOpen}
-            onClick={() => toggleTutor(!tutorOpen)}
+            onClick={() => {
+              const next = !tutorOpen;
+              toggleTutor(next);
+              if (next) setQaOpen(false);
+            }}
           >
             <Sparkles className="size-4" />
             AI trợ lý
@@ -784,6 +803,13 @@ export default function LessonPlayer({
           }}
         />
       )}
+      <LessonQAPanel
+        open={qaOpen}
+        onOpenChange={setQaOpen}
+        courseId={courseId}
+        lessonId={lessonId}
+        lessonTitle={data.lesson.title}
+      />
     </main>
     </TutorBridgeContext.Provider>
   );
