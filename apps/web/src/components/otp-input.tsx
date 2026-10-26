@@ -8,9 +8,10 @@ interface OtpInputProps {
   length?: number;
   value: string;
   onChange: (otp: string) => void;
-  onResend?: () => Promise<void> | void;
+  onResend?: () => Promise<void | boolean> | void | boolean;
   disabled?: boolean;
   expiresInSeconds?: number;
+  autoFocus?: boolean;
 }
 
 export default function OtpInput({
@@ -20,6 +21,7 @@ export default function OtpInput({
   onResend,
   disabled = false,
   expiresInSeconds = 120, // 2 minutes default
+  autoFocus = false,
 }: OtpInputProps) {
   const [timeLeft, setTimeLeft] = useState(expiresInSeconds);
   const [isResending, setIsResending] = useState(false);
@@ -97,7 +99,8 @@ export default function OtpInput({
     if (!onResend || isResending) return;
     try {
       setIsResending(true);
-      await onResend();
+      const sent = await onResend();
+      if (sent === false) return;
       setTimeLeft(expiresInSeconds);
       onChange("");
       inputsRef.current[0]?.focus();
@@ -119,6 +122,9 @@ export default function OtpInput({
               inputsRef.current[idx] = el;
             }}
             type="text"
+            aria-label={`Chữ số ${idx + 1} của mã xác thực`}
+            autoComplete={idx === 0 ? "one-time-code" : "off"}
+            autoFocus={autoFocus && idx === 0}
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
@@ -128,7 +134,7 @@ export default function OtpInput({
             onKeyDown={(e) => handleKeyDown(idx, e)}
             onPaste={handlePaste}
             onFocus={(e) => e.target.select()}
-            className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl font-bold font-mono rounded-lg border border-border bg-card text-card-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="min-w-0 w-0 flex-1 max-w-11 h-13 sm:max-w-12 sm:h-14 text-center text-xl font-bold font-mono rounded-lg border border-border bg-card text-card-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           />
         ))}
       </div>

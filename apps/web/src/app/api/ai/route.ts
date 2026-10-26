@@ -1,40 +1,57 @@
-import { devToolsMiddleware } from "@ai-sdk/devtools";
-import {
-  convertToModelMessages,
-  createUIMessageStreamResponse,
-  streamText,
-  toUIMessageStream,
-  type UIMessage,
-  wrapLanguageModel,
-} from "ai";
-
-import { getLlmProvider } from "@/lib/ai";
-import { getCourseCatalogPrompt } from "@/lib/data/courses";
+import { headers } from "next/headers";
+import { NextResponse } from "next/server";
+import { auth, db } from "@/services";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import {
+  buildAdvisorAnswer,
+  generateGuestFeedbackToken,
+  getLearnerProgressContext,
+  getPublishedCatalog,
+  logAdvisorInteraction,
+  syncLearnerIntakeGoalDraft,
+} from "@/lib/ai-advisor-service";
+import { intakeStateSchema, type IntakeState } from "@/lib/ai-advisor-contract";
+import { ENV } from "@/env";
 
 export const maxDuration = 30;
 
-const SYSTEM_PROMPT = `Bạn là Trợ lý AI Cố vấn Đào tạo & Khóa học thông minh của nền tảng Codi (Codi Course Advisor).
-Nhiệm vụ của bạn:
-1. Lắng nghe nhu cầu, sở thích, định hướng nghề nghiệp, trình độ hiện tại và quỹ thời gian của học viên.
-2. Tư vấn lộ trình học tập lập trình rõ ràng, bài bản, từng bước cụ thể và truyền cảm hứng.
-3. Giới thiệu và đề xuất các khóa học phù hợp nhất từ danh mục khóa học của Codi (bên dưới). Luôn giải thích lý do tại sao khóa học đó phù hợp với mục tiêu của học viên.
-4. Trình bày câu trả lời chuyên nghiệp, dùng định dạng Markdown rõ ràng (tiêu đề, bullet points, in đậm các ý chính). Giữ phong thái thân thiện, nhiệt tình và mang tính giáo dục cao.
+export async function GET(req: Request) {
+  try {
+    const session = await auth.api.getSession({ headers: req.headers });
+    const userId = session?.user?.id ?? null;
 
---- DANH MỤC KHÓA HỌC CỦA NỀN TẢNG CODI ---
-${getCourseCatalogPrompt()}
--------------------------------------------`;
+    const [catalog, progressContext] = await Promise.all([
+      getPublishedCatalog(db),
+      getLearnerProgressContext(db, userId),
+    ]);
+
+    return NextResponse.json({
+      user: session?.user ? { id: session.user.id, name: session.user.name } : null,
+      currentCourse: progressContext.currentCourse,
+      catalog,
+      savedIntake: progressContext.savedIntake ?? null,
+    });
+  } catch (error) {
+    console.error("Failed to initialize advisor context", error);
+    return NextResponse.json(
+      { error: "Không thể tải ngữ cảnh cố vấn AI." },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(req: Request) {
-  // 1. Kiểm tra Rate Limiting (10 requests / 1 phút mỗi IP)
+  const startedAt = Date.now();
   const clientIp = getClientIp(req);
-  const rateLimit = checkRateLimit(clientIp, { windowMs: 60 * 1000, max: 10 });
 
+  // Rate limiting (10 requests/min per IP)
+  const rateLimit = checkRateLimit(clientIp, { windowMs: 60 * 1000, max: 10 });
   if (!rateLimit.success) {
     const retryAfter = Math.max(1, Math.ceil((rateLimit.reset - Date.now()) / 1000));
     return new Response(
       JSON.stringify({
-        error: "Bạn đã gửi quá nhiều yêu cầu tư vấn. Vui lòng đợi trong giây lát rồi thử lại.",
+        error: "Bạn đã hỏi quá nhiều trong thời gian ngắn",
+        body: "Đợi vài phút rồi thử lại.",
         retryAfter,
       }),
       {
@@ -47,38 +64,100 @@ export async function POST(req: Request) {
     );
   }
 
+  let body: unknown;
   try {
-    // 2. Xử lý body request
-    const body = await req.json();
-    const messages: UIMessage[] = body.messages || [];
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Yêu cầu không hợp lệ (JSON lỗi)." }, { status: 400 });
+  }
 
-    // 3. Khởi tạo LLM Provider & Stream câu trả lời
-    const model = wrapLanguageModel({
-      model: getLlmProvider().getModel(),
-      middleware: devToolsMiddleware(),
+  if (typeof body !== "object" || body === null) {
+    return NextResponse.json({ error: "Body không hợp lệ." }, { status: 400 });
+  }
+
+  const { prompt, intake: rawIntake } = body as {
+    prompt?: unknown;
+    intake?: unknown;
+  };
+
+  if (typeof prompt !== "string" || !prompt.trim()) {
+    return NextResponse.json({ error: "Câu hỏi không được để trống." }, { status: 400 });
+  }
+
+  const intakeParsed = intakeStateSchema.safeParse(rawIntake ?? {});
+  const intake: IntakeState = intakeParsed.success
+    ? intakeParsed.data
+    : { skipped: [] };
+
+  try {
+    const session = await auth.api.getSession({ headers: req.headers });
+    const userId = session?.user?.id ?? null;
+
+    const [catalog, progressContext] = await Promise.all([
+      getPublishedCatalog(db),
+      getLearnerProgressContext(db, userId),
+    ]);
+
+    const answer = buildAdvisorAnswer({
+      prompt: prompt.trim(),
+      catalog,
+      intake,
+      ownedCourseIds: progressContext.ownedCourseIds,
     });
 
-    const result = streamText({
-      model,
-      system: SYSTEM_PROMPT,
-      messages: await convertToModelMessages(messages),
+    const latencyMs = Date.now() - startedAt;
+
+    // Connect intake persistence to profile and onboarding for signed-in learners
+    if (userId && (intake.goal || intake.level || intake.hoursPerWeek)) {
+      try {
+        await syncLearnerIntakeGoalDraft(db, userId, intake);
+      } catch (syncErr) {
+        console.warn("Failed to sync intake to goal draft", syncErr);
+      }
+    }
+
+    // Log to ai_interaction_logs (guests have userId = null)
+    const logId = await logAdvisorInteraction(db, {
+      userId,
+      userPrompt: prompt.trim(),
+      aiResponse: JSON.stringify(answer),
+      latencyMs,
+      isSuccess: true,
     });
 
-    return createUIMessageStreamResponse({
-      stream: toUIMessageStream({ stream: result.stream }),
+    const feedbackToken =
+      !userId && logId ? generateGuestFeedbackToken(logId, ENV.BETTER_AUTH_SECRET) : null;
+
+    return NextResponse.json({
+      ...answer,
+      logId,
+      feedbackToken,
+      currentCourse: progressContext.currentCourse,
     });
   } catch (error: any) {
     console.error("AI Course Advisor Error:", error);
-    return new Response(
-      JSON.stringify({
-        error: error?.message || "Đã có lỗi xảy ra khi gọi AI API.",
-      }),
+    const latencyMs = Date.now() - startedAt;
+
+    try {
+      const session = await auth.api.getSession({ headers: req.headers });
+      await logAdvisorInteraction(db, {
+        userId: session?.user?.id ?? null,
+        userPrompt: typeof prompt === "string" ? prompt : "",
+        aiResponse: "",
+        latencyMs,
+        isSuccess: false,
+        errorMessage: error?.message || "Unknown error",
+      });
+    } catch {
+      // Ignore logging failure on error
+    }
+
+    return NextResponse.json(
       {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
+        error: "Codi tạm thời không phản hồi",
+        body: "Câu hỏi chưa được trả lời. Bạn có thể thử lại hoặc tự xem danh mục khoá học.",
+      },
+      { status: 500 }
     );
   }
 }

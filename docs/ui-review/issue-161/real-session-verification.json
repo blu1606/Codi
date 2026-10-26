@@ -1,0 +1,81 @@
+﻿{
+    "date":  "2026-10-21",
+    "timezone":  "Asia/Saigon",
+    "base":  "437c1e8df16969a54b1fb96f0ff3e02a09c15e7a",
+    "candidate":  "831299c",
+    "integrationCandidate":  "c20c4ef21c6463f85f374a42f0b7c43d38d28ccd",
+    "standalone":  {
+                       "stats":  {
+                                     "startTime":  "2026-10-21T11:11:58.141Z",
+                                     "duration":  87451.95199999999,
+                                     "expected":  4,
+                                     "skipped":  0,
+                                     "unexpected":  0,
+                                     "flaky":  0
+                                 },
+                       "tests":  [
+                                     {
+                                         "title":  "learner locked/unlocked, real lesson navigation desktop-light",
+                                         "status":  "expected"
+                                     },
+                                     {
+                                         "title":  "learner locked/unlocked, real lesson navigation desktop-dark",
+                                         "status":  "expected"
+                                     },
+                                     {
+                                         "title":  "learner locked/unlocked, real lesson navigation mobile-light",
+                                         "status":  "expected"
+                                     },
+                                     {
+                                         "title":  "learner locked/unlocked, real lesson navigation mobile-dark",
+                                         "status":  "expected"
+                                     }
+                                 ]
+                   },
+    "integration":  {
+                        "stats":  {
+                                      "startTime":  "2026-10-21T11:08:31.524Z",
+                                      "duration":  177100.65099999998,
+                                      "expected":  8,
+                                      "skipped":  0,
+                                      "unexpected":  0,
+                                      "flaky":  0
+                                  },
+                        "tests":  [
+                                      {
+                                          "title":  "learner locked/unlocked, real lesson navigation desktop-light",
+                                          "status":  "expected"
+                                      },
+                                      {
+                                          "title":  "lecturer #133 cycle, minimap and declined endpoint desktop-light",
+                                          "status":  "expected"
+                                      },
+                                      {
+                                          "title":  "learner locked/unlocked, real lesson navigation desktop-dark",
+                                          "status":  "expected"
+                                      },
+                                      {
+                                          "title":  "lecturer #133 cycle, minimap and declined endpoint desktop-dark",
+                                          "status":  "expected"
+                                      },
+                                      {
+                                          "title":  "learner locked/unlocked, real lesson navigation mobile-light",
+                                          "status":  "expected"
+                                      },
+                                      {
+                                          "title":  "lecturer #133 cycle, minimap and declined endpoint mobile-light",
+                                          "status":  "expected"
+                                      },
+                                      {
+                                          "title":  "learner locked/unlocked, real lesson navigation mobile-dark",
+                                          "status":  "expected"
+                                      },
+                                      {
+                                          "title":  "lecturer #133 cycle, minimap and declined endpoint mobile-dark",
+                                          "status":  "expected"
+                                      }
+                                  ]
+                    },
+    "cleanupVerified":  true,
+    "lecturerMobileLayoutCertified":  false
+}

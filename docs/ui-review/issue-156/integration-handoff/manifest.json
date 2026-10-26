@@ -1,0 +1,330 @@
+{
+  "runtimeCommit": "c20c4ef21c6463f85f374a42f0b7c43d38d28ccd",
+  "runtimeTree": "9311c95765c2f4d3df14717c87e42deb5c06b23d",
+  "runtimeParents": [
+    "5d006de70e7a1f79b0cecb28fd857ae0e5cb7984",
+    "437c1e8df16969a54b1fb96f0ff3e02a09c15e7a"
+  ],
+  "base": "437c1e8df16969a54b1fb96f0ff3e02a09c15e7a",
+  "standaloneRuntime": "4981058b64c3ee861c488b74ff38decf2e2651c7",
+  "unchangedApplicationSource": true,
+  "bundlePrerequisites": [
+    "8f8ead13de0ad874985d7d6b933e9315ba5bb23b",
+    "a7d60184a9e88ffad40f50f855ea7ef2d1e227e4",
+    "45d3bd5de6570c841bf4ee419cb08ebc6e5856b6",
+    "dacdad8b999b5251ec3be682c379e6750eb702af",
+    "437c1e8df16969a54b1fb96f0ff3e02a09c15e7a"
+  ],
+  "runtimeSource": {
+    "apps/web/src/components/knowledge-map.tsx": {
+      "gitBlob": "189017fb0982a289595d161bf98c80595570b8c7",
+      "worktreeSha256": "651c8d0d04b20d6d46fad6a2ea4cb4590e2885707c20e84c5348f9b4f4771540"
+    },
+    "apps/web/src/components/knowledge-map-sections.tsx": {
+      "gitBlob": "224d0ced7b92e3dcb8ff0bf4d4b4c039f71d17a4",
+      "worktreeSha256": "b6070d07d058c0fc63ece48ece6f9cc2d101f60e5379a56a0388bb673a34e0d8"
+    },
+    "apps/web/src/lib/learning-path-service.ts": {
+      "gitBlob": "0b10c684d6bb8d690d0cc43f3675f6aaeb43be5c",
+      "worktreeSha256": "77477c141b156da5104957b1c90b44cd4a12e756e0c90de6f2a9e31c248ad488"
+    },
+    "apps/web/src/lib/learning-path-contract.ts": {
+      "gitBlob": "7ee69c82d987c16addd2023ba8bb1e0f0bef6d8b",
+      "worktreeSha256": "2b2afe1643422c7ce9bea09f4ce4633ccd959befd042cfb903f45a69f4fa4629"
+    },
+    "apps/web/src/app/learn/[courseId]/[lessonId]/layout.tsx": {
+      "gitBlob": "0f5a2b04d6ad6177a990462d801ffdbf7a8763c9",
+      "worktreeSha256": "5e8f98a8e5b70aaaf34e1133a17f9d36c6c2a964850e0ae027fe99ec458c8b13"
+    },
+    "apps/web/src/app/api/learn/[courseId]/lessons/[lessonId]/route.ts": {
+      "gitBlob": "17fa8654a14a35aefab7bc4a02fb2ad55698052f",
+      "worktreeSha256": "9143a564e971ea402aa500a319dc4291b3636702d84e731871812dfc552c9188"
+    },
+    "packages/ui/src/components/learner-knowledge-graph-lines.tsx": {
+      "gitBlob": "59e79511ebcac0161963141e08fe3b564b47abec",
+      "worktreeSha256": "a26fe0611cd252d185579fd04942fa7464dd4cf7915d151e2010477089465085"
+    }
+  },
+  "verificationSource": {
+    "apps/web/scripts/verify-knowledge-map-cta.mjs": {
+      "sha256": "abb8edd0e20538151fd077ba8ca53152b6c53da243358ce0ccba72ef8f8307b6"
+    },
+    "apps/web/e2e/knowledge-map-edge-states.spec.ts": {
+      "sha256": "380dfd55e6e10067e27105df0fae26d5583da596102a496cb9e8764a7b0cb838"
+    },
+    "apps/web/e2e/knowledge-map-cta.spec.ts": {
+      "sha256": "eebc8a008bb8fa679181ac49edd24ca070c08f04fb4c9581f4b5cbc2d7eea85d"
+    },
+    "apps/web/e2e/fixtures.ts": {
+      "sha256": "4d4b0ddc444940bb44f55f4a4758c32a41fbfe2122bd8d5fd3333e97fef558c0"
+    },
+    "apps/web/e2e/env.ts": {
+      "sha256": "0160491fc11dd4086d3891df5a12193ea8c2d3c233c2b52d9ca588cdca51fec7"
+    },
+    "apps/web/playwright.config.ts": {
+      "sha256": "5fe0222588e9752a243bf9a7e2ee1d1d5e01fe56a28edb3848478d57268593d8"
+    }
+  },
+  "buildEnvironment": {
+    "NODE_ENV": "production",
+    "BETTER_AUTH_URL": "http://localhost:3265",
+    "NEXT_TELEMETRY_DISABLED": "1",
+    "NEXT_USE_POST_BUILD": "1",
+    "NEXT_TURBOPACK_USE_WORKER": "0"
+  },
+  "historicalLogsAreNewExecutions": false,
+  "artifacts": {
+    ".gitattributes": {
+      "bytes": 211,
+      "sha256": "3a6e63ca819fba3178b6ada496ce31732041b67bfcc66e0c3580a924c5ea29e8"
+    },
+    "current/build-attempts.json": {
+      "bytes": 1470,
+      "sha256": "67469d1c50e1ac5d1bea6a72d30b2cf460216e682326bf1d87dc2a8f976fc135"
+    },
+    "current/build-sandbox-denied-exit.json": {
+      "bytes": 144,
+      "sha256": "184274cdb42c057d351b41a4091cabc2a278465cdd78d034fddb69840436ca54"
+    },
+    "current/build-sandbox-denied.log": {
+      "bytes": 4426,
+      "sha256": "7d4abb83c8e02bd85ebede66046b15baa58cf89c5754301d1a18def2a7ed01a2"
+    },
+    "current/build-turbopack-interrupted.log": {
+      "bytes": 5392,
+      "sha256": "bf9f3ab758455af7436e57c36a873e2b7a0f458e92cdb8438ee69243f270350a"
+    },
+    "current/build-turbopack-telemetry-disabled-interrupted.log": {
+      "bytes": 2827,
+      "sha256": "74a6826fd687435b6784f1a44068121b02ed054408eae4ec91c5b7741025106a"
+    },
+    "current/build-webpack-type-failure.log": {
+      "bytes": 1519,
+      "sha256": "669fb944ab2d0db3375d29868e3e15207e4f0b5a15614fc2872768e5798ae961"
+    },
+    "current/build-webpack-type-failure.log.json": {
+      "bytes": 363,
+      "sha256": "3aa4541eafc2c95657ecd36fd2c7d5072fca622f1848bde49998d5cb0ed18104"
+    },
+    "current/build-webpack-user-interrupted.log": {
+      "bytes": 228,
+      "sha256": "ab4939a7afad2dfa19d28126133458517d57fb3f8a21d4c0b8569a1069c20bd1"
+    },
+    "current/build.log": {
+      "bytes": 2826,
+      "sha256": "67c0f18012d11893548e095b9b7dc716b82d42710fa788ce38cad0b632e56116"
+    },
+    "current/integration/no-related-lessons-desktop-dark.png": {
+      "bytes": 134758,
+      "sha256": "40aa62c92e2929d74c530cd0d0588a3ea98d4ac6aaebc1f8b31f447de8535dc4"
+    },
+    "current/integration/no-related-lessons-desktop-light.png": {
+      "bytes": 133399,
+      "sha256": "5042d799410f6a53e3bdb725275c3f7f4a5d5d26f6449f19e358f21baf0fbf59"
+    },
+    "current/integration/no-related-lessons-mobile-dark.png": {
+      "bytes": 110667,
+      "sha256": "9b1be1c2887a19978b95bf62881948f35151cd4fea7af9d9d75c392e148ad3a4"
+    },
+    "current/integration/no-related-lessons-mobile-light.png": {
+      "bytes": 108091,
+      "sha256": "e8fa2facd0402b4e90003194f70b90daf2f75b231eb42a3fe331ff823d916deb"
+    },
+    "current/integration/playwright-original.json.gz": {
+      "bytes": 651879,
+      "sha256": "4e5bad69d79491c8282791239bdb9b2c9a1c99344f950fcbb793697a4ea7989c"
+    },
+    "current/integration/summary.json": {
+      "bytes": 1309,
+      "sha256": "dc3228a4cb397bf5ba584a764d35f5e05379f0776ef02ca30b59810c6264108c"
+    },
+    "current/integration/unconfirmed-desktop-dark.png": {
+      "bytes": 52545,
+      "sha256": "7a3bfa6aeb0ab30acf01b15d677891632ab70bbcc46e609af1d2adaaffa1e1d5"
+    },
+    "current/integration/unconfirmed-desktop-light.png": {
+      "bytes": 51097,
+      "sha256": "aff78c682a03956fd2bf2a8845655f0568b32d4c564ef8c2876c5e264a0497a3"
+    },
+    "current/integration/unconfirmed-mobile-dark.png": {
+      "bytes": 44447,
+      "sha256": "7ed86af4d8918dfb1399bc9e9d7182882f4f8448148d250c39289c37a6437b01"
+    },
+    "current/integration/unconfirmed-mobile-light.png": {
+      "bytes": 42691,
+      "sha256": "38924f357106dd2734cc0e5b6d9bb94b13560594db86201e24ff8b55deb68ac1"
+    },
+    "current/integration-edge-playwright-cleanup.log": {
+      "bytes": 1116,
+      "sha256": "5462508d3adb680797bec8f1faa5d77ea9128b4ad29eaa4a49aeb2ae9054ec42"
+    },
+    "current/integration-edge-playwright-cleanup.log.json": {
+      "bytes": 322,
+      "sha256": "9aa8eaf250057a878a38ba280ddd67f5b5e9f5311672ffc380e565eb98b7f8bd"
+    },
+    "current/integration-server.log": {
+      "bytes": 890,
+      "sha256": "773ca5c77835807534025d37b23d72a77565cdbdcb3644be45cec469b07b9058"
+    },
+    "current/standalone/no-related-lessons-desktop-dark.png": {
+      "bytes": 93294,
+      "sha256": "0ea9b58b3acd0b508f258cdf01f2e99be2d99f8275b87471164995fa95d62f6c"
+    },
+    "current/standalone/no-related-lessons-desktop-light.png": {
+      "bytes": 92436,
+      "sha256": "3f04bb5af2f7edabe8c4e158cf6c78997faecc6b71d479ba5412da9d542ee230"
+    },
+    "current/standalone/no-related-lessons-mobile-dark.png": {
+      "bytes": 85795,
+      "sha256": "f8782b3b1d4b7ed389e62c7122773cd4f0e3cc2339d6e512bf3d74caa67f22b1"
+    },
+    "current/standalone/no-related-lessons-mobile-light.png": {
+      "bytes": 84191,
+      "sha256": "31c08337e20b25913355ab82a80b39dc95518de8e0aa28d7f69e9cfc1d3e36b2"
+    },
+    "current/standalone/playwright-cleanup.log": {
+      "bytes": 1116,
+      "sha256": "f80899f9e465ebe89768ccb16a3ae58e88b3e5058c4475aefc7ac173c56ffe2c"
+    },
+    "current/standalone/playwright-cleanup.log.json": {
+      "bytes": 322,
+      "sha256": "fb4d55926e1c9b8058e0b988429b032252244799dba05c8d07588ccebef7e94d"
+    },
+    "current/standalone/playwright-original.json.gz": {
+      "bytes": 527347,
+      "sha256": "90588e623815ba96767d53450240b0d1068213ed04a85e119d5ae3bcc5c0b880"
+    },
+    "current/standalone/playwright-sandbox-denied-exit.json": {
+      "bytes": 106,
+      "sha256": "2c4d59fddeeb2512d68b2582bda1546d5483304433e43cbf164a2ac62c0bbcc5"
+    },
+    "current/standalone/playwright-sandbox-denied.log": {
+      "bytes": 874,
+      "sha256": "8067099e6f0ad6c4039d60771872eacfd89161d5fd709bdba5eed6081135c78d"
+    },
+    "current/standalone/server.log": {
+      "bytes": 890,
+      "sha256": "ed1161e915062f651d6723ab54ea49d769b86daef2cf5bfbcb404fc207e4cb6c"
+    },
+    "current/standalone/summary.json": {
+      "bytes": 1310,
+      "sha256": "043e9f68e3cf517095bbcd682558f59f0535804b76e86339b757d0212a9fbf63"
+    },
+    "current/standalone/unconfirmed-desktop-dark.png": {
+      "bytes": 51347,
+      "sha256": "dcdcc0b66c13ab557034c2fdb504b15d43dd230a456d4043f9c80df5071bebbb"
+    },
+    "current/standalone/unconfirmed-desktop-light.png": {
+      "bytes": 50163,
+      "sha256": "eb80f7372b9bc8f93be997c9f0e85f716082377f0dbdfea2b6485c29611a0a93"
+    },
+    "current/standalone/unconfirmed-mobile-dark.png": {
+      "bytes": 44823,
+      "sha256": "51470c6ddf3b0a299ebd73c0400772baba839789bc06b1603d153ad038d76a4e"
+    },
+    "current/standalone/unconfirmed-mobile-light.png": {
+      "bytes": 43373,
+      "sha256": "1229f322e6b56ed13c7fff3e8f5ee66037c5f89365f9c6e79be4a61055bb9e4f"
+    },
+    "current/standards.log": {
+      "bytes": 219,
+      "sha256": "d98139a56c92d2b670cdd28df52e24ff281a6c598d7058a25fffcd258f45f0d2"
+    },
+    "current/standards.log.json": {
+      "bytes": 302,
+      "sha256": "ee33f75524a5a5b7f19df877e1c9f6a15cf3e8e4db0f22480ad0e7963731b25a"
+    },
+    "current/types.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "current/types.log.json": {
+      "bytes": 321,
+      "sha256": "a38024ba09d3316bd61d1482b85e21002ed677ef77485bb01b9eda5ab253a68e"
+    },
+    "historical/cta-playwright-cleanup-tool-output.json": {
+      "bytes": 2307,
+      "sha256": "bbe380e0beaa4773b81dde287915b6050d7e57da0f46378245330c046c31c287"
+    },
+    "historical/integration-build.log": {
+      "bytes": 5390,
+      "sha256": "5eed8979ee22a46976568869abfd07a61edb4aed6b324b53af07b9802de6a3ed"
+    },
+    "historical/integration-tests.log": {
+      "bytes": 23340,
+      "sha256": "2e0f60c72af98882bcc0a7e6fda270a3d6b224896f5efda92a2977b53c7813e0"
+    },
+    "historical/integration-types.log": {
+      "bytes": 626,
+      "sha256": "1b864f0d05b32e9d5dfefc58ee6684d3c3204b4a63e12b915ca126f00c159ff0"
+    },
+    "historical/old-build-interruption-tool-output.json": {
+      "bytes": 237,
+      "sha256": "37ea8feb8fbcdbf024f87b352637d7d13cc1d23782cfaf075216b4471a58620e"
+    },
+    "historical/pr165-playwright-cleanup-tool-output.json": {
+      "bytes": 1788,
+      "sha256": "777b0c2ee0d5eba45952846f52e796bcf1bbd595db29bef10f763da4d5d16941"
+    },
+    "historical/pr165-playwright-original.json.gz": {
+      "bytes": 1958831,
+      "sha256": "ad21dd1a1ad1765a1e200f6b7baded92514fa976ae09e85003642767fdc30d12"
+    },
+    "historical/pr165-server-stop-tool-output.json": {
+      "bytes": 979,
+      "sha256": "460508a4cbf10d1a94082f82d7c617826f4360373329451867260a65feed8385"
+    },
+    "historical/production-start-tool-output.json": {
+      "bytes": 809,
+      "sha256": "704cbcafb60388d83df28a0a2f40d482e9d592f97634d804cc43cef4427756ed"
+    },
+    "historical/report-checksum.json": {
+      "bytes": 322,
+      "sha256": "18c4ba4a99f02919c0f3426a69431e1475f5d4f199f8289ea62994b6da3a1ced"
+    },
+    "historical/source/e2e/env.ts": {
+      "bytes": 2205,
+      "sha256": "0160491fc11dd4086d3891df5a12193ea8c2d3c233c2b52d9ca588cdca51fec7"
+    },
+    "historical/source/e2e/fixtures.ts": {
+      "bytes": 10624,
+      "sha256": "4d4b0ddc444940bb44f55f4a4758c32a41fbfe2122bd8d5fd3333e97fef558c0"
+    },
+    "historical/source/e2e/knowledge-map-cta.spec.ts": {
+      "bytes": 5343,
+      "sha256": "eebc8a008bb8fa679181ac49edd24ca070c08f04fb4c9581f4b5cbc2d7eea85d"
+    },
+    "historical/source/e2e/knowledge-map-review.spec.ts": {
+      "bytes": 11222,
+      "sha256": "be0ca2787da36f32e6f56cd15da14cd94804ff15942cf25cc13ee6338c6ce4db"
+    },
+    "historical/source/playwright.config.ts": {
+      "bytes": 2664,
+      "sha256": "5fe0222588e9752a243bf9a7e2ee1d1d5e01fe56a28edb3848478d57268593d8"
+    },
+    "historical/source/scripts/verify-knowledge-map-browser.mjs": {
+      "bytes": 8800,
+      "sha256": "754c26a9425b05b31f814467576f42b3dee0ee383874e85be794755778580a37"
+    },
+    "historical/source/scripts/verify-knowledge-map-cta.mjs": {
+      "bytes": 7980,
+      "sha256": "9f682dc409832432e9cca2985ef1d3ed2b8491b7ffb86183ae5603d3a7c9d4e8"
+    },
+    "README.md": {
+      "bytes": 15733,
+      "sha256": "effc90ad5471be4d5975e8074420d108758d03f3c2456a80a59584180d5d86da"
+    },
+    "runtime-c20c4ef.bundle": {
+      "bytes": 8020,
+      "sha256": "531e9070b9590f30b72fd07537547a4a18dfa0830ebec34f5500290b0932781e"
+    },
+    "tools/capture-command.mjs": {
+      "bytes": 1145,
+      "sha256": "c535622356bd0249b920aa0e6cec2eacf5eb670ff0ad7051894fdf08aec3938b"
+    },
+    "tools/inspect-report.mjs": {
+      "bytes": 1145,
+      "sha256": "9cadd955f373c58ed31f692b866a3723d5200358b42494e2b27f9f5e19bc0449"
+    }
+  }
+}

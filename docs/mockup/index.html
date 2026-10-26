@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codi · Prototype trải nghiệm</title>
+  <meta name="description" content="Codi — bản thử nghiệm UX: mua khoá học, lộ trình học cá nhân hoá bằng AI, khu vực giảng viên và quản trị.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Lexend:wght@500;600;700&subset=vietnamese&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/charts.css">
+  <link rel="stylesheet" href="css/commerce.css">
+  <link rel="stylesheet" href="css/learning.css">
+  <link rel="stylesheet" href="css/ai.css">
+  <link rel="stylesheet" href="css/lecturer.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <a class="sr-only" href="#app-main">Bỏ qua đến nội dung chính</a>
+  <header id="app-header" class="app-header"></header>
+  <main id="app-main" class="app-main" tabindex="-1"></main>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+  <!-- Prototype-only scenario controls (role switch + forced states). Not product UI. -->
+  <button id="dev-toggle" class="dev-toggle" type="button" aria-controls="dev-drawer" aria-expanded="false">
+    <svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+    Kịch bản thử nghiệm
+  </button>
+  <div id="dev-drawer" class="dev-drawer" role="region" aria-label="Kịch bản thử nghiệm" hidden></div>
+
+  <script defer src="js/data.js"></script>
+  <script defer src="js/course-logos.js"></script>
+  <script defer src="js/core.js"></script>
+  <script defer src="js/charts.js"></script>
+  <script defer src="js/coding-practice.js"></script>
+  <script defer src="js/learner-commerce.js"></script>
+  <script defer src="js/learner-learning.js"></script>
+  <script defer src="js/learner-insights.js"></script>
+  <script defer src="js/ai-tutor.js"></script>
+  <script defer src="js/ai-advisor.js"></script>
+  <script defer src="js/github-analyze.js"></script>
+  <script defer src="js/course-review.js"></script>
+  <script defer src="js/lecturer.js"></script>
+  <script defer src="js/lecturer-coding.js"></script>
+  <script defer src="js/lecturer-insights.js"></script>
+  <script defer src="js/lecturer-ai.js"></script>
+  <script defer src="js/lecturer-ai-create.js"></script>
+  <script defer src="js/admin.js"></script>
+  <script defer src="js/admin-review.js"></script>
+  <script defer src="js/admin-analytics.js"></script>
+</body>
+</html>

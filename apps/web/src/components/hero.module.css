@@ -1,0 +1,8 @@
+.content {
+  --primary: #785bfa;
+  --primary-foreground: #ffffff;
+}
+
+.stats {
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+}

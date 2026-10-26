@@ -1,0 +1,17 @@
+{
+  "identityAndTokenRedaction": "The runner records stable aliases at observation time. No login credentials, cookies, auth headers or storage state are collected.",
+  "additionalRedactions": [
+    {
+      "path": "historical/server-tool-output.json",
+      "originalSha256": "ea37817188c20f042566acf8d044c419e249b1893b2f7ee06429658e71cc793e",
+      "redactedSha256": "951848b9ec56da206adcf44600c4826fbf1308531ef975a06c7414cbb4238f58",
+      "operation": "Replace private network interface address with [local-network-address]; no test response, timestamps or exit codes changed."
+    },
+    {
+      "path": "current/server.log",
+      "originalSha256": "cfc28ac94f559d01fcec8bb17a5782f3a17fd25c33df0d7f37057d8c3c0b42d5",
+      "redactedSha256": "b8987b334944fb09b98314e0a17a744e2763294a1a6a7c67c414a7e2d1e0ddec",
+      "operation": "Replace private network interface address with [local-network-address]; no test response, timestamps or exit codes changed."
+    }
+  ]
+}

@@ -4,8 +4,11 @@ database/exports/
 *.drawio
 *.drawio.bkp
 
-# agent scratch, not a deliverable
-.claude/
+# agent scratch, not a deliverable — except the shared project skill
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/codi-mockup-parity/
 
 # ---- secrets ----
 .env
@@ -42,6 +45,7 @@ playwright-report/
 test-results/
 blob-report/
 .playwright/
+.vitest/
 
 # ---- python tooling (database scripts) ----
 __pycache__/
@@ -91,3 +95,6 @@ apps/web/src/routeTree.gen.ts
 
 # Working notes for this session/agent — not a shared deliverable
 plans/
+
+# Playwright e2e (apps/web/e2e): signed-in storage states
+apps/web/e2e/.auth/

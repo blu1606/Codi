@@ -1,6 +1,7 @@
 "use client";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Alert } from "@codi-1/ui/components/alert";
 import { Button } from "@codi-1/ui/components/button";
 import {
   Card,
@@ -14,10 +15,13 @@ import { Input } from "@codi-1/ui/components/input";
 import { Label } from "@codi-1/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { safeNext } from "@/lib/safe-redirect";
+import { mapSignInError } from "@/lib/sign-in-error";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
 import Loader from "./loader";
@@ -26,12 +30,21 @@ const REMEMBER_EMAIL_KEY = "codi_remember_email";
 
 export default function SignInForm({
   onSwitchToSignUp,
+  onSuccess,
+  returnTo = "/dashboard",
+  courseTitle,
+  intentReason,
 }: {
   onSwitchToSignUp: () => void;
+  onSuccess?: () => void;
+  returnTo?: string;
+  courseTitle?: string;
+  intentReason?: string;
 }) {
   const router = useRouter();
   const { isPending } = authClient.useSession();
   const [rememberMe, setRememberMe] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm({
     defaultValues: {
@@ -39,6 +52,7 @@ export default function SignInForm({
       password: "",
     },
     onSubmit: async ({ value }) => {
+      setServerError(null);
       await authClient.signIn.email(
         {
           email: value.email,
@@ -46,6 +60,7 @@ export default function SignInForm({
         },
         {
           onSuccess: () => {
+            setServerError(null);
             try {
               if (rememberMe) {
                 localStorage.setItem(REMEMBER_EMAIL_KEY, value.email);
@@ -55,15 +70,23 @@ export default function SignInForm({
             } catch {
               // Ignore storage errors in restricted contexts
             }
-            router.push("/dashboard");
+            try {
+              authClient.$store.notify("$sessionSignal");
+            } catch {
+              // Ignore
+            }
             toast.success("Đăng nhập thành công!");
+            if (onSuccess) {
+              onSuccess();
+            } else {
+              const safeDestination = safeNext(returnTo, "/dashboard");
+              router.push(safeDestination as Route);
+            }
           },
           onError: (error) => {
-            toast.error(
-              error.error.message ||
-                error.error.statusText ||
-                "Đăng nhập thất bại",
-            );
+            const errorMessage = mapSignInError(error);
+            setServerError(errorMessage);
+            toast.error(errorMessage);
           },
         },
       );
@@ -95,51 +118,57 @@ export default function SignInForm({
   return (
     <div className="w-full">
       <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
-        <CardHeader className="text-center pb-6 pt-8 space-y-3">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-2">
-            <Eye
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-6 w-6 text-primary"
-            >
-              <path d="M21.42 10.922a2 2 0 0 1-.019 3.837l-8.5 4.35a2 2 0 0 1-1.802 0l-8.5-4.35a2 2 0 0 1-.019-3.837l8.5-4.2a2 2 0 0 1 1.84 0l8.5 4.2Z" />
-              <path d="M22 10v6" />
-              <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" />
-            </Eye>
+        <CardHeader className="text-center pb-3 pt-5 px-5 space-y-2">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 mb-1">
+            <GraduationCap className="h-5 w-5 text-primary" aria-hidden="true" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">
-            Welcome Back, Student!
+          <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            Chào mừng trở lại!
           </CardTitle>
-          <CardDescription className="text-sm">
-            Login to access your learning portal
+          <CardDescription className="text-xs sm:text-sm">
+            Đăng nhập để tiếp tục học tập và thanh toán
           </CardDescription>
+          {courseTitle && (
+            <div className="mt-1 rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-left text-xs text-foreground">
+              <span className="text-muted-foreground block text-[10px] mb-0.5">
+                Khoá học đang chọn
+              </span>
+              <strong className="text-xs font-semibold text-foreground line-clamp-1">
+                {courseTitle}
+              </strong>
+              {intentReason && (
+                <p className="text-muted-foreground mt-0.5 text-[11px] leading-relaxed">
+                  {intentReason}
+                </p>
+              )}
+            </div>
+          )}
         </CardHeader>
 
-        <CardContent className="space-y-6 pb-8">
+        <CardContent className="space-y-4 px-5 pb-6">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               e.stopPropagation();
               form.handleSubmit();
             }}
-            className="space-y-4"
+            className="space-y-3"
           >
+            {serverError && (
+              <Alert variant="destructive" className="py-2.5 px-3 text-xs">
+                {serverError}
+              </Alert>
+            )}
+
             <div>
               <form.Field name="email">
                 {(field) => (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label
                       htmlFor={field.name}
                       className="text-xs text-muted-foreground font-medium"
                     >
-                      Email Address
+                      Địa chỉ Email
                     </Label>
                     <Input
                       id={field.name}
@@ -150,7 +179,7 @@ export default function SignInForm({
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      className="bg-background/50 h-11"
+                      className="bg-background/50 h-10"
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
@@ -168,12 +197,12 @@ export default function SignInForm({
             <div>
               <form.Field name="password">
                 {(field) => (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label
                       htmlFor={field.name}
                       className="text-xs text-muted-foreground font-medium"
                     >
-                      Password
+                      Mật khẩu
                     </Label>
                     <Input
                       id={field.name}
@@ -184,7 +213,7 @@ export default function SignInForm({
                       value={field.state.value}
                       onBlur={field.handleBlur}
                       onChange={(e) => field.handleChange(e.target.value)}
-                      className="bg-background/50 h-11"
+                      className="bg-background/50 h-10"
                     />
                     {field.state.meta.errors.map((error) => (
                       <p
@@ -199,7 +228,7 @@ export default function SignInForm({
               </form.Field>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="remember-email"
@@ -208,7 +237,7 @@ export default function SignInForm({
                 />
                 <Label
                   htmlFor="remember-email"
-                  className="cursor-pointer text-sm text-muted-foreground"
+                  className="cursor-pointer text-xs text-muted-foreground"
                 >
                   Ghi nhớ email
                 </Label>
@@ -216,13 +245,13 @@ export default function SignInForm({
               <button
                 type="button"
                 onClick={() => router.push("/forgot-password")}
-                className="font-medium text-primary hover:underline"
+                className="font-medium text-primary hover:underline cursor-pointer"
               >
                 Quên mật khẩu?
               </button>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-1">
               <form.Subscribe
                 selector={(state) => ({
                   canSubmit: state.canSubmit,
@@ -232,38 +261,38 @@ export default function SignInForm({
                 {({ canSubmit, isSubmitting }) => (
                   <Button
                     type="submit"
-                    className="w-full h-11 text-base font-semibold bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:bg-primary/90"
+                    className="w-full h-10 text-sm font-semibold bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 cursor-pointer"
                     disabled={!canSubmit || isSubmitting}
                   >
-                    {isSubmitting ? "Logging in..." : "Log In"}
+                    {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
                   </Button>
                 )}
               </form.Subscribe>
             </div>
           </form>
 
-          <div className="relative my-6">
+          <div className="relative my-3">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-3 text-muted-foreground">OR</span>
+            <div className="relative flex justify-center text-[11px] uppercase">
+              <span className="bg-card px-2.5 text-muted-foreground">Hoặc tiếp tục với</span>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <GoogleSignInButton text="Continue with Google" />
-            <GitHubSignInButton text="Continue with GitHub" />
+          <div className="space-y-2.5">
+            <GoogleSignInButton text="Tiếp tục với Google" callbackURL={returnTo} />
+            <GitHubSignInButton text="Tiếp tục với GitHub" callbackURL={returnTo} />
           </div>
 
-          <div className="pt-4 text-center text-sm text-muted-foreground">
-            <span>Don't have an account? </span>
+          <div className="pt-2 text-center text-xs text-muted-foreground">
+            <span>Chưa có tài khoản? </span>
             <button
               type="button"
               onClick={onSwitchToSignUp}
               className="text-primary font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
             >
-              Register here
+              Đăng ký ngay
             </button>
           </div>
         </CardContent>

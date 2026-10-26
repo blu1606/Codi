@@ -1,0 +1,40 @@
+[
+  {
+    "id": "title",
+    "title": "React foundations",
+    "description": "Build interfaces",
+    "category": "Web",
+    "level": "Beginner"
+  },
+  {
+    "id": "description",
+    "title": "UI workshop",
+    "description": "Practice REACT components",
+    "category": "Web",
+    "level": "Advanced",
+    "topics": []
+  },
+  {
+    "id": "topic",
+    "title": "Frontend patterns",
+    "description": "Modern interfaces",
+    "category": "Web",
+    "level": "Beginner",
+    "topics": ["React", "State"]
+  },
+  {
+    "id": "other-category",
+    "title": "React native",
+    "description": "Mobile apps",
+    "category": "Mobile",
+    "level": "Beginner"
+  },
+  {
+    "id": "unrelated",
+    "title": "Databases",
+    "description": "Relational queries",
+    "category": "Web",
+    "level": "Beginner",
+    "topics": ["SQL"]
+  }
+]

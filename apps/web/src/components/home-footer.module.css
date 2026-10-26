@@ -1,0 +1,7 @@
+.footer {
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}

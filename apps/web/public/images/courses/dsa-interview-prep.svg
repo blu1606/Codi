@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" fill="none">
+  <defs><linearGradient id="bg" x2="640" y2="360" gradientUnits="userSpaceOnUse"><stop stop-color="#f97316"/><stop offset="1" stop-color="#be123c"/></linearGradient></defs>
+  <path fill="url(#bg)" d="M0 0h640v360H0z"/>
+  <circle cx="620" cy="330" r="205" stroke="white" stroke-opacity=".08" stroke-width="50"/>
+  <g stroke="#fed7aa" stroke-width="3">
+    <path d="m504 109-60 62m60-62 60 62m-120 0-34 61m34-61 30 61m90-61-30 61m30-61 36 61" stroke-opacity=".7"/>
+    <g fill="#9f1239"><circle cx="504" cy="102" r="23"/><circle cx="444" cy="171" r="20"/><circle cx="564" cy="171" r="20"/><circle cx="410" cy="238" r="17"/><circle cx="474" cy="238" r="17"/><circle cx="534" cy="238" r="17"/><circle cx="600" cy="238" r="17"/></g>
+  </g>
+  <g fill="white" font-family="Arial, sans-serif">
+    <text x="40" y="49" font-size="19" font-weight="700" letter-spacing="3">CODI / COMPUTER SCIENCE</text>
+    <text x="40" y="141" font-size="52" font-weight="800">Cấu trúc dữ liệu</text>
+    <text x="40" y="202" font-size="52" font-weight="800">&amp; Giải thuật</text>
+    <text x="42" y="247" font-size="22" opacity=".88">Tư duy tốt. Giải bài hay.</text>
+    <text x="42" y="321" font-size="17" font-weight="700" letter-spacing="2" opacity=".8">BIG O · ALGORITHMS · INTERVIEW</text>
+  </g>
+</svg>

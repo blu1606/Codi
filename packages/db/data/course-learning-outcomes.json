@@ -1,0 +1,42 @@
+{
+  "frontend-react-nextjs": [
+    "Xây dựng giao diện web bằng HTML ngữ nghĩa, CSS và Tailwind, hiển thị phù hợp trên máy tính, máy tính bảng và điện thoại.",
+    "Vận dụng JavaScript hiện đại để xử lý sự kiện, thao tác dữ liệu và thực hiện các tác vụ bất đồng bộ.",
+    "Tổ chức ứng dụng React thành các component tái sử dụng, quản lý state và sử dụng hooks đúng mục đích.",
+    "Xây dựng trang và luồng điều hướng với Next.js App Router, lựa chọn Server Component hoặc Client Component phù hợp.",
+    "Kết nối giao diện với API, xử lý biểu mẫu và hiển thị đầy đủ trạng thái tải, lỗi hoặc không có dữ liệu.",
+    "Hoàn thiện và triển khai một ứng dụng web, áp dụng các nguyên tắc cơ bản về hiệu năng, SEO và khả năng truy cập."
+  ],
+  "backend-nodejs-typescript": [
+    "Tổ chức ứng dụng backend bằng Node.js và TypeScript, sử dụng kiểu dữ liệu để giảm lỗi và giúp mã dễ bảo trì.",
+    "Thiết kế REST API và GraphQL API, xác thực dữ liệu đầu vào và trả về lỗi nhất quán cho phía giao diện.",
+    "Thiết kế cơ sở dữ liệu PostgreSQL, xây dựng quan hệ giữa các bảng và sử dụng truy vấn, migration cùng transaction.",
+    "Xây dựng luồng đăng nhập và phân quyền, bảo vệ các API theo vai trò và quyền truy cập của người dùng.",
+    "Áp dụng phân trang, chỉ mục, bộ nhớ đệm và giới hạn tần suất yêu cầu để cải thiện hiệu năng và bảo vệ dịch vụ.",
+    "Viết kiểm thử cho các luồng API quan trọng, theo dõi lỗi qua log và đóng gói ứng dụng bằng Docker để triển khai."
+  ],
+  "dsa-interview-prep": [
+    "Phân tích độ phức tạp thời gian và bộ nhớ bằng Big O để so sánh và lựa chọn cách giải phù hợp.",
+    "Sử dụng mảng, chuỗi, hash map, stack và queue để giải các dạng bài xử lý dữ liệu thường gặp.",
+    "Áp dụng two pointers, sliding window và tìm kiếm nhị phân để tối ưu các bài toán tìm kiếm và duyệt dữ liệu.",
+    "Giải bài toán trên cây và đồ thị bằng đệ quy, BFS và DFS; nhận biết khi nào cần dùng thuật toán tìm đường đi ngắn nhất.",
+    "Nhận diện bài toán phù hợp với backtracking và quy hoạch động, xác định trạng thái cùng công thức chuyển trạng thái.",
+    "Luyện quy trình phỏng vấn lập trình: làm rõ đề bài, trình bày hướng giải, viết mã và kiểm tra các trường hợp biên."
+  ],
+  "ai-engineering": [
+    "Hiểu cách ứng dụng LLM xử lý token, cửa sổ ngữ cảnh và các tham số sinh nội dung để chọn cấu hình phù hợp.",
+    "Thiết kế prompt rõ ràng, sử dụng ví dụ và đầu ra có cấu trúc để đáp ứng yêu cầu của từng tác vụ.",
+    "Tích hợp API mô hình ngôn ngữ vào ứng dụng, xử lý phản hồi streaming, lỗi và chi phí sử dụng.",
+    "Xây dựng luồng RAG với embeddings và tìm kiếm vector để trả lời câu hỏi dựa trên tài liệu của ứng dụng.",
+    "Phát triển AI Agent có khả năng gọi công cụ, kết nối API và thực hiện quy trình gồm nhiều bước với giới hạn quyền phù hợp.",
+    "Đánh giá chất lượng câu trả lời, kiểm tra độ chính xác và áp dụng biện pháp giảm thông tin sai lệch, bảo vệ dữ liệu người dùng."
+  ],
+  "react-native-expo": [
+    "Thiết lập dự án React Native với Expo và xây dựng ứng dụng dùng chung mã nguồn cho iOS và Android.",
+    "Thiết kế giao diện bằng các component native và Flexbox, xử lý bàn phím và bố cục phù hợp với nhiều kích thước màn hình.",
+    "Xây dựng điều hướng bằng Expo Router, truyền dữ liệu giữa các màn hình và tổ chức luồng sử dụng ứng dụng.",
+    "Kết nối REST API, quản lý trạng thái và lưu dữ liệu cục bộ để duy trì trải nghiệm khi kết nối mạng không ổn định.",
+    "Tích hợp camera, vị trí và thông báo, xử lý quyền truy cập thiết bị cùng các trường hợp người dùng từ chối cấp quyền.",
+    "Kiểm tra ứng dụng trên thiết bị, tạo bản build với Expo và chuẩn bị cấu hình cần thiết để phát hành lên App Store và Google Play."
+  ]
+}

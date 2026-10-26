@@ -1,0 +1,368 @@
+/* Learning module styles (lessons, quizzes, assignments, insights) */
+
+/* ─────────────── Onboarding: choice cards (S08b start fork) ─────────────── */
+.choice-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  text-decoration: none;
+  color: var(--fg);
+}
+
+.choice-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.choice-card.is-recommended {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choice-card-icon {
+  font-size: var(--text-3xl);
+  color: var(--accent);
+}
+
+.choice-card-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.choice-card-desc {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: var(--leading-relaxed);
+}
+
+.choice-card-note {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  padding: var(--space-2) var(--space-3);
+  background: var(--canvas);
+  border-radius: var(--radius-sm);
+}
+
+/* ─────────────── Code practice: test filtering (B2) ─────────────── */
+.cp-tests-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.cp-filter-tabs {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.cp-filter-tab {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  transition: all 0.2s;
+  font-weight: 400;
+}
+
+.cp-filter-tab:hover {
+  background: var(--subtle);
+  color: var(--fg);
+}
+
+.cp-filter-tab.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.cp-test-details {
+  list-style: none;
+}
+
+.cp-test-summary {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.cp-test-summary:hover {
+  opacity: 0.85;
+}
+
+.cp-test-body {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex: 1;
+}
+
+.cp-test-name {
+  flex: 1;
+}
+
+.cp-test-state {
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.cp-test-detail {
+  padding: var(--space-3) 0 var(--space-2) var(--space-5);
+  border-left: 2px solid var(--subtle);
+  margin-top: var(--space-2);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cp-test-io {
+  padding: var(--space-2);
+  background: var(--canvas);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.cp-test-io strong {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-1);
+}
+
+.cp-test-io code {
+  word-break: break-all;
+  font-family: var(--font-mono);
+}
+
+.cp-test-io.is-fail {
+  background: var(--danger-soft);
+  border-left: 3px solid var(--danger);
+}
+
+.cp-test-io.is-error {
+  background: var(--danger-soft);
+  border-left: 3px solid var(--danger);
+}
+
+.cp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-3);
+}
+
+/* ─────────────── Dashboard: weekly goal & streaks (C1) ─────────────── */
+.goal-tracker {
+  height: 8px;
+  background: var(--subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.goal-tracker-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+
+.streak {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  background: var(--accent-soft);
+  border-radius: var(--radius-md);
+}
+
+.streak-number {
+  font-size: var(--text-3xl);
+  font-weight: bold;
+  color: var(--accent);
+}
+
+.streak-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ─────────────── Insights: statistics & mastery (C2) ─────────────── */
+.stat-card {
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-1);
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.stat-value {
+  font-size: var(--text-2xl);
+  font-weight: bold;
+  color: var(--accent);
+}
+
+.stat-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.stat-detail {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* .grid-2/.grid-4 are the shared app.css rules (minmax(0, 1fr) columns, collapse at 1024/640px). */
+
+.mastery-bars {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: var(--space-1);
+}
+
+.mastery-bar {
+  height: 24px;
+  background: var(--subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.mastery-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+/* ─────────────── Knowledge map (S13c) ─────────────── */
+.knowledge-graph {
+  margin: var(--space-4) 0;
+}
+
+.kg-svg {
+  width: 100%;
+  max-width: 800px;
+  height: auto;
+}
+
+.kg-legend {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.kg-legend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.kg-legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.kg-table {
+  margin-top: var(--space-4);
+}
+
+.kg-table-head {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 2px solid var(--border);
+  font-weight: 500;
+}
+
+.kg-table-row {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+
+.kg-table-cell {
+  padding: var(--space-2);
+}
+
+.insight-card {
+  display: block;
+  padding: var(--space-6);
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: var(--fg);
+  display: grid;
+  gap: var(--space-3);
+  align-items: start;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.insight-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.insight-icon {
+  color: var(--accent);
+}
+
+.insight-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.insight-desc {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* "Hỏi AI về lỗi này" under a console error */
+.cp-log.is-error .cp-ask-ai { justify-self: start; margin-top: var(--space-2); }

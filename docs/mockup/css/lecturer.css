@@ -1,0 +1,61 @@
+/* Lecturer workspace styles (authoring, grading, analytics) */
+
+.tc-split { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: var(--space-4); }
+@media (max-width: 1024px) { .tc-split { grid-template-columns: minmax(0, 1fr); } }
+
+.tc-kmap-panel { max-height: calc(100vh - var(--header-h) - 64px); overflow-y: auto; }
+
+.split-view { display: grid; }
+
+svg circle[data-action] { cursor: pointer; transition: opacity 0.2s; }
+svg circle[data-action]:hover { opacity: 0.8; }
+
+/* ───────── Content tree: review flags, AI items ───────── */
+.tc-lesson.is-target { background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn); }
+.tc-q-ai { border-color: var(--accent-soft-border); box-shadow: inset 3px 0 0 var(--accent); }
+
+/* ───────── Assignment builder + rubric ───────── */
+.tc-assign fieldset { border: 0; padding: 0; margin: 0; }
+.tc-rubric { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.tc-rubric-row { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.tc-rubric-row .field { gap: var(--space-2); }
+.tc-rubric-pts { flex: none; width: 104px; flex-direction: row; align-items: center; display: flex; }
+.tc-rubric-pts input { width: 64px; }
+.tc-rubric-grade { border: 0; padding: 0; margin: 0; }
+.tc-rg-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.tc-rg-row input { width: 72px; }
+.ai-draft-note { display: flex; align-items: flex-start; gap: 4px; color: var(--accent-active); }
+
+/* ───────── AI helpers in authoring ───────── */
+.la-cta { gap: var(--space-4); }
+.tc-qb-ai { padding: var(--space-3); border: 1px solid var(--accent-soft-border); border-radius: var(--radius-md); background: var(--accent-soft); }
+.la-drop { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-8, 32px) var(--space-4); border: 1.5px dashed var(--border-strong); border-radius: var(--radius-lg); text-align: center; }
+.la-progress { display: grid; gap: var(--space-2); }
+.la-file { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--subtle); }
+.la-file .btn { margin-left: auto; }
+.la-block { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.la-qs, .la-tests { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.la-q { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.la-q.is-off { opacity: .6; }
+.la-tests .te-test { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.la-tests code { word-break: break-all; }
+
+@media (max-width: 640px) {
+  .tc-rubric-row { flex-wrap: wrap; }
+  .la-tests .te-test { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ───────── "Tạo bằng AI" (bài giảng / bài code) ───────── */
+.menu-sep { height: 1px; margin: var(--space-1) 0; background: var(--border); }
+.la-code { margin: var(--space-2) 0 0; padding: var(--space-3); max-height: 320px; overflow: auto; border-radius: var(--radius-sm); background: var(--subtle); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.6; white-space: pre; tab-size: 2; }
+
+/* ───────── "Thêm bài học": chọn chương + dạng bài ───────── */
+.tc-kinds { border: 0; padding: 0; margin: 0; display: grid; gap: var(--space-2); }
+.tc-kind-grid { display: grid; gap: var(--space-2); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tc-kind { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 64px; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
+.tc-kind:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+@media (hover: hover) { .tc-kind:hover { border-color: var(--accent); background: var(--accent-soft); } }
+.tc-kind-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--subtle); color: var(--accent); }
+.tc-kind-text { display: grid; gap: 2px; min-width: 0; }
+.tc-kind-text > * { display: block; }
+@media (max-width: 640px) { .tc-kind-grid { grid-template-columns: minmax(0, 1fr); } }

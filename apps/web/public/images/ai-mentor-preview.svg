@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="592" height="557" viewBox="0 0 592 557">
+  <title>Hội thoại mẫu AI Mentor</title>
+  <desc>AI Mentor giải thích cách dùng Set trong JavaScript để loại bỏ các phần tử trùng lặp.</desc>
+  <defs>
+    <clipPath id="card"><rect x="0.5" y="0.5" width="591" height="556" rx="16"/></clipPath>
+    <g id="avatar">
+      <circle r="13" fill="#8b5cf6"/>
+      <g transform="translate(-8 -8) scale(.667)" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="2"/>
+        <rect x="9" y="9" width="6" height="6" rx="1"/>
+        <path d="M9 1v3m6-3v3M9 20v3m6-3v3M20 9h3m-3 6h3M1 9h3m-3 6h3"/>
+      </g>
+    </g>
+  </defs>
+  <g clip-path="url(#card)" font-family="Arial, Helvetica, sans-serif" fill="#fafafa">
+    <rect width="592" height="557" fill="#171717"/>
+    <rect width="592" height="46" fill="#1c1c1c"/>
+    <path d="M0 46.5h592" stroke="#292929"/>
+    <circle cx="23" cy="24" r="4" fill="#10b981"/>
+    <text x="35" y="28" font-size="13" font-weight="700">AI Mentor Trực Tuyến</text>
+    <text x="572" y="28" font-size="11" text-anchor="end" fill="#a1a1aa">Hội thoại mẫu</text>
+
+    <use href="#avatar" x="37" y="83"/>
+    <text x="62" y="83" font-size="11" font-weight="600" fill="#8b5cf6">AI MENTOR</text>
+    <rect x="62" y="95" width="506" height="45" rx="16" fill="#090909"/>
+    <rect x="62" y="95" width="16" height="16" fill="#090909"/>
+    <text x="75" y="121" font-size="14">Xin chào! Tôi có thể giúp gì cho bạn trong bài học JavaScript hôm nay?</text>
+
+    <text x="160" y="175" font-size="11" fill="#a1a1aa">BẠN</text>
+    <rect x="160" y="187" width="408" height="68" rx="20" fill="#262626"/>
+    <rect x="548" y="187" width="20" height="20" fill="#262626"/>
+    <text x="173" y="214" font-size="14">
+      <tspan x="173">Làm sao để lọc các phần tử trùng lặp trong mảng JS hiệu quả</tspan>
+      <tspan x="173" dy="21">nhất?</tspan>
+    </text>
+
+    <use href="#avatar" x="37" y="290"/>
+    <text x="62" y="290" font-size="11" font-weight="600" fill="#8b5cf6">AI MENTOR</text>
+    <rect x="62" y="302" width="506" height="168" rx="16" fill="#090909"/>
+    <rect x="62" y="302" width="16" height="16" fill="#090909"/>
+    <text x="75" y="330" font-size="14">
+      <tspan x="75">Một cách ngắn gọn là sử dụng cấu trúc dữ liệu Set trong ES6. Set tự động loại</tspan>
+      <tspan x="75" dy="22">bỏ các giá trị trùng lặp:</tspan>
+    </text>
+    <rect x="75" y="370" width="480" height="86" rx="9" fill="#171717"/>
+    <g font-family="Consolas, 'Courier New', monospace" font-size="10">
+      <text x="87" y="396"><tspan fill="#8b5cf6">const</tspan> array = [1, 2, 2, 3, 4, 4];</text>
+      <text x="87" y="418"><tspan fill="#8b5cf6">const</tspan> unique = [...<tspan fill="#8b5cf6">new</tspan> <tspan fill="#3b82f6">Set</tspan>(array)];</text>
+      <text x="87" y="440" fill="#10b981">console.log(unique); // [1, 2, 3, 4]</text>
+    </g>
+
+    <rect y="492" width="592" height="65" fill="#1c1c1c"/>
+    <path d="M0 492.5h592" stroke="#292929"/>
+    <text x="15" y="528" font-size="14" fill="#a1a1aa">Hỏi câu hỏi khác...</text>
+    <rect x="547" y="510" width="29" height="29" rx="10" fill="#8b5cf6"/>
+    <path d="M557 529l9-9m-8 0h8v8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <rect x="0.5" y="0.5" width="591" height="556" rx="16" fill="none" stroke="#303030"/>
+</svg>
