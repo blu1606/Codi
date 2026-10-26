@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, inArray, lt, max, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, lt, max, sql } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { user } from "@codi-1/db/schema/auth";
 import { assessments } from "@codi-1/db/schema/assessments";
 import { courses } from "@codi-1/db/schema/courses";
-import { lessonMaterials } from "@codi-1/db/schema/course-content";
+import { courseLessons, lessonMaterials } from "@codi-1/db/schema/course-content";
 import { aiInteractionLogs } from "@codi-1/db/schema/ai-interaction-logs";
 import { aiTutorMessages } from "@codi-1/db/schema/ai-tutor";
 import {
@@ -14,6 +14,7 @@ import { LearningPathError } from "./learning-path-contract";
 import { loadLearningLessonAccess } from "./learning-path-service";
 import { createNotificationService } from "./notification-service";
 import {
+  assembleTutorThreads,
   assertTutorIdle,
   escalationSummary,
   nextHintLevel,
@@ -24,6 +25,7 @@ import {
   type TutorDiff,
   type TutorLessonContext,
   type TutorMessage,
+  type TutorThreadSummary,
   type TutorTurnCommand,
   type TutorView,
 } from "./ai-tutor-contract";
@@ -243,6 +245,42 @@ export function createTutorService(db: Database) {
     },
     get(scope: TutorScope) {
       return view(db, scope);
+    },
+    /** The learner's own threads in one course, newest first. Read-only; owner-scoped, so no course gate is needed. */
+    async listThreads(userId: string, courseId: string): Promise<TutorThreadSummary[]> {
+      const mine = and(
+        eq(aiTutorMessages.userId, userId),
+        eq(aiTutorMessages.courseId, courseId),
+      );
+      const [stats, firsts] = await Promise.all([
+        db
+          .select({
+            lessonId: aiTutorMessages.lessonId,
+            lastAt: max(aiTutorMessages.createdAt),
+            messageCount: count(),
+          })
+          .from(aiTutorMessages)
+          .where(mine)
+          .groupBy(aiTutorMessages.lessonId),
+        db
+          .selectDistinctOn([aiTutorMessages.lessonId], {
+            lessonId: aiTutorMessages.lessonId,
+            body: aiTutorMessages.body,
+          })
+          .from(aiTutorMessages)
+          .where(and(mine, eq(aiTutorMessages.role, "user")))
+          .orderBy(aiTutorMessages.lessonId, asc(aiTutorMessages.id)),
+      ]);
+      if (!stats.length) return [];
+      const titles = await db
+        .select({ id: courseLessons.id, title: courseLessons.title })
+        .from(courseLessons)
+        .where(inArray(courseLessons.id, stats.map((row) => row.lessonId)));
+      return assembleTutorThreads(
+        stats.map((row) => ({ ...row, lastAt: row.lastAt ?? new Date(0), messageCount: Number(row.messageCount) })),
+        firsts,
+        titles,
+      );
     },
     /**
      * idle → thinking: records the learner message (and the hint step) before the model runs,

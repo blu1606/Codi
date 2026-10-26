@@ -1,0 +1,38 @@
+{
+  "id": 207,
+  "code": "CODI-SEED-037",
+  "userId": "usr-learner-001",
+  "buyerName": "Nguyễn Minh Anh",
+  "buyerEmail": "user-a7cce7ff@example.invalid",
+  "subtotal": 990000,
+  "discountAmount": 0,
+  "totalAmount": 990000,
+  "receivedAmount": 0,
+  "status": "pending",
+  "failReason": null,
+  "needsReconciliation": false,
+  "isBuyNow": false,
+  "voucherCode": null,
+  "coursesText": "Node.js & Express xây dựng REST API",
+  "createdAt": "2026-10-25T23:30:00.000Z",
+  "paidAt": null,
+  "cancelledAt": null,
+  "isOverdue": false,
+  "items": [
+    {
+      "id": 227,
+      "courseId": "course-node-001",
+      "courseTitle": "Node.js & Express xây dựng REST API",
+      "unitPrice": 990000
+    }
+  ],
+  "timeline": [
+    {
+      "id": 247,
+      "label": "Đã tạo đơn",
+      "createdAt": "2026-10-25T23:30:00.000Z"
+    }
+  ],
+  "method": "Chuyển khoản ngân hàng (VietQR)",
+  "content": "CODI-SEED-037"
+}

@@ -115,7 +115,7 @@ describe("knowledge map client saved graph state", () => {
     expect(document.body.textContent).toContain("Phân tích AI chưa khả dụng");
     expect(document.body.textContent).toContain("chưa thể tạo hoặc xác nhận");
     expect(document.body.textContent).toContain("chưa thể đáp ứng điều kiện bản đồ để xuất bản");
-    expect([...document.querySelectorAll("button")].some((el) => /Phân tích lại|Thử lại/.test(el.textContent || ""))).toBe(false);
+    expect([...document.querySelectorAll("button")].some((el) => !el.disabled && /Phân tích lại|Thử lại/.test(el.textContent || ""))).toBe(false);
     expect(boundary.runKnowledgeMapAnalysis).not.toHaveBeenCalled();
     expect(boundary.confirmKnowledgeMap).not.toHaveBeenCalled();
   });

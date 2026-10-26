@@ -92,11 +92,18 @@ export function KnowledgeMapList({
 }
 
 const masteryColors = [
-  "bg-card text-foreground",
-  "bg-viz-s1 text-foreground",
-  "bg-viz-s2 text-foreground",
-  "bg-viz-s3 text-viz-on-s4",
-  "bg-viz-s4 text-viz-on-s4",
+  "bg-mastery-0 text-foreground",
+  "bg-mastery-1 text-foreground",
+  "bg-mastery-2 text-foreground",
+  "bg-mastery-3 text-primary-foreground",
+  "bg-mastery-4 text-primary-foreground",
+];
+const masteryBar = [
+  "bg-mastery-0",
+  "bg-mastery-1",
+  "bg-mastery-2",
+  "bg-mastery-3",
+  "bg-mastery-4",
 ];
 const shortMasteryLabel = (level: ConceptNode["level"]) =>
   level === 0 ? MASTERY_LABELS[0] : level < 3 ? "Đang học" : "Thành thạo";
@@ -153,7 +160,7 @@ export function KnowledgeMapMastery({ data }: { data: KnowledgeMapView }) {
                 className="col-span-2 row-start-2 h-3 overflow-hidden rounded bg-muted min-[481px]:col-span-1 min-[481px]:row-start-auto"
               >
                 <span
-                  className="block h-full rounded bg-viz-1"
+                  className={cn("block h-full rounded", masteryBar[n.level])}
                   style={{ width: `${n.level * 25}%` }}
                 />
               </span>
@@ -221,8 +228,7 @@ export function KnowledgeMapNode({
                   key={level}
                   className={cn(
                     "h-1 w-2 rounded-sm bg-border-strong",
-                    level <= n.level &&
-                      (n.level >= 3 ? "bg-viz-on-s4" : "bg-viz-1"),
+                    level <= n.level && masteryBar[n.level],
                   )}
                 />
               ))}

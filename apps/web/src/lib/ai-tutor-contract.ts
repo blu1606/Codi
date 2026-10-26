@@ -338,3 +338,108 @@ export const tutorHintOutput = z.object({
     })
     .nullable(),
 });
+
+// Starter questions shown when a thread is empty (lesson-level or code-level).
+export function tutorStarters(isCode: boolean): string[] {
+  return isCode
+    ? [
+        "Vì sao code của mình chưa chạy đúng?",
+        "Giải thích lại yêu cầu của bài",
+        "Lỗi hay gặp ở bài này là gì?",
+      ]
+    : [
+        "Tóm tắt ý chính của bài",
+        "Cho mình một ví dụ khác",
+        "Lỗi hay gặp ở bài này là gì?",
+      ];
+}
+
+/** The learner's threads: one per lesson, listed by its first question (read-only summary). */
+export type TutorThreadSummary = {
+  lessonId: string;
+  lessonTitle: string;
+  firstQuestion: string;
+  lastAt: string;
+  messageCount: number;
+};
+
+const TUTOR_THREAD_TITLE_MAX = 80;
+/** One-line title for a thread: its first question, whitespace collapsed and cut. */
+export function tutorThreadTitle(question: string) {
+  const oneLine = question.replace(/\s+/g, " ").trim();
+  return oneLine.length > TUTOR_THREAD_TITLE_MAX
+    ? `${oneLine.slice(0, TUTOR_THREAD_TITLE_MAX - 1)}…`
+    : oneLine;
+}
+
+/** Joins the per-lesson aggregates with the first learner question and the lesson titles. */
+export function assembleTutorThreads(
+  stats: { lessonId: string; lastAt: Date | string; messageCount: number }[],
+  firstQuestions: { lessonId: string; body: string }[],
+  titles: { id: string; title: string }[],
+): TutorThreadSummary[] {
+  const question = new Map(firstQuestions.map((row) => [row.lessonId, row.body]));
+  const title = new Map(titles.map((row) => [row.id, row.title]));
+  return stats
+    .filter((row) => question.has(row.lessonId) && title.has(row.lessonId))
+    .map((row) => ({
+      lessonId: row.lessonId,
+      lessonTitle: title.get(row.lessonId)!,
+      firstQuestion: question.get(row.lessonId)!,
+      lastAt: new Date(row.lastAt).toISOString(),
+      messageCount: row.messageCount,
+    }))
+    .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
+// Dates are grouped on the Bangkok calendar (UTC+7, no DST), whatever the viewer's timezone.
+const TUTOR_TIME_ZONE = "Asia/Bangkok";
+const DAY_MS = 86_400_000;
+const dayKeyOf = (date: Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: TUTOR_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+
+export type TutorThreadGroup = {
+  label: string;
+  threads: TutorThreadSummary[];
+};
+
+/** "Hôm nay", "Hôm qua", then one group per calendar month ("Tháng 10, 2026"), newest first. */
+export function groupTutorThreads(
+  threads: TutorThreadSummary[],
+  now: Date = new Date(),
+): TutorThreadGroup[] {
+  const today = dayKeyOf(now);
+  const yesterday = dayKeyOf(new Date(now.getTime() - DAY_MS));
+  const groups: TutorThreadGroup[] = [];
+  const byLabel = new Map<string, TutorThreadGroup>();
+  const sorted = [...threads].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  for (const thread of sorted) {
+    const day = dayKeyOf(new Date(thread.lastAt));
+    let label: string;
+    if (day === today) label = "Hôm nay";
+    else if (day === yesterday) label = "Hôm qua";
+    else {
+      const [year, month] = day.split("-");
+      label = `Tháng ${Number(month)}, ${year}`;
+    }
+    let group = byLabel.get(label);
+    if (!group) {
+      group = { label, threads: [] };
+      byLabel.set(label, group);
+      groups.push(group);
+    }
+    group.threads.push(thread);
+  }
+  return groups;
+}
+
+/** First name in Vietnamese order, where the given name is the last word ("Nguyễn Minh Anh" → "Anh"). */
+export function firstNameOf(name: string | null | undefined): string | null {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1]! : null;
+}

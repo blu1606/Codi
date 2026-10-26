@@ -154,7 +154,7 @@ export function ReviewsClient({ initialData }: ReviewsClientProps) {
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
       {/* Header bar */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Đánh giá</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Đánh giá</h1>
         <p className="text-sm text-muted-foreground">
           Phản hồi của bạn hiển thị công khai dưới đánh giá trên trang khoá học.
         </p>
@@ -172,17 +172,7 @@ export function ReviewsClient({ initialData }: ReviewsClientProps) {
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <span>Tất cả</span>
-          <span
-            className={cn(
-              "px-1.5 py-0.5 rounded-full text-xs font-semibold",
-              filter === "all"
-                ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground"
-            )}
-          >
-            {counts.all}
-          </span>
+          <span>Tất cả ({counts.all})</span>
         </button>
 
         <button
@@ -195,17 +185,7 @@ export function ReviewsClient({ initialData }: ReviewsClientProps) {
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <span>Chưa phản hồi</span>
-          <span
-            className={cn(
-              "px-1.5 py-0.5 rounded-full text-xs font-semibold",
-              filter === "unreplied" && counts.unreplied > 0
-                ? "bg-warning-soft text-warning"
-                : "bg-muted text-muted-foreground"
-            )}
-          >
-            {counts.unreplied}
-          </span>
+          <span>Chưa phản hồi ({counts.unreplied})</span>
         </button>
       </div>
 

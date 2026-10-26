@@ -19,6 +19,7 @@ export type ConfirmDialogProps = {
   typeToConfirm?: string;
   danger?: boolean;
   confirmLabel?: string;
+  cancelLabel?: string;
   onConfirm: (reason: string) => void | Promise<void>;
 };
 
@@ -27,7 +28,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   return props.open ? <ConfirmForm {...props} /> : null;
 }
 
-function ConfirmForm({ open, onOpenChange, title, children, consequence, reversible, requireReason, typeToConfirm, danger, confirmLabel = "Xác nhận", onConfirm }: ConfirmDialogProps) {
+function ConfirmForm({ open, onOpenChange, title, children, consequence, reversible, requireReason, typeToConfirm, danger, confirmLabel = "Xác nhận", cancelLabel = "Huỷ", onConfirm }: ConfirmDialogProps) {
   const id = useId();
   const [reason, setReason] = useState("");
   const [typed, setTyped] = useState("");
@@ -65,7 +66,7 @@ function ConfirmForm({ open, onOpenChange, title, children, consequence, reversi
         </div>}
         {error && <Alert variant="destructive">{error}</Alert>}
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>Huỷ</Button>
+          <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>{cancelLabel}</Button>
           <Button type="submit" variant={danger ? "destructive" : "default"} className="min-w-32" disabled={pending || (!!requireReason && !reason.trim()) || (!!typeToConfirm && typed !== typeToConfirm)}>
             {pending && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{confirmLabel}
           </Button>

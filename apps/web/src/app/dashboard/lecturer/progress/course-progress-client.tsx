@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
+import { StatCard } from "@codi-1/ui/components/stat-card";
 import { Input } from "@codi-1/ui/components/input";
 import { ProgressRing } from "@codi-1/ui/components/progress-ring";
 import { Sheet } from "@codi-1/ui/components/sheet";
@@ -59,7 +60,7 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
           <ArrowLeft className="size-3.5" />
           <span>Tất cả khoá học</span>
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight">
           {data.courseTitle}
         </h1>
       </div>
@@ -77,50 +78,13 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
         </p>
       </div>
       {/* 3 Stat Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border border-border/80">
-          <CardContent className="p-5 flex flex-col justify-between space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Học viên
-            </span>
-            <div className="text-3xl font-bold tracking-tight">
-              {data.learnersCount}
-            </div>
-            <span className="text-xs text-muted-foreground">
-              Đã ghi danh khoá học
-            </span>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/80">
-          <CardContent className="p-5 flex flex-col justify-between space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Tỉ lệ hoàn thành trung bình
-            </span>
-            <div className="text-3xl font-bold tracking-tight">
-              {data.averageCompletionRate}%
-            </div>
-            <span className="text-xs text-muted-foreground">
-              Trên toàn bộ bài học
-            </span>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border/80">
-          <CardContent className="p-5 flex flex-col justify-between space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Điểm quiz trung bình
-            </span>
-            <div className="text-3xl font-bold tracking-tight">
-              {data.averageQuizScore !== null
-                ? `${data.averageQuizScore}%`
-                : "—"}
-            </div>
-            <span className="text-xs text-muted-foreground">
-              Các bài kiểm tra trắc nghiệm
-            </span>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard value={data.learnersCount} label="Học viên" />
+        <StatCard value={`${data.averageCompletionRate}%`} label="Tỉ lệ hoàn thành trung bình" />
+        <StatCard
+          value={data.averageQuizScore !== null ? `${data.averageQuizScore}%` : "—"}
+          label="Điểm quiz trung bình"
+        />
       </div>
 
       {/* Thanh chuyển Tabs */}
@@ -134,7 +98,7 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          Học viên ({data.learnersCount})
+          Học viên
         </button>
         <button
           type="button"
@@ -145,7 +109,7 @@ export function CourseProgressClient({ data }: CourseProgressClientProps) {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          Kết quả quiz ({data.quizQuestions.length})
+          Kết quả quiz
         </button>
       </div>
 

@@ -23,15 +23,14 @@ export default async function LecturerLayout({ children }: { children: ReactNode
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <LecturerNav
-        counts={{
-          grading: counts?.grading,
-          questions: counts?.questions,
-          reviews: counts?.reviews,
-        }}
-      />
-      <main>{children}</main>
-    </div>
+    <LecturerNav
+      counts={{
+        grading: counts?.grading,
+        questions: counts?.questions,
+        reviews: counts?.reviews,
+      }}
+    >
+      {children}
+    </LecturerNav>
   );
 }

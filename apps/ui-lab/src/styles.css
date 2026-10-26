@@ -1,0 +1,2 @@
+/* Same entry as apps/web, so tokens and scanned classes match the real app. */
+@import "../../web/src/index.css";

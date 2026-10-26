@@ -71,15 +71,14 @@ afterEach(async () => {
 
 describe("chapter deletion confirmation", () => {
   it.each([false, true])("explains empty-only deletion and preserves the confirm result %s", async (confirmed) => {
-    const confirm = vi.fn().mockReturnValue(confirmed);
-    vi.stubGlobal("confirm", confirm);
     boundary.deleteChapter.mockRejectedValue(new Error("Không thể xoá chương còn bài học. Hãy xoá từng bài học đủ điều kiện trước, rồi xoá chương trống."));
     await act(async () => document.querySelector<HTMLButtonElement>('button[title="Xoá chương"]')!.click());
-    expect(confirm).toHaveBeenCalledOnce();
-    const message = confirm.mock.calls[0]![0];
+    const message = document.body.textContent ?? "";
     expect(message).toContain("Chỉ có thể xoá chương trống");
     expect(message).toContain("Chapter");
     expect(message).not.toMatch(/cùng toàn bộ bài học|xoá.*bài học bên trong/i);
+    expect(boundary.deleteChapter).not.toHaveBeenCalled();
+    await click(confirmed ? "Xoá" : "Huỷ");
     if (confirmed) {
       expect(boundary.deleteChapter).toHaveBeenCalledWith("course", "chapter");
       expect(boundary.error).toHaveBeenCalledWith(expect.stringContaining("Hãy xoá từng bài học"));

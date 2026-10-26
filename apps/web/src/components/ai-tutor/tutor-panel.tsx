@@ -8,6 +8,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import {
   ArrowRight,
   ChevronDown,
@@ -16,9 +18,11 @@ import {
   Copy,
   Lightbulb,
   LoaderCircle,
+  Maximize2,
   MessageCircle,
   MoreHorizontal,
   Play,
+  Plus,
   RotateCcw,
   Send,
   ThumbsDown,
@@ -32,7 +36,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@codi-1/ui/components/alert";
-import { Button } from "@codi-1/ui/components/button";
+import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import { ConfirmDialog } from "@codi-1/ui/components/confirm-dialog";
 import {
   DropdownMenu,
@@ -53,6 +57,7 @@ import {
   TUTOR_MODE_LABELS,
   TUTOR_MODES,
   TUTOR_STOPPED_TEXT,
+  tutorStarters,
   type TutorCommand,
   type TutorContext,
   type TutorMessage,
@@ -70,6 +75,10 @@ type Chip = { id: string; label: string; fixed?: boolean };
 const short = (value: string) =>
   value.length > 60 ? `${value.slice(0, 57)}…` : value;
 
+/**
+ * The AI trợ lý thread. `sidebar` is the docked panel (Sheet on narrow screens) inside a lesson;
+ * `page` is the full Tutor page, which renders the same thread without the sheet chrome.
+ */
 export default function TutorPanel({
   endpoint,
   request,
@@ -77,6 +86,11 @@ export default function TutorPanel({
   codeVersion,
   docked,
   onClose,
+  variant = "sidebar",
+  expandHref,
+  placeholder = "Hỏi trợ lý về bài học…",
+  onTurnSettled,
+  onPickLesson,
 }: {
   endpoint: string;
   request: (TutorOpenRequest & { id: number }) | null;
@@ -84,6 +98,14 @@ export default function TutorPanel({
   codeVersion: number;
   docked: boolean;
   onClose: () => void;
+  variant?: "sidebar" | "page";
+  /** Opens the same thread on the full Tutor page (sidebar only). */
+  expandHref?: Route;
+  placeholder?: string;
+  /** Called after each answered, stopped or failed turn so the page can refresh its thread list. */
+  onTurnSettled?: () => void;
+  /** Lets the composer's + menu switch to another lesson's thread (page only). */
+  onPickLesson?: () => void;
 }) {
   const [view, setView] = useState<TutorView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -138,25 +160,29 @@ export default function TutorPanel({
   // The context the learner sees as chips is exactly what is sent with the question.
   const bridge = code.current;
   void codeVersion;
-  const failing =
-    bridge && !removed.has("test") ? bridge.failingTest(ctx.testId) : null;
-  const runError = bridge && !removed.has("err") ? bridge.runError() : null;
+  const failingAll = bridge ? bridge.failingTest(ctx.testId) : null;
+  const runErrorAll = bridge ? bridge.runError() : null;
+  const taskAll = bridge ? bridge.task() : null;
   const codeText = bridge ? bridge.getCode() : "";
-  const task = bridge && !removed.has("task") ? bridge.task() : null;
-  const chips: Chip[] = [
+  const failing = removed.has("test") ? null : failingAll;
+  const runError = removed.has("err") ? null : runErrorAll;
+  const task = removed.has("task") ? null : taskAll;
+  const allChips: Chip[] = [
     { id: "lesson", label: `Bài: ${view?.lessonTitle ?? "…"}`, fixed: true },
-    task && { id: "task", label: `Yêu cầu: ${short(task.label)}` },
+    taskAll && { id: "task", label: `Yêu cầu: ${short(taskAll.label)}` },
     bridge && {
       id: "code",
       label: `Code bạn đang viết${codeText.length > TUTOR_CONTEXT_LIMITS.code ? " · đã rút gọn" : ""}`,
     },
-    failing && { id: "test", label: `Test chưa đạt: ${failing.name}` },
-    runError && { id: "err", label: `Lỗi: ${short(runError)}` },
+    failingAll && { id: "test", label: `Test chưa đạt: ${failingAll.name}` },
+    runErrorAll && { id: "err", label: `Lỗi: ${short(runErrorAll)}` },
     ctx.selection && {
       id: "sel",
       label: `Đoạn đã chọn · ${ctx.selection.split("\n").length} dòng${ctx.selection.length > TUTOR_CONTEXT_LIMITS.selection ? " · đã rút gọn" : ""}`,
     },
-  ].filter((chip): chip is Chip => !!chip && !removed.has(chip.id));
+  ].filter((chip): chip is Chip => !!chip);
+  const chips = allChips.filter((chip) => !removed.has(chip.id));
+  const addable = allChips.filter((chip) => removed.has(chip.id));
 
   function context(): TutorContext {
     const value: TutorContext = {};
@@ -252,6 +278,7 @@ export default function TutorPanel({
         setPending(null);
         setStreamText("");
       }
+      onTurnSettled?.();
     }
   }
   function ask(text: string, retryOf?: number) {
@@ -391,17 +418,7 @@ export default function TutorPanel({
   const level = view?.hintLevel ?? 0;
   const lastQuestion =
     [...messages].reverse().find((m) => m.role === "user")?.text ?? "";
-  const starters = isCode
-    ? [
-        "Vì sao code của mình chưa chạy đúng?",
-        "Giải thích lại yêu cầu của bài",
-        "Lỗi hay gặp ở bài này là gì?",
-      ]
-    : [
-        "Tóm tắt ý chính của bài",
-        "Cho mình một ví dụ khác",
-        "Lỗi hay gặp ở bài này là gì?",
-      ];
+  const starters = tutorStarters(isCode);
   const escalateButton = (variant: "outline" | "ghost" = "outline") => (
     <Button variant={variant} size="sm" onClick={() => setEscalating(true)}>
       <MessageCircle className="size-4" />
@@ -466,6 +483,46 @@ export default function TutorPanel({
           ask(question);
         }}
       >
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-11 shrink-0"
+                aria-label="Thêm ngữ cảnh"
+              />
+            }
+          >
+            <Plus className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {addable.map((chip) => (
+              <DropdownMenuItem
+                key={chip.id}
+                onClick={() =>
+                  setRemoved((previous) => {
+                    const next = new Set(previous);
+                    next.delete(chip.id);
+                    return next;
+                  })
+                }
+              >
+                {chip.label}
+              </DropdownMenuItem>
+            ))}
+            {onPickLesson && (
+              <DropdownMenuItem onClick={onPickLesson}>
+                Chọn bài khác…
+              </DropdownMenuItem>
+            )}
+            {!addable.length && !onPickLesson && (
+              <DropdownMenuItem disabled>
+                Không có ngữ cảnh nào để thêm
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <label className="sr-only" htmlFor="tutor-question">
           Câu hỏi cho AI trợ lý
         </label>
@@ -477,7 +534,7 @@ export default function TutorPanel({
           maxLength={2000}
           autoComplete="off"
           disabled={!!busy || !view}
-          placeholder="Hỏi AI về bài học này…"
+          placeholder={placeholder}
           className="min-h-11 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
         />
         <Button
@@ -493,24 +550,17 @@ export default function TutorPanel({
     </div>
   );
 
-  return (
-    <Sheet
-      open
-      docked={docked}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      title="AI trợ lý"
-      description={
-        docked ? undefined : `Hỏi về bài “${view?.lessonTitle ?? ""}”`
-      }
-      className={
-        docked ? "sticky top-16 h-[calc(100svh-4rem)] self-start" : undefined
-      }
-      footer={composer}
-    >
+  const body = (
+    <>
       <div className="space-y-4">
-        <div className="flex items-start gap-2">
+        {/* Context chips and the open-full-page link stay visible while the thread scrolls (sidebar only). */}
+        <div
+          className={cn(
+            "flex items-start gap-2",
+            variant === "sidebar" &&
+              "sticky -top-5 z-10 -mx-5 -mt-5 border-b bg-card px-5 pb-3 pt-5",
+          )}
+        >
           <ul
             aria-label="Ngữ cảnh gửi kèm câu hỏi"
             className="flex min-w-0 flex-1 flex-wrap gap-1.5"
@@ -536,6 +586,16 @@ export default function TutorPanel({
               </li>
             ))}
           </ul>
+          {expandHref && (
+            <Link
+              href={expandHref}
+              aria-label="Mở trang Tutor"
+              title="Mở trang Tutor"
+              className={buttonVariants({ variant: "ghost", size: "icon" })}
+            >
+              <Maximize2 className="size-4" />
+            </Link>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -664,6 +724,7 @@ export default function TutorPanel({
               key={message.id}
               message={message}
               busy={!!busy}
+              codeOpen={!!bridge}
               onLine={line}
               onDiff={(op) => void diff(message, op)}
               onRerun={() => {
@@ -770,6 +831,39 @@ export default function TutorPanel({
           toast("Đã xoá cuộc trò chuyện.");
         }}
       />
+    </>
+  );
+  if (variant === "page")
+    return (
+      <section
+        aria-label="Trò chuyện với Tutor"
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
+          <div className="mx-auto max-w-3xl">{body}</div>
+        </div>
+        <div className="border-t bg-background px-4 py-3 md:px-8">
+          <div className="mx-auto max-w-3xl">{composer}</div>
+        </div>
+      </section>
+    );
+  return (
+    <Sheet
+      open
+      docked={docked}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="Trợ lý AI"
+      description={
+        docked ? undefined : `Hỏi về bài “${view?.lessonTitle ?? ""}”`
+      }
+      className={
+        docked ? "sticky top-16 h-[calc(100svh-4rem)] self-start" : undefined
+      }
+      footer={composer}
+    >
+      {body}
     </Sheet>
   );
 }
@@ -777,6 +871,7 @@ export default function TutorPanel({
 function MessageView({
   message,
   busy,
+  codeOpen,
   onLine,
   onDiff,
   onRerun,
@@ -788,6 +883,8 @@ function MessageView({
 }: {
   message: TutorMessage;
   busy: boolean;
+  /** False outside a code lesson: line jumps and code changes need the editor. */
+  codeOpen: boolean;
   onLine: (line: number) => void;
   onDiff: (op: "apply" | "undo" | "skip") => void;
   onRerun: () => void;
@@ -841,7 +938,7 @@ function MessageView({
       {message.stopped && (
         <p className="text-xs text-muted-foreground">Đã dừng câu trả lời.</p>
       )}
-      {message.lines.length > 0 && (
+      {codeOpen && message.lines.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {message.lines.map((n) => (
             <Button
@@ -856,7 +953,7 @@ function MessageView({
           ))}
         </div>
       )}
-      {diff && (
+      {codeOpen && diff && (
         <div
           role="group"
           aria-label={`Đề xuất thay đổi${diff.state === "applied" ? " (đã áp dụng)" : ""}`}
@@ -941,7 +1038,7 @@ function MessageView({
         <button
           type="button"
           aria-pressed={message.vote === "up"}
-          aria-label="Câu trả lời hữu ích"
+          aria-label="Hữu ích"
           onClick={() => onVote("up")}
           className={cn(
             "rounded p-1.5 hover:bg-muted",
@@ -953,7 +1050,7 @@ function MessageView({
         <button
           type="button"
           aria-pressed={message.vote === "down"}
-          aria-label="Câu trả lời chưa tốt"
+          aria-label="Không hữu ích"
           onClick={() => onVote("down")}
           className={cn(
             "rounded p-1.5 hover:bg-muted",

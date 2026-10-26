@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { masteryLevel } from "@codi-1/ui/lib/mastery";
 import {
   assignmentFormat,
+  buildConfirmedKnowledgeMap,
   codingExerciseFromMockup,
   codingSubmitPlan,
   diagnosticPattern,
@@ -113,5 +114,54 @@ describe("mockup seed mapping", () => {
     expect(tutorial.tutorialSteps[2]!.isSolution).toBe(true);
     expect(tutorial.instructions).toContain("Đi hết các bước");
     expect(tutorial.instructions).not.toContain("Lời giải");
+  });
+
+  describe("buildConfirmedKnowledgeMap", () => {
+    const bkt = { bktPInit: 0.1, bktPLearn: 0.2, bktPGuess: 0.2, bktPSlip: 0.1 };
+    type BuilderInput = Parameters<typeof buildConfirmedKnowledgeMap>[0];
+    const input = (): BuilderInput => ({
+      courseId: "course-x",
+      contentGeneration: 0,
+      publishedAt: "2026-10-07T10:00:00.000Z",
+      skills: [
+        { id: 2, name: "B", review: "accepted" as const, ...bkt },
+        { id: 1, name: "A", review: "edited" as const, ...bkt },
+        { id: 3, name: "Bỏ", review: "declined" as const, ...bkt },
+      ],
+      edges: [
+        { skillId: 2, prerequisiteSkillId: 1, review: "accepted" as const },
+        { skillId: 2, prerequisiteSkillId: 3, review: "accepted" as const },
+      ],
+      links: [
+        { lessonId: "lesson-b", skillId: 2 },
+        { lessonId: "lesson-a", skillId: 1 },
+        { lessonId: "lesson-a", skillId: 3 },
+      ],
+    });
+
+    it("drops declined concepts with their edges and links, sorted by id", () => {
+      const map = buildConfirmedKnowledgeMap(input());
+      expect(map.skills.map((s) => s.id)).toEqual([1, 2]);
+      expect(map.edges).toEqual([{ from: 1, to: 2 }]);
+      expect(map.links).toEqual([{ lessonId: "lesson-a", skillId: 1 }, { lessonId: "lesson-b", skillId: 2 }]);
+      expect(map.version).toBe(1);
+      expect(map.publishedAt).toBe("2026-10-07T10:00:00.000Z");
+    });
+
+    it("keeps the publication id stable for identical content", () => {
+      expect(buildConfirmedKnowledgeMap(input()).publicationId).toBe(buildConfirmedKnowledgeMap(input()).publicationId);
+    });
+
+    it("refuses pending suggestions, cycles and empty maps", () => {
+      const pending = input();
+      pending.skills[0]!.review = "suggested";
+      expect(() => buildConfirmedKnowledgeMap(pending)).toThrow("đề xuất chưa xem lại");
+      const cyclic = input();
+      cyclic.edges.push({ skillId: 1, prerequisiteSkillId: 2, review: "accepted" });
+      expect(() => buildConfirmedKnowledgeMap(cyclic)).toThrow("vòng lặp");
+      const empty = input();
+      empty.skills = empty.skills.map((s) => ({ ...s, review: "declined" as const }));
+      expect(() => buildConfirmedKnowledgeMap(empty)).toThrow("ít nhất một khái niệm");
+    });
   });
 });

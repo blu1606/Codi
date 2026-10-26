@@ -51,10 +51,8 @@ export default async function AdminUsersPage({
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Quản lý người dùng</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {users.length} tài khoản · Xem danh sách, thay đổi vai trò (Học viên / Giảng viên / Quản trị viên) và vô hiệu hoá / kích hoạt lại tài khoản.
-        </p>
+        <h1 className="text-2xl tracking-tight">Người dùng</h1>
+        <p className="text-sm text-muted-foreground mt-1">{users.length} tài khoản</p>
       </div>
 
       <UsersClient

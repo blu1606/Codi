@@ -23,6 +23,7 @@ import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
 import { Button } from "@codi-1/ui/components/button";
+import { ConfirmDialog } from "@codi-1/ui/components/confirm-dialog";
 import {
   Card,
   CardContent,
@@ -62,6 +63,7 @@ export function CodingExercisePreviewClient({
 
   const [studentCode, setStudentCode] = useState(exercise.starterCode || "");
   const [isRunning, setIsRunning] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
   const [activeSideTab, setActiveSideTab] = useState<"brief" | "hints">("brief");
   const [activeResultTab, setActiveResultTab] = useState<"tests" | "console">("tests");
 
@@ -87,10 +89,8 @@ export function CodingExercisePreviewClient({
 
   // Khôi phục code ban đầu
   const handleResetCode = () => {
-    if (confirm("Code bạn đang viết sẽ được thay bằng code khởi đầu?")) {
-      setStudentCode(exercise.starterCode || "");
-      toast.info("Đã khôi phục mã nguồn ban đầu.");
-    }
+    setStudentCode(exercise.starterCode || "");
+    toast.info("Đã khôi phục mã nguồn ban đầu.");
   };
 
   // Thực thi code trong QuickJS WASM sandbox server-side (Chạy hoặc Nộp bài)
@@ -137,7 +137,7 @@ export function CodingExercisePreviewClient({
             Quay lại trình soạn thảo bài code
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight">Xem trước trải nghiệm học viên</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Xem trước trải nghiệm học viên</h1>
             <span className="px-2.5 py-0.5 text-xs font-semibold rounded-md bg-accent text-accent-foreground border border-border">
               Chế độ mô phỏng học viên
             </span>
@@ -148,11 +148,22 @@ export function CodingExercisePreviewClient({
           </p>
         </div>
 
+        <ConfirmDialog
+          open={showResetDialog}
+          onOpenChange={setShowResetDialog}
+          title="Khôi phục code ban đầu?"
+          consequence="Code bạn đang viết trong trình xem trước sẽ được thay bằng code khởi đầu."
+          reversible="Bản xem trước không lưu bài nộp; code đã thay đổi chỉ có thể viết lại thủ công."
+          danger
+          confirmLabel="Khôi phục"
+          onConfirm={handleResetCode}
+        />
+
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={handleResetCode}
+            onClick={() => setShowResetDialog(true)}
             disabled={isRunning}
             className="text-xs gap-1.5 cursor-pointer"
           >

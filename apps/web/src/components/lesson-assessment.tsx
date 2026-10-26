@@ -234,8 +234,17 @@ export function QuizAssessment({
               >
                 {s.isPassed ? "Đạt" : "Chưa đạt"}
               </h3>
+              <p className="font-medium">
+                {Math.round(
+                  s.quizPercent ?? ((s.score ?? 0) / data.maxScore) * 100,
+                )}
+                % đúng
+              </p>
               <p className="text-sm text-muted-foreground">
-                Lần làm {s.attempt} · lần gần nhất được tính
+                Điểm đạt: {data.passingScore}% · Lần làm {s.attempt}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Làm lại không giới hạn; lần gần nhất được tính.
               </p>
             </div>
           </div>
@@ -329,20 +338,21 @@ export function QuizAssessment({
               lời
             </span>
           </div>
-          <div className="flex flex-wrap gap-2" aria-label="Đi đến câu hỏi">
-            {data.questions.map((q, i) => (
-              <Button
-                key={q.id}
-                size="icon"
-                variant={i === index ? "default" : "outline"}
-                disabled={busy}
-                aria-label={`Câu ${i + 1}${s.answers.some((a) => a.questionId === q.id) ? ", đã trả lời" : ", chưa trả lời"}`}
-                aria-current={i === index ? "step" : undefined}
-                onClick={() => setIndex(i)}
-              >
-                {i + 1}
-              </Button>
-            ))}
+          <div className="flex gap-1" aria-label="Đi đến câu hỏi">
+            {data.questions.map((q, i) => {
+              const answered = s.answers.some((a) => a.questionId === q.id);
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  disabled={busy}
+                  aria-label={`Câu ${i + 1}${answered ? ", đã trả lời" : ", chưa trả lời"}`}
+                  aria-current={i === index ? "step" : undefined}
+                  onClick={() => setIndex(i)}
+                  className={`h-2 min-h-11 flex-1 bg-clip-content rounded-full py-[18px] ${answered ? "bg-primary" : i === index ? "bg-accent-foreground/40" : "bg-muted"}`}
+                />
+              );
+            })}
           </div>
           <fieldset disabled={busy} className="space-y-3">
             <legend className="mb-3 font-semibold">{question.text}</legend>

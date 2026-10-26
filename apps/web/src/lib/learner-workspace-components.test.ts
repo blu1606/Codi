@@ -15,6 +15,8 @@ const trackerId = "19a88269-9c03-4c26-921d-bcecd007906b";
 const mocks = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
+// The GitHub card loads its own data; these tests count the workspace's goal and diagnostic requests only.
+vi.mock("@/components/profile/github-learner-card", () => ({ default: () => null }));
 let root: Root | undefined;
 const course: LearnerCourse = {
   id: "owned",

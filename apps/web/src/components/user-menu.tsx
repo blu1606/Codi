@@ -14,10 +14,11 @@ import { Skeleton } from "@codi-1/ui/components/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { UserRound } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 import { authClient, signOutSession } from "@/lib/auth-client";
+import { ThemeMenuGroup } from "./mode-toggle";
 import { getRoleHome, ROLE_LABEL, type RoleId } from "@codi-1/auth/roles";
 
 export default function UserMenu({ role = null }: { role?: RoleId | null }) {
@@ -91,14 +92,7 @@ export default function UserMenu({ role = null }: { role?: RoleId | null }) {
 
   if (!session) {
     return (
-      <Link
-        href="/login"
-        aria-label="Đăng nhập"
-        title="Đăng nhập"
-        className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <UserRound aria-hidden="true" className="size-5" />
-      </Link>
+      <Button nativeButton={false} render={<Link href="/login" />}>Đăng nhập</Button>
     );
   }
 
@@ -110,24 +104,30 @@ export default function UserMenu({ role = null }: { role?: RoleId | null }) {
     ? avatarOverride.imageUrl
     : session.user.image;
   const initials = currentDisplayName.trim().split(/\s+/).slice(-2).map((part) => part[0]).join("").toUpperCase();
+  // Vietnamese names put the given name last, so the header label uses the last word (as in the mockup).
+  const firstName = currentDisplayName.trim().split(/\s+/).slice(-1)[0];
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" className="size-11 overflow-hidden rounded-full border border-border bg-muted p-0" />}
+        render={<Button variant="ghost" className="h-11 gap-2 rounded-md px-2" />}
         aria-label={`Mở menu tài khoản của ${currentDisplayName}`}
         title={currentDisplayName}
       >
-        {avatarUrl && failedAvatar !== avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt=""
-            className="size-full object-cover"
-            onError={() => setFailedAvatar(avatarUrl)}
-          />
-        ) : (
-          <span aria-hidden="true" className="text-sm font-semibold">{initials}</span>
-        )}
+        <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+          {avatarUrl && failedAvatar !== avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="size-full object-cover"
+              onError={() => setFailedAvatar(avatarUrl)}
+            />
+          ) : (
+            <span aria-hidden="true">{initials}</span>
+          )}
+        </span>
+        <span aria-hidden="true" className="hidden max-w-24 truncate text-sm font-medium text-foreground sm:inline">{firstName}</span>
+        <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="w-64 max-w-[calc(100vw-2rem)] rounded-xl bg-card p-1">
         <DropdownMenuGroup>
@@ -144,9 +144,11 @@ export default function UserMenu({ role = null }: { role?: RoleId | null }) {
           <DropdownMenuItem onClick={() => router.push("/profile")}>
             Hồ sơ cá nhân (Profile)
           </DropdownMenuItem>
+          {role === "LEARNER" && <DropdownMenuItem onClick={() => router.push("/profile?tab=nang-luc")}>Hồ sơ năng lực</DropdownMenuItem>}
           <DropdownMenuItem onClick={() => router.push("/settings")}>
             Cài đặt (Setting)
           </DropdownMenuItem>
+          <ThemeMenuGroup />
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"

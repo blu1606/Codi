@@ -5,7 +5,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { CourseProgressClient } from "./course-progress-client";
 import { InsightsClient } from "../insights/insights-client";
 import { LecturerNav } from "../lecturer-nav";
-import { FINANCE_UNAVAILABLE } from "@/lib/analytics-contract";
 import {
   HINT_USAGE_UNAVAILABLE,
   PROGRESS_CHARTS_UNAVAILABLE,
@@ -113,15 +112,14 @@ it("shows a genuine empty enrollment state and retains unavailable disclaimers",
   expect(document.body.textContent).toContain("Chưa có học viên");
   expect(document.body.textContent).toContain(HINT_USAGE_UNAVAILABLE);
 });
-it("renders finance unavailable without a monetary chart, filter or total", async () => {
+it("renders the no-published revenue state without a monetary chart, filter or total", async () => {
   await mount(
     createElement(InsightsClient, {
-      data: { state: "unavailable", message: FINANCE_UNAVAILABLE },
+      data: { state: "no-published" },
+      period: "30",
     }),
   );
-  expect(document.querySelector('[role="status"]')?.textContent).toBe(
-    FINANCE_UNAVAILABLE,
-  );
+  expect(document.body.textContent).toContain("Chưa có khoá học nào được xuất bản");
   expect(document.body.textContent).not.toContain("₫");
   expect(document.body.textContent).not.toContain("100%");
   expect(document.querySelector("svg")).toBeNull();
@@ -152,6 +150,6 @@ it("enables only the two new links while preserving current workspace navigation
       ].some((element) => element.textContent?.includes(label)),
     ).toBe(false);
   expect(
-    document.querySelector('a[href="/dashboard/lecturer/progress"]')?.className,
-  ).toContain("bg-primary");
+    document.querySelector('a[href="/dashboard/lecturer/progress"]')?.getAttribute("aria-current"),
+  ).toBe("page");
 });

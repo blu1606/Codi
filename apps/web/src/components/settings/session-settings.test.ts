@@ -65,6 +65,7 @@ describe("settings current session", () => {
     });
     await render(createElement(AccountSettings, {
       user: { id: "user", name: "Test User", email: "test@example.com", emailVerified: true },
+      initialTab: "security",
     }));
     await click(container.querySelector<HTMLButtonElement>('button[aria-controls="settings-session-list"]')!);
     expect(logoutButtons()).toHaveLength(1);
@@ -99,7 +100,7 @@ describe("settings current session", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(auth.getSession).toHaveBeenCalledTimes(2);
     expect(auth.listSessions).toHaveBeenCalledTimes(2);
-    const rows = container.querySelectorAll("li");
+    const rows = container.querySelectorAll("#settings-session-list li");
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain("Phiên hiện tại");
     expect(logoutButtons()).toHaveLength(0);

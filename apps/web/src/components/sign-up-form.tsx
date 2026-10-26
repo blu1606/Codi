@@ -38,6 +38,7 @@ export default function SignUpForm({
   const { isPending } = authClient.useSession();
   const [signedUpEmail, setSignedUpEmail] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
 
   const form = useForm({
@@ -76,11 +77,12 @@ export default function SignUpForm({
   const handleVerifyOtp = async () => {
     if (!signedUpEmail) return;
     if (otp.length !== 6) {
-      toast.error("Vui lòng nhập đủ 6 chữ số OTP");
+      setOtpError("Vui lòng nhập đủ 6 chữ số OTP");
       return;
     }
 
     try {
+      setOtpError(null);
       setVerifying(true);
       await authClient.emailOtp.verifyEmail(
         {
@@ -105,7 +107,7 @@ export default function SignUpForm({
             }
           },
           onError: (ctx) => {
-            toast.error(ctx.error.message || "Mã OTP không chính xác hoặc đã hết hạn 2 phút.");
+            setOtpError(ctx.error.message || "Mã OTP không chính xác hoặc đã hết hạn 2 phút.");
           },
         }
       );
@@ -140,7 +142,7 @@ export default function SignUpForm({
   if (signedUpEmail) {
     return (
       <div className="w-full">
-        <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
+        <Card>
           <CardHeader className="text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-2">
               <ShieldCheck className="w-6 h-6" />
@@ -155,10 +157,14 @@ export default function SignUpForm({
             <OtpInput
               length={6}
               value={otp}
-              onChange={setOtp}
+              onChange={(value) => {
+                setOtp(value);
+                setOtpError(null);
+              }}
               onResend={handleResendOtp}
               expiresInSeconds={120}
               disabled={verifying}
+              error={otpError}
             />
 
             <Button
@@ -190,7 +196,7 @@ export default function SignUpForm({
   // Step 1: Sign Up Form
   return (
     <div className="w-full">
-      <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
+      <Card>
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">Tạo tài khoản</CardTitle>
           <CardDescription>Đăng ký tài khoản Codi mới</CardDescription>

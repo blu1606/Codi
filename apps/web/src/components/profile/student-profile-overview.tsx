@@ -4,9 +4,10 @@ import { BookOpen, CheckCircle2, Clock3, TrendingUp, Wallet } from "lucide-react
 import { Button } from "@codi-1/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@codi-1/ui/components/card";
 type ProfileData = { activities: { occurredAt: string; type: string }[]; enrollments: { enrollment: { progress: number }; course: { id: string; title: string } }[]; transactions: { id: string; createdAt: string; courseId: string; amount: number; currency: string; status: string }[] };
-export default function StudentProfileOverview() {
+export type StudentProfileTab = "overview" | "courses" | "transactions";
+
+export default function StudentProfileOverview({ tab }: { tab: StudentProfileTab }) {
   const currentYear = new Date().getFullYear();
-  const [tab, setTab] = useState("overview");
   const [year, setYear] = useState(currentYear);
   const [data, setData] = useState<ProfileData | null>(null);
   const [activities, setActivities] = useState<ProfileData["activities"]>([]);
@@ -161,25 +162,6 @@ export default function StudentProfileOverview() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <nav
-        className="order-1 flex gap-1 border-b border-border"
-        aria-label="Điều hướng hồ sơ"
-      >
-        {[
-          ["overview", "Tổng quan"],
-          ["courses", "Khóa học"],
-          ["transactions", "Giao dịch"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`border-b-2 px-3 py-2 text-xs ${tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
       {loading && (
         <p role="status" className="text-sm text-muted-foreground">
           Đang tải dữ liệu hồ sơ…

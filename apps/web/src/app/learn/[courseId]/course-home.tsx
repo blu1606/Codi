@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { BookOpen, LoaderCircle, Map, RefreshCw, Sparkles } from "lucide-react";
+import { BookOpen, LoaderCircle, Map, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   Alert,
@@ -14,6 +14,7 @@ import {
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
 import { ConfirmDialog } from "@codi-1/ui/components/confirm-dialog";
+import { cn } from "@codi-1/ui/lib/utils";
 import { GOAL_LABELS } from "@/lib/onboarding-contract";
 import {
   type CoursePathView,
@@ -21,13 +22,14 @@ import {
 } from "@/lib/learning-path-contract";
 import { useDiagnosticCardDismissal } from "@/lib/use-diagnostic-card-dismissal";
 import KnowledgeMap from "@/components/knowledge-map";
+import { LessonPath } from "@/components/learning-path/lesson-path";
+import { PathSummary } from "@/components/learning-path/path-summary";
 
 import {
   CourseOverview,
   DiagnosticPrompt,
   PathUpdateNotice,
   CourseCompletion,
-  LessonPath,
   ReviewForm,
 } from "./course-home-sections";
 
@@ -304,16 +306,6 @@ export default function CourseHome({
           }
         />
       )}
-      {data.source === "ai" && (
-        <p className="flex items-start gap-2 text-sm text-muted-foreground">
-          <Sparkles className="mt-1 size-4 shrink-0" />
-          <span>
-            AI dùng mục tiêu và mức thành thạo BKT để xếp thứ tự; điều kiện tiên
-            quyết luôn áp dụng. AI có thể sai. Mỗi bài có giải thích “Vì sao?”.{" "}
-            {data.rationale}
-          </span>
-        </p>
-      )}
       {data.updating && (
         <p
           role="status"
@@ -344,29 +336,43 @@ export default function CourseHome({
         />
       )}
       <div
-        role="group"
+        role="tablist"
         aria-label="Nội dung khoá học"
-        className="flex flex-wrap gap-2"
+        className="flex gap-6 overflow-x-auto border-b"
       >
-        <Button
-          aria-pressed={!map}
-          variant={map ? "outline" : "default"}
-          onClick={() => setMap(false)}
+        <TabButton
+          id="tab-path"
+          panel="panel-path"
+          selected={!map}
+          icon={BookOpen}
+          onSelect={() => setMap(false)}
         >
-          <BookOpen className="size-4" /> Lộ trình học
-        </Button>
-        <Button
-          aria-pressed={map}
-          variant={map ? "default" : "outline"}
-          onClick={() => setMap(true)}
+          Lộ trình của bạn
+        </TabButton>
+        <TabButton
+          id="tab-map"
+          panel="panel-map"
+          selected={map}
+          icon={Map}
+          onSelect={() => setMap(true)}
         >
-          <Map className="size-4" /> Bản đồ kiến thức
-        </Button>
+          Bản đồ kiến thức
+        </TabButton>
       </div>
       {map ? (
-        <KnowledgeMap initialCourseId={courseId} embedded />
+        <div role="tabpanel" id="panel-map" aria-labelledby="tab-map">
+          <KnowledgeMap initialCourseId={courseId} embedded />
+        </div>
       ) : (
-        <LessonPath data={data} lessonUrl={lessonUrl} />
+        <div
+          role="tabpanel"
+          id="panel-path"
+          aria-labelledby="tab-path"
+          className="space-y-6"
+        >
+          <PathSummary data={data} />
+          <LessonPath data={data} lessonUrl={lessonUrl} />
+        </div>
       )}
       <ConfirmDialog
         open={editing}
@@ -390,6 +396,42 @@ export default function CourseHome({
         />
       )}
     </main>
+  );
+}
+
+function TabButton({
+  id,
+  panel,
+  selected,
+  icon: Icon,
+  onSelect,
+  children,
+}: {
+  id: string;
+  panel: string;
+  selected: boolean;
+  icon: typeof BookOpen;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      id={id}
+      aria-controls={panel}
+      aria-selected={selected}
+      onClick={onSelect}
+      className={cn(
+        "-mb-px flex shrink-0 items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        selected
+          ? "border-primary text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <Icon aria-hidden="true" className="size-4" />
+      {children}
+    </button>
   );
 }
 
