@@ -1,3 +1,5 @@
+import type { Route } from "next";
+
 export const PROFILE_TABS = [
   { id: "overview", label: "Tổng quan", learnerOnly: false },
   { id: "courses", label: "Khóa học", learnerOnly: false },
@@ -14,6 +16,6 @@ export function resolveProfileTab(value: unknown, isLearner: boolean): ProfileTa
   return "overview";
 }
 
-export function profileTabHref(id: ProfileTab) {
+export function profileTabHref(id: ProfileTab): Route {
   return id === "overview" ? "/profile" : `/profile?tab=${id}`;
 }

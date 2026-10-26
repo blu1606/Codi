@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -523,7 +524,8 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
           const target = pendingNav;
           setPendingNav(null);
           setIsInfoDirty(false);
-          if (target) router.push(target);
+          // target is the href of an in-app link the guard intercepted.
+          if (target) router.push(target as Route);
         }}
       >
         <p className="text-sm text-muted-foreground">Thông tin khoá học có thay đổi chưa được lưu.</p>
