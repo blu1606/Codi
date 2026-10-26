@@ -161,10 +161,10 @@ export async function POST(req: Request) {
           // Auto-honour candidate: failed (expired) order
           isLateHonoured = true;
         } else {
-          // Other non-pending states (cancelled, refunded, or failed not expired)
-          if (existingOrder.status === "cancelled") {
-            // Cancellation can commit before this receipt acquires the order lock.
-            // Keep it terminal, but account for the money requiring manual refund.
+          // Keep terminal status and fulfillment unchanged, but account for a
+          // distinct receipt after cancellation or settlement. Provider replay
+          // has already been rejected under the transaction-code lock above.
+          if (existingOrder.status === "cancelled" || existingOrder.status === "paid") {
             await txDB
               .update(orders)
               .set({
@@ -176,7 +176,9 @@ export async function POST(req: Request) {
 
             await txDB.insert(orderEvents).values({
               orderId: existingOrder.id,
-              label: "Nhận thanh toán sau khi đơn đã huỷ (cần đối soát hoàn tiền)",
+              label: existingOrder.status === "paid"
+                ? "Nhận thêm thanh toán sau khi đơn đã thanh toán (cần đối soát hoàn tiền)"
+                : "Nhận thanh toán sau khi đơn đã huỷ (cần đối soát hoàn tiền)",
               actorId: tx.userId,
             });
           }

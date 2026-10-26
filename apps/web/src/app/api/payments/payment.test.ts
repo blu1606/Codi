@@ -29,7 +29,7 @@ beforeEach(() => {
  vi.resetAllMocks();
  vi.stubEnv("SEPAY_WEBHOOK_SECRET", "test-secret"); vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "12345678"); vi.stubEnv("SEPAY_BANK_CODE", "VCB");
  mocks.getSession.mockResolvedValue({ user: { id: "session-user" } });
- mocks.limit.mockResolvedValue([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000 }]);
+ mocks.limit.mockResolvedValue([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000, status: "published" }]);
 });
 afterEach(() => vi.unstubAllEnvs());
 it.each([undefined, "", "   "])("fails closed without a webhook secret (%s)", async (secret) => {
@@ -40,7 +40,7 @@ it.each([undefined, "", "   "])("fails closed without a webhook secret (%s)", as
 it("rejects invalid webhook authentication", async () => { expect((await callback(request({}, false))).status).toBe(401); });
 it("returns authoritative price and configured receiver for a database-only slug", async () => {
  mocks.limit
-   .mockResolvedValueOnce([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000 }])
+   .mockResolvedValueOnce([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000, status: "published" }])
    .mockResolvedValueOnce([])
    .mockResolvedValueOnce([]);
  const response = await create(request({ courseSlug: "database-only", amount: 1, userId: "attacker" }));
@@ -51,6 +51,18 @@ it("returns authoritative price and configured receiver for a database-only slug
 it("does not request payment for a free course", async () => {
  mocks.limit.mockResolvedValue([{ id: "free", price: 0 }]);
  expect((await create(request({ courseId: "free" }))).status).toBe(422); expect(mocks.values).not.toHaveBeenCalled();
+});
+it.each([
+  ["hidden", { courseId: "db-id" }], ["hidden", { courseSlug: "database-only" }],
+  ["draft", { courseId: "db-id" }], ["draft", { courseSlug: "database-only" }],
+  ["pending", { courseId: "db-id" }], ["rejected", { courseSlug: "database-only" }],
+])("rejects new legacy purchases of a %s course before transaction writes (%j)", async (status, input) => {
+  mocks.limit.mockResolvedValue([]).mockResolvedValueOnce([{ id: "db-id", slug: "database-only", price: 125000, status }]);
+  const response = await create(request(input));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: "Khóa học hiện không mở bán." });
+  expect(mocks.limit).toHaveBeenCalledTimes(1);
+  expect(mocks.values).not.toHaveBeenCalled();
 });
 it("rejects missing receiver configuration before inserting an order", async () => {
  vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "");
@@ -214,24 +226,30 @@ it("does not enroll learner if the order is already cancelled", async () => {
   expect(enroll).not.toHaveBeenCalled();
 });
 
-it.each([50000, 500000])("reconciles a unique %i VND receipt after cancellation without double-counting replay", async (amount) => {
+it.each([
+  ["cancelled", 50000], ["cancelled", 500000], ["paid", 50000], ["paid", 500000],
+] as const)("reconciles a unique receipt after %s (%i VND) without double-counting replay", async (status, amount) => {
+  const priorReceived = status === "paid" ? 500000 : 25000;
   const order = {
     id: 998,
     code: "CODI99998",
     userId: "session-user",
-    status: "cancelled",
+    status,
     totalAmount: 500000,
-    receivedAmount: 25000,
+    receivedAmount: priorReceived,
     needsReconciliation: false,
+    paidAt: status === "paid" ? new Date("2026-10-01T00:00:00Z") : null,
+  };
+  const paidAt = order.paidAt;
+  const legacy = {
+    id: order.code, userId: order.userId, courseId: "course-1", amount: order.totalAmount, status: status === "paid" ? "success" : status,
   };
   const receipts: Record<string, unknown>[] = [];
   const events: Record<string, unknown>[] = [];
   const unexpectedInsert = vi.fn();
   const updateOrder = vi.fn();
   const execute = vi.fn().mockResolvedValue(undefined);
-  mocks.limit.mockResolvedValue([{
-    id: order.code, userId: order.userId, courseId: "course-1", amount: order.totalAmount, status: "cancelled",
-  }]);
+  mocks.limit.mockResolvedValue([legacy]);
   mocks.transaction.mockImplementation(async (fn) => fn({
     execute,
     select: () => ({
@@ -250,12 +268,15 @@ it.each([50000, 500000])("reconciles a unique %i VND receipt after cancellation 
     }),
     update: (table: unknown) => ({
       set: (value: Record<string, unknown>) => ({
-        where: async () => {
+        where: async (predicate: SQL) => {
           if (table === orders) {
             updateOrder(value);
             Object.assign(order, value);
           } else {
             expect(table).toBe(studentTransactions);
+            const query = new PgDialect().sqlToQuery(predicate);
+            expect(query.params).toEqual([order.code, "pending"]);
+            if (legacy.status === "pending") Object.assign(legacy, value);
           }
         },
       }),
@@ -275,7 +296,7 @@ it.each([50000, 500000])("reconciles a unique %i VND receipt after cancellation 
   const first = await delivery();
   expect(first.status).toBe(200);
   expect(await first.json()).toEqual({ success: true, message: "Order not pending, marked for reconciliation" });
-  expect(order).toMatchObject({ status: "cancelled", receivedAmount: 25000 + amount, needsReconciliation: true });
+  expect(order).toMatchObject({ status, paidAt, receivedAmount: priorReceived + amount, needsReconciliation: true });
   expect(receipts).toEqual([expect.objectContaining({
     orderId: order.id, transactionCode: "99998001", amount, status: "failed",
   })]);
@@ -286,7 +307,7 @@ it.each([50000, 500000])("reconciles a unique %i VND receipt after cancellation 
   const replay = await delivery();
   expect(replay.status).toBe(200);
   expect(await replay.json()).toEqual({ success: true, message: "Already processed" });
-  expect(order.receivedAmount).toBe(25000 + amount);
+  expect(order.receivedAmount).toBe(priorReceived + amount);
   expect(updateOrder).toHaveBeenCalledTimes(1);
   expect(receipts).toHaveLength(1);
   expect(events).toHaveLength(1);
@@ -298,17 +319,18 @@ it.each([50000, 500000])("reconciles a unique %i VND receipt after cancellation 
     content: order.code, transferAmount: 10000,
   }));
   expect(nextReceipt.status).toBe(200);
-  expect(order).toMatchObject({ status: "cancelled", receivedAmount: 35000 + amount, needsReconciliation: true });
+  expect(order).toMatchObject({ status, paidAt, receivedAmount: priorReceived + 10000 + amount, needsReconciliation: true });
   expect(receipts).toHaveLength(2);
   expect(receipts[1]).toMatchObject({ transactionCode: "SEPAY_NEXT_99998", amount: 10000, status: "failed" });
   expect(events).toHaveLength(2);
   expect(updateOrder).toHaveBeenCalledTimes(2);
   expect(unexpectedInsert).not.toHaveBeenCalled();
+  expect(legacy.status).toBe(status === "paid" ? "success" : status);
 });
 
 it("reuses and validates orderCode in create-transaction", async () => {
   mocks.limit
-    .mockResolvedValueOnce([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000 }])
+    .mockResolvedValueOnce([{ id: "db-id", slug: "database-only", title: "Database course", category: "Backend", price: 125000, status: "hidden" }])
     .mockResolvedValueOnce([{ id: 10, code: "CODI12345", totalAmount: 120000 }])
     .mockResolvedValueOnce([]); // existingTx check
 
