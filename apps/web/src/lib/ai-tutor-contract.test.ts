@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applyDiff,
+  assertTutorIdle,
+  clip,
   escalationSummary,
   lineRefs,
   nextHintLevel,
@@ -136,12 +138,54 @@ describe("prompt", () => {
     expect(prompt).toContain(
       "Lỗi khi chạy: Dòng 1: console.lg is not a function",
     );
-    expect(prompt).toContain(`${"x".repeat(TUTOR_CONTEXT_LIMITS.selection)}…`);
-    expect(prompt).not.toContain(
-      "x".repeat(TUTOR_CONTEXT_LIMITS.selection + 1),
+    expect(prompt).toContain(
+      `${"x".repeat(TUTOR_CONTEXT_LIMITS.selection - 1)}…`,
     );
+    expect(prompt).not.toContain("x".repeat(TUTOR_CONTEXT_LIMITS.selection));
     expect(prompt).toMatch(
       /Học viên: Lỗi gì vậy\?[\s\S]*Câu hỏi: Vì sao lỗi\?$/,
     );
+  });
+});
+
+describe("one turn at a time per lesson (§13 'not busy', enforced on the server)", () => {
+  const at = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+  it("rejects a second question while the last one is still unanswered", () => {
+    expect(() => assertTutorIdle([{ role: "user", at: at(5_000) }])).toThrow(
+      /đang trả lời câu hỏi trước/,
+    );
+  });
+  it("allows a new turn after an answer, an error or a limit row", () => {
+    for (const role of ["ai", "error", "limit"] as const)
+      expect(() =>
+        assertTutorIdle([
+          { role: "user", at: at(5_000) },
+          { role, at: at(1_000) },
+        ]),
+      ).not.toThrow();
+    expect(() => assertTutorIdle([])).not.toThrow();
+  });
+  it("does not block forever when a turn's server died without answering", () => {
+    expect(() =>
+      assertTutorIdle([{ role: "user", at: at(120_000) }]),
+    ).not.toThrow();
+  });
+});
+
+describe("clip", () => {
+  it("never exceeds the limit, ellipsis included, so clipped payloads pass the schema", () => {
+    const code = "a".repeat(TUTOR_CONTEXT_LIMITS.code + 500);
+    const clipped = clip(code, TUTOR_CONTEXT_LIMITS.code);
+    expect(clipped.truncated).toBe(true);
+    expect(clipped.text).toHaveLength(TUTOR_CONTEXT_LIMITS.code);
+    expect(
+      tutorCommand.safeParse({
+        type: "escalate",
+        text: "Em chưa hiểu vì sao test sai",
+        code: clipped.text,
+        withSummary: false,
+      }).success,
+    ).toBe(true);
+    expect(clip("ngắn", 10)).toEqual({ text: "ngắn", truncated: false });
   });
 });

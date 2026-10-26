@@ -168,7 +168,16 @@ export default function TutorPanel({
       ).text;
     if (bridge && !removed.has("code"))
       value.code = clip(bridge.getCode(), TUTOR_CONTEXT_LIMITS.code).text;
-    if (failing) value.failingTest = failing;
+    if (failing) {
+      // Sample tests may be far longer than the context limit; send the same clipped text the model reads.
+      const cut = (text: string) => clip(text, TUTOR_CONTEXT_LIMITS.test).text;
+      value.failingTest = {
+        name: failing.name.slice(0, 200),
+        input: failing.input === null ? null : cut(failing.input),
+        expected: cut(failing.expected),
+        actual: failing.actual === null ? null : cut(failing.actual),
+      };
+    }
     if (runError) value.error = clip(runError, TUTOR_CONTEXT_LIMITS.error).text;
     return value;
   }
@@ -214,7 +223,14 @@ export default function TutorPanel({
     setBusy("thinking");
     try {
       const response = await post(next, controller.signal);
-      if (response.headers.get("content-type")?.startsWith("text/plain")) {
+      if (response.status === 409) {
+        // Another tab is mid-turn on this lesson: not an AI failure, just show the thread as it is.
+        const body = await response.json().catch(() => null);
+        toast(body?.error ?? "AI trợ lý đang trả lời câu hỏi trước.");
+        await refresh();
+      } else if (
+        response.headers.get("content-type")?.startsWith("text/plain")
+      ) {
         setBusy("streaming");
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();

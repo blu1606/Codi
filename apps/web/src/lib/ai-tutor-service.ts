@@ -14,6 +14,7 @@ import { LearningPathError } from "./learning-path-contract";
 import { loadLearningLessonAccess } from "./learning-path-service";
 import { createNotificationService } from "./notification-service";
 import {
+  assertTutorIdle,
   escalationSummary,
   nextHintLevel,
   retryRows,
@@ -251,6 +252,7 @@ export function createTutorService(db: Database) {
       return db.transaction(async (tx) => {
         await lockThread(tx, scope);
         let history = await thread(tx, scope);
+        assertTutorIdle(history);
         if (command.type === "ask" && command.retryOf) {
           const ids = retryRows(history, command.retryOf);
           await tx
@@ -354,6 +356,7 @@ export function createTutorService(db: Database) {
     async recordLimit(scope: TutorScope, question: string) {
       await db.transaction(async (tx) => {
         await lockThread(tx, scope);
+        assertTutorIdle(await thread(tx, scope));
         await insertMessage(tx, scope, { role: "user", body: question });
         await insertMessage(tx, scope, { role: "limit", body: "" });
         await prune(tx, scope);

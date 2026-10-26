@@ -157,11 +157,33 @@ export function nextHintLevel(current: number, isCode: boolean) {
   return level;
 }
 
-/** Cuts a context value to its limit and reports whether it was shortened. */
+/** Cuts a value to at most `max` characters (ellipsis included) and reports whether it was shortened. */
 export function clip(value: string, max: number) {
   return value.length > max
-    ? { text: `${value.slice(0, max)}…`, truncated: true }
+    ? { text: `${value.slice(0, max - 1)}…`, truncated: true }
     : { text: value, truncated: false };
+}
+
+// Longer than the route's maxDuration, so a turn whose server died does not block the thread forever.
+export const TUTOR_TURN_TIMEOUT_MS = 90_000;
+
+/**
+ * Server-side "not busy" guard (§13): a turn is in flight while the thread ends with a learner
+ * message that has no answer yet. Blocks a second tab from interleaving questions.
+ */
+export function assertTutorIdle(
+  messages: Pick<TutorMessage, "role" | "at">[],
+  now = Date.now(),
+) {
+  const last = messages.at(-1);
+  if (
+    last?.role === "user" &&
+    now - Date.parse(last.at) < TUTOR_TURN_TIMEOUT_MS
+  )
+    throw new LearningPathError(
+      "AI trợ lý đang trả lời câu hỏi trước. Hãy đợi hoặc bấm Dừng rồi hỏi lại.",
+      409,
+    );
 }
 
 /** "dòng 14" mentions in an answer that point at real lines of the learner's code (max 5). */
