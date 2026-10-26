@@ -178,6 +178,7 @@ export async function createOrderFromCart(
       }
     }
 
+    const isZeroVndOrder = summary.total <= 0;
     // 4. Find voucherId if voucher applied
     let voucherId: number | null = null;
     if (summary.voucher) {
@@ -187,6 +188,25 @@ export async function createOrderFromCart(
         .where(eq(vouchers.code, summary.voucher.code))
         .limit(1);
       if (v) voucherId = v.id;
+    }
+
+    if (isZeroVndOrder && summary.voucher) {
+      if (!voucherId) {
+        throw new CheckoutError(409, "Mã giảm giá không còn khả dụng. Vui lòng kiểm tra lại giỏ hàng.");
+      }
+      // No money was received: a failed capacity claim must abort the whole
+      // checkout transaction, not commit free fulfillment for reconciliation.
+      const claimed = await tx
+        .update(vouchers)
+        .set({ usedCount: sql`${vouchers.usedCount} + 1` })
+        .where(and(
+          eq(vouchers.id, voucherId),
+          or(isNull(vouchers.usageLimit), sql`${vouchers.usedCount} < ${vouchers.usageLimit}`),
+        ))
+        .returning({ id: vouchers.id });
+      if (claimed.length === 0) {
+        throw new CheckoutError(409, "Mã đã hết lượt sử dụng.");
+      }
     }
 
     // 5. Generate unique order code
@@ -210,7 +230,6 @@ export async function createOrderFromCart(
       retries--;
     }
 
-    const isZeroVndOrder = summary.total <= 0;
     const now = new Date();
     const paymentDeadline = new Date(now.getTime() + 30 * 60 * 1000); // 30 mins deadline
 
@@ -256,7 +275,7 @@ export async function createOrderFromCart(
     }
 
     if (isZeroVndOrder) {
-      // Direct fulfillment for 0 VND order: enroll immediately and increment voucher usedCount
+      // Voucher capacity was claimed before creating this paid order.
       for (const item of summary.items) {
         await tx
           .insert(studentEnrollments)
@@ -265,38 +284,6 @@ export async function createOrderFromCart(
             courseId: item.id,
           })
           .onConflictDoNothing();
-      }
-
-      if (voucherId) {
-        const voucherRes = await tx
-          .update(vouchers)
-          .set({
-            usedCount: sql`${vouchers.usedCount} + 1`,
-          })
-          .where(
-            and(
-              eq(vouchers.id, voucherId),
-              or(
-                isNull(vouchers.usageLimit),
-                sql`${vouchers.usedCount} < ${vouchers.usageLimit}`,
-              ),
-            ),
-          )
-          .returning({ id: vouchers.id });
-
-        if (voucherRes.length === 0) {
-          // Concurrently exhausted
-          await tx
-            .update(orders)
-            .set({ needsReconciliation: true })
-            .where(eq(orders.id, order.id));
-
-          await tx.insert(orderEvents).values({
-            orderId: order.id,
-            label: "Mã giảm giá vượt hạn mức sử dụng khi hoàn tất đơn 0 ₫ (Cần đối soát)",
-            actorId: userId,
-          });
-        }
       }
     } else {
       // Insert studentTransactions for payment matching compatibility
