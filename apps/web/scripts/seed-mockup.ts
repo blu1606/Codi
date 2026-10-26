@@ -20,6 +20,7 @@ import { coursePublicationRequests, publicationReviewCriteria, publicationReview
 import { aiInteractionLogs } from "@codi-1/db/schema/ai-interaction-logs";
 import {
   assignmentFormat,
+  buildConfirmedKnowledgeMap,
   codingExerciseFromMockup,
   codingSubmitPlan,
   diagnosticPattern,
@@ -160,6 +161,22 @@ async function upsertQuestions(tx: Store, assessmentId: number, questions: Mocku
   })) };
 }
 
+// Learners read the published snapshot in courses.confirmed_knowledge_map, not the editing tables.
+// Only the lecturer confirm action writes it, so a confirmed mockup map needs the same snapshot here.
+async function publishConfirmedKnowledgeMap(tx: Store, courseId: string, publishedAt: string, skillIds: number[]) {
+  const [course] = await tx.select({ generation: courses.knowledgeMapContentGeneration }).from(courses).where(eq(courses.id, courseId));
+  const skillRows = await tx.select({
+    id: skills.id, name: skills.name, review: skills.review,
+    bktPInit: skills.bktPInit, bktPLearn: skills.bktPLearn, bktPGuess: skills.bktPGuess, bktPSlip: skills.bktPSlip,
+  }).from(skills).where(inArray(skills.id, skillIds));
+  const edgeRows = await tx.select({ skillId: skillPrerequisites.skillId, prerequisiteSkillId: skillPrerequisites.prerequisiteSkillId, review: skillPrerequisites.review })
+    .from(skillPrerequisites).where(inArray(skillPrerequisites.skillId, skillIds));
+  const linkRows = await tx.select({ lessonId: lessonSkills.lessonId, skillId: lessonSkills.skillId })
+    .from(lessonSkills).where(inArray(lessonSkills.skillId, skillIds));
+  const payload = buildConfirmedKnowledgeMap({ courseId, contentGeneration: course!.generation, publishedAt, skills: skillRows, edges: edgeRows, links: linkRows });
+  await tx.update(courses).set({ confirmedKnowledgeMap: payload }).where(eq(courses.id, courseId));
+}
+
 async function seedCourse(tx: Store, data: MockupSnapshot, course: MockupCourse, index: CatalogIndex) {
   const category = data.categories.find((c) => c.id === course.categoryId);
   if (!category) throw new SeedError(`Khoá ${course.id} trỏ tới danh mục không tồn tại ${course.categoryId}.`);
@@ -223,6 +240,11 @@ async function seedCourse(tx: Store, data: MockupSnapshot, course: MockupCourse,
     const [lessonId, conceptId] = link.split("|") as [string, string];
     const skillId = skillIds.get(conceptId);
     if (skillId && courseLessonIds.has(lessonId)) await tx.insert(lessonSkills).values({ lessonId: mockupLessonUuid(lessonId), skillId }).onConflictDoNothing();
+  }
+
+  if (authored.knowledgeMapStatus === "confirmed") {
+    if (skillIds.size) await publishConfirmedKnowledgeMap(tx, course.id, new Date(map?.updatedAt ?? 0).toISOString(), [...skillIds.values()]);
+    else console.warn(`  ${course.id}: trạng thái bản đồ là confirmed nhưng chưa có khái niệm; không xuất bản bản đồ.`);
   }
 
   for (const lesson of lessons) {

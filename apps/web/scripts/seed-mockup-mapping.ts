@@ -3,6 +3,8 @@ import { z } from "zod";
 import { ONBOARDING_GOALS, ONBOARDING_LEVELS, WEEKLY_HOURS } from "@codi-1/db/schema/onboarding-values";
 import { canonical } from "../src/lib/coding-contract";
 import type { TutorialStep } from "@codi-1/db/schema/coding-tutorial";
+import type { ConfirmedKnowledgeMap } from "@codi-1/db/schema/confirmed-knowledge-map";
+import { findCycle } from "../src/lib/knowledge-map-runner";
 
 // Pure mapping for seed-mockup.ts: the mockup snapshot schema (validated at the boundary) and the
 // rules that turn prototype values into database values. No database access in this module.
@@ -319,5 +321,46 @@ export function codingExerciseFromMockup(lessonTitle: string, code: MockupCode):
     solutionVerifiedAt: null,
     hints: [],
     tests: graded.flatMap((s) => s.tests!.map((t) => toTest(t, true))),
+  };
+}
+
+// The published knowledge map that learners read (courses.confirmed_knowledge_map). Mirrors the
+// lecturer confirm action: declined items are dropped, pending suggestions block publication and the
+// prerequisite graph must be acyclic. The publication id is derived from the content so re-runs keep
+// the same id, which learner paths reference.
+type KnowledgeReview = "suggested" | "accepted" | "edited" | "declined";
+export function buildConfirmedKnowledgeMap(input: {
+  courseId: string;
+  contentGeneration: number;
+  publishedAt: string;
+  skills: { id: number; name: string; review: KnowledgeReview; bktPInit: number; bktPLearn: number; bktPGuess: number; bktPSlip: number }[];
+  edges: { skillId: number; prerequisiteSkillId: number; review: KnowledgeReview }[];
+  links: { lessonId: string; skillId: number }[];
+}): ConfirmedKnowledgeMap {
+  const pending = input.skills.filter((s) => s.review === "suggested").length + input.edges.filter((e) => e.review === "suggested").length;
+  if (pending) throw new Error(`${input.courseId}: còn ${pending} đề xuất chưa xem lại, chưa thể xuất bản bản đồ.`);
+  const live = input.skills.filter((s) => s.review !== "declined").sort((a, b) => a.id - b.id);
+  if (!live.length) throw new Error(`${input.courseId}: cần ít nhất một khái niệm để xuất bản bản đồ.`);
+  const liveIds = new Set(live.map((s) => s.id));
+  const edges = input.edges
+    .filter((e) => e.review !== "declined" && liveIds.has(e.skillId) && liveIds.has(e.prerequisiteSkillId))
+    .map((e) => ({ from: e.prerequisiteSkillId, to: e.skillId }))
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+  if (findCycle([...liveIds], edges)) throw new Error(`${input.courseId}: bản đồ còn vòng lặp, chưa thể xuất bản.`);
+  const links = input.links
+    .filter((l) => liveIds.has(l.skillId))
+    .map(({ lessonId, skillId }) => ({ lessonId, skillId }))
+    .sort((a, b) => a.lessonId.localeCompare(b.lessonId) || a.skillId - b.skillId);
+  const content = {
+    skills: live.map(({ id, name, bktPInit, bktPLearn, bktPGuess, bktPSlip }) => ({ id, name, bktPInit, bktPLearn, bktPGuess, bktPSlip })),
+    edges,
+    links,
+  };
+  return {
+    version: 1,
+    publicationId: stableUuid(`mockup:publication:${input.courseId}:${JSON.stringify(content)}`),
+    contentGeneration: input.contentGeneration,
+    publishedAt: input.publishedAt,
+    ...content,
   };
 }
