@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
@@ -13,6 +13,7 @@ import {
   List,
   LoaderCircle,
   LockKeyhole,
+  Sparkles,
   Star,
 } from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
@@ -42,6 +43,25 @@ import type {
 } from "@/lib/lesson-player-contract";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 import { ReviewForm } from "../course-home";
+import {
+  TutorBridgeContext,
+  type TutorBridge,
+  type TutorCodeBridge,
+  type TutorOpenRequest,
+} from "@/components/ai-tutor/tutor-bridge";
+import TutorPanel from "@/components/ai-tutor/tutor-panel";
+import TutorSelectionToolbar from "@/components/ai-tutor/tutor-selection-toolbar";
+
+// Remembered per browser tab so the panel stays open while the learner moves between lessons.
+const TUTOR_OPEN_KEY = "codi:tutor-open";
+function rememberTutor(open: boolean) {
+  try {
+    if (open) sessionStorage.setItem(TUTOR_OPEN_KEY, "1");
+    else sessionStorage.removeItem(TUTOR_OPEN_KEY);
+  } catch {
+    /* storage unavailable: the panel just starts closed next lesson */
+  }
+}
 
 export default function LessonPlayer({
   courseId,
@@ -61,6 +81,44 @@ export default function LessonPlayer({
   const queue = useRef(Promise.resolve());
   const revision = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const codeBridge = useRef<TutorCodeBridge | null>(null);
+  const [codeVersion, setCodeVersion] = useState(0);
+  const [tutorOpen, setTutorOpen] = useState(false);
+  const [tutorRequest, setTutorRequest] = useState<
+    (TutorOpenRequest & { id: number }) | null
+  >(null);
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(TUTOR_OPEN_KEY)) setTutorOpen(true);
+    } catch {
+      /* storage unavailable */
+    }
+    const media = window.matchMedia("(min-width: 1280px)");
+    const sync = () => setWide(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  const toggleTutor = (open: boolean) => {
+    setTutorOpen(open);
+    rememberTutor(open);
+  };
+  const tutor = useMemo<TutorBridge>(
+    () => ({
+      open: (request = {}) => {
+        setTutorRequest({ ...request, id: Date.now() });
+        setTutorOpen(true);
+        rememberTutor(true);
+      },
+      registerCode: (bridge) => {
+        codeBridge.current = bridge;
+        setCodeVersion((version) => version + 1);
+      },
+    }),
+    [],
+  );
   const courseHome = `/learn/${encodeURIComponent(courseId)}` as Route;
   const endpoint = `/api/learn/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`;
   const lessonUrl = (id: string) =>
@@ -303,8 +361,15 @@ export default function LessonPlayer({
   );
   const update = path.update?.afterLessonId === lessonId ? path.update : null;
 
+  const docked = tutorOpen && wide;
   return (
-    <main className="grid w-full min-w-0 gap-6 p-4 lg:grid-cols-[18.5rem_minmax(0,1fr)] lg:gap-0 lg:p-0">
+    <TutorBridgeContext.Provider value={tutor}>
+    <main
+      className={cn(
+        "grid w-full min-w-0 gap-6 p-4 lg:grid-cols-[18.5rem_minmax(0,1fr)] lg:gap-0 lg:p-0",
+        docked && "xl:grid-cols-[18.5rem_minmax(0,1fr)_24rem]",
+      )}
+    >
       <aside
         className="hidden min-w-0 space-y-2 self-start border-r px-3 py-2 lg:sticky lg:top-16 lg:block lg:max-h-[calc(100svh-4rem)] lg:overflow-y-auto"
         aria-label="Lộ trình bài học"
@@ -335,10 +400,10 @@ export default function LessonPlayer({
         </p>
         {lessons}
       </aside>
-      <div className="min-w-0 space-y-6 lg:px-6 lg:pb-6">
+      <div ref={content} className="min-w-0 space-y-6 lg:px-6 lg:pb-6">
         <nav
           aria-label="Điều hướng bài học"
-          className="flex flex-wrap items-center gap-2 border-b pb-3"
+          className="sticky top-16 z-20 flex flex-wrap items-center gap-2 border-b bg-background py-3"
         >
           <Button
             variant="outline"
@@ -372,6 +437,15 @@ export default function LessonPlayer({
           >
             Về lộ trình
           </Link>
+          <Button
+            variant={tutorOpen ? "secondary" : "outline"}
+            className="lg:ml-auto"
+            aria-pressed={tutorOpen}
+            onClick={() => toggleTutor(!tutorOpen)}
+          >
+            <Sparkles className="size-4" />
+            AI trợ lý
+          </Button>
         </nav>
         {errorAlert}
         <div className="space-y-2 lg:hidden">
@@ -679,6 +753,17 @@ export default function LessonPlayer({
           {path.review ? "Sửa đánh giá" : "Đánh giá khóa học"}
         </Button>
       </div>
+      {tutorOpen && (
+        <TutorPanel
+          endpoint={`${endpoint}/tutor`}
+          request={tutorRequest}
+          code={codeBridge}
+          codeVersion={codeVersion}
+          docked={wide}
+          onClose={() => toggleTutor(false)}
+        />
+      )}
+      <TutorSelectionToolbar root={content} />
       <Sheet
         open={sidebar}
         onOpenChange={setSidebar}
@@ -700,6 +785,7 @@ export default function LessonPlayer({
         />
       )}
     </main>
+    </TutorBridgeContext.Provider>
   );
 }
 
