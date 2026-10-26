@@ -7,12 +7,17 @@ Tài liệu hướng dẫn tiêu chuẩn viết unit test, cấu trúc test suit
 ## 1. Triết lý & Công nghệ kiểm thử
 
 Dự án Codi sử dụng **Vitest** làm framework unit test chính thức:
-- **Môi trường thực thi**: Node.js (nhanh, nhẹ, không kéo DOM/jsdom hay giả lập trình duyệt cồng kềnh cho logic thuần).
-- **Nguyên tắc cô lập**: Kiểm thử unit chạy độc lập 100%, không yêu cầu database PostgreSQL thật, Redis hay external API secrets.
+
+- **Chọn test theo outcome và rủi ro**: Mỗi test cần chỉ ra hành vi quan sát được hoặc bất biến an toàn được bảo vệ, cùng lỗi thực tế khiến test thất bại. Giữ các trường hợp phân biệt về phân quyền, tiền, mất dữ liệu và ranh giới đầu vào; không thêm test chỉ để đạt số lượng hay tỷ lệ coverage.
+- **Gộp theo hành vi, không theo tên**: Chỉ bỏ trường hợp trùng khi đầu vào, nhánh và outcome đã được bảo vệ tương đương. Các guard cho phép/từ chối, trạng thái pending/error và biến thể đầu vào công khai vẫn cần được giữ.
+- **Oracle độc lập**: Assert kết quả mong đợi cụ thể từ yêu cầu/fixture, không chỉ so hai hàm dùng chung logic hoặc kiểm tra mock trả lại đúng giá trị đã cấu hình.
+- **Môi trường thực thi**: Logic thuần mặc định chạy Node.js; test component có thể chọn happy-dom theo từng file. Cấu hình thuộc [vitest.config.ts](../vitest.config.ts).
+- **Nguyên tắc cô lập**: Unit/component tests không cần PostgreSQL thật, Redis hay external API secrets. Fixture nhỏ, xác định được dùng làm đầu vào; không thay thế logic production bằng kết quả giả.
 - **Ranh giới Mocking (Mock Boundaries)**:
   - Mock ở tầng biên hạ tầng: `@/services` (auth, db), `next/headers`, `next/server`.
   - **Tuyệt đối không mock** hàm hoặc logic nghiệp vụ đang được kiểm thử.
   - Sử dụng `beforeEach` / `afterEach` để reset trạng thái mocks, đảm bảo tính độc lập giữa các ca kiểm thử.
+  - Mock biên hạ tầng vẫn hữu ích khi chạy hàm/component production thật và kiểm tra kết quả hoặc side effect quan trọng (kể cả không được ghi dữ liệu khi bị từ chối). Mock SQL không chứng minh transaction/lock của PostgreSQL; render response giả không chứng minh đã lưu dữ liệu.
 
 ---
 
@@ -71,12 +76,11 @@ pnpm test:watch
 pnpm test:coverage
 ```
 
-### Tiêu chuẩn Coverage Gate
-Coverage được đo bằng công cụ V8 (`@vitest/coverage-v8`) với ngưỡng tối thiểu bắt buộc trên 4 module nghiệp vụ trọng điểm:
-- **Statements**: ≥ 80% (Thực tế đạt: 100%)
-- **Lines**: ≥ 80% (Thực tế đạt: 100%)
-- **Functions**: ≥ 80% (Thực tế đạt: 100%)
-- **Branches**: ≥ 75% (Thực tế đạt: 100%)
+### Coverage và gate hiện hành
+
+Coverage giúp tìm vùng chưa được thực thi, không chứng minh outcome đúng hay là mục tiêu để tăng số test. Nguồn sự thật cho phạm vi đo/ngưỡng đang được thực thi là [vitest.config.ts](../vitest.config.ts); lệnh và điều kiện CI nằm trong [workflow CI](../.github/workflows/ci.yml). Giữ nguyên các gate này cho đến khi có quyết định thay đổi riêng; báo cáo kết quả pass/fail thực tế, không hạ ngưỡng hoặc che lỗi để việc tinh gọn test được xanh.
+
+Khi bàn giao, ghi candidate, lệnh, exit code và giới hạn chứng minh. Chỉ báo cáo coverage/thời gian của lần chạy có bằng chứng; không dùng tỷ lệ hay test count thay cho kiểm tra các outcome cần bảo vệ.
 
 ---
 
@@ -86,9 +90,9 @@ Coverage được đo bằng công cụ V8 (`@vitest/coverage-v8`) với ngưỡ
 |---|---|---|---|
 | **0:00 – 1:00** | Giới thiệu kiến trúc kiểm thử | Mở file `vitest.config.ts`, giải thích Node runner, module alias và ranh giới unit test | Làm rõ phân biệt giữa Unit Test (nhanh, cô lập) và Integration / E2E test |
 | **1:00 – 3:00** | Cấu trúc AAA & Table-Driven Tests | Trình chiếu `apps/web/src/lib/filter-course-catalog.test.ts` | Minh họa pattern Arrange-Act-Assert và `it.each` với các bộ dữ liệu boundary/whitespace |
-| **3:00 – 5:00** | Mocking nghiệp vụ & An toàn phân quyền | Trình chiếu `actions.test.ts` (Admin self-demotion lockout) và `route.test.ts` (PATCH profile validation) | Chứng minh logic nghiệp vụ chặn rủi ro mất Admin cuối cùng và xác thực input người dùng |
-| **5:00 – 6:30** | **Live Failure & Recovery Test** | Tạm sửa 1 assertion trong `actions.test.ts` để cố tình gây lỗi, chạy `pnpm test`. Quan sát terminal báo đỏ và exit code ≠ 0. Sau đó undo và chạy lại xanh | Chứng minh test bắt lỗi thực sự, không phải test rỗng hình thức |
-| **6:30 – 8:00** | Báo cáo Coverage V8 & Ngưỡng chất lượng | Chạy `pnpm test:coverage`, hiển thị bảng thống kê 100% metrics trên terminal và mở file HTML trong `coverage/index.html` | Chứng minh toàn bộ các nhánh rẽ và câu lệnh nghiệp vụ đều được kiểm thử bảo vệ |
+| **3:00 – 5:00** | Mock biên hạ tầng & An toàn phân quyền | Trình chiếu `actions.test.ts` (Admin self-demotion lockout) và `route.test.ts` (PATCH profile validation) | Giải thích outcome, guard và assert không ghi dữ liệu khi bị từ chối; không coi mock DB là bằng chứng PostgreSQL |
+| **5:00 – 6:30** | **Failure & Recovery có kiểm soát** | Trong worktree dùng một lần, không secrets/DB/provider/runtime đang dùng: chạy test catalogue xanh, tạm đảo ưu tiên title-match trong hàm production `filterCourseCatalog`, chạy lại test hẹp và ghi lỗi outcome/exit code. Khôi phục chính xác bytes source ban đầu, kiểm tra diff/hash rồi chạy xanh lại; không sửa assertion để tạo RED | Chứng minh test phân biệt một hồi quy production thật. Chỉ thực hiện khi được phép sửa tạm source trong môi trường cô lập; không đưa mutation vào commit |
+| **6:30 – 8:00** | Báo cáo Coverage V8 & Giới hạn bằng chứng | Chạy `pnpm test:coverage`, đọc kết quả và gate thực tế, mở báo cáo HTML nếu được sinh ra | Nêu vùng chưa đo/chưa kiểm và outcome được bảo vệ; coverage cao không chứng minh persistence, UI trình duyệt hay provider |
 | **8:00 – 10:00** | Tích hợp CI Gate trên GitHub Actions | Mở `.github/workflows/ci.yml`, chỉ ra job `unit-test` chạy trong fast/full lane và điều kiện `ci-gate` bắt buộc `UNIT_TEST=success` | Chứng minh quy trình CI tự động chặn code lỗi không thể merge vào nhánh `develop` |
 
 ---
@@ -97,4 +101,4 @@ Coverage được đo bằng công cụ V8 (`@vitest/coverage-v8`) với ngưỡ
 
 - **Unit tests kiểm thử logic thuần và điều kiện rẽ nhánh**: Các hành vi phụ thuộc sâu vào cơ chế vật lý của RDBMS (như PostgreSQL row-level locks `for update`, concurrent race conditions, transaction rollback khi crash phần cứng) cần được kiểm thử bằng integration tests riêng với cơ sở dữ liệu thật trong môi trường staging.
 - **E2E trên trình duyệt thật**: luồng UI được kiểm bằng Playwright (`pnpm test:e2e`, spec `apps/web/e2e/*.spec.ts`), tách khỏi Vitest. Cách chạy và biến môi trường: [ui-test-flows.md §5](ui-test-flows.md#5-chạy-test).
-- **Không dùng DOM renderer**: Các test trên không render giao diện React (không dùng jsdom/RTL) nhằm tối ưu tốc độ thực thi trong CI pipeline (chỉ tốn ~1.5 giây).
+- **Component tests với happy-dom**: Có thể kiểm tra tương tác của component production với biên fetch/router được mock, nhưng không thay thế trình duyệt thật, hydration toàn ứng dụng, media playback hay save/reopen qua DB. Ví dụ: [catalog-search.test.ts](../apps/web/src/app/courses/catalog-search.test.ts). Phân biệt rõ kết quả đã chạy, chưa chạy và bị chặn vì thiếu fixture; không biến thiếu fixture thành PASS.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SEED_COURSES, type Course } from "./data/courses";
+import { SEED_COURSES } from "./data/courses";
 import { filterCourseCatalog } from "./filter-course-catalog";
 
 describe("filterCourseCatalog", () => {
@@ -117,16 +117,19 @@ describe("filterCourseCatalog", () => {
 
   it("bảo toàn thứ tự mảng gốc và không làm biến đổi mảng đầu vào (immutability)", () => {
     // Arrange
-    const sampleCourses: Course[] = SEED_COURSES.slice(0, 2);
-    const frozenInput = Object.freeze([...sampleCourses]);
+    const frozenInput = Object.freeze([
+      Object.freeze({ id: "second", title: "React basics", category: "Frontend", level: "Beginner", description: "" }),
+      Object.freeze({ id: "excluded", title: "Node basics", category: "Backend", level: "Beginner", description: "" }),
+      Object.freeze({ id: "first", title: "React advanced", category: "Frontend", level: "Advanced", description: "" }),
+    ]);
+    const original = structuredClone(frozenInput);
 
     // Act
-    const result = filterCourseCatalog(frozenInput, sampleCourses[0].title, "Tất cả", "Tất cả cấp độ");
+    const result = filterCourseCatalog(frozenInput, "React", "Tất cả", "Tất cả cấp độ");
 
     // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(sampleCourses[0].id);
-    expect(frozenInput).toHaveLength(2);
+    expect(result.map((course) => course.id)).toEqual(["second", "first"]);
+    expect(frozenInput).toEqual(original);
   });
 
   describe("lọc theo giá (price)", () => {
@@ -165,14 +168,15 @@ describe("filterCourseCatalog", () => {
       expect(result.map((c) => c.id)).toEqual(["c2", "c1", "c3"]);
     });
 
-    it("sắp xếp theo phù hợp nhất (relevant) khi có từ khóa tìm kiếm", () => {
+    it("sắp xếp relevant ưu tiên khớp tiêu đề rồi số học viên khi cùng mức khớp", () => {
       const searchList = [
+        { id: "description", title: "Học Lập trình Web", category: "Frontend", level: "Beginner", description: "Chứa React trong mô tả", enrollmentCount: 500 },
         { id: "c1", title: "React Nâng cao", category: "Frontend", level: "Advanced", description: "Lập trình web", enrollmentCount: 20 },
-        { id: "c2", title: "Học Lập trình Web", category: "Frontend", level: "Beginner", description: "Chứa React trong mô tả", enrollmentCount: 100 },
+        { id: "c2", title: "React Cơ bản", category: "Frontend", level: "Beginner", description: "Lập trình web", enrollmentCount: 100 },
       ];
       // Title khớp "React" xếp trước dù ít enrollment hơn
       const result = filterCourseCatalog(searchList, "React", "Tất cả", "Tất cả cấp độ", { sort: "relevant" });
-      expect(result.map((c) => c.id)).toEqual(["c1", "c2"]);
+      expect(result.map((c) => c.id)).toEqual(["c2", "c1", "description"]);
     });
 
     it("sắp xếp theo mới nhất (newest)", () => {
@@ -195,19 +199,6 @@ describe("filterCourseCatalog", () => {
       expect(result.map((c) => c.id)).toEqual(["c3", "c1", "c2"]);
     });
 
-    it("sắp xếp theo học nhiều nhất (enrollment): số học viên giảm dần", () => {
-      const result = filterCourseCatalog(list, "", "Tất cả", "Tất cả cấp độ", { sort: "enrollment" });
-      expect(result.map((c) => c.id)).toEqual(["c2", "c1", "c3"]);
-    });
-
-    it("sắp xếp theo phù hợp nhất (relevant): ưu tiên khớp tiêu đề, fallback theo enrollment", () => {
-      const relevantList = [
-        { id: "c1", title: "Lập trình Web", category: "Frontend", level: "Beginner", description: "Học React cơ bản", price: 100000, enrollmentCount: 500, rating: 4.8 },
-        { id: "c2", title: "React chuyên sâu", category: "Frontend", level: "Beginner", description: "Học chuyên sâu", price: 100000, enrollmentCount: 50, rating: 4.8 },
-      ];
-      const result = filterCourseCatalog(relevantList, "React", "Tất cả", "Tất cả cấp độ", { sort: "relevant" });
-      expect(result.map((c) => c.id)).toEqual(["c2", "c1"]);
-    });
   });
 
   describe("getTypeaheadSuggestions", () => {
@@ -221,11 +212,18 @@ describe("filterCourseCatalog", () => {
       expect(suggestions.isEmpty).toBe(false);
     });
 
-    it.each([" REACT ", "apps", "Hooks", "not-found"])("uses the same query predicate as the catalog for %s", async (query) => {
+    it.each([
+      [" REACT ", ["c1", "c2"]],
+      ["apps", ["c2"]],
+      ["Hooks", ["c1"]],
+      ["not-found", []],
+    ] as const)("matches expected courses and the catalog destination for %s", async (query, expectedIds) => {
       const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
-      expect(getTypeaheadSuggestions(catalog, query).matches).toEqual(
-        filterCourseCatalog(catalog, query, "all", "all"),
-      );
+      const suggestions = getTypeaheadSuggestions(catalog, query);
+      const destination = filterCourseCatalog(catalog, query, "all", "all");
+      expect(destination.map((course) => course.id)).toEqual(expectedIds);
+      expect(suggestions.matches.map((course) => course.id)).toEqual(expectedIds);
+      expect(suggestions.matches).toEqual(destination);
     });
 
     const catalog = [
@@ -247,19 +245,12 @@ describe("filterCourseCatalog", () => {
     it("trả về querySuggestions và topResults với badge Khóa học / Chủ đề", async () => {
       const { getTypeaheadSuggestions } = await import("./filter-course-catalog");
       const result = getTypeaheadSuggestions(catalog, "React");
-      expect(result.querySuggestions).toBeDefined();
-      expect(result.querySuggestions.length).toBeGreaterThan(0);
       expect(result.querySuggestions).toContain("React Fundamentals");
 
-      expect(result.topResults).toBeDefined();
-      expect(result.topResults.length).toBeGreaterThan(0);
-
       const courseTop = result.topResults.find((r) => r.type === "Khóa học");
-      expect(courseTop).toBeDefined();
       expect(courseTop?.badgeLabel).toBe("Khóa học");
 
       const topicTop = result.topResults.find((r) => r.type === "Chủ đề");
-      expect(topicTop).toBeDefined();
       expect(topicTop?.badgeLabel).toBe("Chủ đề");
     });
 
