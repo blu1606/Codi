@@ -385,7 +385,9 @@ export default function CheckoutPage({
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center p-8 space-y-4">
         <Loader2 className="size-8 animate-spin text-primary" />
-        <p className="text-muted-foreground animate-pulse text-base">Đang tải thông tin thanh toán…</p>
+        <p className="text-muted-foreground animate-pulse text-base">
+          {orderParam ? "Đang tải thông tin thanh toán…" : "Đang tạo đơn hàng…"}
+        </p>
       </div>
     );
   }
@@ -484,7 +486,7 @@ export default function CheckoutPage({
   if (order.status === "paid") {
     return (
       <div className="container mx-auto max-w-2xl px-4 py-12 space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Thanh toán khóa học</h1>
+        <h1 className="text-2xl tracking-tight">Thanh toán khóa học</h1>
         <Alert variant="success">
           <AlertTitle>Đơn hàng đã được thanh toán</AlertTitle>
           <AlertDescription>
@@ -505,7 +507,7 @@ export default function CheckoutPage({
   if (order.status === "cancelled") {
     return (
       <div className="container mx-auto max-w-2xl px-4 py-12 space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Thanh toán khóa học</h1>
+        <h1 className="text-2xl tracking-tight">Thanh toán khóa học</h1>
         <Alert variant="info">
           <AlertTitle>Đơn hàng đã huỷ</AlertTitle>
           <AlertDescription className="space-y-1.5">
@@ -534,7 +536,7 @@ export default function CheckoutPage({
     const isExpired = order.failReason === "expired";
     return (
       <div className="container mx-auto max-w-2xl px-4 py-12 space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Thanh toán khóa học</h1>
+        <h1 className="text-2xl tracking-tight">Thanh toán khóa học</h1>
         <Alert variant="destructive">
           <AlertTitle>{isExpired ? "Mã thanh toán đã hết hạn" : "Thanh toán không thành công"}</AlertTitle>
           <AlertDescription className="space-y-2">
@@ -610,7 +612,7 @@ export default function CheckoutPage({
     <div className="container mx-auto max-w-5xl px-4 py-8 space-y-8">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Thanh toán khóa học</h1>
+        <h1 className="text-2xl sm:text-3xl tracking-tight">Thanh toán khóa học</h1>
         <p className="text-muted-foreground text-sm sm:text-base">
           Quét mã bằng ứng dụng ngân hàng, hoặc chuyển khoản theo thông tin bên dưới.
         </p>
