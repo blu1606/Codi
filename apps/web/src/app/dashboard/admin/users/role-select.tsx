@@ -18,9 +18,9 @@ import type { RoleId } from "@codi-1/auth";
 import { updateUserRole } from "../actions";
 
 const ROLE_OPTIONS: { value: RoleId; label: string }[] = [
-  { value: "LEARNER", label: "Learner" },
-  { value: "LECTURER", label: "Lecturer" },
-  { value: "ADMIN", label: "Admin" },
+  { value: "LEARNER", label: "Học viên" },
+  { value: "LECTURER", label: "Giảng viên" },
+  { value: "ADMIN", label: "Quản trị viên" },
 ];
 
 const ROLE_DESCRIPTIONS: Record<RoleId, string> = {
@@ -100,7 +100,7 @@ export default function RoleSelect({
           <DialogHeader>
             <DialogTitle>Đổi vai trò của {userName}?</DialogTitle>
             <DialogDescription>
-              {currentRoleId} → {selected}. Người dùng sẽ {ROLE_DESCRIPTIONS[selected] || selected}. Thay đổi có hiệu lực ở lần tải trang tiếp theo của họ.
+              {ROLE_OPTIONS.find((r) => r.value === currentRoleId)?.label ?? currentRoleId} → {ROLE_OPTIONS.find((r) => r.value === selected)?.label ?? selected}. Người dùng sẽ {ROLE_DESCRIPTIONS[selected] || selected}. Thay đổi có hiệu lực ở lần tải trang tiếp theo của họ.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -2,15 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import { studentActivities, studentEnrollments } from "@codi-1/db";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
-  buildAdvisorAnswer,
+  ADVISOR_NO_MATCH,
+  advisorCatalogSlice,
+  advisorPrompt,
+  toAdvisorAnswer,
   formatVnd,
   levelLabel,
   getLearnerProgressContext,
   syncLearnerIntakeGoalDraft,
   logAdvisorInteraction,
   type AdvisorCourseItem,
+  type AdvisorModelOutput,
 } from "./ai-advisor-service";
-import type { IntakeState } from "./ai-advisor-contract";
 
 const mockCatalog: AdvisorCourseItem[] = [
   {
@@ -63,143 +66,120 @@ describe("ai-advisor-service business logic", () => {
     expect(levelLabel("Advanced")).toBe("Nâng cao");
   });
 
-  it("recommends courses based on goal and beginner intake", () => {
-    const intake: IntakeState = {
-      goal: "Làm được dự án",
-      level: "Mới bắt đầu",
-      hoursPerWeek: "5-10 giờ",
-      skipped: [],
-    };
+  const answer = (output: Partial<AdvisorModelOutput>) =>
+    toAdvisorAnswer(
+      {
+        text: "Gợi ý cho bạn",
+        courses: [],
+        compare: false,
+        order: [],
+        followups: [],
+        noMatch: false,
+        ...output,
+      },
+      mockCatalog,
+    );
 
-    const res = buildAdvisorAnswer({
-      prompt: "Tôi nên học khoá nào?",
-      catalog: mockCatalog,
-      intake,
-      ownedCourseIds: [],
+  it("keeps only real catalogue courses, once each, at most 3, best match first", () => {
+    const res = answer({
+      courses: [
+        { id: "course-node-002", reason: "Hợp mục tiêu làm backend" },
+        { id: "fake-course", reason: "Không có trong danh mục" },
+        { id: "course-node-002", reason: "Trùng" },
+        { id: "course-react-001", reason: "Nền tảng" },
+        { id: "course-dsa-003", reason: "Phỏng vấn" },
+      ],
     });
-
-    expect(res.text).toContain("Làm được dự án, Mới bắt đầu, 5-10 giờ/tuần");
-    expect(res.courses.length).toBeGreaterThan(0);
-    expect(res.courses[0].id).toBe("course-react-001");
-    expect(res.courses[0].isBestMatch).toBe(true);
-    expect(res.table).toBeNull();
-    expect(res.noMatch).toBe(false);
-  });
-
-  it("generates a comparison table when prompt asks for comparison (so sánh)", () => {
-    const intake: IntakeState = {
-      goal: "Chuẩn bị phỏng vấn",
-      level: "Trung cấp",
-      hoursPerWeek: "> 10 giờ",
-      skipped: [],
-    };
-
-    const res = buildAdvisorAnswer({
-      prompt: "So sánh các khoá học phù hợp",
-      catalog: mockCatalog,
-      intake,
-      ownedCourseIds: [],
-    });
-
-    expect(res.text).toContain("bảng so sánh các khoá theo quy tắc danh mục");
-    expect(res.table).not.toBeNull();
-    expect(res.table?.headers).toEqual([
-      "Khoá học",
-      "Trình độ",
-      "Số bài",
-      "Học phí",
-      "Phù hợp khi",
+    expect(res.courses.map((c) => c.id)).toEqual([
+      "course-node-002",
+      "course-react-001",
+      "course-dsa-003",
     ]);
-    expect(res.table?.rows.length).toBe(3);
-    expect(res.courses.length).toBe(3);
+    expect(res.courses.map((c) => c.isBestMatch)).toEqual([true, false, false]);
   });
 
-  it("generates a roadmap order when prompt asks for course order or roadmap (thứ tự / lộ trình)", () => {
-    const intake: IntakeState = {
-      goal: "Làm được dự án",
-      level: "Mới bắt đầu",
-      hoursPerWeek: "5-10 giờ",
-      skipped: [],
-    };
+  it("takes card and table values from the catalogue, not the model", () => {
+    const res = answer({
+      courses: [
+        { id: "course-react-001", reason: "Bạn mới bắt đầu" },
+        { id: "course-dsa-003", reason: "Bạn ôn phỏng vấn" },
+      ],
+      compare: true,
+    });
+    expect(res.courses[0]).toMatchObject({
+      title: "React cơ bản",
+      level: "Cơ bản",
+      price: 590000,
+      lessonCount: 12,
+      learnersCount: 120,
+      reason: "Bạn mới bắt đầu",
+    });
+    expect(res.table).toEqual({
+      headers: ["Khoá học", "Trình độ", "Số bài", "Học phí", "Phù hợp khi"],
+      rows: [
+        ["React cơ bản", "Cơ bản", "12", formatVnd(590000), "Bạn mới bắt đầu"],
+        ["Cấu trúc dữ liệu & Giải thuật", "Nâng cao", "20", "Miễn phí", "Bạn ôn phỏng vấn"],
+      ],
+    });
+  });
 
-    const res = buildAdvisorAnswer({
-      prompt: "Nên học theo thứ tự nào?",
+  it("only builds a comparison table for at least 2 real courses", () => {
+    expect(
+      answer({ courses: [{ id: "course-react-001", reason: "x" }], compare: true }).table,
+    ).toBeNull();
+  });
+
+  it("maps the suggested order to real courses with catalogue titles", () => {
+    const res = answer({
+      order: [
+        { id: "course-react-001", reason: "Học trước" },
+        { id: "nope", reason: "x" },
+        { id: "course-node-002", reason: "Sau đó" },
+      ],
+    });
+    expect(res.order).toEqual([
+      { id: "course-react-001", slug: "react-co-ban", title: "React cơ bản", reason: "Học trước" },
+      { id: "course-node-002", slug: "nodejs-backend", title: "Node.js & Express", reason: "Sau đó" },
+    ]);
+  });
+
+  it("states 'Codi chưa có khoá' on no match and caps follow-ups at 3", () => {
+    const res = answer({
+      text: "Bạn có thể bắt đầu với khoá gần nhất.",
+      noMatch: true,
+      courses: [{ id: "course-react-001", reason: "Gần nhất" }],
+      followups: ["A", " ", "B", "C", "D"],
+    });
+    expect(res.noMatch).toBe(true);
+    expect(res.text).toBe(`${ADVISOR_NO_MATCH}. Bạn có thể bắt đầu với khoá gần nhất.`);
+    expect(res.followups).toEqual(["A", "B", "C"]);
+    expect(answer({ text: `${ADVISOR_NO_MATCH} về Elixir.`, noMatch: true }).text).toBe(
+      `${ADVISOR_NO_MATCH} về Elixir.`,
+    );
+  });
+
+  it("gives the model the catalogue by id, what Codi knows about the learner and recent turns", () => {
+    const { system, prompt } = advisorPrompt({
+      prompt: "So sánh 2 khoá vừa rồi",
       catalog: mockCatalog,
-      intake,
+      intake: { goal: "Làm được dự án", level: "Mới bắt đầu", hoursPerWeek: "5-10 giờ", skipped: [] },
       ownedCourseIds: ["course-react-001"],
+      currentCourse: { id: "course-react-001", slug: "react-co-ban", title: "React cơ bản", doneLessons: 4, totalLessons: 12 },
+      history: [
+        { role: "user", text: "Mình muốn làm web" },
+        { role: "ai", text: "Gợi ý React và Node" },
+      ],
     });
-
-    expect(res.text).toContain("Thứ tự tham khảo theo trình độ khoá học (bạn chọn 5-10 giờ/tuần)");
-    expect(res.text).toContain("chưa phân tích quan hệ tiên quyết hay ước tính thời gian hoàn thành");
-    expect(res.order.length).toBeGreaterThan(0);
-    // Unowned courses only in order recommendations
-    expect(res.order.some((o) => o.id === "course-react-001")).toBe(false);
-    expect(res.order[0].reason).toContain("nền tảng");
-  });
-
-  it("gives guidance when learner reports falling behind (chậm tiến độ)", () => {
-    const res = buildAdvisorAnswer({
-      prompt: "Mình bị chậm tiến độ, nên làm gì?",
-      catalog: mockCatalog,
-      intake: { skipped: [] },
-      ownedCourseIds: [],
-    });
-
-    expect(res.text).toContain("Bàn làm việc");
-    expect(res.text).toContain("Tìm điểm bắt đầu của tôi");
-    expect(res.courses).toHaveLength(0);
-  });
-
-  it("handles no matching course gracefully with nearest alternatives", () => {
-    const res = buildAdvisorAnswer({
-      prompt: "Có khoá nào về blockchain solidity không?",
-      catalog: mockCatalog,
-      intake: { skipped: [] },
-      ownedCourseIds: [],
-    });
-
-    expect(res.noMatch).toBe(true);
-    expect(res.text).toContain("Codi chưa có khoá cho mục tiêu này");
-    expect(res.courses.length).toBeGreaterThan(0);
-  });
-
-  it("matches requested subject rather than requiring the whole query string in course title", () => {
-    const res = buildAdvisorAnswer({
-      prompt: "Codi có khoá học Flutter cho người mới không?",
-      catalog: mockCatalog,
-      intake: { skipped: [] },
-      ownedCourseIds: [],
-    });
-
-    expect(res.noMatch).toBe(true);
-    expect(res.text).toContain("Codi chưa có khoá cho mục tiêu này");
-    expect(res.courses.length).toBe(2);
-  });
-
-  it("detects absent subject outside the original whitelist (e.g. Python)", () => {
-    const res = buildAdvisorAnswer({
-      prompt: "Có khoá Python không?",
-      catalog: mockCatalog,
-      intake: { skipped: [] },
-      ownedCourseIds: [],
-    });
-
-    expect(res.noMatch).toBe(true);
-    expect(res.text).toContain("Codi chưa có khoá cho mục tiêu này");
-    expect(res.courses.length).toBe(2);
-  });
-
-  it("does not trigger noMatch when requested subject is present in catalog (e.g. React)", () => {
-    const res = buildAdvisorAnswer({
-      prompt: "Có khoá React không?",
-      catalog: mockCatalog,
-      intake: { skipped: [] },
-      ownedCourseIds: [],
-    });
-
-    expect(res.noMatch).toBe(false);
-    expect(res.courses.length).toBeGreaterThan(0);
-    expect(res.courses[0].id).toBe("course-react-001");
+    expect(system).toContain("Chỉ đề xuất khoá có trong <catalog>");
+    expect(prompt).toContain('"id":"course-node-002"');
+    expect(prompt).toContain('"id":"course-react-001","title":"React cơ bản","level":"Cơ bản"');
+    expect(prompt).toMatch(/"id":"course-react-001"[^\n]*"owned":true/);
+    expect(prompt).toMatch(/"id":"course-node-002"[^\n]*"owned":false/);
+    expect(prompt).toContain("Mục tiêu: Làm được dự án");
+    expect(prompt).toContain("Thời gian: 5-10 giờ/tuần");
+    expect(prompt).toContain("Đang học: React cơ bản (4/12 bài)");
+    expect(prompt).toContain("Học viên: Mình muốn làm web\nCodi: Gợi ý React và Node");
+    expect(prompt.endsWith("Câu hỏi: So sánh 2 khoá vừa rồi")).toBe(true);
   });
 
   it("generates and verifies guest capability tokens securely", async () => {
@@ -218,14 +198,15 @@ describe("ai-advisor-service business logic", () => {
 });
 
 describe("advisor intake owner storage", () => {
-  it("identifies successful local catalog rules without claiming a provider model", async () => {
+  it("logs the provider model and token usage of an answer", async () => {
     const values = vi.fn(() => ({ returning: async () => [{ id: 42 }] }));
     const db: any = { insert: () => ({ values }) };
     expect(await logAdvisorInteraction(db, {
-      userId: null, userPrompt: "So sánh khoá học", aiResponse: "catalog result", latencyMs: 5, isSuccess: true,
+      userId: null, userPrompt: "So sánh khoá học", aiResponse: "answer", latencyMs: 5, isSuccess: true,
+      model: "gpt-6-luna", promptTokens: 900, completionTokens: 120,
     })).toBe(42);
     expect(values).toHaveBeenCalledWith(expect.objectContaining({
-      model: "codi-catalog-rules-v1", isSuccess: true, requestType: "ask_advisor",
+      model: "gpt-6-luna", promptTokens: 900, completionTokens: 120, isSuccess: true, requestType: "ask_advisor",
     }));
   });
   it("records intake for the session owner even before any enrollment exists", async () => {
@@ -263,5 +244,39 @@ describe("advisor intake owner storage", () => {
     const activityQuery = new PgDialect().sqlToQuery(predicates[1] as any);
     expect(activityQuery.params).toEqual(["saved-owner", "course_view", "%advisor_intake%"]);
     expect(activityQuery.sql).toContain('"student_activities"."user_id"');
+  });
+});
+
+describe("advisor context sent to the model", () => {
+  it("names the courses an earlier answer showed, so follow-ups can refer to them", () => {
+    const { prompt } = advisorPrompt({
+      prompt: "So sánh 2 khoá vừa rồi",
+      catalog: mockCatalog,
+      intake: { skipped: [] },
+      ownedCourseIds: [],
+      currentCourse: null,
+      history: [
+        { role: "user", text: "Mình muốn làm web" },
+        { role: "ai", text: "Đây là 2 khoá hợp với bạn", courseIds: ["course-react-001", "fake", "course-node-002"] },
+      ],
+    });
+    expect(prompt).toContain(
+      "Codi: Đây là 2 khoá hợp với bạn (khoá đã gợi ý: React cơ bản [course-react-001], Node.js & Express [course-node-002])",
+    );
+    expect(prompt).not.toContain("fake");
+  });
+
+  it("keeps a large catalogue relevant: ranks by the question and keeps mentioned courses", () => {
+    const many: AdvisorCourseItem[] = Array.from({ length: 100 }, (_, i) => ({
+      ...mockCatalog[0]!,
+      id: `c-${i}`,
+      slug: `khoa-${i}`,
+      title: `Khoá ${String(i).padStart(3, "0")}`,
+      description: i === 95 ? "Lập trình Elixir và Phoenix" : "Nền tảng lập trình",
+    }));
+    const picked = advisorCatalogSlice(many, "Có khoá Elixir không?", new Set(["c-99"]), 10);
+    expect(picked).toHaveLength(10);
+    expect(picked.map((c) => c.id)).toEqual(expect.arrayContaining(["c-95", "c-99"]));
+    expect(advisorCatalogSlice(mockCatalog, "bất kỳ", new Set(), 10)).toBe(mockCatalog);
   });
 });

@@ -1,5 +1,5 @@
 "use client";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Alert } from "@codi-1/ui/components/alert";
 import { Button } from "@codi-1/ui/components/button";
@@ -120,22 +120,7 @@ export default function SignInForm({
       <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
         <CardHeader className="text-center pb-3 pt-5 px-5 space-y-2">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 mb-1">
-            <Eye
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5 text-primary"
-            >
-              <path d="M21.42 10.922a2 2 0 0 1-.019 3.837l-8.5 4.35a2 2 0 0 1-1.802 0l-8.5-4.35a2 2 0 0 1-.019-3.837l8.5-4.2a2 2 0 0 1 1.84 0l8.5 4.2Z" />
-              <path d="M22 10v6" />
-              <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" />
-            </Eye>
+            <GraduationCap className="h-5 w-5 text-primary" aria-hidden="true" />
           </div>
           <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
             Chào mừng trở lại!

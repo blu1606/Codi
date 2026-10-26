@@ -103,6 +103,11 @@ export async function POST(req: Request) {
         finalAmount = existingTx.amount;
       }
     } else {
+      // Existing orders retain their validation above; only new purchases must
+      // reject courses that are no longer offered for sale.
+      if (course.status !== "published") {
+        return NextResponse.json({ error: "Khóa học hiện không mở bán." }, { status: 400 });
+      }
       const { orders } = await import("@codi-1/db");
       let generatedId: string | null = null;
       let attempts = 0;

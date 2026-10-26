@@ -14,6 +14,48 @@ function verifyApiKey(authHeader: string | null, secret: string): boolean {
   return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
 }
 
+function usableReceiptIdentity(value: unknown): string | null {
+  // Validate blankness without rewriting existing nonblank ledger keys.
+  if (typeof value === "string") return value.trim() ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function receiptIdentity(data: Record<string, unknown>): string | null {
+  return usableReceiptIdentity(data.id) ?? usableReceiptIdentity(data.referenceCode);
+}
+
+function legacyReceiptKey(data: Record<string, unknown>): string | null {
+  return data.id != null ? String(data.id) : (data.referenceCode != null ? String(data.referenceCode) : null);
+}
+
+function safeLegacyReceiptKey(data: Record<string, unknown>): string | null {
+  try { return legacyReceiptKey(data); } catch { return null; }
+}
+
+function savedReceiptIdentity(receipt: { transactionCode: string | null; providerResponse: string | null }) {
+  try {
+    const data: unknown = JSON.parse(receipt.providerResponse ?? "null");
+    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+    const payload = data as Record<string, unknown>;
+    const identity = receiptIdentity(payload);
+    if (!identity) return null;
+    return {
+      identity,
+      consistent: Boolean(receipt.transactionCode)
+        && (receipt.transactionCode === identity || receipt.transactionCode === safeLegacyReceiptKey(payload)),
+    };
+  } catch { return null; }
+}
+
+function isReceiptKeyConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const cause = "cause" in error ? error.cause : null;
+  return [error, cause].some(value => value && typeof value === "object"
+    && "code" in value && value.code === "23505"
+    && "constraint" in value && value.constraint === "payments_transaction_code_idx");
+}
+
 export async function POST(req: Request) {
   try {
     // Authenticate the webhook request
@@ -52,7 +94,6 @@ export async function POST(req: Request) {
     }
 
     const txId = match[0].toUpperCase();
-    const providerTxCode = data.id != null ? String(data.id) : (data.referenceCode != null ? String(data.referenceCode) : null);
 
     // Find the transaction in DB
     const [tx] = await db.select().from(studentTransactions).where(eq(studentTransactions.id, txId)).limit(1);
@@ -69,19 +110,6 @@ export async function POST(req: Request) {
       // Serialize concurrent transfers for this transaction/order code
       await txDB.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${txId}))`);
 
-      // Idempotency check on provider transactionCode if available
-      if (providerTxCode) {
-        const [existingPayment] = await txDB
-          .select({ id: payments.id })
-          .from(payments)
-          .where(eq(payments.transactionCode, providerTxCode))
-          .limit(1);
-
-        if (existingPayment) {
-          return { alreadyProcessed: true };
-        }
-      }
-
       // 1. Check if there is an associated order in the `orders` table
       const [existingOrder] = await txDB
         .select({
@@ -97,6 +125,53 @@ export async function POST(req: Request) {
         .from(orders)
         .where(eq(orders.code, txId))
         .limit(1);
+
+      // Canonical receipt identity must not change when an order settles.
+      // Legacy-only transactions retain their original raw key and CAS behavior.
+      const providerTxCode = existingOrder ? receiptIdentity(data) : legacyReceiptKey(data);
+      if (existingOrder && !providerTxCode) {
+        return { invalidReceiptIdentity: true };
+      }
+
+      // Read the receipt ledger under the same code lock, before any writes.
+      if (providerTxCode) {
+        const [existingPayment] = await txDB
+          .select({ id: payments.id, orderId: payments.orderId, transactionCode: payments.transactionCode, providerResponse: payments.providerResponse })
+          .from(payments)
+          .where(eq(payments.transactionCode, providerTxCode))
+          .limit(1);
+        if (existingPayment) {
+          if (existingOrder) {
+            const saved = savedReceiptIdentity(existingPayment);
+            // A global unique key belonging elsewhere or demonstrably naming
+            // another transfer is a conflict, not this order's recorded replay.
+            if (existingPayment.orderId !== existingOrder.id || (saved && saved.identity !== providerTxCode)) {
+              return { receiptIdentityConflict: true };
+            }
+          }
+          return { alreadyProcessed: true };
+        }
+      }
+
+      if (existingOrder) {
+        const priorReceipts = await txDB.select({
+          transactionCode: payments.transactionCode, providerResponse: payments.providerResponse,
+        }).from(payments).where(eq(payments.orderId, existingOrder.id));
+        const rawKey = safeLegacyReceiptKey(data);
+        let ambiguous = false;
+        for (const receipt of priorReceipts) {
+          const saved = savedReceiptIdentity(receipt);
+          if (saved?.identity === providerTxCode) {
+            if (saved.consistent) return { alreadyProcessed: true };
+            ambiguous = true;
+          } else if (!saved?.consistent && rawKey && rawKey !== providerTxCode && receipt.transactionCode === rawKey) {
+            ambiguous = true;
+          }
+          // A consistent different reference remains distinct even when both
+          // old primary values stringify to the same lossy raw key.
+        }
+        if (ambiguous) return { receiptIdentityConflict: true };
+      }
 
       let isLateHonoured = false;
 
@@ -161,10 +236,10 @@ export async function POST(req: Request) {
           // Auto-honour candidate: failed (expired) order
           isLateHonoured = true;
         } else {
-          // Other non-pending states (cancelled, refunded, or failed not expired)
-          if (existingOrder.status === "cancelled") {
-            // Cancellation can commit before this receipt acquires the order lock.
-            // Keep it terminal, but account for the money requiring manual refund.
+          // Keep terminal status and fulfillment unchanged, but account for a
+          // distinct receipt after cancellation or settlement. Provider replay
+          // has already been rejected under the transaction-code lock above.
+          if (existingOrder.status === "cancelled" || existingOrder.status === "paid") {
             await txDB
               .update(orders)
               .set({
@@ -176,7 +251,9 @@ export async function POST(req: Request) {
 
             await txDB.insert(orderEvents).values({
               orderId: existingOrder.id,
-              label: "Nhận thanh toán sau khi đơn đã huỷ (cần đối soát hoàn tiền)",
+              label: existingOrder.status === "paid"
+                ? "Nhận thêm thanh toán sau khi đơn đã thanh toán (cần đối soát hoàn tiền)"
+                : "Nhận thanh toán sau khi đơn đã huỷ (cần đối soát hoàn tiền)",
               actorId: tx.userId,
             });
           }
@@ -641,6 +718,20 @@ export async function POST(req: Request) {
       return { success: true };
     });
 
+    if (processResult.invalidReceiptIdentity) {
+      return NextResponse.json(
+        { success: false, message: "Order receipts require a valid provider transaction identifier" },
+        { status: 400 },
+      );
+    }
+
+    if (processResult.receiptIdentityConflict) {
+      return NextResponse.json(
+        { success: false, message: "Receipt identity cannot be reconciled automatically" },
+        { status: 409 },
+      );
+    }
+
     if (processResult.alreadyProcessed) {
       return NextResponse.json({ success: true, message: "Already processed" });
     }
@@ -664,6 +755,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Webhook processing error:", error);
+    if (isReceiptKeyConflict(error)) {
+      return NextResponse.json(
+        { success: false, message: "Receipt identity cannot be reconciled automatically" },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { success: false, message: "Internal server error" },
       { status: 500 }

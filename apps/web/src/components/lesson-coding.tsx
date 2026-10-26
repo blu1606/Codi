@@ -28,9 +28,9 @@ import {
   DialogFooter,
   DialogTitle,
 } from "@codi-1/ui/components/dialog";
-import { Sheet } from "@codi-1/ui/components/sheet";
 import { cn } from "@codi-1/ui/lib/utils";
 import { highlightCode } from "./code-highlight";
+import { selectEditorLine, useTutor } from "./ai-tutor/tutor-bridge";
 import type { CodingCommand, CodingView } from "@/lib/coding-contract";
 
 export default function LessonCoding({
@@ -49,7 +49,7 @@ export default function LessonCoding({
   const [confirm, setConfirm] = useState<"reset" | "solution" | null>(null);
   const [tab, setTab] = useState<"tests" | "console">("tests");
   const [filter, setFilter] = useState<"all" | "pass" | "fail">("all");
-  const [help, setHelp] = useState<string | null>(null);
+  const tutor = useTutor();
   const editor = useRef<HTMLTextAreaElement>(null);
   const painted = useRef<HTMLPreElement>(null);
   const gutter = useRef<HTMLDivElement>(null);
@@ -214,68 +214,51 @@ export default function LessonCoding({
       setError("Chưa thể định dạng. Hãy sửa lỗi cú pháp trước.");
     }
   }
+  // The AI tutor reads this editor's instructions, code and last run (Flow L6c); it never gets a solution to apply.
   useEffect(() => {
-    function handleLine(e: Event) {
-      const line = (e as CustomEvent<{ line: number }>).detail?.line;
-      if (!line || !editor.current) return;
-      const lines = editor.current.value.split("\n");
-      const idx = Math.min(Math.max(line, 1), lines.length) - 1;
-      const start = lines.slice(0, idx).reduce((s, x) => s + x.length + 1, 0);
-      editor.current.focus({ preventScroll: true });
-      editor.current.setSelectionRange(start, start + lines[idx].length);
-      editor.current.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
-
-    function handleDiff(e: Event) {
-      const { op, diff } = (e as CustomEvent<{ op: string; diff: { at: number; add: string; original: string | null } }>).detail || {};
-      if (!editor.current || !diff) return;
-      if (op === "apply") {
-        const lines = editor.current.value.split("\n");
-        lines.splice(Math.min(diff.at - 1, lines.length), 0, diff.add);
-        change(lines.join("\n"));
-      } else if (op === "undo" && diff.original !== null) {
-        change(diff.original);
-      }
-    }
-
-    function handleRerun() {
-      void execute("submit");
-    }
-
-    window.addEventListener("codi:tutor-line", handleLine);
-    window.addEventListener("codi:tutor-diff", handleDiff);
-    window.addEventListener("codi:tutor-rerun", handleRerun);
-    return () => {
-      window.removeEventListener("codi:tutor-line", handleLine);
-      window.removeEventListener("codi:tutor-diff", handleDiff);
-      window.removeEventListener("codi:tutor-rerun", handleRerun);
+    if (!tutor || !data) return;
+    const failing = (testId?: number) => {
+      const outcome = data.lastRun?.outcomes.find((o) =>
+        testId === undefined ? !o.passed : o.id === testId,
+      );
+      const test = outcome && data.tests.find((t) => t.id === outcome.id);
+      return outcome && test && !outcome.passed
+        ? {
+            name: test.name,
+            input: test.input,
+            expected: test.expectedOutput,
+            actual: outcome.error ?? outcome.actual,
+          }
+        : null;
     };
-  }, []);
+    tutor.registerCode({
+      task: () => ({
+        label: data.title,
+        text: data.instructions ?? "Hoàn thành hàm để đạt tất cả kiểm thử.",
+      }),
+      getCode: () => value.current,
+      setCode: (next) => change(next),
+      selectLine: (line) => selectEditorLine(editor.current, line),
+      runTests: () => {
+        if (data.available) void execute("run");
+      },
+      failingTest: failing,
+      runError: () => runErrorText(data.lastRun),
+    });
+    return () => tutor.registerCode(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutor, data]);
   function explain(testId?: number) {
     const test = data?.tests.find((t) => t.id === testId);
-    const outcome = data?.lastRun?.outcomes.find((t) => t.id === testId);
-    const context = test
-      ? `Đầu vào: ${test.input}\nKết quả mong đợi: ${test.expectedOutput}\nKết quả thực tế: ${outcome?.error ?? outcome?.actual}`
-      : `Trạng thái: ${data?.lastRun?.phase}\n${data?.lastRun?.outcomes.find((o) => o.error)?.error ?? "Code chạy quá thời gian."}`;
-    const prompt = `Hãy giúp tôi hiểu lỗi bằng gợi ý, đừng đưa lời giải đầy đủ.\n${context}\n\nCode hiện tại:\n${value.current}`;
-    setHelp(prompt);
-    window.dispatchEvent(
-      new CustomEvent("codi:tutor-open", {
-        detail: {
-          testName: test ? (test.input || test.expectedOutput) : undefined,
-          expected: test?.expectedOutput,
-          actual: outcome?.error ?? outcome?.actual,
-          runError: data?.lastRun?.outcomes.find((o) => o.error)?.error,
-          runPhase: data?.lastRun?.phase,
-          code: value.current,
-          isCodeLesson: true,
-          ask: test
-            ? `Giải thích giúp mình vì sao test "${test.input || test.expectedOutput}" chưa đạt?`
-            : "Giải thích giúp mình lỗi ở lần chạy gần nhất?",
-          prompt,
-        },
-      }),
-    );
+    const error = runErrorText(data?.lastRun ?? null);
+    tutor?.open({
+      testId,
+      ask: test
+        ? `Giải thích giúp mình vì sao test “${test.name}” chưa đạt?`
+        : error
+          ? `Code của mình báo lỗi “${error.slice(0, 80)}”. Lỗi này nghĩa là gì và mình nên xem chỗ nào?`
+          : "Giải thích giúp mình lỗi ở lần chạy gần nhất?",
+    });
   }
   const run = data?.lastRun;
   const phaseLabel =
@@ -521,6 +504,7 @@ export default function LessonCoding({
                   maxLength={65536}
                   disabled={busy}
                   aria-label="Code bài làm"
+                  data-tutor-code=""
                   aria-describedby={`${id}-keys`}
                   spellCheck={false}
                   wrap="off"
@@ -673,7 +657,7 @@ export default function LessonCoding({
                 {run && run.phase !== "done" && (
                   <Button variant="outline" size="sm" onClick={() => explain()}>
                     <Sparkles className="size-4" />
-                    Hỏi AI về lỗi này
+                    Hỏi AI trợ lý: Giải thích lỗi này
                   </Button>
                 )}
               </>
@@ -794,7 +778,8 @@ export default function LessonCoding({
                                 className="mx-4 mt-3 mb-4"
                                 onClick={() => explain(test.id)}
                               >
-                                Giải thích lỗi này
+                                <Sparkles className="size-4" />
+                                Vì sao test này chưa đạt?
                               </Button>
                             </>
                           )}
@@ -868,39 +853,15 @@ export default function LessonCoding({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Sheet
-        open={help !== null}
-        onOpenChange={(open) => {
-          if (!open) setHelp(null);
-        }}
-        title="Hỏi AI về lỗi này"
-        description="Ngữ cảnh lỗi từ test mẫu và code của bạn"
-      >
-        <p className="mb-4 text-sm text-muted-foreground">
-          AI tutor chưa sẵn sàng. Bạn có thể sao chép ngữ cảnh để hỏi khi dịch
-          vụ hoạt động trở lại.
-        </p>
-        <textarea
-          readOnly
-          value={help ?? ""}
-          aria-label="Ngữ cảnh hỏi AI"
-          className="min-h-80 w-full rounded-lg border bg-background p-3 font-mono text-xs"
-        />
-        <Button
-          className="mt-3"
-          variant="outline"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(help ?? "");
-              toast.success("Đã sao chép ngữ cảnh lỗi.");
-            } catch {
-              toast("Hãy chọn và sao chép nội dung trong ô ngữ cảnh.");
-            }
-          }}
-        >
-          Sao chép ngữ cảnh
-        </Button>
-      </Sheet>
     </section>
   );
+}
+
+/** The run-level error the console shows (syntax / runtime / timeout), with its line when known. */
+function runErrorText(run: CodingView["lastRun"]) {
+  if (!run || run.phase === "done") return null;
+  const failed = run.outcomes.find((o) => o.error);
+  if (failed?.error)
+    return `${failed.line ? `Dòng ${failed.line}: ` : ""}${failed.error}`;
+  return run.phase === "timeout" ? "Code chạy quá thời gian." : null;
 }
