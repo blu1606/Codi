@@ -51,7 +51,8 @@ export default function LessonMarkdown({
       linkSafety={noLinkModal}
       components={components}
       className={cn(
-        "break-words leading-8 [&_li]:whitespace-pre-line [&_p]:whitespace-pre-line",
+        // min-w-0 + scrollable code blocks keep wide snippets from widening the page on mobile.
+        "min-w-0 break-words leading-8 [&_li]:whitespace-pre-line [&_p]:whitespace-pre-line [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_[data-streamdown=code-block]]:min-w-0 [&_[data-streamdown=code-block]]:max-w-full",
         className,
       )}
     >

@@ -200,7 +200,7 @@ describe("GitHub profile consent and request UI", () => {
   it("keeps mockup cards and unknown area segments without fabricating domains or mastery", async () => {
     await renderPanel({ initialProfile: profile(), initialLinked: true });
     expect(
-      host.querySelector('[data-mockup="resultPage.header"] h1')?.textContent,
+      host.querySelector('[data-mockup="resultPage.header"] h2')?.textContent,
     ).toBe("@linked-user");
     const header = host.querySelector('[data-mockup="resultPage.header"]')!;
     expect(header.firstElementChild?.className).toContain("w-full");
@@ -925,8 +925,8 @@ describe("GitHub profile consent and request UI", () => {
     await submit();
     expect(auth.linkSocial).toHaveBeenCalledWith({
       provider: "github",
-      callbackURL: "/profile/github",
-      errorCallbackURL: "/profile/github",
+      callbackURL: "/profile?tab=nang-luc",
+      errorCallbackURL: "/profile?tab=nang-luc",
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(host.textContent).toContain("không tự phân tích khi bạn quay lại");
@@ -976,8 +976,8 @@ describe("GitHub profile consent and request UI", () => {
     await submit();
     expect(auth.linkSocial).toHaveBeenCalledExactlyOnceWith({
       provider: "github",
-      callbackURL: "/profile/github",
-      errorCallbackURL: "/profile/github",
+      callbackURL: "/profile?tab=nang-luc",
+      errorCallbackURL: "/profile?tab=nang-luc",
     });
     expect(button("Phân tích lại").disabled).toBe(true);
     expect(host.textContent).toContain("Ước tính ban đầu.");

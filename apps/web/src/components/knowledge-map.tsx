@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { BarChart3, ChevronDown, Lightbulb, LoaderCircle } from "lucide-react";
 import { Alert } from "@codi-1/ui/components/alert";
-import { Button } from "@codi-1/ui/components/button";
+import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
@@ -110,14 +112,12 @@ export default function KnowledgeMap({
               Mỗi ô là một khái niệm; mũi tên chỉ khái niệm cần học trước.
             </p>
           </div>
-          <Button
-            variant="outline"
-            disabled
-            title="Thống kê học tập chưa khả dụng"
-            className="border-border-strong disabled:opacity-100"
+          <Link
+            href={"/insights/stats" as Route}
+            className={buttonVariants({ variant: "outline" })}
           >
             <BarChart3 className="size-4" /> Thống kê học tập
-          </Button>
+          </Link>
         </header>
       )}
       {error && (
