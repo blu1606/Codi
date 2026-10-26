@@ -25,6 +25,7 @@ export default function ForgotPasswordPage() {
   const router = useRouter();
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
 
   // Step 1: Request OTP Form
@@ -65,7 +66,7 @@ export default function ForgotPasswordPage() {
     onSubmit: async ({ value }) => {
       if (!submittedEmail) return;
       if (otp.length !== 6) {
-        toast.error("Vui lòng nhập đủ 6 chữ số mã OTP");
+        setOtpError("Vui lòng nhập đủ 6 chữ số mã OTP");
         return;
       }
       if (value.password !== value.confirmPassword) {
@@ -74,6 +75,7 @@ export default function ForgotPasswordPage() {
       }
 
       try {
+        setOtpError(null);
         setResetting(true);
         await authClient.emailOtp.resetPassword(
           {
@@ -89,7 +91,7 @@ export default function ForgotPasswordPage() {
               }, 1200);
             },
             onError: (ctx: { error?: { message?: string } }) => {
-              toast.error(ctx.error?.message || "Mã OTP không hợp lệ hoặc đã hết hạn 2 phút.");
+              setOtpError(ctx.error?.message || "Mã OTP không hợp lệ hoặc đã hết hạn 2 phút.");
             },
           }
         );
@@ -153,10 +155,14 @@ export default function ForgotPasswordPage() {
                 <OtpInput
                   length={6}
                   value={otp}
-                  onChange={setOtp}
+                  onChange={(value) => {
+                    setOtp(value);
+                    setOtpError(null);
+                  }}
                   onResend={handleResendOtp}
                   expiresInSeconds={120}
                   disabled={resetting}
+                  error={otpError}
                 />
               </div>
 
