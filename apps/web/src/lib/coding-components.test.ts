@@ -3,6 +3,11 @@ import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LessonCoding from "../components/lesson-coding";
+import {
+  TutorBridgeContext,
+  type TutorBridge,
+  type TutorCodeBridge,
+} from "../components/ai-tutor/tutor-bridge";
 import type { CodingView } from "./coding-contract";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 vi.mock("sonner", () => ({
@@ -60,20 +65,34 @@ async function mount(
   fetcher: ReturnType<typeof vi.fn>,
   onChanged = vi.fn(),
   strict = false,
+  tutor?: TutorBridge,
 ) {
   vi.stubGlobal("fetch", fetcher);
   const host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
-    const component = createElement(LessonCoding, {
+    const coding = createElement(LessonCoding, {
       endpoint: "/api/code",
       onChanged,
     });
+    const component = tutor
+      ? createElement(TutorBridgeContext.Provider, { value: tutor }, coding)
+      : coding;
     root!.render(
       strict ? createElement(StrictMode, null, component) : component,
     );
   });
+}
+function tutorSpy() {
+  const state: { code: TutorCodeBridge | null } = { code: null };
+  const tutor = {
+    open: vi.fn(),
+    registerCode: vi.fn((code: TutorCodeBridge | null) => {
+      state.code = code;
+    }),
+  };
+  return { tutor, state };
 }
 async function click(label: string) {
   await act(async () => {
@@ -191,8 +210,12 @@ describe("coding workspace", () => {
     expect(JSON.parse(fetcher.mock.calls[2]![1].body).type).toBe("submit");
   });
   it("shows input/expected/received, text differences and filters", async () => {
+    const { tutor, state } = tutorSpy();
     await mount(
       vi.fn().mockResolvedValue(response({ ...blank, lastRun: result() })),
+      vi.fn(),
+      false,
+      tutor,
     );
     expect(document.body.textContent).toContain("Đầu vào");
     expect(document.body.textContent).toContain("Kết quả mong đợi");
@@ -201,19 +224,35 @@ describe("coding workspace", () => {
     expect(document.body.textContent).not.toContain("Mẫu 1");
     await click("Chưa đạt");
     expect(document.body.textContent).toContain("Mẫu 1");
-    await click("Giải thích lỗi này");
-    expect(
-      document.querySelector('textarea[aria-label="Ngữ cảnh hỏi AI"]')
-        ?.textContent,
-    ).toContain("inc(1)");
+    await click("Vì sao test này chưa đạt?");
+    expect(tutor.open).toHaveBeenCalledWith({
+      testId: 1,
+      ask: "Giải thích giúp mình vì sao test “Mẫu 1” chưa đạt?",
+    });
+    // What the tutor reads: the exercise, the learner's code and the failing test's real values.
+    expect(state.code?.task()).toEqual({
+      label: "Bài tập code",
+      text: "Viết hàm inc.",
+    });
+    expect(state.code?.getCode()).toBe("function inc(n) { return 0; }");
+    expect(state.code?.failingTest(1)).toEqual({
+      name: "Mẫu 1",
+      input: "inc(1)",
+      expected: "2",
+      actual: "0",
+    });
   });
   it.each(["runtime", "syntax", "timeout"] as const)(
     "shows %s console and error help",
     async (phase) => {
+      const { tutor, state } = tutorSpy();
       await mount(
         vi
           .fn()
           .mockResolvedValue(response({ ...blank, lastRun: result(phase) })),
+        vi.fn(),
+        false,
+        tutor,
       );
       await click("Console");
       expect(document.body.textContent).toContain(
@@ -223,11 +262,20 @@ describe("coding workspace", () => {
             ? "Lỗi cú pháp"
             : "Dòng 2",
       );
-      expect(
-        [...document.querySelectorAll("button")].some((b) =>
-          b.textContent?.includes("Hỏi AI về lỗi này"),
-        ),
-      ).toBe(true);
+      await click("Hỏi AI trợ lý: Giải thích lỗi này");
+      const expected =
+        phase === "runtime"
+          ? "Dòng 2: n is not defined"
+          : phase === "timeout"
+            ? "Code chạy quá thời gian."
+            : null;
+      expect(state.code?.runError()).toBe(expected);
+      expect(tutor.open).toHaveBeenCalledWith({
+        testId: undefined,
+        ask: expected
+          ? `Code của mình báo lỗi “${expected}”. Lỗi này nghĩa là gì và mình nên xem chỗ nào?`
+          : "Giải thích giúp mình lỗi ở lần chạy gần nhất?",
+      });
     },
   );
   it("keeps instructions readable when Python is unavailable", async () => {

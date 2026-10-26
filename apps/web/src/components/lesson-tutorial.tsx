@@ -11,6 +11,7 @@ import {
   LoaderCircle,
   Play,
   RotateCcw,
+  Sparkles,
   Terminal,
   WandSparkles,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import LessonMarkdown from "./lesson-markdown";
 import { highlightCode } from "./code-highlight";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 import type { TutorialCommand, TutorialView } from "@/lib/tutorial-contract";
+import { selectEditorLine, useTutor } from "./ai-tutor/tutor-bridge";
 
 export default function LessonTutorial({
   endpoint,
@@ -63,6 +65,40 @@ export default function LessonTutorial({
   const escapeTab = useRef(false);
   const queue = useRef(Promise.resolve());
   const retry = useRef<(() => void) | null>(null);
+  const tutor = useTutor();
+  // The AI tutor reads the current step, its code and last run; it hints, it does not solve (Flow L6c).
+  useEffect(() => {
+    if (!tutor || !data || data.gated) return;
+    const step = `Bước ${data.current + 1}/${data.steps.length}: ${data.title}`;
+    tutor.registerCode({
+      task: () => ({ label: step, text: `${step}\n${data.body ?? ""}` }),
+      getCode: () => value.current,
+      setCode: (next) => change(next),
+      selectLine: (line) => selectEditorLine(editor.current, line),
+      runTests: () => {
+        if (data.available && !working.current)
+          void perform({
+            type: "run",
+            step: data.current,
+            code: value.current,
+          });
+      },
+      failingTest: () => {
+        const failed = data.lastRun?.outcomes.find((o) => !o.passed);
+        return failed
+          ? {
+              name: failed.name,
+              input: null,
+              expected: failed.expected,
+              actual: failed.actual,
+            }
+          : null;
+      },
+      runError: () => tutorialRunError(data.lastRun),
+    });
+    return () => tutor.registerCode(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutor, data]);
 
   function apply(next: TutorialView) {
     current.current = next;
@@ -468,6 +504,7 @@ export default function LessonTutorial({
                     <textarea
                       ref={editor}
                       aria-label="Code hướng dẫn"
+                      data-tutor-code=""
                       aria-describedby={`${id}-keys`}
                       value={code}
                       maxLength={65536}
@@ -601,6 +638,28 @@ export default function LessonTutorial({
                           {run.line ? ` · Dòng ${run.line}` : ""}: {run.error}
                         </p>
                       )}
+                      {tutor &&
+                        (run.error || run.outcomes.some((o) => !o.passed)) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-sans"
+                            onClick={() => {
+                              const error = tutorialRunError(run);
+                              const failed = run.outcomes.find(
+                                (o) => !o.passed,
+                              );
+                              tutor.open({
+                                ask: error
+                                  ? `Code của mình báo lỗi “${error.slice(0, 80)}”. Lỗi này nghĩa là gì và mình nên xem chỗ nào?`
+                                  : `Giải thích giúp mình vì sao “${failed?.name}” chưa đạt?`,
+                              });
+                            }}
+                          >
+                            <Sparkles className="size-4" />
+                            Hỏi AI trợ lý: Giải thích lỗi này
+                          </Button>
+                        )}
                       {run.phase === "done" && !run.logs.length && (
                         <p className="text-code-muted">
                           Code đã chạy xong, không có nội dung in ra Console.
@@ -666,4 +725,10 @@ export default function LessonTutorial({
       </Dialog>
     </section>
   );
+}
+
+/** The run-level error the console shows (syntax / runtime / timeout), with its line when known. */
+function tutorialRunError(run: TutorialView["lastRun"]) {
+  if (!run?.error) return null;
+  return `${run.line ? `Dòng ${run.line}: ` : ""}${run.error}`;
 }

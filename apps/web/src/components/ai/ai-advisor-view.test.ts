@@ -105,7 +105,7 @@ describe("AiAdvisorView component - pending guest action replay", () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
     const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
     expect(posts).toHaveLength(1);
-    expect(JSON.parse(posts[0][1]!.body as string)).toEqual({ prompt: "So sánh khoá học", intake: currentIntake });
+    expect(JSON.parse(posts[0][1]!.body as string)).toEqual({ prompt: "So sánh khoá học", intake: currentIntake, history: [] });
   });
 
   it("keeps submission blocked if context fails rather than treating the error as a guest", async () => {

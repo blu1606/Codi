@@ -42,7 +42,7 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://cdn.21st.dev" />
       </head>
-      <body className="antialiased">
+      <body className="antialiased" suppressHydrationWarning>
         <Providers>
           <HomeLogoIntro />
           <div className="grid grid-rows-[auto_1fr] h-svh">

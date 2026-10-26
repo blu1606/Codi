@@ -13,5 +13,6 @@ export * from "./learning";
 export * from "./learning-path-runtime";
 export * from "./interaction";
 export * from "./ai-interaction-logs";
+export * from "./ai-tutor";
 export * from "./github-profile";
 export {};
