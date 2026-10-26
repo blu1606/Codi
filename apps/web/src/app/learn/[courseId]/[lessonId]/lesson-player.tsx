@@ -14,8 +14,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   MessageCircle,
-  Sparkles,
-  Star,
+    Star,
 } from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
@@ -52,6 +51,7 @@ import {
   type TutorOpenRequest,
 } from "@/components/ai-tutor/tutor-bridge";
 import TutorPanel from "@/components/ai-tutor/tutor-panel";
+import { TutorLauncher } from "@/components/ai-tutor/tutor-launcher";
 import TutorSelectionToolbar from "@/components/ai-tutor/tutor-selection-toolbar";
 
 // Remembered per browser tab so the panel stays open while the learner moves between lessons.
@@ -68,9 +68,15 @@ function rememberTutor(open: boolean) {
 export default function LessonPlayer({
   courseId,
   lessonId,
+  viewerName = null,
+  initialTutor,
 }: {
   courseId: string;
   lessonId: string;
+  /** Signed-in learner's name, for the tutor greeting. */
+  viewerName?: string | null;
+  /** Opens the tutor at mount (lab screens only): the launcher popup, or the panel with an optional first question. */
+  initialTutor?: { mode: "popup" } | { mode: "panel"; ask?: string };
 }) {
   const [data, setData] = useState<LessonPlayerView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,10 +93,15 @@ export default function LessonPlayer({
   const content = useRef<HTMLDivElement>(null);
   const codeBridge = useRef<TutorCodeBridge | null>(null);
   const [codeVersion, setCodeVersion] = useState(0);
-  const [tutorOpen, setTutorOpen] = useState(false);
+  const [tutorOpen, setTutorOpen] = useState(initialTutor?.mode === "panel");
+  const [launcherOpen, setLauncherOpen] = useState(initialTutor?.mode === "popup");
   const [tutorRequest, setTutorRequest] = useState<
     (TutorOpenRequest & { id: number }) | null
-  >(null);
+  >(() =>
+    initialTutor?.mode === "panel" && initialTutor.ask
+      ? { id: 1, ask: initialTutor.ask }
+      : null,
+  );
   const [wide, setWide] = useState(false);
   useEffect(() => {
     try {
@@ -436,7 +447,7 @@ export default function LessonPlayer({
           )}
           <Link
             href={courseHome}
-            className="ml-auto inline-flex min-h-11 items-center text-sm text-primary lg:hidden"
+            className="inline-flex min-h-11 items-center text-sm text-primary lg:hidden"
           >
             Về lộ trình
           </Link>
@@ -452,18 +463,6 @@ export default function LessonPlayer({
           >
             <MessageCircle className="size-4" />
             Hỏi đáp
-          </Button>
-          <Button
-            variant={tutorOpen ? "secondary" : "outline"}
-            aria-pressed={tutorOpen}
-            onClick={() => {
-              const next = !tutorOpen;
-              toggleTutor(next);
-              if (next) setQaOpen(false);
-            }}
-          >
-            <Sparkles className="size-4" />
-            AI trợ lý
           </Button>
         </nav>
         {errorAlert}
@@ -780,6 +779,21 @@ export default function LessonPlayer({
           codeVersion={codeVersion}
           docked={wide}
           onClose={() => toggleTutor(false)}
+          expandHref={
+            `/learn/${encodeURIComponent(courseId)}/tutor?lesson=${encodeURIComponent(lessonId)}` as Route
+          }
+        />
+      )}
+      {!tutorOpen && !qaOpen && (
+        <TutorLauncher
+          endpoint={`${endpoint}/tutor`}
+          viewerName={viewerName}
+          open={launcherOpen}
+          onOpenChange={setLauncherOpen}
+          onAsk={(ask) => {
+            tutor.open(ask ? { ask } : {});
+            setLauncherOpen(false);
+          }}
         />
       )}
       <TutorSelectionToolbar root={content} />
