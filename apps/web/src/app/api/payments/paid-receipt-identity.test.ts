@@ -64,11 +64,13 @@ function paidReceipt() {
   return { order, legacy, receipts, events, updates, unexpectedWrite, deliver };
 }
 
-it.each([
+const unusableIdentities: Record<string, unknown>[] = [
   {}, { id: null }, { id: "" }, { id: " \t " }, { id: {} }, { id: { toString: null } }, { id: [] }, { id: false },
   { referenceCode: "" }, { referenceCode: " \n " }, { referenceCode: {} },
   { id: "", referenceCode: [] }, { id: {}, referenceCode: "   " },
-])("rejects repeated paid deliveries with unusable receipt identity %j without accounting writes", async identity => {
+];
+
+it.each(unusableIdentities)("rejects repeated paid deliveries with unusable receipt identity %j without accounting writes", async identity => {
   const s = paidReceipt();
   const original = structuredClone({ order: s.order, legacy: s.legacy });
   for (let delivery = 0; delivery < 2; delivery++) {
