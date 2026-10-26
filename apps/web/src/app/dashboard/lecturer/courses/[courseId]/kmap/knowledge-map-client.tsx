@@ -21,6 +21,7 @@ import {
   Minus,
   Pencil,
   Plus,
+  RefreshCw,
   Sparkles,
   Undo2,
   X,
@@ -484,7 +485,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
                 </EmptyMedia>
                 <EmptyTitle>Chưa có nội dung để phân tích</EmptyTitle>
                 <EmptyDescription>
-                  Bạn có thể thêm bài học, nhưng bản thử nghiệm chưa hỗ trợ tạo bản đồ từ nội dung.
+                  Thêm ít nhất một bài học, sau đó Codi sẽ đề xuất các khái niệm và quan hệ học trước.
                 </EmptyDescription>
               </EmptyHeader>
               <Link
@@ -492,14 +493,29 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
                 className={cn(buttonVariants({ variant: "default" }), "gap-2 cursor-pointer shadow-xs")}
               >
                 <BookOpen className="size-4" />
-                Thêm nội dung bài học
+                Thêm nội dung
               </Link>
             </Empty>
           </CardContent>
         </Card>
       )}
 
-      {(course.knowledgeMapStatus === "analysing" || course.knowledgeMapStatus === "failed") && (
+      {course.knowledgeMapStatus === "failed" && (
+        <Alert variant="destructive">
+          <AlertTitle>Phân tích bản đồ kiến thức thất bại</AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>Dịch vụ AI không phản hồi. Nội dung khoá học không bị ảnh hưởng.</span>
+            <span className="flex shrink-0 items-center gap-2">
+              <Button type="button" variant="outline" size="sm" disabled className="gap-1.5">
+                <RefreshCw className="size-3.5" />
+                Thử lại
+              </Button>
+              <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Sắp có</span>
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+      {course.knowledgeMapStatus === "analysing" && (
         <Alert variant="warning">
           <AlertTitle>Trạng thái phân tích cũ chưa được xác minh</AlertTitle>
           <AlertDescription>Không có tác vụ AI đang chạy hoặc chức năng thử lại trong bản thử nghiệm.</AlertDescription>

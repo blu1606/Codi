@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Edit2, FileText, Plus, Trash2 } from "lucide-react";
+import { Edit2, FileText, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@codi-1/ui/components/button";
@@ -171,16 +170,7 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Link
-              href={"/dashboard/lecturer/grading" as any}
-              className="inline-flex items-center text-xs text-muted-foreground hover:text-foreground transition-colors gap-1"
-            >
-              <ArrowLeft className="size-3.5" />
-              Quay lại chấm bài
-            </Link>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Mẫu nhận xét</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mẫu nhận xét</h1>
           <p className="text-sm text-muted-foreground">
             Tạo và quản lý mẫu nhận xét để tái sử dụng khi chấm bài.
           </p>
@@ -209,10 +199,6 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
                   Tạo mẫu nhận xét để tiết kiệm thời gian chấm bài.
                 </EmptyDescription>
               </EmptyHeader>
-              <Button onClick={handleOpenCreate} className="mt-4 gap-2">
-                <Plus className="size-4" />
-                Tạo mẫu nhận xét
-              </Button>
             </Empty>
           </CardContent>
         </Card>
@@ -226,7 +212,7 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
                     Tiêu đề
                   </th>
                   <th scope="col" className="px-6 py-3.5 w-1/2">
-                    Nội dung mẫu
+                    Nội dung
                   </th>
                   <th scope="col" className="px-6 py-3.5 text-right w-1/4">
                     Thao tác
@@ -243,8 +229,8 @@ export function SnippetsClient({ initialSnippets }: SnippetsClientProps) {
                       {snippet.title}
                     </td>
                     <td className="px-6 py-4 text-muted-foreground align-top">
-                      <p className="line-clamp-3 whitespace-pre-line leading-relaxed">
-                        {snippet.body}
+                      <p className="whitespace-pre-line leading-relaxed">
+                        {snippet.body.length > 80 ? `${snippet.body.slice(0, 80)}...` : snippet.body}
                       </p>
                     </td>
                     <td className="px-6 py-4 text-right align-top">

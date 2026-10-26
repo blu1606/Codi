@@ -20,7 +20,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@codi-1/ui/components/card";
@@ -506,92 +505,64 @@ export function PublishTabClient({ courseId, data }: PublishTabClientProps) {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          3. DANH SÁCH ĐIỀU KIỆN XUẤT BẢN (readiness(c) checklist)
+          3. ĐIỀU KIỆN XUẤT BẢN: thẻ yêu cầu (mockup publishTab / readiness)
           ───────────────────────────────────────────────────────────── */}
-      <Card className="border border-border/80">
-        <CardHeader className="pb-3 border-b border-border/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Điều kiện xuất bản</CardTitle>
-              <CardDescription className="text-xs mt-0.5">
-                Đáp ứng tất cả các tiêu chí trước khi gửi yêu cầu phê duyệt
-              </CardDescription>
-            </div>
-            <span className="text-xs font-semibold text-muted-foreground">
-              {passedItemsCount}/{totalItemsCount} đạt
-            </span>
-          </div>
+      <Card className="gap-0 border border-border/80 py-0">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border/50 px-5 py-4">
+          <CardTitle className="text-base font-semibold">Điều kiện xuất bản</CardTitle>
+          <span className="text-sm text-muted-foreground">
+            {passedItemsCount}/{totalItemsCount} đạt
+          </span>
         </CardHeader>
 
-        <CardContent className="p-0">
-          <ul className="divide-y divide-border/40">
-            {readiness.items.map((item) => (
-              <li
-                key={item.key}
-                className="p-4 flex items-center justify-between gap-4 hover:bg-muted/20 transition-colors"
-              >
-                <div className="flex items-start gap-3">
-                  {item.ok ? (
-                    <CheckCircle2 className="size-5 text-success shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="size-5 text-warning shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.hint}</p>
-                  </div>
-                </div>
-
-                <div className="shrink-0">
-                  {item.ok ? (
-                    <Badge className="bg-success/10 text-success border-success/20 font-medium">
-                      Đạt
-                    </Badge>
-                  ) : (
-                    <Link
-                      href={item.href as any}
-                      className={buttonVariants({
-                        variant: "secondary",
-                        size: "sm",
-                        className: "h-8 text-xs",
-                      })}
-                    >
-                      Sửa ngay
-                    </Link>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-
-        {canSubmit && (
-          <CardFooter className="p-4 border-t border-border/50 bg-muted/20 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-muted-foreground">
-              {readiness.allOk ? (
-                <span className="text-success font-medium flex items-center gap-1.5">
-                  <CheckCircle2 className="size-4" />
-                  Tất cả điều kiện đã sẵn sàng để gửi duyệt.
-                </span>
+        <CardContent className="space-y-3 p-5">
+          {readiness.items.map((item) => (
+            <div
+              key={item.key}
+              className="flex items-center gap-3 rounded-lg border border-border/70 bg-card p-3"
+            >
+              {item.ok ? (
+                <CheckCircle2 className="size-5 shrink-0 text-success" />
               ) : (
-                <span>
-                  Còn {totalItemsCount - passedItemsCount} điều kiện chưa đạt. Vui lòng hoàn tất trước khi gửi.
-                </span>
+                <AlertCircle className="size-5 shrink-0 text-warning" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{item.ok ? "Đã đạt" : item.hint}</p>
+              </div>
+              {item.ok ? (
+                <Badge className="border-success/20 bg-success/10 font-medium text-success">Đạt</Badge>
+              ) : (
+                <Link
+                  href={item.href as any}
+                  className={buttonVariants({ variant: "secondary", size: "sm", className: "h-8 text-xs" })}
+                >
+                  Sửa ngay
+                </Link>
               )}
             </div>
-
-            <Button
-              size="lg"
-              disabled={!readiness.allOk || isSubmitting}
-              className="gap-2 cursor-pointer shadow-sm"
-              onClick={() => setShowConfirmModal(true)}
-            >
-              <Send className="size-4" />
-              {course.status === "rejected" ? "Sửa và gửi lại" : "Gửi yêu cầu xuất bản"}
-            </Button>
-          </CardFooter>
-        )}
+          ))}
+        </CardContent>
       </Card>
+
+      {canSubmit && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            size="lg"
+            disabled={!readiness.allOk || isSubmitting}
+            className="cursor-pointer gap-2"
+            onClick={() => setShowConfirmModal(true)}
+          >
+            <Send className="size-4" />
+            {course.status === "rejected" ? "Sửa và gửi lại" : "Gửi yêu cầu xuất bản"}
+          </Button>
+          {!readiness.allOk && (
+            <span className="text-sm text-muted-foreground">
+              Hoàn thành {totalItemsCount - passedItemsCount} điều kiện còn thiếu để gửi.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ─────────────────────────────────────────────────────────────
           4. DIALOG XÁC NHẬN GỬI DUYỆT (tc-submit)

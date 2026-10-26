@@ -13,12 +13,11 @@ export default async function NewCoursePage() {
   if (!active.includes(ROLE.LECTURER)) redirect("/dashboard");
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* Tiêu đề trang */}
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Tạo khóa học</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Chỉ cần 4 thông tin cơ bản. Khoá học sẽ được tạo ở trạng thái Bản nháp (draft).
+        <h1 className="text-2xl font-semibold tracking-tight">Tạo khóa học</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Chỉ cần 4 thông tin. Khoá học được tạo ở trạng thái Bản nháp.
         </p>
       </div>
 

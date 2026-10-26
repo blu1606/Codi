@@ -43,6 +43,7 @@ import {
   CardTitle,
 } from "@codi-1/ui/components/card";
 import { Checkbox } from "@codi-1/ui/components/checkbox";
+import { ConfirmDialog } from "@codi-1/ui/components/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -106,6 +107,13 @@ interface CourseEditorProps {
   };
 }
 
+type PendingDelete = {
+  kind: "chapter" | "lesson";
+  id: string;
+  title: string;
+  consequence: string;
+};
+
 export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   const router = useRouter();
   const { course, details, chapters, entryTest, isLocked } = data;
@@ -141,6 +149,38 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   const [loadedLessonDetails, setLoadedLessonDetails] = useState<{ lessonId: string; request: number } | null>(null);
   const [lessonDetailsError, setLessonDetailsError] = useState("");
   const [isSavingLesson, setIsSavingLesson] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  // Guard chưa lưu (Thông tin): chặn điều hướng trong app và đóng tab/trình duyệt (mockup lecturer.js:55-68)
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
+  const guardActive = isInfoDirty && activeTab === "info";
+
+  useEffect(() => {
+    if (!guardActive) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [guardActive]);
+
+  useEffect(() => {
+    if (!guardActive) return;
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null | undefined;
+      if (!anchor) return;
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      const target = url.pathname + url.search;
+      if (target === window.location.pathname + window.location.search) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingNav(target);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [guardActive]);
 
   useEffect(() => () => { lessonDetailsRequest.current += 1; }, []);
   const canSaveLesson = !isLocked && !isSavingLesson && !isLoadingLessonDetails
@@ -238,16 +278,21 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     }
   };
 
-  // Xoá chương
-  const handleDeleteChapter = async (chapterId: string, title: string) => {
+  // Xoá chương: mở xác nhận nêu hậu quả trước khi gọi action
+  const handleDeleteChapter = (chapterId: string, title: string) => {
     if (isLocked) return;
-    if (
-      course.status === "published" &&
-      !confirm(`Khoá học đã xuất bản! Xoá ${title} sẽ ảnh hưởng trực tiếp đến học viên đã đăng ký. Bạn có chắc chắn muốn xoá?`)
-    ) {
-      return;
-    }
-    if (!confirm(`Chỉ có thể xoá chương trống. Bạn có chắc chắn muốn xoá ${title}?`)) return;
+    setPendingDelete({
+      kind: "chapter",
+      id: chapterId,
+      title,
+      consequence:
+        course.status === "published"
+          ? `Khoá học đã xuất bản. Xoá chương "${title}" có thể ảnh hưởng trực tiếp đến học viên đã đăng ký. Chỉ có thể xoá chương trống.`
+          : `Chương "${title}" sẽ bị xoá khỏi khoá học. Chỉ có thể xoá chương trống.`,
+    });
+  };
+
+  const performDeleteChapter = async (chapterId: string) => {
     try {
       await deleteChapter(courseId, chapterId);
       toast.success("Đã xoá chương.");
@@ -293,25 +338,26 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     }
   };
 
-  // Xoá bài học với Undo Toast và cảnh báo khoá đã xuất bản (§7.17 / Finding 2)
-  const handleDeleteLesson = async (lessonId: string, title: string) => {
+  // Xoá bài học: mở xác nhận nêu hậu quả; toast Hoàn tác sau khi xoá (§7.17)
+  const handleDeleteLesson = (lessonId: string, title: string) => {
     if (isLocked) return;
+    setPendingDelete({
+      kind: "lesson",
+      id: lessonId,
+      title,
+      consequence:
+        course.status === "published"
+          ? `Khoá học đang xuất bản. Xoá bài học "${title}" có thể làm gián đoạn tiến độ của học viên đã đăng ký.`
+          : `Bài học "${title}" sẽ bị xoá khỏi chương này.`,
+    });
+  };
 
-    if (
-      course.status === "published" &&
-      !confirm(
-        `Khoá học đang ở trạng thái ĐÃ XUẤT BẢN. Xoá bài học "${title}" có thể làm gián đoạn tiến độ của học viên đã đăng ký. Bạn có chắc chắn muốn xoá?`
-      )
-    ) {
-      return;
-    }
-
+  const performDeleteLesson = async (lessonId: string, title: string) => {
     try {
       const res = await deleteLesson(courseId, lessonId);
       if (res.success && res.deletedLesson) {
         const deletedSnapshot: LessonSnapshot = res.deletedLesson;
         router.refresh();
-        // Toast hoàn tác theo chuẩn PRODUCT §7.17
         toast(`Đã xoá "${title}"`, {
           action: {
             label: "Hoàn tác",
@@ -326,6 +372,14 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     } catch (err: any) {
       toast.error(err.message || "Lỗi khi xoá bài học.");
     }
+  };
+
+  const handleConfirmDelete = async () => {
+    const target = pendingDelete;
+    if (!target) return;
+    setPendingDelete(null);
+    if (target.kind === "chapter") await performDeleteChapter(target.id);
+    else await performDeleteLesson(target.id, target.title);
   };
 
   // Mở trình soạn thảo bài học (Lesson Editor modal / Finding 9)
@@ -454,6 +508,38 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <ConfirmDialog
+        open={pendingNav !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingNav(null);
+        }}
+        title="Có thay đổi chưa lưu"
+        consequence="Rời trang sẽ bỏ các thay đổi này."
+        reversible="Các thay đổi chưa lưu không thể khôi phục."
+        danger
+        confirmLabel="Rời trang, bỏ thay đổi"
+        cancelLabel="Ở lại"
+        onConfirm={() => {
+          const target = pendingNav;
+          setPendingNav(null);
+          setIsInfoDirty(false);
+          if (target) router.push(target);
+        }}
+      >
+        <p className="text-sm text-muted-foreground">Thông tin khoá học có thay đổi chưa được lưu.</p>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        title={pendingDelete?.kind === "chapter" ? "Xoá chương?" : "Xoá bài học?"}
+        consequence={pendingDelete?.consequence ?? ""}
+        reversible={pendingDelete?.kind === "lesson" ? "Bạn có thể hoàn tác ngay sau khi xoá." : "Thao tác này không hoàn tác được."}
+        danger
+        confirmLabel="Xoá"
+        onConfirm={handleConfirmDelete}
+      />
       {/* Header trình soạn khoá học */}
       <div className="space-y-4">
         <Link
@@ -467,7 +553,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold tracking-tight">{course.title}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">{course.title}</h1>
               <StatusBadge kind="course" status={course.status} />
             </div>
             <p className="text-xs text-muted-foreground flex items-center gap-2">
