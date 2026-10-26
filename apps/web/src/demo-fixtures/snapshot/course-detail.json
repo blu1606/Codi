@@ -1,0 +1,188 @@
+{
+  "course": {
+    "id": "course-js-001",
+    "slug": "javascript-nen-tang",
+    "title": "JavaScript nền tảng",
+    "category": "Frontend",
+    "level": "Beginner",
+    "duration": "3 giờ 40 phút",
+    "description": "Nắm chắc JavaScript hiện đại: biến, hàm, mảng, đối tượng, DOM và lập trình bất đồng bộ — nền móng cho mọi framework.",
+    "price": 590000,
+    "instructorId": "usr-lecturer-001",
+    "rating": 4.8,
+    "reviewCount": 312,
+    "status": "published",
+    "createdAt": "2026-10-19T07:08:18.058Z",
+    "publishedAt": "2026-06-02T09:00:00.000Z",
+    "updatedAt": "2026-10-26T09:17:01.187Z",
+    "enrollmentCount": 16
+  },
+  "instructor": {
+    "name": "Trần Quốc Huy",
+    "title": null,
+    "avatar": null,
+    "bio": null
+  },
+  "rating": 4.8,
+  "reviewCount": 312,
+  "reviews": [
+    {
+      "id": "26",
+      "userName": "Bùi Minh Tuấn",
+      "userAvatar": null,
+      "stars": 4,
+      "text": "Phần bất đồng bộ cần thêm ví dụ.",
+      "createdAt": "2026-10-09T20:00:00.000Z",
+      "reply": null
+    },
+    {
+      "id": "24",
+      "userName": "Vũ Thị Hương",
+      "userAvatar": null,
+      "stars": 5,
+      "text": "Giải thích dễ hiểu, bài tập vừa sức.",
+      "createdAt": "2026-09-30T20:00:00.000Z",
+      "reply": {
+        "text": "Cảm ơn bạn đã học cùng Codi!",
+        "createdAt": "2026-10-01T09:00:00.000Z"
+      }
+    },
+    {
+      "id": "25",
+      "userName": "Phạm Thảo Linh",
+      "userAvatar": null,
+      "stars": 5,
+      "text": null,
+      "createdAt": "2026-09-20T20:00:00.000Z",
+      "reply": null
+    }
+  ],
+  "learningOutcomes": [
+    "Viết JavaScript hiện đại (ES6+)",
+    "Xử lý dữ liệu với mảng và đối tượng",
+    "Thao tác DOM và sự kiện",
+    "Làm việc với Promise và async/await"
+  ],
+  "requirements": [
+    "Không cần kinh nghiệm lập trình trước",
+    "Biết HTML cơ bản là một lợi thế"
+  ],
+  "targetAudience": null,
+  "coverImageUrl": null,
+  "introVideoUrl": null,
+  "introVideoCaptionsUrl": null,
+  "chapters": [
+    {
+      "id": "7fa39196-c831-451d-a0c1-1f83468c19f6",
+      "title": "Làm quen JavaScript",
+      "lessons": [
+        {
+          "id": "eab288f3-a31f-4ad3-a16f-da038f93e4c1",
+          "title": "Biến, hằng và kiểu dữ liệu",
+          "description": null,
+          "durationSeconds": 960,
+          "isFreePreview": false
+        },
+        {
+          "id": "17a6b1bd-96b7-4fb7-af82-222a6ca41ee7",
+          "title": "Hàm và phạm vi",
+          "description": null,
+          "durationSeconds": 1200,
+          "isFreePreview": false
+        }
+      ]
+    },
+    {
+      "id": "2cb2cd49-3b6b-4bd4-a6f2-36c18cde173f",
+      "title": "Dữ liệu có cấu trúc",
+      "lessons": [
+        {
+          "id": "24ce2fab-9dbf-4900-a51d-12aaf3988c36",
+          "title": "Làm việc với mảng",
+          "description": null,
+          "durationSeconds": 1080,
+          "isFreePreview": false
+        },
+        {
+          "id": "56f73c1d-47fc-4807-ae52-87089d6d07c4",
+          "title": "Đối tượng và destructuring",
+          "description": null,
+          "durationSeconds": 1020,
+          "isFreePreview": false
+        }
+      ]
+    },
+    {
+      "id": "0e6c3151-fda6-4314-a980-4ec656b8c59a",
+      "title": "Luyện tập lập trình",
+      "lessons": [
+        {
+          "id": "bedaf193-5537-4de7-a390-f4b157b55307",
+          "title": "Hướng dẫn: Viết và chạy JavaScript",
+          "description": null,
+          "durationSeconds": 1200,
+          "isFreePreview": false
+        },
+        {
+          "id": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+          "title": "Thử thách: Thống kê đơn hàng",
+          "description": null,
+          "durationSeconds": 1500,
+          "isFreePreview": false
+        }
+      ]
+    },
+    {
+      "id": "b72e8947-18ec-40f9-abd8-791825ee1f53",
+      "title": "Trình duyệt và DOM",
+      "lessons": [
+        {
+          "id": "568f51b3-6f4e-485c-a09c-5affed8c4954",
+          "title": "Chọn và thay đổi phần tử DOM",
+          "description": null,
+          "durationSeconds": 1140,
+          "isFreePreview": false
+        },
+        {
+          "id": "fbda8d8b-89b6-4161-a581-4c9b55a6cec5",
+          "title": "Sự kiện và event delegation",
+          "description": null,
+          "durationSeconds": 900,
+          "isFreePreview": false
+        }
+      ]
+    },
+    {
+      "id": "4b6542bc-f82c-4932-a330-ac66ce7d5165",
+      "title": "Bất đồng bộ",
+      "lessons": [
+        {
+          "id": "e463a4b9-1379-4b14-a630-32395e242c51",
+          "title": "Promise là gì",
+          "description": null,
+          "durationSeconds": 1260,
+          "isFreePreview": false
+        },
+        {
+          "id": "a8689f9e-7ba7-4e58-a193-f1ab1a6b2e89",
+          "title": "async/await và xử lý lỗi",
+          "description": null,
+          "durationSeconds": 1140,
+          "isFreePreview": false
+        },
+        {
+          "id": "6ed0d48c-2494-4949-a962-8c00a37c7bd9",
+          "title": "Dự án nhỏ: Ứng dụng thời tiết",
+          "description": null,
+          "durationSeconds": 1800,
+          "isFreePreview": false
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "chapterCount": 5,
+    "lessonCount": 11,
+    "durationSeconds": 13200
+  }
+}

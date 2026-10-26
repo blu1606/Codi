@@ -4,6 +4,7 @@ packages:
 allowBuilds:
   esbuild: true
   sharp: true
+  msw: false
 overrides:
   "@next/env": npm:@varlock/nextjs-integration@1.2.2
 catalog:

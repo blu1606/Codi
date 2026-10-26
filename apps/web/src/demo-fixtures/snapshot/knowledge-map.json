@@ -1,0 +1,257 @@
+{
+  "courses": [
+    {
+      "id": "course-js-001",
+      "title": "JavaScript nền tảng"
+    },
+    {
+      "id": "course-python-001",
+      "title": "Python cho phân tích dữ liệu"
+    },
+    {
+      "id": "course-react-001",
+      "title": "React từ cơ bản đến dự án thực tế"
+    }
+  ],
+  "courseId": "course-js-001",
+  "title": "JavaScript nền tảng",
+  "confirmed": true,
+  "edges": [
+    {
+      "to": 159,
+      "from": 158
+    },
+    {
+      "to": 168,
+      "from": 158
+    },
+    {
+      "to": 169,
+      "from": 158
+    },
+    {
+      "to": 160,
+      "from": 159
+    },
+    {
+      "to": 161,
+      "from": 159
+    },
+    {
+      "to": 163,
+      "from": 159
+    },
+    {
+      "to": 164,
+      "from": 159
+    },
+    {
+      "to": 166,
+      "from": 159
+    },
+    {
+      "to": 167,
+      "from": 160
+    },
+    {
+      "to": 162,
+      "from": 161
+    },
+    {
+      "to": 167,
+      "from": 161
+    },
+    {
+      "to": 165,
+      "from": 163
+    }
+  ],
+  "nodes": [
+    {
+      "id": 158,
+      "name": "Biến & kiểu dữ liệu",
+      "probability": 0.925,
+      "evidenceCount": 4,
+      "level": 4,
+      "recommended": false,
+      "locked": false,
+      "lessons": [
+        {
+          "id": "eab288f3-a31f-4ad3-a16f-da038f93e4c1",
+          "title": "Biến, hằng và kiểu dữ liệu",
+          "locked": false
+        }
+      ]
+    },
+    {
+      "id": 159,
+      "name": "Hàm",
+      "probability": 0.725,
+      "evidenceCount": 4,
+      "level": 3,
+      "recommended": false,
+      "locked": false,
+      "lessons": [
+        {
+          "id": "17a6b1bd-96b7-4fb7-af82-222a6ca41ee7",
+          "title": "Hàm và phạm vi",
+          "locked": false
+        }
+      ]
+    },
+    {
+      "id": 160,
+      "name": "Mảng",
+      "probability": 0.725,
+      "evidenceCount": 4,
+      "level": 3,
+      "recommended": true,
+      "locked": false,
+      "lessons": [
+        {
+          "id": "24ce2fab-9dbf-4900-a51d-12aaf3988c36",
+          "title": "Làm việc với mảng",
+          "locked": false
+        },
+        {
+          "id": "bedaf193-5537-4de7-a390-f4b157b55307",
+          "title": "Hướng dẫn: Viết và chạy JavaScript",
+          "locked": false
+        },
+        {
+          "id": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+          "title": "Thử thách: Thống kê đơn hàng",
+          "locked": false
+        }
+      ]
+    },
+    {
+      "id": 161,
+      "name": "Đối tượng",
+      "probability": 0.5,
+      "evidenceCount": 4,
+      "level": 2,
+      "recommended": false,
+      "locked": false,
+      "lessons": [
+        {
+          "id": "56f73c1d-47fc-4807-ae52-87089d6d07c4",
+          "title": "Đối tượng và destructuring",
+          "locked": false
+        }
+      ]
+    },
+    {
+      "id": 162,
+      "name": "DOM & sự kiện",
+      "probability": 0.2,
+      "evidenceCount": 4,
+      "level": 1,
+      "recommended": false,
+      "locked": false,
+      "lessons": [
+        {
+          "id": "568f51b3-6f4e-485c-a09c-5affed8c4954",
+          "title": "Chọn và thay đổi phần tử DOM",
+          "locked": false
+        },
+        {
+          "id": "fbda8d8b-89b6-4161-a581-4c9b55a6cec5",
+          "title": "Sự kiện và event delegation",
+          "locked": false
+        },
+        {
+          "id": "6ed0d48c-2494-4949-a962-8c00a37c7bd9",
+          "title": "Dự án nhỏ: Ứng dụng thời tiết",
+          "locked": false
+        }
+      ]
+    },
+    {
+      "id": 163,
+      "name": "Bất đồng bộ",
+      "probability": null,
+      "evidenceCount": 0,
+      "level": 0,
+      "recommended": false,
+      "locked": false,
+      "lessons": [
+        {
+          "id": "e463a4b9-1379-4b14-a630-32395e242c51",
+          "title": "Promise là gì",
+          "locked": false
+        },
+        {
+          "id": "a8689f9e-7ba7-4e58-a193-f1ab1a6b2e89",
+          "title": "async/await và xử lý lỗi",
+          "locked": false
+        },
+        {
+          "id": "6ed0d48c-2494-4949-a962-8c00a37c7bd9",
+          "title": "Dự án nhỏ: Ứng dụng thời tiết",
+          "locked": false
+        }
+      ]
+    },
+    {
+      "id": 164,
+      "name": "Closure",
+      "probability": null,
+      "evidenceCount": 0,
+      "level": 0,
+      "recommended": false,
+      "locked": false,
+      "lessons": []
+    },
+    {
+      "id": 165,
+      "name": "Xử lý lỗi",
+      "probability": null,
+      "evidenceCount": 0,
+      "level": 0,
+      "recommended": false,
+      "locked": true,
+      "lessons": []
+    },
+    {
+      "id": 166,
+      "name": "Module & ES6",
+      "probability": null,
+      "evidenceCount": 0,
+      "level": 0,
+      "recommended": false,
+      "locked": false,
+      "lessons": []
+    },
+    {
+      "id": 167,
+      "name": "Spread & Destructuring",
+      "probability": null,
+      "evidenceCount": 0,
+      "level": 0,
+      "recommended": false,
+      "locked": false,
+      "lessons": []
+    },
+    {
+      "id": 168,
+      "name": "Template Literal",
+      "probability": null,
+      "evidenceCount": 0,
+      "level": 0,
+      "recommended": false,
+      "locked": false,
+      "lessons": []
+    },
+    {
+      "id": 169,
+      "name": "Regular Expression",
+      "probability": null,
+      "evidenceCount": 0,
+      "level": 0,
+      "recommended": false,
+      "locked": false,
+      "lessons": []
+    }
+  ]
+}
