@@ -2,16 +2,24 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth, db } from "@/services";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { z } from "zod";
 import {
-  buildAdvisorAnswer,
+  advisorPrompt,
   generateGuestFeedbackToken,
   getLearnerProgressContext,
   getPublishedCatalog,
   logAdvisorInteraction,
   syncLearnerIntakeGoalDraft,
+  toAdvisorAnswer,
 } from "@/lib/ai-advisor-service";
+import { generateAdvisorAnswer } from "@/lib/ai-advisor-ai";
 import { intakeStateSchema, type IntakeState } from "@/lib/ai-advisor-contract";
 import { ENV } from "@/env";
+
+// Recent turns so follow-ups ("so sánh 2 khoá vừa rồi") have context; invalid history is ignored.
+const historySchema = z
+  .array(z.object({ role: z.enum(["user", "ai"]), text: z.string().max(4000) }))
+  .max(20);
 
 export const maxDuration = 30;
 
@@ -75,10 +83,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body không hợp lệ." }, { status: 400 });
   }
 
-  const { prompt, intake: rawIntake } = body as {
+  const { prompt, intake: rawIntake, history: rawHistory } = body as {
     prompt?: unknown;
     intake?: unknown;
+    history?: unknown;
   };
+  const historyParsed = historySchema.safeParse(rawHistory ?? []);
+  const history = historyParsed.success ? historyParsed.data : [];
 
   if (typeof prompt !== "string" || !prompt.trim()) {
     return NextResponse.json({ error: "Câu hỏi không được để trống." }, { status: 400 });
@@ -98,12 +109,18 @@ export async function POST(req: Request) {
       getLearnerProgressContext(db, userId),
     ]);
 
-    const answer = buildAdvisorAnswer({
-      prompt: prompt.trim(),
-      catalog,
-      intake,
-      ownedCourseIds: progressContext.ownedCourseIds,
-    });
+    const generated = await generateAdvisorAnswer(
+      advisorPrompt({
+        prompt: prompt.trim(),
+        catalog,
+        intake,
+        ownedCourseIds: progressContext.ownedCourseIds,
+        currentCourse: progressContext.currentCourse,
+        history,
+      }),
+      req.signal,
+    );
+    const answer = toAdvisorAnswer(generated.output, catalog);
 
     const latencyMs = Date.now() - startedAt;
 
@@ -123,6 +140,9 @@ export async function POST(req: Request) {
       aiResponse: JSON.stringify(answer),
       latencyMs,
       isSuccess: true,
+      model: generated.model,
+      promptTokens: generated.promptTokens,
+      completionTokens: generated.completionTokens,
     });
 
     const feedbackToken =

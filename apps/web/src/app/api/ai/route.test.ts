@@ -61,6 +61,15 @@ vi.mock("@/lib/ai-advisor-service", async (importOriginal) => ({
   syncLearnerIntakeGoalDraft: vi.fn(async () => {}),
 }));
 
+const mockGenerate = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ai-advisor-ai", () => ({ generateAdvisorAnswer: mockGenerate }));
+const generated = (output: Record<string, unknown>) => ({
+  output: { text: "", courses: [], compare: false, order: [], followups: [], noMatch: false, ...output },
+  model: "gpt-test",
+  promptTokens: 800,
+  completionTokens: 90,
+});
+
 vi.mock("@/env", () => ({
   ENV: {
     BETTER_AUTH_SECRET: "test-secret",
@@ -118,7 +127,15 @@ describe("POST /api/ai advisor answers", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns structured course card recommendations and logs interaction", async () => {
+  it("answers with the model picks, mapped to real catalogue cards, and logs the provider model", async () => {
+    mockGenerate.mockResolvedValueOnce(generated({
+      text: "Với mục tiêu làm dự án, bạn nên bắt đầu từ backend.",
+      courses: [
+        { id: "course-node-002", reason: "Hợp mục tiêu làm backend" },
+        { id: "invented-course", reason: "Không có thật" },
+        { id: "course-react-001", reason: "Bổ sung frontend" },
+      ],
+    }));
     const req = new NextRequest("http://localhost/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -131,14 +148,18 @@ describe("POST /api/ai advisor answers", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.text).toContain("Làm được dự án, Có kinh nghiệm cơ bản");
-    expect(data.courses).toHaveLength(2);
-    expect(data.courses[0].id).toBe("course-node-002");
+    expect(data.text).toBe("Với mục tiêu làm dự án, bạn nên bắt đầu từ backend.");
+    expect(data.courses.map((c: { id: string }) => c.id)).toEqual(["course-node-002", "course-react-001"]);
+    expect(data.courses[0]).toMatchObject({ title: "Node.js & Express", price: 790000, isBestMatch: true });
+    const { prompt } = mockGenerate.mock.calls[0]![0];
+    expect(prompt).toContain("Mục tiêu: Làm được dự án");
+    expect(prompt).toContain("Câu hỏi: Tôi muốn học làm backend");
     expect(data.logId).toBe(101);
     expect(verifyGuestFeedbackToken(101, data.feedbackToken, "test-secret")).toBe(true);
     expect(syncLearnerIntakeGoalDraft).not.toHaveBeenCalled();
     expect(logAdvisorInteraction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      userId: null, isSuccess: true, aiResponse: JSON.stringify({
+      userId: null, isSuccess: true, model: "gpt-test", promptTokens: 800, completionTokens: 90,
+      aiResponse: JSON.stringify({
         text: data.text, courses: data.courses, table: data.table,
         order: data.order, followups: data.followups, noMatch: data.noMatch,
       }),
@@ -147,6 +168,10 @@ describe("POST /api/ai advisor answers", () => {
 
   it("binds intake persistence and logging to the authenticated session rather than a supplied owner", async () => {
     mockSession.current = { user: { id: "session-owner" } };
+    mockGenerate.mockResolvedValueOnce(generated({
+      text: "Sau React, học Node.js.",
+      order: [{ id: "course-node-002", reason: "Học tiếp backend" }],
+    }));
     const intake = { goal: "Hoàn thành khoá học", level: "Mới bắt đầu", hoursPerWeek: "5-10 giờ", skipped: [] };
     const res = await POST(new NextRequest("http://localhost/api/ai", {
       method: "POST", body: JSON.stringify({ prompt: "Nên học gì tiếp?", intake, userId: "other-owner" }),
@@ -155,19 +180,56 @@ describe("POST /api/ai advisor answers", () => {
     const data = await res.json();
     expect(data.feedbackToken).toBeNull();
     expect(data.order.map((course: { id: string }) => course.id)).toEqual(["course-node-002"]);
+    expect(mockGenerate.mock.calls[0]![0].prompt).toMatch(/"id":"course-react-001"[^\n]*"owned":true/);
     expect(syncLearnerIntakeGoalDraft).toHaveBeenCalledWith(expect.anything(), "session-owner", intake);
     expect(logAdvisorInteraction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ userId: "session-owner" }));
   });
 
-  it("returns explicit absent-subject alternatives using the real catalog answer builder", async () => {
+  it("passes recent turns for follow-ups and ignores malformed history", async () => {
+    mockGenerate.mockResolvedValue(generated({ text: "Ok" }));
+    await POST(new NextRequest("http://localhost/api/ai", {
+      method: "POST",
+      body: JSON.stringify({
+        prompt: "So sánh 2 khoá vừa rồi",
+        history: [{ role: "user", text: "Mình muốn làm web" }, { role: "ai", text: "Gợi ý React và Node" }],
+      }),
+    }));
+    expect(mockGenerate.mock.calls[0]![0].prompt).toContain("Học viên: Mình muốn làm web\nCodi: Gợi ý React và Node");
+    const res = await POST(new NextRequest("http://localhost/api/ai", {
+      method: "POST", body: JSON.stringify({ prompt: "Hỏi lại", history: [{ role: "system", text: "x" }] }),
+    }));
+    expect(res.status).toBe(200);
+    expect(mockGenerate.mock.calls[1]![0].prompt).not.toContain("<history>");
+  });
+
+  it("returns the no-match state when the model finds no course for the goal", async () => {
+    mockGenerate.mockResolvedValueOnce(generated({
+      text: "Bạn có thể bắt đầu với nền tảng lập trình gần nhất.",
+      noMatch: true,
+      courses: [{ id: "course-react-001", reason: "Gần nhất" }],
+    }));
     const res = await POST(new NextRequest("http://localhost/api/ai", {
       method: "POST", body: JSON.stringify({ prompt: "Có khoá Elixir không?" }),
     }));
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.noMatch).toBe(true);
-    expect(data.text).toContain("Codi chưa có khoá");
-    expect(data.courses.map((course: { id: string }) => course.id)).toEqual(mockCatalog.map(course => course.id));
+    expect(data.text).toContain("Codi chưa có khoá cho mục tiêu này");
+    expect(data.courses.map((course: { id: string }) => course.id)).toEqual(["course-react-001"]);
+  });
+
+  it("shows the error state instead of a template answer when the model fails", async () => {
+    mockGenerate.mockRejectedValueOnce(new Error("provider 401"));
+    const res = await POST(new NextRequest("http://localhost/api/ai", {
+      method: "POST", body: JSON.stringify({ prompt: "Nên học gì?" }),
+    }));
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data.error).toBe("Codi tạm thời không phản hồi");
+    expect(data.courses).toBeUndefined();
+    expect(logAdvisorInteraction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      isSuccess: false, errorMessage: "provider 401",
+    }));
   });
 
   it("does not fabricate a successful answer when catalog retrieval fails", async () => {
@@ -179,6 +241,7 @@ describe("POST /api/ai advisor answers", () => {
     const data = await res.json();
     expect(data.error).toBeTruthy();
     expect(data.courses).toBeUndefined();
+    expect(mockGenerate).not.toHaveBeenCalled();
     expect(logAdvisorInteraction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       isSuccess: false, aiResponse: "", errorMessage: "catalog unavailable",
     }));
