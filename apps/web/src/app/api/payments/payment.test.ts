@@ -25,6 +25,11 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 import { POST as create } from "./create-transaction/route";
 import { POST as callback } from "./sepay/callback/route";
 const request = (body: unknown, authorized = true) => new Request("http://localhost/api/payments", { method: "POST", headers: authorized ? { authorization: "Apikey test-secret" } : {}, body: JSON.stringify(body) });
+// Older single-delivery fixtures model no pre-existing receipts. Keep that
+// transport boundary separate from order/item queries, including awaited reads.
+const emptyReceiptLedger = () => ({ where: () => ({
+  limit: async () => [], then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+}) });
 beforeEach(() => {
  vi.resetAllMocks();
  vi.stubEnv("SEPAY_WEBHOOK_SECRET", "test-secret"); vi.stubEnv("SEPAY_ACCOUNT_NUMBER", "12345678"); vi.stubEnv("SEPAY_BANK_CODE", "VCB");
@@ -93,7 +98,7 @@ it("enrolls only a sufficiently funded authenticated incoming transfer and settl
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: () => ({
             limit: vi.fn().mockResolvedValue([
               {
@@ -139,6 +144,7 @@ it("enrolls only a sufficiently funded authenticated incoming transfer and settl
       accountNumber: "12345678",
       content: "CODI12345",
       transferAmount: 1,
+      referenceCode: "partial-receipt",
     }),
   );
   // Transaction is called to record partial payment in payments & update receivedAmount
@@ -152,6 +158,7 @@ it("enrolls only a sufficiently funded authenticated incoming transfer and settl
       accountNumber: "12345678",
       content: "CODI12345",
       transferAmount: 125000,
+      referenceCode: "full-receipt",
     }),
   );
   expect(mocks.transaction).toHaveBeenCalledTimes(2);
@@ -186,7 +193,7 @@ it("does not enroll learner if the order is already cancelled", async () => {
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: () => ({
             limit: vi.fn().mockResolvedValue([{ id: "order-123", status: "cancelled", receivedAmount: 0 }]),
           }),
@@ -215,6 +222,7 @@ it("does not enroll learner if the order is already cancelled", async () => {
       accountNumber: "12345678",
       content: "CODI12345",
       transferAmount: 125000,
+      referenceCode: "cancelled-receipt",
     }),
   );
   expect(res.status).toBe(200);
@@ -254,16 +262,17 @@ it.each([
     execute,
     select: () => ({
       from: (table: unknown) => ({
-        where: (predicate: SQL) => ({
-          limit: async () => {
+        where: (predicate: SQL) => {
+          const rows = () => {
             if (table === payments) {
-              const { params } = new PgDialect().sqlToQuery(predicate);
-              return receipts.filter((receipt) => params.includes(receipt.transactionCode));
+              const { params, sql } = new PgDialect().sqlToQuery(predicate);
+              return receipts.filter((receipt) => sql.includes('"transaction_code"') ? params.includes(receipt.transactionCode) : params.includes(receipt.orderId));
             }
             if (table === orders) return [{ ...order }];
             throw new Error("Unexpected reconciliation query");
-          },
-        }),
+          };
+          return { limit: async () => rows(), then: (resolve: (value: unknown) => unknown) => Promise.resolve(rows()).then(resolve) };
+        },
       }),
     }),
     update: (table: unknown) => ({
@@ -368,7 +377,7 @@ it("ignores callback if transaction is already processed concurrently", async ()
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: () => ({
             limit: vi.fn().mockResolvedValue([]),
           }),
@@ -423,7 +432,7 @@ it("enrolls all order_items and increments voucher usedCount atomically upon suc
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => ({
             // If selecting order
             limit: vi.fn().mockResolvedValue([{ id: 555, status: "pending", voucherId: 77 }]),
@@ -469,6 +478,7 @@ it("enrolls all order_items and increments voucher usedCount atomically upon suc
       accountNumber: "12345678",
       content: "CODI55555",
       transferAmount: 800000,
+      referenceCode: "order-items-receipt",
     }),
   );
 
@@ -499,7 +509,7 @@ it("D2: auto-honours late payment when expired and learner does not own courses 
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => {
             selectCallCount++;
             return {
@@ -555,6 +565,7 @@ it("D2: auto-honours late payment when expired and learner does not own courses 
       accountNumber: "12345678",
       content: "CODI99991",
       transferAmount: 500000,
+      referenceCode: "expired-full-receipt",
     }),
   );
 
@@ -587,7 +598,7 @@ it("D2: marks order for reconciliation when expired and learner already owns all
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => {
             selectCallCount++;
             return {
@@ -636,6 +647,7 @@ it("D2: marks order for reconciliation when expired and learner already owns all
       accountNumber: "12345678",
       content: "CODI99992",
       transferAmount: 500000,
+      referenceCode: "already-owned-receipt",
     }),
   );
 
@@ -665,7 +677,7 @@ it("D3: flags order with needsReconciliation when overpaid", async () => {
   mocks.transaction.mockImplementation(async (fn) =>
     fn({
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => ({
             limit: vi.fn().mockResolvedValue([
               {
@@ -709,6 +721,7 @@ it("D3: flags order with needsReconciliation when overpaid", async () => {
       accountNumber: "12345678",
       content: "CODI99993",
       transferAmount: 600000,
+      referenceCode: "overpaid-receipt",
     }),
   );
 
@@ -743,7 +756,7 @@ it("P1: acquires pg_advisory_xact_lock to serialize concurrent transfers", async
         return Promise.resolve();
       },
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: () => ({
             limit: vi.fn().mockResolvedValue([
               {
@@ -778,6 +791,7 @@ it("P1: acquires pg_advisory_xact_lock to serialize concurrent transfers", async
       accountNumber: "12345678",
       content: "CODI12345",
       transferAmount: 125000,
+      referenceCode: "lock-control-receipt",
     }),
   );
   expect(res.status).toBe(200);
@@ -803,7 +817,7 @@ it("P2: flags order with needsReconciliation when partial transfer arrives after
     fn({
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => ({
             limit: vi.fn().mockResolvedValue([
               {
@@ -847,6 +861,7 @@ it("P2: flags order with needsReconciliation when partial transfer arrives after
       accountNumber: "12345678",
       content: "CODI99994",
       transferAmount: 200000,
+      referenceCode: "expired-partial-receipt",
     }),
   );
 
@@ -882,7 +897,7 @@ it("P1: late-honours order if concurrent expiry changed pending order to failed 
     fn({
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => {
             selectCallCount++;
             return {
@@ -962,6 +977,7 @@ it("P1: late-honours order if concurrent expiry changed pending order to failed 
       accountNumber: "12345678",
       content: "CODI99995",
       transferAmount: 500000,
+      referenceCode: "concurrent-expiry-receipt",
     }),
   );
 
@@ -995,7 +1011,7 @@ it("P1: marks for reconciliation if concurrent expiry changed pending order to f
     fn({
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => ({
-        from: () => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => {
             selectCallCount++;
             return {
@@ -1068,6 +1084,7 @@ it("P1: marks for reconciliation if concurrent expiry changed pending order to f
       accountNumber: "12345678",
       content: "CODI99996",
       transferAmount: 500000,
+      referenceCode: "concurrent-owned-receipt",
     }),
   );
 
@@ -1101,7 +1118,7 @@ it("P1: cancels concurrent callback and persists payment failure and reconciliat
     fn({
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => ({
-        from: (table: unknown) => ({
+        from: (table: unknown) => table === payments ? emptyReceiptLedger() : ({
           where: vi.fn().mockImplementation(() => {
             return {
               limit: vi.fn().mockImplementation(() => {
