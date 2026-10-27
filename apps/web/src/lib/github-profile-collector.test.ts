@@ -166,6 +166,41 @@ afterEach(() => {
 });
 
 describe("GitHub public GraphQL collector", () => {
+  it("keeps listing below the per-request deadline without reducing repository coverage", async () => {
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout", "performance", "Date"],
+    });
+    const fetch = transport(async (gql) => {
+      if (gql.operation !== "CodiPublicProfile") return;
+      const first = Number(gql.variables.first);
+      const offset = Number(gql.variables.after ?? 0);
+      await new Promise((resolve) => setTimeout(resolve, first * 110));
+      const end = Math.min(100, offset + first);
+      return json(
+        page(
+          Array.from({ length: end - offset }, (_, i) =>
+            repo({
+              databaseId: offset + i + 1,
+              name: `project-${offset + i + 1}`,
+              isFork: true,
+            }),
+          ),
+          end < 100,
+          end < 100 ? String(end) : null,
+        ),
+      );
+    });
+    const pending = collectGithubProfile(input, {
+      fetch,
+      limits: { totalMs: 25_000 },
+    });
+    await vi.advanceTimersByTimeAsync(25_000);
+    const result = await pending;
+    expect(result.coverage.listingComplete).toBe(true);
+    expect(result.repositories).toHaveLength(100);
+    expect(result.issues).toEqual([]);
+    expect(result.coverage.elapsedMs).toBe(11_000);
+  });
   it("reports only safe timing fields and tolerates a failed observation sink", async () => {
     const events: GithubRequestTiming[] = [];
     const observed = await collectGithubProfile(appInput, {
@@ -233,7 +268,7 @@ describe("GitHub public GraphQL collector", () => {
       const listing = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
       expect(listing).toMatchObject({
         operationName: "CodiPublicProfile",
-        variables: { first: 100, after: null },
+        variables: { first: 25, after: null },
       });
       expect(listing.query).toMatch(/viewer\s*\{/);
       expect(listing.query).toContain("privacy: PUBLIC");
@@ -306,14 +341,15 @@ describe("GitHub public GraphQL collector", () => {
         first: number;
         after: string | null;
       };
+      const offset = after ? Number(after) : 0;
       return json(
         page(
           Array.from({ length: first }, (_, i) => {
-            const databaseId = (after ? 101 : 1) + i;
+            const databaseId = offset + 1 + i;
             return repo({ databaseId, name: `project-${databaseId}` });
           }),
-          !after,
-          after ? null : "cursor-1",
+          offset + first < 101,
+          offset + first < 101 ? String(offset + first) : null,
         ),
       );
     });
@@ -324,12 +360,12 @@ describe("GitHub public GraphQL collector", () => {
     expect(result.repositories).toHaveLength(101);
     expect(result.coverage.listingComplete).toBe(true);
     expect(
-      JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)).variables,
-    ).toEqual({ first: 1, after: "cursor-1" });
+      JSON.parse(String(fetch.mock.calls[4]?.[1]?.body)).variables,
+    ).toEqual({ first: 1, after: "100" });
   });
 
-  it.each([1, 100])(
-    "caps three listing pages with %i nodes per page and ignores Link URLs",
+  it.each([1, 25])(
+    "bounds listing pages with %i nodes per page and ignores Link URLs",
     async (length) => {
       let count = 0;
       const fetch = transport((gql) =>
@@ -352,7 +388,7 @@ describe("GitHub public GraphQL collector", () => {
         fetch,
         limits: { selectedRepos: 1 },
       });
-      expect(count).toBe(length * 3);
+      expect(count).toBe(length * 12);
       expect(result.coverage.listingComplete).toBe(false);
       expect(result.issues).toContainEqual({
         operation: "listing",

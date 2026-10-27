@@ -16,6 +16,7 @@ import type {
 const GRAPHQL_URL = "https://api.github.com/graphql";
 // Upper bound on repository aliases per batched query; a batch is split, never truncated.
 const MAX_ALIASES_PER_QUERY = 100;
+const REPOSITORIES_PER_PAGE = 25;
 // Regular git blobs only. Symlinks (120000) and gitlinks (160000) are never read.
 const REGULAR_FILE_MODES = new Set([0o100644, 0o100755]);
 const RATE_LIMIT_MESSAGE =
@@ -639,7 +640,7 @@ export async function collectGithubProfile(
     page++
   ) {
     const perPage = Math.min(
-      100,
+      REPOSITORIES_PER_PAGE,
       limits.listedRepos - snapshot.repositories.length,
     );
     try {
@@ -713,7 +714,7 @@ export async function collectGithubProfile(
       after = endCursor;
       cursors.add(endCursor!);
       if (
-        page >= Math.ceil(limits.listedRepos / 100) ||
+        page >= Math.ceil(limits.listedRepos / REPOSITORIES_PER_PAGE) ||
         snapshot.repositories.length >= limits.listedRepos
       ) {
         issue({ operation: "listing" }, new ReadFailure("pagination_limit"));
