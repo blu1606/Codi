@@ -98,3 +98,13 @@ export const MASTERY_SHORT_LABELS = [
 export function getMasteryLabel(level: number): string {
   return MASTERY_LABELS[Math.max(0, Math.min(4, Math.floor(level)))] ?? MASTERY_LABELS[0];
 }
+
+/** Whole-number scale for counts: integer steps only, so an axis never shows 0.2 repositories. */
+export function integerScale(maxVal: number): { top: number; ticks: number[] } {
+  const top = Math.max(1, Math.ceil(maxVal));
+  const step = Math.max(1, Math.ceil(top / 4));
+  const bound = Math.ceil(top / step) * step;
+  const ticks: number[] = [];
+  for (let v = 0; v <= bound; v += step) ticks.push(v);
+  return { top: bound, ticks };
+}
