@@ -727,7 +727,7 @@ export function AiAdvisorView({
           <div>
             <h1 className="text-2xl tracking-tight">Tư vấn khoá học cùng AI</h1>
             <p className="mt-1 text-xs text-muted-foreground">
-              Bản thử nghiệm dùng quy tắc đối chiếu danh mục khoá học đã xuất bản; không dùng mô hình AI để phân tích.
+              Codi chỉ gợi ý từ các khoá học đã xuất bản trên Codi.
             </p>
             {messages.length === 0 ? (
               <p className="text-muted-foreground text-sm mt-1">
@@ -870,7 +870,7 @@ export function AiAdvisorView({
               })}
             </ul>
             <p className="text-xs text-muted-foreground pt-1">
-              Gợi ý theo quy tắc có thể chưa phù hợp với bạn. Hãy xem kỹ trang chi tiết khoá học trước khi mua.
+              AI có thể trả lời sai. Hãy xem kỹ trang chi tiết khoá học trước khi mua.
             </p>
           </section>
         )}
@@ -902,7 +902,7 @@ export function AiAdvisorView({
                     aria-busy="true"
                   >
                     <span className="inline-block size-2 animate-ping rounded-full bg-primary" />
-                    <span>Đang đối chiếu danh mục…</span>
+                    <span>Codi đang suy nghĩ…</span>
                     <Button
                       type="button"
                       variant="ghost"
@@ -993,12 +993,9 @@ export function AiAdvisorView({
                 );
               }
 
-              // Catalog-rules answer message
+              // Model answer grounded in the published catalogue
               return (
                 <div key={m.id} className="flex flex-col gap-4 text-sm leading-relaxed">
-                  <p className="text-xs text-muted-foreground">
-                    Gợi ý theo quy tắc danh mục · Không phải phân tích từ mô hình AI.
-                  </p>
                   {m.text && (
                     <div className="whitespace-pre-line text-foreground">{m.text}</div>
                   )}
