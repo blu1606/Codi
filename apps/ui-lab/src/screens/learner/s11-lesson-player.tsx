@@ -34,12 +34,22 @@ import {
   lessonMaterialError,
   lessonPlayerView,
   lessonReading,
+  lessonReadyToComplete,
+  lessonAfterCompletion,
+  lessonSoftLocked,
+  lessonTasksAtTop,
   lessonVideoDefault,
+  offerAll,
+  offerHarder,
+  offerPractice,
+  offerSkipMastered,
   quizAnswering,
   quizFailed,
   quizPassed,
 } from "@/demo-fixtures/learner/s11-lesson-player";
+import { PathAdjustOffer } from "@/components/learning-path/path-adjust-offer";
 import type { AssessmentView } from "@/lib/assessment-contract";
+import type { AdjustmentOffer } from "@/lib/learning-path-contract";
 import type { CodingView } from "@/lib/coding-contract";
 import type { LessonPlayerView } from "@/lib/lesson-player-contract";
 import type { Screen, ScreenState } from "../screen-types";
@@ -81,6 +91,17 @@ const quizView = (done: boolean) => lessonPlayerView({
     { key: "quiz", label: "Làm quiz", done, note: "Đạt từ 70% để hoàn thành.", assessmentId: QUIZ_ASSESSMENT_ID },
   ],
 });
+
+/** Completion: the first matching handler answers "complete" with the offer; every other command gets the plain view. */
+const offerState = (label: string, offer: AdjustmentOffer): ScreenState => {
+  const complete = http.post(endpoint, async ({ request }) => {
+    const body = (await request.json()) as { type?: string };
+    return HttpResponse.json(body.type === "complete" ? { ...lessonReadyToComplete, completed: true, adjustment: offer } : lessonReadyToComplete);
+  });
+  return state(label, [complete, ...playerHandlers(lessonReadyToComplete)], {
+    render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialAdjustment={offer} />,
+  });
+};
 
 /** Tutor GET for this lesson: the thread the panel or popup reads when it opens. */
 const tutorRead = (view: object): HttpHandler => http.get(`${endpoint}/tutor`, () => HttpResponse.json(view));
@@ -143,6 +164,25 @@ export const s11LessonPlayerScreen: Screen = {
     "materials-error": state("Lỗi tải tài liệu", playerHandlers(lessonMaterialError), { mockupScenario: { materials: "error" } }),
     "checklist-partial": state("Checklist một phần", playerHandlers(lessonChecklistPartial)),
     completed: state("Đã hoàn thành (S11e)", playerHandlers(lessonCompleted)),
+    "soft-locked": state("Chưa đủ tiên quyết · mở được, có cảnh báo", playerHandlers(lessonSoftLocked)),
+    "offer-skip-mastered": offerState("Gợi ý sau hoàn thành · bỏ qua bài đã vững", offerSkipMastered),
+    "offer-practice": offerState("Gợi ý sau hoàn thành · luyện thêm", offerPractice),
+    "offer-harder": offerState("Gợi ý sau hoàn thành · làm bài code sớm", offerHarder),
+    "offer-all": offerState("Gợi ý sau hoàn thành · đủ các lựa chọn", offerAll),
+    "offer-applied": state("Gợi ý · đã áp dụng (hoàn tác 7 giây)", playerHandlers(lessonReadyToComplete), {
+      render: () => (
+        <div className="mx-auto max-w-xl p-6">
+          <PathAdjustOffer offer={null} completing={false} applying={null} applied={{ summary: "Bài Hàm và phạm vi được đưa lên ngay sau bài vừa học để ôn Mảng." }} error={null} onChoose={() => {}} onDismiss={() => {}} onViewPath={() => {}} />
+        </div>
+      ),
+    }),
+    "tasks-at-top": state("Nhiệm vụ ở đầu trang (quiz, bài tập)", playerHandlers(lessonTasksAtTop)),
+    "map-popup": state("Lộ trình · bản đồ mở từ bài học", playerHandlers(lessonVideoDefault), {
+      render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialPathMap={{}} />,
+    }),
+    "map-after-completion": state("Lộ trình · sau hoàn thành, tiến trình sang bài kế", playerHandlers(lessonAfterCompletion), {
+      render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialPathMap={{ animateFrom: LESSON_ID }} />,
+    }),
     "quiz-answering": state("Quiz · đang làm (S11c)", playerHandlers(quizView(false), { quiz: quizAnswering })),
     "quiz-passed": state("Quiz · đạt (S11c)", playerHandlers(quizView(true), { quiz: quizPassed })),
     "quiz-failed": state("Quiz · chưa đạt (S11c)", playerHandlers(quizView(false), { quiz: quizFailed })),
