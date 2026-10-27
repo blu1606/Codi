@@ -7,7 +7,7 @@ import {
   Bot,
   CheckCircle2,
   Inbox,
-  MessageCircle,
+
   RotateCcw,
   Send,
 } from "lucide-react";
@@ -46,6 +46,15 @@ import {
 
 interface QuestionsInboxClientProps {
   initialData: LecturerQuestionsDataDto;
+}
+
+function inboxTabClass(active: boolean) {
+  return cn(
+    "-mb-px border-b-2 px-3 pb-2.5 pt-1 text-sm font-medium transition-colors",
+    active
+      ? "border-primary text-primary"
+      : "border-transparent text-muted-foreground hover:text-foreground"
+  );
 }
 
 export function QuestionsInboxClient({
@@ -241,7 +250,7 @@ export function QuestionsInboxClient({
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Hỏi đáp</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Hỏi đáp</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {view === "conversations"
               ? "Cuộc hội thoại chuyển tiếp từ AI trợ lý."
@@ -250,107 +259,53 @@ export function QuestionsInboxClient({
         </div>
       </div>
 
-      {/* Main Mode Switcher: Câu hỏi từ học viên vs Cuộc hội thoại AI */}
-      <div className="flex items-center gap-2 border-b border-border pb-3">
-        <button
-          type="button"
-          onClick={() => handleSwitchView("questions")}
-          className={cn(
-            "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-            view === "questions"
-              ? "bg-primary text-primary-foreground shadow-xs"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          )}
-        >
-          <MessageCircle className="size-4" />
-          <span>Câu hỏi từ học viên</span>
-          <span
-            className={cn(
-              "px-1.5 py-0.5 rounded-full text-xs font-semibold",
-              view === "questions"
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-muted text-muted-foreground"
-            )}
-          >
-            {counts.unanswered + counts.answered}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSwitchView("conversations")}
-          className={cn(
-            "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-            view === "conversations"
-              ? "bg-primary text-primary-foreground shadow-xs"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          )}
-        >
-          <Bot className="size-4" />
-          <span>Cuộc hội thoại AI</span>
-          <span
-            className={cn(
-              "px-1.5 py-0.5 rounded-full text-xs font-semibold",
-              view === "conversations"
-                ? "bg-primary-foreground/20 text-primary-foreground"
-                : "bg-muted text-muted-foreground"
-            )}
-          >
-            {counts.aiConversations}
-          </span>
-        </button>
+      {/* Tabs gạch chân (mockup .tabs): trạng thái câu hỏi, hoặc một tab cho hội thoại AI */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {view === "questions" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => handleSwitchStatus("unanswered")}
+              className={inboxTabClass(status === "unanswered")}
+            >
+              Chưa trả lời ({counts.unanswered})
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchStatus("answered")}
+              className={inboxTabClass(status === "answered")}
+            >
+              Đã trả lời ({counts.answered})
+            </button>
+          </>
+        ) : (
+          <button type="button" className={inboxTabClass(true)}>
+            Từ AI trợ lý ({counts.aiConversations})
+          </button>
+        )}
       </div>
 
-      {/* Sub Tabs for Public Questions */}
-      {view === "questions" && (
-        <div className="inline-flex items-center gap-2 p-1 rounded-lg bg-muted/60">
-          <button
-            type="button"
-            onClick={() => handleSwitchStatus("unanswered")}
-            className={cn(
-              "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm font-medium transition-all",
-              status === "unanswered"
-                ? "bg-background text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <span>Chưa trả lời</span>
-            <span
-              className={cn(
-                "px-1.5 py-0.5 rounded-full text-xs font-semibold",
-                status === "unanswered" && counts.unanswered > 0
-                  ? "bg-primary/10 text-primary"
-                  : "bg-muted text-muted-foreground"
-              )}
-            >
-              {counts.unanswered}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSwitchStatus("answered")}
-            className={cn(
-              "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-sm font-medium transition-all",
-              status === "answered"
-                ? "bg-background text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <span>Đã trả lời</span>
-            <span
-              className={cn(
-                "px-1.5 py-0.5 rounded-full text-xs font-semibold",
-                status === "answered"
-                  ? "bg-success-soft text-success"
-                  : "bg-muted text-muted-foreground"
-              )}
-            >
-              {counts.answered}
-            </span>
-          </button>
-        </div>
-      )}
+      {/* Chọn nguồn: câu hỏi của học viên hoặc hội thoại AI */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          aria-pressed={view === "questions"}
+          onClick={() => handleSwitchView("questions")}
+          className={cn(view === "questions" && "bg-muted text-foreground")}
+        >
+          Câu hỏi từ học viên ({counts.unanswered + counts.answered})
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          aria-pressed={view === "conversations"}
+          onClick={() => handleSwitchView("conversations")}
+          className={cn(view === "conversations" && "bg-muted text-foreground")}
+        >
+          Cuộc hội thoại AI ({counts.aiConversations})
+        </Button>
+      </div>
 
       {/* Split-view: Left List, Right Detail */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -360,7 +315,7 @@ export function QuestionsInboxClient({
             questions.length === 0 ? (
               <Card className="border border-border/80">
                 <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                  Không có câu hỏi nào.
+                  Không có câu hỏi.
                 </CardContent>
               </Card>
             ) : (
@@ -399,7 +354,7 @@ export function QuestionsInboxClient({
           ) : conversations.length === 0 ? (
             <Card className="border border-border/80">
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                Không có cuộc hội thoại nào.
+                Không có cuộc hội thoại.
               </CardContent>
             </Card>
           ) : (

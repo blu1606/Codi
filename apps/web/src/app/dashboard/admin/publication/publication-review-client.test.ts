@@ -38,7 +38,7 @@ async function open() {
   await act(async () => root.render(createElement(PublicationReviewClient, {
     queue: { tab: "pending", counts: { pending: 1, changes: 0, approved: 0 }, items: [] }, detail,
   })));
-  await click("Xem trước nội dung");
+  await click("Xem trước như học viên");
 }
 it("renders real video controls and markdown, navigates, and exits without learner writes", async () => {
   await open();
@@ -83,12 +83,12 @@ it("drops authored raw HTML and shows unknown provenance without a fake reviewed
   await act(async () => root.render(createElement(PublicationReviewClient, {
     queue: { tab: "pending", counts: { pending: 1, changes: 0, approved: 0 }, items: [] }, detail: input,
   })));
-  await click("Xem trước nội dung");
+  await click("Xem trước như học viên");
   expect(document.querySelector('[role="dialog"] script')).toBeNull();
   const link = document.querySelector('[role="dialog"] a[href="https://example.invalid/read"]');
   expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
   await click("Thoát xem trước");
-  await click("Nội dung bài học");
+  await click("Nội dung");
   await click("Quiz lesson");
   expect(document.body.textContent).toContain("Nguồn AI / trạng thái duyệt: chưa có dữ liệu.");
   expect(document.body.textContent).not.toContain("GV đã duyệt");

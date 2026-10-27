@@ -1,4 +1,5 @@
 "use client";
+import { Alert } from "@codi-1/ui/components/alert";
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -184,7 +185,7 @@ export function OrdersTableClient({
               disabled
               className="w-full h-9 rounded-md border border-input bg-muted/50 px-3 text-sm text-muted-foreground cursor-not-allowed"
             >
-              <option>Chuyển khoản VietQR</option>
+              <option>Chuyển khoản ngân hàng</option>
             </select>
           </div>
 
@@ -208,6 +209,20 @@ export function OrdersTableClient({
             </div>
           </form>
         </div>
+
+        {initialFilter.overdue && (
+          <Alert variant="warning" className="items-center justify-between">
+            <p className="font-medium">Đang lọc: đơn chờ thanh toán quá 24 giờ</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => updateFilter({ overdue: null })}
+              className="cursor-pointer"
+            >
+              Bỏ lọc quá hạn
+            </Button>
+          </Alert>
+        )}
 
         {/* Quick Toggles: Overdue & Reconciliation */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">

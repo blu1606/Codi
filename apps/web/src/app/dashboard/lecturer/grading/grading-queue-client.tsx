@@ -14,6 +14,7 @@ import {
   History,
   List,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -300,7 +301,7 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Chấm bài</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Chấm bài</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Chấm từng bài; học viên nhận thông báo ngay khi có điểm.
           </p>
@@ -758,6 +759,14 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
                       </div>
                     )}
 
+                    {/* AI gợi ý điểm: chưa có backend (issue #232). Hiện trạng thái thật, không giả kết quả. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="button" variant="ghost" size="sm" disabled className="gap-1.5">
+                        <Sparkles className="size-3.5" />
+                        AI gợi ý điểm và nhận xét
+                      </Button>
+                      <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Sắp có</span>
+                    </div>
                     <p role="status" className="text-sm text-muted-foreground">AI chấm bài chưa khả dụng. Vui lòng chấm bài thủ công theo thang điểm.</p>
 
                     {/* Feedback Textarea + Snippet trigger */}

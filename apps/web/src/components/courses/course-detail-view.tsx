@@ -482,7 +482,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         <div className={styles.container}>
           <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
             <BookOpen className="size-10 text-muted-foreground mx-auto" />
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-semibold">
               {error?.notFound
                 ? "Không tìm thấy khoá học"
                 : "Chưa thể tải khoá học"}

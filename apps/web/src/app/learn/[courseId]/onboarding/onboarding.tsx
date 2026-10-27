@@ -101,7 +101,7 @@ export default function Onboarding({
       if (command.type !== "goal-pick" && command.type !== "answer")
         heading.current?.focus();
       if (
-        (command.type === "goal-next" || command.type === "goal-skip") &&
+        (command.type === "goal-commit" || command.type === "goal-next" || command.type === "goal-skip") &&
         data?.enrollment.goalEditing &&
         !body.enrollment.goalEditing
       )
@@ -186,13 +186,22 @@ export default function Onboarding({
   );
   const progress = (value: number, total: number, label: string) => (
     <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
-      <progress
-        className="h-2 w-full accent-primary"
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <div
+        role="progressbar"
         aria-label={label}
-        value={value}
-        max={total}
-      />
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={value}
+        className="flex gap-1"
+      >
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={`h-1.5 flex-1 rounded-full ${i < value ? "bg-primary" : "bg-muted"}`}
+          />
+        ))}
+      </div>
     </div>
   );
   const action = (

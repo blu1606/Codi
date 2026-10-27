@@ -1,0 +1,844 @@
+{
+  "name": "Nguyễn Minh Anh",
+  "courses": [
+    {
+      "id": "course-react-001",
+      "title": "React từ cơ bản đến dự án thực tế",
+      "slug": "react-du-an-thuc-te",
+      "cover": null,
+      "hidden": false,
+      "goal": null,
+      "goalSetAt": null,
+      "weeklyGoalMinutes": null,
+      "lastActiveAt": "2026-10-24T00:45:16.000Z",
+      "pathStatus": "none",
+      "showDiagnostic": false,
+      "complete": false,
+      "done": 10,
+      "total": 13,
+      "percent": 77,
+      "nextLessonId": "6b4f6e85-525d-42a4-a0ff-969f48a712d9",
+      "skills": [
+        {
+          "id": 148,
+          "name": "JSX",
+          "level": 0
+        },
+        {
+          "id": 149,
+          "name": "Component",
+          "level": 0
+        },
+        {
+          "id": 150,
+          "name": "Props",
+          "level": 0
+        },
+        {
+          "id": 151,
+          "name": "State (useState)",
+          "level": 0
+        },
+        {
+          "id": 152,
+          "name": "Sự kiện & Form",
+          "level": 0
+        },
+        {
+          "id": 153,
+          "name": "Danh sách & key",
+          "level": 0
+        },
+        {
+          "id": 154,
+          "name": "useEffect",
+          "level": 0
+        },
+        {
+          "id": 155,
+          "name": "Gọi API",
+          "level": 0
+        },
+        {
+          "id": 156,
+          "name": "React Router",
+          "level": 0
+        },
+        {
+          "id": 157,
+          "name": "Context API",
+          "level": 0
+        }
+      ],
+      "lessons": [
+        {
+          "id": "6b4abbe5-9d95-4186-a1c1-75623f8bcfbe",
+          "title": "Giới thiệu React và cài đặt môi trường",
+          "status": "done",
+          "lock": null,
+          "results": []
+        },
+        {
+          "id": "b38bdfaf-a64f-41e3-adf9-e845f0478113",
+          "title": "JSX hoạt động thế nào",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 116,
+              "title": "Quiz: JSX hoạt động thế nào",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "5333b3b8-aa51-4bfb-a3ff-5dc0f3dbe4f6",
+          "title": "Component đầu tiên của bạn",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 117,
+              "title": "Quiz: Component đầu tiên của bạn",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "dbbe4b17-aeb1-4ed9-a010-4d7c11d4f9bc",
+          "title": "Truyền dữ liệu bằng Props",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 118,
+              "title": "Quiz: Truyền dữ liệu bằng Props",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "b4c54255-c762-4a59-ab2c-7e6a23486ff5",
+          "title": "State với useState",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 119,
+              "title": "Quiz: State với useState",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            },
+            {
+              "id": 120,
+              "title": "Bài tập: State với useState",
+              "type": "assignment",
+              "maxScore": 10,
+              "passingScore": 50,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "712a4023-d1dd-4861-a771-836ffd4d2257",
+          "title": "Xử lý sự kiện và form",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 121,
+              "title": "Quiz: Xử lý sự kiện và form",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "e915c647-dbf9-419b-a8b7-1eae176bc0be",
+          "title": "Thử thách: Reducer quản lý danh sách công việc",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 122,
+              "title": "Bài tập code: Thử thách: Reducer quản lý danh sách công việc",
+              "type": "coding",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "2a901123-b70f-4b4b-a3c5-47d3f9da5592",
+          "title": "Render danh sách và key",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 123,
+              "title": "Quiz: Render danh sách và key",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "5d2b3592-190b-46ea-a244-f7b261670726",
+          "title": "useEffect và vòng đời component",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 124,
+              "title": "Quiz: useEffect và vòng đời component",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "15edd11c-192e-411a-a21b-fe514b8ca299",
+          "title": "Gọi API với fetch",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 125,
+              "title": "Quiz: Gọi API với fetch",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            },
+            {
+              "id": 126,
+              "title": "Bài tập: Gọi API với fetch",
+              "type": "assignment",
+              "maxScore": 10,
+              "passingScore": 50,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "6b4f6e85-525d-42a4-a0ff-969f48a712d9",
+          "title": "React Router cơ bản",
+          "status": "next",
+          "lock": null,
+          "results": [
+            {
+              "id": 127,
+              "title": "Quiz: React Router cơ bản",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "e78e06f3-cd16-4d9b-a12e-5e5b81385f28",
+          "title": "Context API chia sẻ state",
+          "status": "todo",
+          "lock": null,
+          "results": [
+            {
+              "id": 128,
+              "title": "Quiz: Context API chia sẻ state",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "556b7d8e-2110-4f8b-a61a-6e1b6cc48f1a",
+          "title": "Dự án: Ứng dụng quản lý công việc",
+          "status": "todo",
+          "lock": null,
+          "results": [
+            {
+              "id": 129,
+              "title": "Bài tập: Dự án: Ứng dụng quản lý công việc",
+              "type": "assignment",
+              "maxScore": 10,
+              "passingScore": 50,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "course-python-001",
+      "title": "Python cho phân tích dữ liệu",
+      "slug": "python-phan-tich-du-lieu",
+      "cover": null,
+      "hidden": false,
+      "goal": null,
+      "goalSetAt": null,
+      "weeklyGoalMinutes": null,
+      "lastActiveAt": "2026-10-06T11:03:40.000Z",
+      "pathStatus": "none",
+      "showDiagnostic": false,
+      "complete": false,
+      "done": 2,
+      "total": 5,
+      "percent": 40,
+      "nextLessonId": "16f0f68e-7be3-4326-ae5c-f4af5a12717e",
+      "skills": [],
+      "lessons": [
+        {
+          "id": "2b34d656-0ab0-4ebc-a702-7bf8615a4963",
+          "title": "Cú pháp Python",
+          "status": "done",
+          "lock": null,
+          "results": []
+        },
+        {
+          "id": "d418dc47-b64e-42da-a43c-4d718a457b3d",
+          "title": "Cấu trúc dữ liệu",
+          "status": "done",
+          "lock": null,
+          "results": []
+        },
+        {
+          "id": "16f0f68e-7be3-4326-ae5c-f4af5a12717e",
+          "title": "DataFrame",
+          "status": "next",
+          "lock": null,
+          "results": []
+        },
+        {
+          "id": "031fe014-955b-48cd-a21d-e7728208f197",
+          "title": "Làm sạch dữ liệu",
+          "status": "todo",
+          "lock": null,
+          "results": []
+        },
+        {
+          "id": "fd3af5fa-2b7b-4026-ac33-e226f2379dee",
+          "title": "Trực quan hoá",
+          "status": "todo",
+          "lock": null,
+          "results": []
+        }
+      ]
+    },
+    {
+      "id": "course-js-001",
+      "title": "JavaScript nền tảng",
+      "slug": "javascript-nen-tang",
+      "cover": null,
+      "hidden": false,
+      "goal": "project",
+      "goalSetAt": "2026-08-16T09:14:00.000Z",
+      "weeklyGoalMinutes": 300,
+      "lastActiveAt": "2026-10-07T10:00:00.000Z",
+      "pathStatus": "ready",
+      "showDiagnostic": false,
+      "complete": false,
+      "done": 5,
+      "total": 11,
+      "percent": 45,
+      "nextLessonId": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+      "skills": [
+        {
+          "id": 158,
+          "name": "Biến & kiểu dữ liệu",
+          "level": 4
+        },
+        {
+          "id": 159,
+          "name": "Hàm",
+          "level": 3
+        },
+        {
+          "id": 160,
+          "name": "Mảng",
+          "level": 3
+        },
+        {
+          "id": 161,
+          "name": "Đối tượng",
+          "level": 2
+        },
+        {
+          "id": 162,
+          "name": "DOM & sự kiện",
+          "level": 1
+        },
+        {
+          "id": 163,
+          "name": "Bất đồng bộ",
+          "level": 0
+        },
+        {
+          "id": 164,
+          "name": "Closure",
+          "level": 0
+        },
+        {
+          "id": 165,
+          "name": "Xử lý lỗi",
+          "level": 0
+        },
+        {
+          "id": 166,
+          "name": "Module & ES6",
+          "level": 0
+        },
+        {
+          "id": 167,
+          "name": "Spread & Destructuring",
+          "level": 0
+        },
+        {
+          "id": 168,
+          "name": "Template Literal",
+          "level": 0
+        },
+        {
+          "id": 169,
+          "name": "Regular Expression",
+          "level": 0
+        }
+      ],
+      "lessons": [
+        {
+          "id": "eab288f3-a31f-4ad3-a16f-da038f93e4c1",
+          "title": "Biến, hằng và kiểu dữ liệu",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 131,
+              "title": "Quiz: Biến, hằng và kiểu dữ liệu",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": "graded",
+              "score": 100,
+              "percent": 100,
+              "passed": true,
+              "feedback": null,
+              "gradedAt": "2026-08-26T18:57:36.000Z"
+            }
+          ]
+        },
+        {
+          "id": "17a6b1bd-96b7-4fb7-af82-222a6ca41ee7",
+          "title": "Hàm và phạm vi",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 132,
+              "title": "Quiz: Hàm và phạm vi",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": "graded",
+              "score": 50,
+              "percent": 50,
+              "passed": false,
+              "feedback": null,
+              "gradedAt": "2026-09-06T04:43:12.000Z"
+            },
+            {
+              "id": 133,
+              "title": "Bài tập: Hàm và phạm vi",
+              "type": "assignment",
+              "maxScore": 10,
+              "passingScore": 50,
+              "status": "graded",
+              "score": 8.5,
+              "percent": 85,
+              "passed": true,
+              "feedback": "Làm tốt! Lưu ý xử lý số âm và giá trị không phải số — hàm hiện trả về \"NaN ₫\". Thêm một kiểm tra đầu vào là đạt điểm tối đa.",
+              "gradedAt": "2026-08-27T09:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "id": "24ce2fab-9dbf-4900-a51d-12aaf3988c36",
+          "title": "Làm việc với mảng",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 134,
+              "title": "Quiz: Làm việc với mảng",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": "graded",
+              "score": 100,
+              "percent": 100,
+              "passed": true,
+              "feedback": null,
+              "gradedAt": "2026-09-16T14:28:48.000Z"
+            }
+          ]
+        },
+        {
+          "id": "56f73c1d-47fc-4807-ae52-87089d6d07c4",
+          "title": "Đối tượng và destructuring",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 136,
+              "title": "Bài tập: Đối tượng và destructuring",
+              "type": "assignment",
+              "maxScore": 10,
+              "passingScore": 50,
+              "status": "pending",
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            },
+            {
+              "id": 135,
+              "title": "Quiz: Đối tượng và destructuring",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": "graded",
+              "score": 100,
+              "percent": 100,
+              "passed": true,
+              "feedback": null,
+              "gradedAt": "2026-09-27T00:14:24.000Z"
+            }
+          ]
+        },
+        {
+          "id": "bedaf193-5537-4de7-a390-f4b157b55307",
+          "title": "Hướng dẫn: Viết và chạy JavaScript",
+          "status": "done",
+          "lock": null,
+          "results": [
+            {
+              "id": 137,
+              "title": "Hướng dẫn code: Hướng dẫn: Viết và chạy JavaScript",
+              "type": "coding",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+          "title": "Thử thách: Thống kê đơn hàng",
+          "status": "next",
+          "lock": null,
+          "results": [
+            {
+              "id": 138,
+              "title": "Bài tập code: Thử thách: Thống kê đơn hàng",
+              "type": "coding",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "568f51b3-6f4e-485c-a09c-5affed8c4954",
+          "title": "Chọn và thay đổi phần tử DOM",
+          "status": "todo",
+          "lock": null,
+          "results": [
+            {
+              "id": 139,
+              "title": "Quiz: Chọn và thay đổi phần tử DOM",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "fbda8d8b-89b6-4161-a581-4c9b55a6cec5",
+          "title": "Sự kiện và event delegation",
+          "status": "todo",
+          "lock": null,
+          "results": [
+            {
+              "id": 140,
+              "title": "Quiz: Sự kiện và event delegation",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "e463a4b9-1379-4b14-a630-32395e242c51",
+          "title": "Promise là gì",
+          "status": "todo",
+          "lock": null,
+          "results": [
+            {
+              "id": 141,
+              "title": "Quiz: Promise là gì",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "a8689f9e-7ba7-4e58-a193-f1ab1a6b2e89",
+          "title": "async/await và xử lý lỗi",
+          "status": "todo",
+          "lock": null,
+          "results": [
+            {
+              "id": 142,
+              "title": "Quiz: async/await và xử lý lỗi",
+              "type": "quiz",
+              "maxScore": 100,
+              "passingScore": 70,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        },
+        {
+          "id": "6ed0d48c-2494-4949-a962-8c00a37c7bd9",
+          "title": "Dự án nhỏ: Ứng dụng thời tiết",
+          "status": "todo",
+          "lock": null,
+          "results": [
+            {
+              "id": 143,
+              "title": "Bài tập: Dự án nhỏ: Ứng dụng thời tiết",
+              "type": "assignment",
+              "maxScore": 10,
+              "passingScore": 50,
+              "status": null,
+              "score": null,
+              "percent": null,
+              "passed": null,
+              "feedback": null,
+              "gradedAt": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "continueCourseId": "course-react-001",
+  "weekly": {
+    "minutes": 63,
+    "goalMinutes": 300,
+    "assumed": false,
+    "courseId": "course-js-001",
+    "streak": 0,
+    "days": [
+      {
+        "date": "2026-10-26",
+        "studied": false,
+        "today": true
+      },
+      {
+        "date": "2026-10-27",
+        "studied": false,
+        "today": false
+      },
+      {
+        "date": "2026-10-28",
+        "studied": false,
+        "today": false
+      },
+      {
+        "date": "2026-10-29",
+        "studied": false,
+        "today": false
+      },
+      {
+        "date": "2026-10-30",
+        "studied": false,
+        "today": false
+      },
+      {
+        "date": "2026-10-31",
+        "studied": false,
+        "today": false
+      },
+      {
+        "date": "2026-11-01",
+        "studied": false,
+        "today": false
+      }
+    ]
+  },
+  "stats": {
+    "active": 3,
+    "completed": 0,
+    "lessons": 17,
+    "pending": 1,
+    "answered": 1,
+    "feedback": 1
+  },
+  "latestFeedback": {
+    "courseId": "course-js-001",
+    "courseTitle": "JavaScript nền tảng",
+    "lessonTitle": "Hàm và phạm vi",
+    "score": 8.5,
+    "maxScore": 10,
+    "text": "Làm tốt! Lưu ý xử lý số âm và giá trị không phải số — hàm hiện trả về \"NaN ₫\". Thêm một kiểm tra đầu vào là đạt điểm tối đa."
+  },
+  "recommendations": [
+    {
+      "id": "dev-practice-quiz-code",
+      "slug": "dev-practice-quiz-code",
+      "title": "TypeScript & JavaScript — Thực hành Quiz và Code",
+      "level": "Beginner",
+      "price": 0,
+      "cover": null
+    },
+    {
+      "id": "course-git-001",
+      "slug": "git-github-cho-nguoi-moi",
+      "title": "Git & GitHub cho người mới",
+      "level": "Beginner",
+      "price": 0,
+      "cover": null
+    },
+    {
+      "id": "course-node-001",
+      "slug": "nodejs-express-rest-api",
+      "title": "Node.js & Express xây dựng REST API",
+      "level": "Intermediate",
+      "price": 990000,
+      "cover": null
+    }
+  ]
+}

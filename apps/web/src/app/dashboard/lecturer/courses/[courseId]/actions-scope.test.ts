@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/services", () => ({ db: mocks }));
 vi.mock("@/lib/lecturer-auth", () => ({ readLecturerIdentity: async () => ({ user: await (mocks.verifySession)(), session: { id: "session-1" } }), verifyLecturerSession: mocks.verifySession }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
+const aiMocks = vi.hoisted(() => ({ generateText: vi.fn() }));
+vi.mock("ai", async (importOriginal) => ({ ...(await importOriginal<typeof import("ai")>()), generateText: aiMocks.generateText }));
+vi.mock("@/lib/ai", () => ({ getLlmProvider: () => ({ id: "test", getModel: () => "test-model" }) }));
 
 import {
   addLesson, deleteChapter, deleteLesson, generateAiQuizQuestions,
@@ -99,7 +102,7 @@ beforeEach(() => {
       { id: "other-owned-chapter", courseId: "other-owned", position: 0 },
     ],
     course_lessons: [
-      { id: "own-lesson", chapterId: "own-chapter", title: "Own lesson", position: 0 },
+      { id: "own-lesson", chapterId: "own-chapter", title: "Own lesson", position: 0, body: "Nội dung bài học" },
       { id: "own-next-lesson", chapterId: "own-chapter", title: "Own next lesson", position: 1 },
       { id: "foreign-lesson", chapterId: "foreign-chapter", title: "Private lesson", position: 0 },
       { id: "foreign-next-lesson", chapterId: "foreign-chapter", position: 1 },
@@ -108,6 +111,9 @@ beforeEach(() => {
     ],
   };
   mocks.verifySession.mockResolvedValue({ id: "lecturer" });
+  aiMocks.generateText.mockResolvedValue({
+    output: { questions: [{ text: "Câu hỏi", options: ["a", "b", "c", "d"], correctIndex: 0, explanation: "" }] },
+  });
   mocks.select.mockImplementation(select);
   mocks.insert.mockImplementation((table: Table) => mutation("insert", table));
   mocks.update.mockImplementation((table: Table) => mutation("update", table));

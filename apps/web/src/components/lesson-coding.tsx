@@ -367,7 +367,7 @@ export default function LessonCoding({
           </AlertDescription>
         </Alert>
       )}
-      <div className="grid min-w-0 items-start gap-4 @[42rem]/coding:grid-cols-[minmax(17rem,1fr)_minmax(0,1.4fr)]">
+      <div className="grid min-w-0 items-start gap-4 @[42rem]/coding:grid-cols-[minmax(17rem,1fr)_minmax(0,1.4fr)] @[56rem]/coding:grid-cols-[minmax(15rem,1fr)_minmax(0,1.4fr)_minmax(15rem,1fr)]">
         <div className="min-w-0 space-y-5 rounded-lg border bg-card p-4 @[42rem]/coding:sticky @[42rem]/coding:top-20 @[42rem]/coding:row-span-2">
           <h3 className="font-semibold">Yêu cầu</h3>
           <ol className="list-decimal space-y-4 pl-5 text-sm leading-relaxed marker:font-medium marker:text-muted-foreground">
@@ -428,7 +428,7 @@ export default function LessonCoding({
             </div>
           </details>
         </div>
-        <div className="min-w-0 space-y-3">
+        <div className="min-w-0 space-y-3 @[56rem]/coding:col-start-2 @[56rem]/coding:row-start-1">
           <div className="overflow-hidden rounded-lg bg-code-background text-code-foreground">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-code-bar px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -589,7 +589,7 @@ export default function LessonCoding({
             </details>
           </div>
         </div>
-        <div className="min-w-0 overflow-hidden rounded-lg border @[42rem]/coding:col-start-2">
+        <div className="min-w-0 overflow-hidden rounded-lg border @[56rem]/coding:col-start-3 @[56rem]/coding:row-span-2 @[56rem]/coding:row-start-1">
           <div
             className="flex flex-wrap gap-1 border-b bg-muted/20 px-3 py-2"
             role="tablist"

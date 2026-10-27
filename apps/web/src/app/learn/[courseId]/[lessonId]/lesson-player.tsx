@@ -44,6 +44,7 @@ import type {
 } from "@/lib/lesson-player-contract";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 import { ReviewForm } from "../course-home";
+import { LessonQAPanel } from "@/components/tutor/lesson-qa-panel";
 import {
   TutorBridgeContext,
   type TutorBridge,
@@ -51,6 +52,7 @@ import {
   type TutorOpenRequest,
 } from "@/components/ai-tutor/tutor-bridge";
 import TutorPanel from "@/components/ai-tutor/tutor-panel";
+import { TutorLauncher } from "@/components/ai-tutor/tutor-launcher";
 import TutorSelectionToolbar from "@/components/ai-tutor/tutor-selection-toolbar";
 
 // Remembered per browser tab so the panel stays open while the learner moves between lessons.
@@ -67,14 +69,21 @@ function rememberTutor(open: boolean) {
 export default function LessonPlayer({
   courseId,
   lessonId,
+  viewerName = null,
+  initialTutor,
 }: {
   courseId: string;
   lessonId: string;
+  /** Signed-in learner's name, for the tutor greeting. */
+  viewerName?: string | null;
+  /** Opens the tutor at mount (lab screens only): the launcher popup, or the panel with an optional first question. */
+  initialTutor?: { mode: "popup" } | { mode: "panel"; ask?: string };
 }) {
   const [data, setData] = useState<LessonPlayerView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sidebar, setSidebar] = useState(false);
+  const [qaOpen, setQaOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [materialId, setMaterialId] = useState<number | null>(null);
@@ -85,10 +94,15 @@ export default function LessonPlayer({
   const content = useRef<HTMLDivElement>(null);
   const codeBridge = useRef<TutorCodeBridge | null>(null);
   const [codeVersion, setCodeVersion] = useState(0);
-  const [tutorOpen, setTutorOpen] = useState(false);
+  const [tutorOpen, setTutorOpen] = useState(initialTutor?.mode === "panel");
+  const [launcherOpen, setLauncherOpen] = useState(initialTutor?.mode === "popup");
   const [tutorRequest, setTutorRequest] = useState<
     (TutorOpenRequest & { id: number }) | null
-  >(null);
+  >(() =>
+    initialTutor?.mode === "panel" && initialTutor.ask
+      ? { id: 1, ask: initialTutor.ask }
+      : null,
+  );
   const [wide, setWide] = useState(false);
   useEffect(() => {
     try {
@@ -436,15 +450,22 @@ export default function LessonPlayer({
             <Button
               variant={tutorOpen ? "secondary" : "outline"}
               aria-pressed={tutorOpen}
-              onClick={() => toggleTutor(!tutorOpen)}
+              onClick={() => {
+                const next = !tutorOpen;
+                toggleTutor(next);
+                if (next) setQaOpen(false);
+              }}
             >
               <Sparkles className="size-4" />
               AI trợ lý
             </Button>
             <Button
-              variant="outline"
+              variant={qaOpen ? "secondary" : "outline"}
+              aria-pressed={qaOpen}
               onClick={() => {
-                toast("Tính năng Hỏi đáp giảng viên & lớp học đang được kết nối.");
+                const next = !qaOpen;
+                setQaOpen(next);
+                if (next) toggleTutor(false);
               }}
             >
               <MessageCircle className="size-4" />
@@ -771,6 +792,21 @@ export default function LessonPlayer({
           codeVersion={codeVersion}
           docked={wide}
           onClose={() => toggleTutor(false)}
+          expandHref={
+            `/learn/${encodeURIComponent(courseId)}/tutor?lesson=${encodeURIComponent(lessonId)}` as Route
+          }
+        />
+      )}
+      {!tutorOpen && !qaOpen && (
+        <TutorLauncher
+          endpoint={`${endpoint}/tutor`}
+          viewerName={viewerName}
+          open={launcherOpen}
+          onOpenChange={setLauncherOpen}
+          onAsk={(ask) => {
+            tutor.open(ask ? { ask } : {});
+            setLauncherOpen(false);
+          }}
         />
       )}
       <TutorSelectionToolbar root={content} />
@@ -802,6 +838,13 @@ export default function LessonPlayer({
           }}
         />
       )}
+      <LessonQAPanel
+        open={qaOpen}
+        onOpenChange={setQaOpen}
+        courseId={courseId}
+        lessonId={lessonId}
+        lessonTitle={data.lesson.title}
+      />
     </main>
     </TutorBridgeContext.Provider>
   );

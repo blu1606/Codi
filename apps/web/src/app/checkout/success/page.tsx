@@ -129,7 +129,7 @@ export default function CheckoutSuccessPage({
         <div className="flex size-16 items-center justify-center rounded-full bg-success-soft text-success">
           <Check className="size-9 stroke-[2.5]" />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">Thanh toán thành công!</h1>
+        <h1 className="text-3xl tracking-tight">Thanh toán thành công!</h1>
         <p className="text-muted-foreground text-sm">
           Đơn <span className="font-mono font-semibold text-foreground">{order.code}</span> · {formatVnd(order.totalAmount)} · {formatDatetime(order.paidAt)}
         </p>

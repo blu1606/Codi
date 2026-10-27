@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { CourseLogo } from "@codi-1/ui/components/course-logo";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -12,7 +13,6 @@ import {
   RotateCcw,
   Sparkles,
   Ticket,
-  Trash2,
   X,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
@@ -24,6 +24,11 @@ import { undoToast } from "@codi-1/ui/components/undo-toast";
 import { toast } from "sonner";
 import type { CartCourse, CartSummaryData } from "@/lib/cart-contract";
 import { formatVnd } from "@/lib/cart-contract";
+import { COURSE_LEVEL_LABELS, type CourseLevel } from "@/lib/course-constants";
+
+function levelLabel(level: string): string {
+  return COURSE_LEVEL_LABELS[level as CourseLevel] ?? level;
+}
 
 export function CartView() {
   const router = useRouter();
@@ -342,7 +347,7 @@ export function CartView() {
         </Alert>
       )}
 
-      <h1 className="font-display mb-6 text-2xl font-bold tracking-tight sm:text-3xl">
+      <h1 className="font-display mb-6 text-2xl tracking-tight sm:text-3xl">
         Giỏ hàng {items.length > 0 && <span className="text-muted-foreground font-normal">({items.length})</span>}
       </h1>
 
@@ -377,60 +382,46 @@ export function CartView() {
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           {/* Cart Item List */}
           <div className="lg:col-span-8">
-            <ul className="space-y-4">
+            <ul className="divide-y overflow-hidden rounded-lg border bg-card">
               {items.map((course) => (
-                <li key={course.id}>
-                  <Card className="overflow-hidden transition-shadow hover:shadow-sm">
-                    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-md bg-muted">
-                          {course.coverImageUrl ? (
-                            <Image
-                              src={course.coverImageUrl}
-                              alt=""
-                              fill
-                              sizes="112px"
-                              className="object-cover"
-                              unoptimized
-                            />
-                          ) : (
-                            <div className="flex size-full items-center justify-center text-muted-foreground">
-                              <BookOpen className="size-8 stroke-[1.5]" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0 space-y-1">
-                          <Link
-                            href={{ pathname: `/courses/${course.slug}` }}
-                            className="font-semibold text-foreground hover:text-primary hover:underline line-clamp-1"
-                          >
-                            {course.title}
-                          </Link>
-                          <p className="text-xs text-muted-foreground">
-                            {course.lecturerName} · {course.level}
-                          </p>
-                          <div className="font-semibold text-primary sm:hidden">
-                            {formatVnd(course.price)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between border-t pt-3 sm:border-0 sm:pt-0 sm:gap-6">
-                        <span className="hidden text-base font-semibold text-primary sm:inline-block">
-                          {formatVnd(course.price)}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveItem(course)}
-                          aria-label={`Xoá ${course.title} khỏi giỏ`}
-                          className="size-9 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                <li key={course.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="relative size-16 shrink-0 overflow-hidden rounded-sm bg-muted">
+                    {course.coverImageUrl ? (
+                      <Image
+                        src={course.coverImageUrl}
+                        alt=""
+                        fill
+                        sizes="64px"
+                        className="object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <CourseLogo slug={course.slug} title={course.title} size="sm" className="size-full rounded-none" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={{ pathname: `/courses/${course.slug}` }}
+                      className="line-clamp-2 text-sm font-semibold text-foreground hover:text-primary hover:underline"
+                    >
+                      {course.title}
+                    </Link>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {course.lecturerName} · {levelLabel(course.level)}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-primary">
+                    {formatVnd(course.price)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveItem(course)}
+                    aria-label={`Xoá ${course.title} khỏi giỏ`}
+                    className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="size-4" />
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -496,8 +487,9 @@ export function CartView() {
                           <span>{voucherError}</span>
                         </p>
                       ) : (
+                        // Codes from `db:seed-mockup`; remove before real launch.
                         <p className="text-xs text-muted-foreground">
-                          Thử WELCOME20 (đơn từ 500.000 ₫) hoặc SUMMER15 (đã hết hạn).
+                          <span className="font-medium">Chỉ để test:</span> thử WELCOME20 (đơn từ 500.000 ₫) hoặc SUMMER15 (đã hết hạn).
                         </p>
                       )}
                     </form>

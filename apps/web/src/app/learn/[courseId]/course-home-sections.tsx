@@ -3,11 +3,9 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
-  ArrowRight,
   CheckCircle2,
   GraduationCap,
   LoaderCircle,
-  LockKeyhole,
   Star,
   X,
 } from "lucide-react";
@@ -17,17 +15,13 @@ import { Card, CardContent } from "@codi-1/ui/components/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@codi-1/ui/components/dialog";
-import { MasteryChip } from "@codi-1/ui/components/mastery-chip";
 import { Textarea } from "@codi-1/ui/components/textarea";
 import { cn } from "@codi-1/ui/lib/utils";
-import {
-  LESSON_PATH_LABELS,
-  type CoursePathView,
-} from "@/lib/learning-path-contract";
+import { LearningProgressBar } from "@/components/learner-workspace";
+import type { CoursePathView } from "@/lib/learning-path-contract";
 type LessonUrl = (id: string) => Route;
 type CurrentLesson = CoursePathView["rows"][number] | undefined;
 export function CourseOverview({
@@ -47,8 +41,8 @@ export function CourseOverview({
 }) {
   return (
     <Card>
-      <CardContent className="flex flex-col gap-6 py-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-4">
+      <CardContent className="flex flex-col gap-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-3">
           <h1 className="text-2xl font-semibold">{data.course.title}</h1>
           <p className="text-sm text-muted-foreground">
             Mục tiêu: <strong className="text-foreground">{goal}</strong>
@@ -58,24 +52,29 @@ export function CourseOverview({
             </Button>
           </p>
           <div className="flex items-center gap-4">
-            <progress
-              aria-label="Tiến độ khoá học"
-              max={100}
-              value={data.percent}
-              className="h-3 min-w-0 flex-1 accent-primary"
-            />
+            <div className="min-w-0 flex-1">
+              <LearningProgressBar
+                value={data.percent}
+                label="Tiến độ khoá học"
+              />
+            </div>
             <span className="shrink-0 text-sm">
               {data.done}/{data.total} bài · {data.percent}%
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col gap-3">
+        <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
           {current && !data.complete && (
-            <Link className={buttonVariants()} href={lessonUrl(current.id)}>
-              Học tiếp <ArrowRight className="size-4" />
-            </Link>
+            <>
+              <Link className={buttonVariants({ size: "lg" })} href={lessonUrl(current.id)}>
+                Học tiếp
+              </Link>
+              <span className="max-w-64 truncate text-xs text-muted-foreground">
+                {current.title}
+              </span>
+            </>
           )}
-          <Button variant="outline" onClick={onReview}>
+          <Button variant="outline" size="sm" onClick={onReview}>
             {data.review ? "Sửa đánh giá" : "Đánh giá khóa học"}
           </Button>
         </div>
@@ -236,115 +235,6 @@ export function CourseCompletion({
   );
 }
 
-export function LessonPath({
-  data,
-  lessonUrl,
-}: {
-  data: CoursePathView;
-  lessonUrl: LessonUrl;
-}) {
-  return (
-    <section className="space-y-4" aria-label="Các bài theo thứ tự lộ trình">
-      {!data.rows.length && (
-        <Card>
-          <CardContent className="py-6 text-muted-foreground">
-            Khoá học chưa có bài học được xuất bản.
-          </CardContent>
-        </Card>
-      )}
-      <ol className="space-y-3">
-        {data.rows.map((row, index) => (
-          <li key={row.id}>
-            <Card
-              className={cn(
-                (row.status === "next" || row.status === "active") &&
-                  "border-primary",
-                data.highlights.includes(row.id) && "border-info bg-info-soft",
-              )}
-            >
-              <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-start">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold">
-                  {row.status === "done" ? (
-                    <CheckCircle2 className="size-5 text-success" />
-                  ) : row.status === "locked" ? (
-                    <LockKeyhole className="size-5 text-muted-foreground" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <div className="min-w-0 flex-1 space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    {row.chapterTitle}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {row.status === "locked" ? (
-                      <h2 className="font-semibold text-muted-foreground">
-                        {row.title}
-                      </h2>
-                    ) : (
-                      <h2 className="font-semibold">
-                        <Link
-                          href={lessonUrl(row.id)}
-                          className="hover:underline"
-                        >
-                          {row.title}
-                        </Link>
-                      </h2>
-                    )}
-                    {data.highlights.includes(row.id) && (
-                      <span className="rounded-full bg-info-soft px-2 py-1 text-xs text-info">
-                        Mới cập nhật
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                    <span>{Math.ceil(row.durationSeconds / 60)} phút</span>
-                    {row.mastery.map((c) => (
-                      <span
-                        key={c.id}
-                        className="inline-flex items-center gap-1"
-                      >
-                        <span>{c.name}:</span>
-                        <MasteryChip level={c.level} />
-                      </span>
-                    ))}
-                  </div>
-                  {row.lock && row.status !== "done" ? (
-                    <p className="text-sm">
-                      Cần học trước: {row.lock.concept} ({row.lock.lessonTitle})
-                    </p>
-                  ) : (
-                    <details
-                      open={row.status === "next" || row.status === "active"}
-                    >
-                      <summary className="cursor-pointer text-sm text-primary">
-                        Vì sao?
-                      </summary>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {row.reason}
-                      </p>
-                    </details>
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    "w-fit shrink-0 rounded-full px-3 py-1 text-xs",
-                    row.status === "done"
-                      ? "bg-success-soft text-success"
-                      : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {LESSON_PATH_LABELS[row.status]}
-                </span>
-              </CardContent>
-            </Card>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
 export function ReviewForm({
   data,
   initialRating,
@@ -373,8 +263,9 @@ export function ReviewForm({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Đánh giá khóa học</DialogTitle>
-          <DialogDescription>{data.course.title}</DialogDescription>
+          <DialogTitle>
+            {data.review ? "Sửa đánh giá" : `Đánh giá "${data.course.title}"`}
+          </DialogTitle>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -401,10 +292,14 @@ export function ReviewForm({
             }
           }}
         >
+          <div className="space-y-2">
+            <span className="text-sm font-medium">
+              Đánh giá của bạn <span className="text-destructive">*</span>
+            </span>
           <div
             className="flex flex-wrap gap-2"
-            role="group"
-            aria-label="Chọn số sao"
+            role="radiogroup"
+            aria-label="Số sao"
           >
             {[1, 2, 3, 4, 5].map((n) => (
               <Button
@@ -413,7 +308,8 @@ export function ReviewForm({
                 size="icon"
                 variant="ghost"
                 aria-label={`${n} sao`}
-                aria-pressed={rating === n}
+                role="radio"
+                aria-checked={rating === n}
                 disabled={pending}
                 onClick={() => setRating(n)}
               >
@@ -426,8 +322,14 @@ export function ReviewForm({
               </Button>
             ))}
           </div>
+          {!rating && (
+            <span className="text-sm text-muted-foreground">
+              Chọn số sao để gửi đánh giá.
+            </span>
+          )}
+          </div>
           <label htmlFor="course-review" className="text-sm">
-            Nhận xét (không bắt buộc)
+            Nhận xét <span className="text-muted-foreground">(không bắt buộc)</span>
           </label>
           <Textarea
             id="course-review"
@@ -437,10 +339,24 @@ export function ReviewForm({
             onChange={(event) => setText(event.target.value)}
           />
           {error && <Alert variant="destructive">{error}</Alert>}
-          <Button type="submit" className="min-w-32" disabled={pending}>
-            {pending && <LoaderCircle className="size-4 animate-spin" />}Lưu
-            đánh giá
-          </Button>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={pending}
+              onClick={() => onOpenChange(false)}
+            >
+              Huỷ
+            </Button>
+            <Button
+              type="submit"
+              className="min-w-32"
+              disabled={pending || !rating}
+            >
+              {pending && <LoaderCircle className="size-4 animate-spin" />}
+              {data.review ? "Lưu thay đổi" : "Gửi đánh giá"}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

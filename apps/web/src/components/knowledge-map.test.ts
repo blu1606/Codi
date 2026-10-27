@@ -99,9 +99,9 @@ describe("mockup knowledge map layout", () => {
     await render();
     expect(document.querySelector("select")).toBeNull();
     expect(
-      [...document.querySelectorAll("button")].find((b) =>
-        b.textContent?.includes("Thống kê học tập"),
-      )?.disabled,
+      document
+        .querySelector('a[href="/insights/stats"]')
+        ?.textContent?.includes("Thống kê học tập"),
     ).toBe(true);
     expect(document.body.textContent).toContain("Nên ôn tiếp: Hàm");
     expect(

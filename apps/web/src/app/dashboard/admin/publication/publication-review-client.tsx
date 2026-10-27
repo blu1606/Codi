@@ -467,26 +467,22 @@ export function PublicationReviewClient({
           ───────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Duyệt xuất bản</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Duyệt xuất bản</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Chấm từng tiêu chí, xem trước nội dung học viên, gắn cờ chỗ cần sửa rồi kết luận phê duyệt.
+            Chấm từng tiêu chí, xem trước nội dung, gắn cờ chỗ cần sửa rồi kết luận.
           </p>
         </div>
       </div>
 
       {/* Tabs Filter Queue */}
-      <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+      <div className="flex items-center gap-6 border-b border-border/60">
         <Link
           href={"/dashboard/admin/publication?tab=pending" as any}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            queue.tab === "pending"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50"
-          }`}
+          className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors ${queue.tab === "pending" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           <span>Chờ duyệt</span>
           <span
-            className={`px-1.5 py-0.2 rounded-full text-xs font-semibold ${
+            className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
               queue.tab === "pending"
                 ? "bg-primary-foreground/20 text-primary-foreground"
                 : "bg-muted text-muted-foreground"
@@ -498,15 +494,11 @@ export function PublicationReviewClient({
 
         <Link
           href={"/dashboard/admin/publication?tab=changes" as any}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            queue.tab === "changes"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50"
-          }`}
+          className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors ${queue.tab === "changes" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           <span>Cần sửa / từ chối</span>
           <span
-            className={`px-1.5 py-0.2 rounded-full text-xs font-semibold ${
+            className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
               queue.tab === "changes"
                 ? "bg-primary-foreground/20 text-primary-foreground"
                 : "bg-muted text-muted-foreground"
@@ -518,15 +510,11 @@ export function PublicationReviewClient({
 
         <Link
           href={"/dashboard/admin/publication?tab=approved" as any}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            queue.tab === "approved"
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-muted/50"
-          }`}
+          className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors ${queue.tab === "approved" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           <span>Đã duyệt</span>
           <span
-            className={`px-1.5 py-0.2 rounded-full text-xs font-semibold ${
+            className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${
               queue.tab === "approved"
                 ? "bg-primary-foreground/20 text-primary-foreground"
                 : "bg-muted text-muted-foreground"
@@ -551,7 +539,12 @@ export function PublicationReviewClient({
             <Card className="border border-dashed border-border/80">
               <CardContent className="p-8 text-center text-sm text-muted-foreground">
                 <CheckCircle2 className="size-8 text-muted-foreground/50 mx-auto mb-2" />
-                Không có khoá học nào trong hàng đợi này.
+                <p className="text-sm font-medium text-foreground">
+                  {queue.tab === "pending" ? "Không có khoá học chờ duyệt" : "Không có khoá học"}
+                </p>
+                {queue.tab === "pending" && (
+                  <p className="text-xs mt-1">Yêu cầu mới từ giảng viên sẽ xuất hiện ở đây.</p>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -649,7 +642,7 @@ export function PublicationReviewClient({
                         onClick={() => setShowStudentPreview(true)}
                       >
                         <Eye className="size-3.5 text-primary" />
-                        Xem trước nội dung
+                        Xem trước như học viên
                       </Button>
                     </div>
                   </div>
@@ -671,43 +664,43 @@ export function PublicationReviewClient({
 
                 <CardContent className="pt-4 space-y-4">
                   {/* Tabs chuyển đổi giữa: Tiêu chí, Nội dung, Cờ, Lịch sử */}
-                  <div className="flex items-center gap-1 border-b border-border/50 pb-2.5">
+                  <div className="flex items-center gap-6 border-b border-border/50">
                     <button
                       type="button"
                       onClick={() => setActiveView("criteria")}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`-mb-px border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors cursor-pointer ${
                         activeView === "criteria"
-                          ? "bg-primary/10 text-primary border border-primary/20"
-                          : "text-muted-foreground hover:bg-muted/40"
+                          ? "border-primary text-primary"
+                          : "border-transparent text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      Tiêu chí ({markedCriteriaCount}/{CRITERIA.length})
+                      Tiêu chí
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setActiveView("content")}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`-mb-px border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors cursor-pointer ${
                         activeView === "content"
-                          ? "bg-primary/10 text-primary border border-primary/20"
-                          : "text-muted-foreground hover:bg-muted/40"
+                          ? "border-primary text-primary"
+                          : "border-transparent text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      Nội dung bài học
+                      Nội dung
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setActiveView("flags")}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      className={`-mb-px border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
                         activeView === "flags"
-                          ? "bg-primary/10 text-primary border border-primary/20"
-                          : "text-muted-foreground hover:bg-muted/40"
+                          ? "border-primary text-primary"
+                          : "border-transparent text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <span>Cờ góp ý</span>
+                      <span>Cờ</span>
                       {detail.round.flags.filter((f) => f.status !== "closed").length > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full text-xs bg-warning/15 text-warning font-bold">
+                        <span className="px-1.5 py-0.5 rounded-full text-xs bg-warning/15 text-warning font-bold">
                           {detail.round.flags.filter((f) => f.status !== "closed").length}
                         </span>
                       )}
@@ -716,13 +709,13 @@ export function PublicationReviewClient({
                     <button
                       type="button"
                       onClick={() => setActiveView("history")}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`-mb-px border-b-2 px-1 pb-2.5 pt-1 text-sm font-medium transition-colors cursor-pointer ${
                         activeView === "history"
-                          ? "bg-primary/10 text-primary border border-primary/20"
-                          : "text-muted-foreground hover:bg-muted/40"
+                          ? "border-primary text-primary"
+                          : "border-transparent text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      Lịch sử vòng duyệt ({detail.roundsHistory.length})
+                      Lịch sử
                     </button>
                   </div>
 
@@ -894,7 +887,7 @@ export function PublicationReviewClient({
                                     <span className="truncate pr-1">{l.title}</span>
                                     {lessonFlags.length > 0 && (
                                       <span
-                                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                                           isSel
                                             ? "bg-primary-foreground/20 text-primary-foreground"
                                             : "bg-warning/20 text-warning"
@@ -1485,9 +1478,6 @@ export function PublicationReviewClient({
                 <Card className="border border-border/80 shadow-md">
                   <CardHeader className="pb-3 border-b border-border/50">
                     <CardTitle className="text-base">Kết luận vòng {detail.round.round}</CardTitle>
-                    <CardDescription className="text-xs">
-                      Xác nhận giá bán và đưa ra quyết định duyệt, yêu cầu sửa hoặc từ chối khoá học.
-                    </CardDescription>
                   </CardHeader>
 
                   <CardContent className="pt-4 space-y-4">

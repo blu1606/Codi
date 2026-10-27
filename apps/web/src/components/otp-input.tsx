@@ -12,6 +12,8 @@ interface OtpInputProps {
   disabled?: boolean;
   expiresInSeconds?: number;
   autoFocus?: boolean;
+  /** Inline validation message shown under the digit slots (wrong or expired code). */
+  error?: string | null;
 }
 
 export default function OtpInput({
@@ -22,6 +24,7 @@ export default function OtpInput({
   disabled = false,
   expiresInSeconds = 120, // 2 minutes default
   autoFocus = false,
+  error = null,
 }: OtpInputProps) {
   const [timeLeft, setTimeLeft] = useState(expiresInSeconds);
   const [isResending, setIsResending] = useState(false);
@@ -128,6 +131,8 @@ export default function OtpInput({
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "otp-error" : undefined}
             value={digit}
             disabled={disabled || isExpired}
             onChange={(e) => handleChange(idx, e.target.value)}
@@ -138,6 +143,12 @@ export default function OtpInput({
           />
         ))}
       </div>
+
+      {error && (
+        <p id="otp-error" role="alert" className="text-center text-xs font-medium text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Countdown Timer & Resend Controls */}
       <div className="flex items-center justify-between text-xs text-muted-foreground px-1">

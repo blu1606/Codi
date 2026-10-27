@@ -1006,8 +1006,8 @@ export default function GithubProfilePanel({
       try {
         const result = await authClient.linkSocial({
           provider: "github",
-          callbackURL: "/profile/github",
-          errorCallbackURL: "/profile/github",
+          callbackURL: "/profile?tab=nang-luc",
+          errorCallbackURL: "/profile?tab=nang-luc",
         });
         if (result.error)
           setFailure({
@@ -1127,11 +1127,11 @@ export default function GithubProfilePanel({
             </span>
           )}
           <div className="min-w-0 space-y-1">
-            <h1 className="break-words text-xl font-semibold">
+            <h2 className="break-words text-xl font-semibold">
               {profile?.identity
                 ? `@${profile.identity.login}`
                 : "Phân tích GitHub"}
-            </h1>
+            </h2>
             <p className="text-sm text-muted-foreground">
               {profile
                 ? `Phân tích lúc ${dateLabel(profile.collectedAt)} · ${profile.limitations.coverage.selected} repo được chọn`

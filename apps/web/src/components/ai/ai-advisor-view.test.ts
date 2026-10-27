@@ -148,15 +148,14 @@ describe("AiAdvisorView component - pending guest action replay", () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
     // Skip through the real guest intake UI; no persistent-cache shortcut.
     for (let i = 0; i < 3; i++) await click("Bỏ qua");
-    expect(container.querySelector("header")?.textContent).toContain("quy tắc đối chiếu danh mục khoá học đã xuất bản");
-    expect(container.querySelector("header")?.textContent).toContain("không dùng mô hình AI để phân tích");
-    expect(container.textContent).toContain("Đang đối chiếu danh mục");
-    expect(container.textContent).not.toContain("Codi đang suy nghĩ");
+    // Answers come from the configured model, so the UI must not claim otherwise.
+    expect(container.textContent).not.toContain("không dùng mô hình AI");
+    expect(container.textContent).toContain("Codi đang suy nghĩ");
     await act(async () => {
       finishAnswer(Response.json({ text: "So sánh từ danh mục", courses: [], order: [], followups: [] }));
     });
     const thread = container.querySelector('[role="log"]');
-    expect(thread?.textContent).toContain("Gợi ý theo quy tắc danh mục · Không phải phân tích từ mô hình AI.");
+    expect(thread?.textContent).not.toContain("Không phải phân tích từ mô hình AI");
     expect(thread?.textContent).toContain("So sánh từ danh mục");
   });
 

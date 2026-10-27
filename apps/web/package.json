@@ -23,6 +23,7 @@
     "db:seed-coding": "tsx --env-file=.env scripts/seed-coding-dev.ts",
     "db:split-practice": "tsx --env-file=.env scripts/split-practice-dev.ts",
     "db:seed-mockup": "tsx --env-file=.env scripts/seed-mockup.ts",
+    "demo:snapshot": "varlock run -- tsx scripts/export-demo-fixtures.ts",
     "test:coding:db": "tsx --env-file=.env scripts/verify-coding.ts",
     "test:tutorial:db": "tsx --env-file=.env scripts/verify-tutorial.ts",
     "test:assessments:r2": "tsx --env-file=.env scripts/verify-assignment-r2.ts",

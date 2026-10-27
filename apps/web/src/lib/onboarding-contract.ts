@@ -19,7 +19,20 @@ export const LEVEL_LABELS = {
 } as const;
 const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const step = z.number().int().min(0).max(2);
+const weeklyHours = z.union([z.literal(2), z.literal(5), z.literal(10)]);
+const goalDraft = z
+  .object({
+    goal: z.enum(ONBOARDING_GOALS).optional(),
+    level: z.enum(ONBOARDING_LEVELS).optional(),
+    hours: weeklyHours.optional(),
+  })
+  .strict();
 export const onboardingCommand = z.discriminatedUnion("type", [
+  // The goal wizard runs on the client; it saves once when finished, or as a draft on exit.
+  z.object({ type: z.literal("goal-save-draft"), step, draft: goalDraft }).strict(),
+  z
+    .object({ type: z.literal("goal-commit"), draft: goalDraft.required() })
+    .strict(),
   z
     .object({
       type: z.literal("goal-pick"),
@@ -129,6 +142,13 @@ export function goalTransition(
     );
   if (command.type === "goal-skip")
     return saveGoal(enrollment, { goal: "finish", level: "new", hours: 5 });
+  if (command.type === "goal-commit") return saveGoal(enrollment, command.draft);
+  if (command.type === "goal-save-draft") {
+    // A draft can only point past steps that already have an answer.
+    if ([command.draft.goal, command.draft.level].slice(0, command.step).includes(undefined))
+      throw new OnboardingError("Vui lòng chọn một câu trả lời.", 400);
+    return { goalStep: command.step, goalDraft: command.draft };
+  }
   if (!("step" in command) || command.step !== current)
     throw new OnboardingError("Bước thiết lập đã thay đổi.");
   if (command.type === "goal-back") {
