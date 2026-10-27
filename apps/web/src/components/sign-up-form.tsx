@@ -22,7 +22,7 @@ import { authClient } from "@/lib/auth-client";
 import { safeNext } from "@/lib/safe-redirect";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
-import Loader from "./loader";
+import { AuthFormSkeleton } from "@/components/skeletons/auth-form-skeleton";
 import OtpInput from "./otp-input";
 
 export default function SignUpForm({
@@ -135,7 +135,7 @@ export default function SignUpForm({
   };
 
   if (isPending) {
-    return <Loader />;
+    return <AuthFormSkeleton />;
   }
 
   // Step 2: OTP Verification Screen

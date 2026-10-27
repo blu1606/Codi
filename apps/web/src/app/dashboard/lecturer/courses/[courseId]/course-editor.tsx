@@ -1,5 +1,8 @@
 "use client";
 
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
+import { ListRowsSkeleton } from "@/components/skeletons/list-rows-skeleton";
 import { useEffect, useRef, useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
@@ -1162,21 +1165,11 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
         data.publicationData ? (
           <PublishTabClient courseId={courseId} data={data.publicationData} />
         ) : (
-          <Card className="border border-dashed border-border/80">
-            <CardContent className="p-0">
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CheckCircle2 className="size-5 text-primary animate-pulse" />
-                  </EmptyMedia>
-                  <EmptyTitle>Đang tải thông tin xuất bản...</EmptyTitle>
-                  <EmptyDescription>
-                    Đang kiểm tra các điều kiện xuất bản và lịch sử kiểm duyệt.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            </CardContent>
-          </Card>
+          <LoadingRegion label="Đang tải thông tin xuất bản…" className="space-y-4">
+            <Skeleton className="h-6 w-1/3" />
+            <Skeleton className="h-4 w-2/3" />
+            <ListRowsSkeleton rows={3} withAvatar={false} />
+          </LoadingRegion>
         )
       )}
 
@@ -1200,10 +1193,12 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
           </DialogHeader>
 
           {isLoadingLessonDetails ? (
-            <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground text-sm">
-              <Loader2 className="size-6 animate-spin text-primary" />
-              <span>Đang tải thông tin bài học...</span>
-            </div>
+            <LoadingRegion label="Đang tải thông tin bài học…" className="space-y-4 py-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-10 w-2/3" />
+              <Skeleton className="h-16 w-full" />
+            </LoadingRegion>
           ) : lessonDetailsError ? (
             <Alert variant="destructive">
               <AlertTitle>Không thể tải chi tiết bài học</AlertTitle>

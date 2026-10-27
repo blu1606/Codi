@@ -1,5 +1,6 @@
 "use client";
 
+import { CartSkeleton } from "@/components/skeletons/cart-skeleton";
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -257,11 +258,7 @@ export function CartView() {
   };
 
   if (loading && !data) {
-    return (
-      <div className="mx-auto flex min-h-[50vh] max-w-4xl items-center justify-center p-8">
-        <p className="text-muted-foreground animate-pulse">Đang tải giỏ hàng…</p>
-      </div>
-    );
+    return <CartSkeleton />;
   }
 
   if (error && !data) {
