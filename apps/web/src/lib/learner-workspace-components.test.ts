@@ -251,14 +251,15 @@ describe("learner workspace states", () => {
       document.querySelector('a[href="/insights/knowledge-map?course=owned"]'),
     ).toBeTruthy();
   });
-  it("does not provide a lesson bypass for locked rows and filters completed courses", async () => {
+  it("keeps advisory-locked rows openable with a hint and filters completed courses", async () => {
     const data = structuredClone(overview);
     data.courses[0]!.complete = true;
     data.courses[0]!.lessons[0]!.status = "locked";
     data.courses[0]!.lessons[0]!.lock = "Biến";
     await mount(createElement(ProgressResults, { data, tab: "done" }));
-    expect(document.body.textContent).toContain("Cần học trước: Biến");
-    expect(document.querySelector('a[href="/learn/owned/lesson"]')).toBeNull();
+    expect(document.body.textContent).toContain("Nên học trước: Biến");
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết");
+    expect(document.querySelector('a[href="/learn/owned/lesson"]')).not.toBeNull();
   });
 });
 describe("study tracker", () => {

@@ -14,10 +14,14 @@ import {
   studentActivities,
   studentEnrollments,
 } from "@codi-1/db/schema/student-profile";
-import { LearningPathError } from "./learning-path-contract";
+import {
+  LearningPathError,
+  type AdjustmentOffer,
+} from "./learning-path-contract";
 import {
   loadLearningLessonAccess,
   createLearningPathService,
+  offerPathAdjustment,
   reconcileLearningPath,
 } from "./learning-path-service";
 import { createNotificationService } from "./notification-service";
@@ -28,6 +32,7 @@ import {
   recordPdfPage,
   requireLessonChecklist,
   videoPosition,
+  videoStudied,
   type LessonPlayerCommand,
   type LessonPlayerView,
   type LessonPlayerResponse,
@@ -108,6 +113,7 @@ async function context(
     progress,
     materials,
     requirements,
+    submissions: submissions.map((s) => s.submission),
     checklist: lessonChecklist(
       !!progress?.studiedAt,
       requirements,
@@ -168,6 +174,7 @@ export function createLessonPlayerService(db: Database) {
     ): Promise<LessonPlayerResponse<C>> {
       const command = lessonPlayerCommand.parse(input);
       const mediaOnly = command.type === "video" || command.type === "pdf-page";
+      let adjustment: AdjustmentOffer | null = null;
       const result = await db.transaction(async (tx) => {
         // Every read/write, including resume updates, repeats the role/ownership/publication/prerequisite gate.
         // Assessment writers (#99) must acquire this same enrollment lock before modifying attempts.
@@ -216,7 +223,8 @@ export function createLessonPlayerService(db: Database) {
             );
             media[String(material.id)] = { seconds };
             values.lastPositionSeconds = seconds;
-            if (command.ended) values.studiedAt = p?.studiedAt ?? now;
+            if (videoStudied(seconds, material.durationSeconds, command.ended))
+              values.studiedAt = p?.studiedAt ?? now;
           } else {
             if (!["pdf", "slide"].includes(material.type))
               throw new LearningPathError(
@@ -274,6 +282,13 @@ export function createLessonPlayerService(db: Database) {
               metadata: JSON.stringify({ lessonId }),
               occurredAt: now,
             });
+          adjustment = await offerPathAdjustment(
+            tx,
+            userId,
+            courseId,
+            lessonId,
+            latestQuizPercent(ctx.requirements, ctx.submissions),
+          );
         }
         return {
           kind: "media-progress",
@@ -284,15 +299,39 @@ export function createLessonPlayerService(db: Database) {
           completed: values.status === "completed",
         } satisfies LessonMediaUpdate;
       });
+      if (mediaOnly) return result as LessonPlayerResponse<C>;
       // Building the sidebar/path is deliberately outside the enrollment lock.
+      const lessonView = await db.transaction(
+        (tx) => view(tx, userId, courseId, lessonId),
+        { isolationLevel: "repeatable read", accessMode: "read only" },
+      );
+      // A completion always answers with its offer (null when nothing would change).
       return (
-        mediaOnly
-          ? result
-          : await db.transaction((tx) => view(tx, userId, courseId, lessonId), {
-              isolationLevel: "repeatable read",
-              accessMode: "read only",
-            })
+        command.type === "complete"
+          ? { ...lessonView, adjustment }
+          : lessonView
       ) as LessonPlayerResponse<C>;
     },
   };
+}
+
+// Latest graded quiz result as a percentage; feeds the completion insight only.
+function latestQuizPercent(
+  requirements: { id: number; type: string; maxScore: number }[],
+  submissions: {
+    assessmentId: number;
+    attempt: number;
+    status: string;
+    score: number | null;
+  }[],
+) {
+  const quiz = requirements.find((a) => a.type === "quiz");
+  if (!quiz || quiz.maxScore <= 0) return null;
+  const latest = submissions
+    .filter(
+      (s) =>
+        s.assessmentId === quiz.id && s.status === "graded" && s.score !== null,
+    )
+    .sort((a, b) => b.attempt - a.attempt)[0];
+  return latest?.score == null ? null : (latest.score / quiz.maxScore) * 100;
 }
