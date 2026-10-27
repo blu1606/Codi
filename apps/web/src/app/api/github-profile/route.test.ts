@@ -141,9 +141,23 @@ function retained(): GithubCollectionSnapshot {
   };
 }
 function providerTransport(empty = false) {
-  return vi.fn<typeof fetch>(async (url) => {
+  return vi.fn<typeof fetch>(async (url, init) => {
     const parsed = new URL(String(url));
     if (parsed.origin === "https://api.github.com") {
+      if (
+        parsed.pathname === "/graphql" &&
+        JSON.parse(String(init?.body)).operationName === "CodiPublicTrees"
+      )
+        // Batched root-tree read for the single repository; no manifest entries.
+        return json({
+          data: {
+            t0: {
+              databaseId: 1,
+              owner: { login: "learner", databaseId: 123 },
+              tree: { entries: [] },
+            },
+          },
+        });
       if (parsed.pathname === "/graphql")
         return json({
           data: {
@@ -182,7 +196,6 @@ function providerTransport(empty = false) {
             },
           },
         });
-      if (parsed.pathname.endsWith("/contents")) return json([]);
     }
     if (String(url) === "https://api.openai.com/v1/responses/input_tokens")
       return json({ object: "response.input_tokens", input_tokens: 1000 });
@@ -756,7 +769,7 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
       );
       expect(githubCalls.map(([url]) => String(url))).toEqual([
         "https://api.github.com/graphql",
-        `https://api.github.com/repos/learner/project/contents?ref=${"a".repeat(40)}`,
+        "https://api.github.com/graphql",
       ]);
       const graphqlInit = githubCalls[0]![1]!;
       expect(graphqlInit.method).toBe("POST");
@@ -767,11 +780,14 @@ describe("GitHub profile route boundaries (offline doubles, not live acceptance)
       expect(graphqlBody.operationName).toBe("CodiPublicProfile");
       expect(graphqlBody.query).toMatch(/privacy:\s*PUBLIC/);
       expect(graphqlBody.query).toMatch(/ownerAffiliations:\s*OWNER/);
-      const contentsInit = githubCalls[1]![1]!;
-      expect(contentsInit.method).toBe("GET");
-      expect(new Headers(contentsInit.headers).get("authorization")).toBe(
-        `Basic ${Buffer.from("fixture-app:fixture-app-secret").toString("base64")}`,
+      const treeInit = githubCalls[1]![1]!;
+      expect(treeInit.method).toBe("POST");
+      expect(new Headers(treeInit.headers).get("authorization")).toBe(
+        "Bearer fixture-user-token",
       );
+      const treeBody = JSON.parse(String(treeInit.body));
+      expect(treeBody.operationName).toBe("CodiPublicTrees");
+      expect(treeBody.variables.e0).toBe(`${"a".repeat(40)}:`);
       expect(response.headers.get("Cache-Control")).toBe("private, no-store");
       const text = JSON.stringify(data);
       for (const hidden of [
