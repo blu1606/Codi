@@ -2,16 +2,12 @@ import { delay, http, HttpResponse } from "msw";
 import type { HttpHandler } from "msw";
 import LessonPlayer from "@/app/learn/[courseId]/[lessonId]/lesson-player";
 import {
-  tutorAnswered,
-  tutorCodeEmpty,
-  tutorDiffApplied,
-  tutorDiffPending,
-  tutorEmpty,
-  tutorEscalated,
-  tutorError,
-  tutorHintLevel2,
-  tutorRateLimited,
+  TUTOR_CHAT_HINT,
+  TUTOR_CHAT_LECTURER,
+  TUTOR_CHAT_LESSON,
+  tutorLessonMeta,
 } from "@/demo-fixtures/learner/s11-tutor";
+import { seedTutor, tutorAsk, tutorAskFails, tutorStream } from "../../shell/tutor-handlers";
 import {
   ASSIGNMENT_ASSESSMENT_ID,
   CODING_ASSESSMENT_ID,
@@ -103,53 +99,61 @@ const offerState = (label: string, offer: AdjustmentOffer): ScreenState => {
   });
 };
 
-/** Tutor GET for this lesson: the thread the panel or popup reads when it opens. */
-const tutorRead = (view: object): HttpHandler => http.get(`${endpoint}/tutor`, () => HttpResponse.json(view));
+/** The lesson's meta as the Tutor panel reads it (code lesson, hint ladder, lecturer). */
+const tutorMeta = (meta: object): HttpHandler => http.get("/api/ai/lesson", () => HttpResponse.json(meta));
+const lessonKey = `lesson:${LESSON_ID}`;
 
-/** Lesson player with the tutor opened at mount, so each thread state renders without a click. */
+/**
+ * Lesson player with the shared Tutor panel open at load: a new chat (optionally asking right away)
+ * or a stored chat of this lesson, so each panel state renders without a click.
+ */
 const tutorState = (
   label: string,
-  initialTutor: { mode: "popup" } | { mode: "panel"; ask?: string },
   handlers: HttpHandler[],
-  extra: Partial<ScreenState> = {},
+  { chat, ask }: { chat?: string; ask?: string } = {},
 ): ScreenState => ({
   ...state(label, handlers),
-  render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} viewerName="Nguyễn Minh Anh" initialTutor={initialTutor} />,
-  ...extra,
+  render: () => {
+    seedTutor({ chats: chat ? { [lessonKey]: chat } : {} });
+    return <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialTutor={{ mode: "panel", ask }} />;
+  },
 });
 
 const tutorStates: Record<string, ScreenState> = {
-  "tutor-launcher": state("Trợ lý · nút tròn (đóng)", playerHandlers(lessonVideoDefault)),
-  "tutor-popup": tutorState("Trợ lý · popup", { mode: "popup" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorEmpty)]),
-  "tutor-empty": tutorState("Trợ lý · gợi ý ban đầu", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorEmpty)]),
-  "tutor-answer": tutorState("Trợ lý · câu trả lời", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorAnswered)]),
-  "tutor-context": tutorState("Trợ lý · có ngữ cảnh đính kèm", { mode: "panel" }, [
+  "tutor-bubble": { ...state("Tutor · nút nổi (đóng)", playerHandlers(lessonVideoDefault)), render: () => {
+    seedTutor({ open: false });
+    return <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} />;
+  } },
+  "tutor-empty": tutorState("Tutor · đoạn chat mới, gợi ý", [...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())]),
+  "tutor-thinking": tutorState(
+    "Tutor · đang đọc bài (Dừng)",
+    [tutorAsk(() => tutorStream(undefined, { hangAfter: 0 })), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "querySelectorAll trả về gì?" },
+  ),
+  "tutor-streaming": tutorState(
+    "Tutor · suy nghĩ, dùng công cụ, trả lời từng chữ",
+    [tutorAsk(() => tutorStream(undefined, { stepMs: 700 })), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "Duyệt danh sách querySelectorAll thế nào?" },
+  ),
+  "tutor-answer": tutorState("Tutor · câu trả lời có nguồn", [...playerHandlers(lessonVideoDefault)], { chat: TUTOR_CHAT_LESSON }),
+  "tutor-context": tutorState("Tutor · có ngữ cảnh đính kèm (code, test)", [
     ...playerHandlers(lessonCodeBase, { coding: codingSomeFailed }),
-    tutorRead(tutorCodeEmpty),
+    tutorMeta(tutorLessonMeta({ isCode: true })),
   ]),
-  "tutor-thinking": tutorState("Trợ lý · đang trả lời (Dừng)", { mode: "panel", ask: "Vì sao nó trả về null?" }, [
-    http.post(`${endpoint}/tutor`, async () => {
-      await delay("infinite");
-      return HttpResponse.json({});
-    }),
-    ...playerHandlers(lessonVideoDefault),
-    tutorRead(tutorEmpty),
-  ]),
-  "tutor-hint": tutorState("Trợ lý · gợi ý 2/3", { mode: "panel" }, [
+  "tutor-diff": tutorState("Tutor · gợi ý 3/3, đề xuất chưa áp dụng", [
     ...playerHandlers(lessonCodeBase, { coding: codingIdle }),
-    tutorRead(tutorHintLevel2),
-  ]),
-  "tutor-diff": tutorState("Trợ lý · đề xuất chưa áp dụng", { mode: "panel" }, [
-    ...playerHandlers(lessonCodeBase, { coding: codingIdle }),
-    tutorRead(tutorDiffPending),
-  ]),
-  "tutor-diff-applied": tutorState("Trợ lý · đã áp dụng đề xuất", { mode: "panel" }, [
-    ...playerHandlers(lessonCodeBase, { coding: codingIdle }),
-    tutorRead(tutorDiffApplied),
-  ]),
-  "tutor-error": tutorState("Trợ lý · lỗi, thử lại", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorError)]),
-  "tutor-rate-limited": tutorState("Trợ lý · hỏi quá nhiều", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorRateLimited)]),
-  "tutor-escalated": tutorState("Trợ lý · đã hỏi giảng viên", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorEscalated)]),
+  ], { chat: TUTOR_CHAT_HINT }),
+  "tutor-error": tutorState(
+    "Tutor · tạm nghỉ, thử lại",
+    [tutorAskFails(500, "Không thể tải hoặc cập nhật lộ trình. Vui lòng thử lại."), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "Vì sao nó trả về null?" },
+  ),
+  "tutor-rate-limited": tutorState(
+    "Tutor · hỏi quá nhiều",
+    [tutorAskFails(429, "Bạn đã hỏi quá nhiều trong thời gian ngắn"), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "Giải thích lại giúp mình" },
+  ),
+  "tutor-escalated": tutorState("Tutor · 👎 và giảng viên đã trả lời", [...playerHandlers(lessonVideoDefault)], { chat: TUTOR_CHAT_LECTURER }),
 };
 
 export const s11LessonPlayerScreen: Screen = {
