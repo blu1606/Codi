@@ -580,4 +580,24 @@ describe("evidence-backed profile projection", () => {
       }).summaryState,
     ).toBe("not_provided");
   });
+
+  it("exposes display-only repository fields with the top language by positive bytes", () => {
+    const source = snapshot();
+    source.repositories[0]!.pushedAt = "2026-10-01T00:00:00Z";
+    const evidence = source.evidence.find(
+      (item) => item.repositoryId === 1 && item.kind === "languages",
+    );
+    if (evidence?.kind !== "languages") throw new Error("fixture changed");
+    evidence.bytes = { CSS: 10, TypeScript: 90, Python: 0 };
+    const projection = projectGithubProfile(source, null);
+    const [first, second] = projection.limitations.repositories;
+    expect(first).toMatchObject({
+      id: 1,
+      owner: "learner",
+      name: "project-1",
+      pushedAt: "2026-10-01T00:00:00Z",
+      topLanguage: "TypeScript",
+    });
+    expect(second).toMatchObject({ pushedAt: null, owner: "learner" });
+  });
 });

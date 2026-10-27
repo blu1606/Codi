@@ -4,6 +4,8 @@ import * as React from "react";
 import { cn } from "@codi-1/ui/lib/utils";
 import {
   calculateScale,
+
+  integerScale,
   formatCompact,
   formatNum,
   pickLabels,
@@ -28,6 +30,10 @@ export interface BarChartProps {
   emptyText?: string;
   maxXLabels?: number;
   valueLabel?: string;
+
+  /** Whole-number axis ticks (0, 1, 2, ...) for counts. */
+
+  integerTicks?: boolean;
   className?: string;
 }
 
@@ -43,6 +49,8 @@ export function BarChart({
   emptyText = "Chưa có dữ liệu trong kỳ này.",
   maxXLabels = 8,
   valueLabel = "Giá trị",
+
+  integerTicks = false,
   className,
 }: BarChartProps) {
   const [activeIdx, setActiveIdx] = React.useState<number | null>(null);
@@ -57,7 +65,7 @@ export function BarChart({
   }
 
   const maxVal = Math.max(...items.map((i) => i.value), goal || 0);
-  const { top, ticks } = calculateScale(maxVal);
+  const { top, ticks } = integerTicks ? integerScale(maxVal) : calculateScale(maxVal);
   const n = items.length;
   const maxIdx = items.reduce(
     (m, it, i) => {
