@@ -13,6 +13,8 @@ import {
   ResultScreen,
 } from "./onboarding-screens";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 function view(): OnboardingView {
   return {
     canRequestPath: false,

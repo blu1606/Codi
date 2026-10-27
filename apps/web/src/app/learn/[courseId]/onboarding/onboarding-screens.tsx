@@ -1,12 +1,14 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Check,
   Clock,
   HelpCircle,
   ListOrdered,
+  LoaderCircle,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -22,6 +24,14 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@codi-1/ui/components/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@codi-1/ui/components/dialog";
 import { MasteryChip } from "@codi-1/ui/components/mastery-chip";
 import { masteryLevel } from "@codi-1/ui/lib/mastery";
 import { cn } from "@codi-1/ui/lib/utils";
@@ -50,6 +60,7 @@ type ScreenProps = {
   };
 };
 type Send = (command: OnboardingCommand) => Promise<boolean>;
+type GoalDraft = OnboardingView["enrollment"]["goalDraft"];
 
 const GOAL_DESCRIPTIONS: Record<string, string> = {
   project: "Ưu tiên bài thực hành và dự án cuối khoá.",
@@ -70,7 +81,44 @@ export function GoalScreen({
 }: ScreenProps & { send: Send }) {
   const e = data.enrollment;
   const { title, progress, action } = ui;
-  const step = e.goalStep;
+  const router = useRouter();
+  // Choices stay local until the last step; leaving midway offers to keep them as a draft.
+  const [step, setStep] = useState(e.goalStep);
+  const [draft, setDraft] = useState<GoalDraft>(e.goalDraft);
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const dirty =
+    step !== e.goalStep || JSON.stringify(draft) !== JSON.stringify(e.goalDraft);
+  useEffect(() => {
+    if (!dirty) return;
+    const onClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank") return;
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLeaveTo(url.pathname + url.search + url.hash);
+    };
+    const onUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("beforeunload", onUnload);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("beforeunload", onUnload);
+    };
+  }, [dirty]);
+  async function leave(save: boolean) {
+    if (!leaveTo) return;
+    setLeaving(true);
+    const saved = save
+      ? await send({ type: "goal-save-draft", step, draft })
+      : !e.goalEditing || (await send({ type: "goal-cancel" }));
+    setLeaving(false);
+    if (!saved) return setLeaveTo(null);
+    router.push(leaveTo as Route);
+  }
   const prompts = [
     "Bạn muốn đạt được gì với khoá học này?",
     "Bạn đang ở mức nào với chủ đề này?",
@@ -94,9 +142,28 @@ export function GoalScreen({
             label: `${value} giờ mỗi tuần`,
             description: undefined,
           }));
-  const selected = [e.goalDraft.goal, e.goalDraft.level, e.goalDraft.hours][
-    step
-  ];
+  const selected = [draft.goal, draft.level, draft.hours][step];
+  const pick = (value: (typeof choices)[number]["value"]) =>
+    setDraft((current) => ({
+      ...current,
+      [(["goal", "level", "hours"] as const)[step]]: value,
+    }));
+  const next = () => {
+    if (step < 2) return setStep(step + 1);
+    const { goal, level, hours } = draft;
+    if (goal && level && hours)
+      void send({ type: "goal-commit", draft: { goal, level, hours } });
+  };
+  const localButton = (label: string, onClick: () => void, disabled = false, secondary = false) => (
+    <Button
+      variant={secondary ? "outline" : "default"}
+      className="min-h-11 min-w-32 whitespace-normal"
+      disabled={busy || disabled}
+      onClick={onClick}
+    >
+      {label}
+    </Button>
+  );
   return (
     <>
       {progress(
@@ -122,7 +189,7 @@ export function GoalScreen({
               name="goal-choice"
               className="size-4 accent-primary"
               checked={selected === value}
-              onChange={() => void send({ type: "goal-pick", step, value })}
+              onChange={() => pick(value)}
             />
             <span className="min-w-0 flex-1">
               <span className="block font-medium">{label}</span>
@@ -143,7 +210,7 @@ export function GoalScreen({
       </fieldset>
       <div className="flex flex-wrap items-center justify-between gap-3">
         {step > 0 ? (
-          action("Quay lại", { type: "goal-back", step }, false, true)
+          localButton("Quay lại", () => setStep(step - 1), false, true)
         ) : (
           <span />
         )}
@@ -151,15 +218,44 @@ export function GoalScreen({
           {e.goalEditing
             ? action("Huỷ chỉnh sửa", { type: "goal-cancel" }, false, true)
             : action("Bỏ qua", { type: "goal-skip" }, false, true)}
-          {action(
+          {localButton(
             step === 2 && e.goalEditing
               ? "Lưu và xếp lại lộ trình"
-              : "Tiếp tục",
-            { type: "goal-next", step },
+              : step === 2
+                ? "Lưu mục tiêu"
+                : "Tiếp tục",
+            next,
             selected === undefined,
           )}
         </div>
       </div>
+      <Dialog
+        open={leaveTo !== null}
+        onOpenChange={(open) => !open && !leaving && setLeaveTo(null)}
+      >
+        <DialogContent showCloseButton={!leaving} className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Lưu lựa chọn trước khi rời đi?</DialogTitle>
+            <DialogDescription>
+              {e.goalEditing
+                ? "Mục tiêu đang dùng chưa thay đổi. Lưu nháp để lần sau tiếp tục chỉnh từ bước này; bỏ thay đổi để giữ nguyên mục tiêu cũ."
+                : "Mục tiêu chưa được lưu. Lưu nháp để lần sau tiếp tục từ bước này; bỏ thay đổi để xoá các lựa chọn vừa chọn."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={leaving} onClick={() => setLeaveTo(null)}>
+              Ở lại
+            </Button>
+            <Button variant="outline" disabled={leaving} onClick={() => void leave(false)}>
+              Bỏ thay đổi
+            </Button>
+            <Button className="min-w-32" disabled={leaving} onClick={() => void leave(true)}>
+              {leaving && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}
+              Lưu nháp
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

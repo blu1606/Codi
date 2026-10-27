@@ -101,7 +101,7 @@ export default function Onboarding({
       if (command.type !== "goal-pick" && command.type !== "answer")
         heading.current?.focus();
       if (
-        (command.type === "goal-next" || command.type === "goal-skip") &&
+        (command.type === "goal-commit" || command.type === "goal-next" || command.type === "goal-skip") &&
         data?.enrollment.goalEditing &&
         !body.enrollment.goalEditing
       )
