@@ -21,6 +21,7 @@
       pathStatus: 'none', pathSource: null, order: [], skippable: [],
       completed: [], studied: [], video: {}, pdf: {}, quiz: {}, draft: {},
       mastery: {}, highlight: [], lastUpdate: null, lastActive: null,
+      offer: null, adjustment: null,
     };
   }
 
@@ -67,7 +68,8 @@
     return p ? p.reason : 'Theo thứ tự bài học tiên quyết.';
   };
 
-  // Hard lock (Q8): every prerequisite concept must be completed in at least one lesson, or already mastered (≥3).
+  // Advisory prerequisite check (decision 65): every prerequisite concept should be completed in at least one lesson,
+  // or already mastered (≥3). It never blocks opening or completing the lesson; it only drives the warning.
   function lockInfo(c, r, lesson) {
     for (const e of c.prerequisites || []) {
       if (!lesson.conceptIds.includes(e.to) || lesson.conceptIds.includes(e.from)) continue;
@@ -81,9 +83,9 @@
 
   function lessonStatus(c, r, lesson, currentId) {
     if (r.completed.includes(lesson.id)) return 'done';
-    if (lockInfo(c, r, lesson)) return 'locked';
     if (lesson.id === currentId) return (r.studied.includes(lesson.id) || r.quiz[lesson.id]) ? 'active' : 'next';
-    if (r.pathSource === 'ai' && r.skippable.includes(lesson.id)) return 'skippable';
+    if (lockInfo(c, r, lesson)) return 'locked';
+    if (r.skippable.includes(lesson.id)) return 'skippable';
     return 'todo';
   }
   const STATUS = {
@@ -91,18 +93,70 @@
     active: ['Đang học', 'badge-accent', 'circle-dot'],
     next: ['Tiếp theo', 'badge-accent', 'arrow-right'],
     skippable: ['Có thể bỏ qua', 'badge-neutral', 'skip-forward'],
-    locked: ['Bị khoá', 'badge-outline', 'lock'],
+    locked: ['Chưa đủ tiên quyết', 'badge-outline', 'alert-circle'],
     todo: ['Chưa học', 'badge-neutral', 'circle'],
   };
   const statusBadge = (st) => html`<span class="badge ${STATUS[st][1]}">${icon(STATUS[st][2])}${STATUS[st][0]}</span>`;
 
   function currentLessonId(c, r) {
     const order = orderOf(c, r);
-    const open = (id) => { const l = Codi.lesson(c, id); return l && !r.completed.includes(id) && !lockInfo(c, r, l); };
-    return order.find((id) => open(id) && !(r.pathSource === 'ai' && r.skippable.includes(id))) || order.find(open) || null;
+    const open = (id) => { const l = Codi.lesson(c, id); return l && !r.completed.includes(id); };
+    return order.find((id) => open(id) && !r.skippable.includes(id)) || order.find(open) || null;
   }
-  const requiredLessons = (c, r) => orderOf(c, r).filter((id) => !(r.pathSource === 'ai' && r.skippable.includes(id)));
+  const requiredLessons = (c, r) => orderOf(c, r).filter((id) => !r.skippable.includes(id));
   const isCourseComplete = (c, r) => requiredLessons(c, r).every((id) => r.completed.includes(id));
+
+  // Adaptive offer after a lesson completion (decisions 66–67). r.offer = {afterLessonId, strong, weak, evidence}.
+  // Options are derived from the current path, so an option disappears once it no longer applies.
+  const MASTERED = 3;
+  const isOpenLesson = (c, r, id, afterId) => !!Codi.lesson(c, id) && !r.completed.includes(id) && id !== afterId;
+  // A lesson may move up only when each prerequisite concept is completed, mastered, or placed before the insertion point.
+  function prereqsBefore(c, r, order, lesson, pos) {
+    for (const e of c.prerequisites || []) {
+      if (!lesson.conceptIds.includes(e.to) || lesson.conceptIds.includes(e.from)) continue;
+      if ((r.mastery[e.from] || 0) >= MASTERED) continue;
+      const teach = lessonsTeaching(c, e.from).filter((l) => l.id !== lesson.id);
+      if (!teach.length) continue;
+      const ok = teach.some((l) => r.completed.includes(l.id) || (order.indexOf(l.id) >= 0 && order.indexOf(l.id) < pos));
+      if (!ok) return false;
+    }
+    return true;
+  }
+  function offerChoices(c, r) {
+    const off = r.offer;
+    if (!off) return null;
+    const order = orderOf(c, r);
+    const pos = order.indexOf(off.afterLessonId) + 1;
+    const open = (id) => isOpenLesson(c, r, id, off.afterLessonId);
+    const movable = (id) => open(id) && order.indexOf(id) > pos && prereqsBefore(c, r, order, Codi.lesson(c, id), pos);
+    return {
+      skip: order.filter((id) => {
+        const l = Codi.lesson(c, id);
+        return open(id) && !r.skippable.includes(id) && l.conceptIds.length > 0 && l.conceptIds.every((k) => (r.mastery[k] || 0) >= MASTERED);
+      }),
+      practice: off.weak.length ? order.filter((id) => movable(id) && Codi.lesson(c, id).conceptIds.some((k) => off.weak.includes(k))) : [],
+      harder: order.filter((id) => movable(id) && Codi.lesson(c, id).code && Codi.lesson(c, id).code.kind === 'challenge'),
+    };
+  }
+  // Applies one option at once (learner's own data, decision 67). Returns the affected lesson ids or null.
+  function applyOffer(c, r, kind) {
+    const ch = offerChoices(c, r);
+    const ids = ch && ch[kind] ? ch[kind] : [];
+    if (!ids.length) return null;
+    const pos = orderOf(c, r).indexOf(r.offer.afterLessonId) + 1;
+    r.adjustment = { kind, at: new Date().toISOString(), before: { order: r.order.slice(), skippable: r.skippable.slice() }, offer: r.offer, ids };
+    if (kind === 'skip') {
+      r.skippable = r.skippable.concat(ids.filter((id) => !r.skippable.includes(id)));
+    } else {
+      // ids all sit after the insertion point, so removing them does not shift it.
+      const order = orderOf(c, r).filter((id) => !ids.includes(id));
+      order.splice(pos, 0, ...ids);
+      r.order = order;
+    }
+    r.highlight = ids.slice();
+    r.offer = null;
+    return ids;
+  }
 
   // Lesson checklist mirrors the UC precondition: study + quiz + assignment before completion.
   function mySubmission(lessonId) {
@@ -149,11 +203,14 @@
     setTimeout(() => {
       genPending.delete(courseId);
       const rr = rec(courseId);
+      // An applied adaptive adjustment wins over a regenerated order until the next lesson completion (decision 67).
+      const keepAdjustment = !!rr.adjustment;
       if (Codi.state.scenario.pathAI === 'fail') {
-        rr.pathStatus = 'failed'; rr.pathSource = 'default'; rr.order = c.defaultOrder.slice(); rr.skippable = [];
+        rr.pathStatus = 'failed'; rr.pathSource = 'default';
+        if (!keepAdjustment) { rr.order = c.defaultOrder.slice(); rr.skippable = []; }
       } else {
         rr.pathStatus = 'ready'; rr.pathSource = c.aiPath && c.aiPath.length ? 'ai' : 'default';
-        rr.order = aiOrder(c); rr.skippable = (c.aiPath || []).filter((p) => p.skippable).map((p) => p.lessonId);
+        if (!keepAdjustment) { rr.order = aiOrder(c); rr.skippable = (c.aiPath || []).filter((p) => p.skippable).map((p) => p.lessonId); }
       }
       save(Codi.path().startsWith('/learn/' + courseId));
     }, 2800);
@@ -212,6 +269,31 @@
       <div class="row">${icon('graduation-cap', { cls: 'icon-lg text-success' })}<div class="stack-1"><h2>Chúc mừng! Bạn đã hoàn thành khoá học</h2><p class="small muted">${c.title}</p></div></div>
       ${reviewBlock(c)}
       ${next ? html`<div class="panel row-between"><div class="stack-1"><span class="xsmall muted">Khoá học gợi ý tiếp theo</span><strong>${next.title}</strong></div><a class="btn btn-secondary" href="#/courses/${next.slug}">Xem khoá học</a></div>` : ''}
+    </div></section>`;
+  }
+
+  // Non-blocking offer after a completion: an insight plus the options that apply right now (decisions 66–67).
+  function offerCard(c, r) {
+    if (!r.offer) return '';
+    const ch = offerChoices(c, r); const off = r.offer;
+    const names = (ids) => ids.map((k) => conceptName(c, k)).join(', ');
+    const titles = (ids) => ids.map((id) => Codi.lesson(c, id).title).join(', ');
+    const lines = [];
+    if (off.strong.length) lines.push(`Codi thấy bạn đã nắm vững ${names(off.strong)}.`);
+    if (off.weak.length) lines.push(`Bạn còn chưa chắc về ${names(off.weak)}.`);
+    if (!lines.length) lines.push('Codi chưa có đủ kết quả quiz hoặc bài code để đánh giá bài này.');
+    const options = [
+      ['skip', 'Bỏ qua bài đã vững', ch.skip, `${ch.skip.length} bài mà mọi khái niệm đã Thành thạo: ${titles(ch.skip)}`],
+      ['practice', 'Luyện thêm', ch.practice, `Đưa ${ch.practice.length} bài về ${names(off.weak)} lên ngay sau bài này: ${titles(ch.practice)}`],
+      ['harder', 'Nâng độ khó', ch.harder, `Đưa ${ch.harder.length} bài thử thách đã đủ tiên quyết lên trước: ${titles(ch.harder)}`],
+    ].filter((o) => o[2].length);
+    return html`<section class="card ln-offer" aria-live="polite"><div class="card-body stack-3">
+      <div class="row">${icon('sparkles', { cls: 'icon-sm' })}<strong>Codi gợi ý điều chỉnh lộ trình</strong></div>
+      <p class="small">${lines.join(' ')}</p>
+      <ul class="list ln-offer-list">${options.map(([kind, label, , hint]) => html`<li class="panel row-between">
+        <div class="stack-1 od-fill"><strong class="small">${label}</strong><span class="xsmall muted">${hint}</span></div>
+        <button class="btn btn-secondary btn-sm" data-action="ln-offer-apply" data-course="${c.id}" data-kind="${kind}">Áp dụng</button></li>`)}</ul>
+      <div class="row-between"><span class="xsmall muted">Áp dụng xong, bạn có thể hoàn tác ngay từ thông báo.</span><button class="btn btn-ghost btn-sm" data-action="ln-offer-keep" data-course="${c.id}">Giữ nguyên lộ trình</button></div>
     </div></section>`;
   }
 
@@ -532,18 +614,19 @@
       ${r.pathSource === 'default' && r.pathStatus === 'ready' && r.diag.status === 'skipped' && !r.diag.diagCardDismissed ? html`<section class="card"><div class="card-body stack-3" role="status"><div class="row-between"><strong>Cá nhân hoá lộ trình — làm bài kiểm tra đầu vào (~10 phút)</strong><button class="btn btn-ghost btn-icon btn-sm" data-action="ln-dismiss-diag-card" data-course="${c.id}" aria-label="Ẩn thông báo">${icon('x', { cls: 'icon-sm' })}</button></div><p class="small muted">Giúp Codi bỏ qua phần bạn đã biết và tập trung vào phần còn thiếu.</p><button class="btn btn-secondary btn-sm" data-action="ln-take-diag" data-course="${c.id}">Làm bài kiểm tra đầu vào</button></div></section>` : ''}
       ${r.pathSource === 'ai' ? html`<p class="small muted row">${icon('sparkles', { cls: 'icon-sm' })} Thứ tự do AI xếp theo kết quả của bạn, luôn tôn trọng bài học tiên quyết. Mỗi bài có giải thích "Vì sao?".</p>` : ''}
       ${updateNotice(c, r, false)}
+      ${offerCard(c, r)}
       ${complete ? completionCard(c) : ''}
       <div class="stack-4">${groups.map((g) => html`<section class="card"><div class="card-header"><h2 class="ln-h">${g.ch.title}</h2><span class="small muted">${g.ids.filter((id) => r.completed.includes(id)).length}/${g.ids.length} bài</span></div>
         <ol class="list">${g.ids.map((id) => {
-          const l = Codi.lesson(c, id); const st = lessonStatus(c, r, l, cur); const lock = st === 'locked' ? lockInfo(c, r, l) : null;
+          const l = Codi.lesson(c, id); const st = lessonStatus(c, r, l, cur); const lock = st === 'done' ? null : lockInfo(c, r, l);
           const concept = l.conceptIds[0];
           return html`<li class="ln-row ${st === 'next' || st === 'active' ? 'is-current' : ''} ${highlight.includes(id) ? 'is-updated' : ''}">
             <span class="ln-row-icon">${icon(TYPE_ICON[l.type] || 'file-text')}</span>
             <div class="od-fill stack-1">
-              <div class="row" style="gap:8px">${st === 'locked' ? html`<span class="strong ln-locked-title">${l.title}</span>` : html`<a class="strong" href="#/learn/${c.id}/${l.id}">${l.title}</a>`}${highlight.includes(id) ? html`<span class="badge badge-info">Mới cập nhật</span>` : ''}</div>
+              <div class="row" style="gap:8px"><a class="strong" href="#/learn/${c.id}/${l.id}">${l.title}</a>${highlight.includes(id) ? html`<span class="badge badge-info">Mới cập nhật</span>` : ''}</div>
               <div class="row xsmall muted" style="gap:12px"><span>${TYPE_LABEL[l.type]} · ${fmt.duration(l.durationMin)}</span>${concept ? ui.mastery(r.mastery[concept] || 0) : ''}</div>
-              ${lock ? html`<p class="small">${icon('lock', { cls: 'icon-sm' })} Cần học trước: <a href="#/learn/${c.id}/${lock.lesson.id}">${lock.concept} (${lock.lesson.title})</a></p>`
-                : html`<details class="ln-why" ${st === 'next' || st === 'active' ? Codi.raw('open') : ''}><summary>Vì sao?</summary><p class="small">${reasonFor(c, r, id)}</p></details>`}
+              ${lock ? html`<p class="small ln-advisory">${icon('alert-circle', { cls: 'icon-sm' })} Nên học ${lock.concept} trước (bài <a href="#/learn/${c.id}/${lock.lesson.id}">${lock.lesson.title}</a>)</p>` : ''}
+              <details class="ln-why" ${st === 'next' || st === 'active' ? Codi.raw('open') : ''}><summary>Vì sao?</summary><p class="small">${reasonFor(c, r, id)}</p></details>
             </div>
             <div class="ln-row-side">${statusBadge(st)}${st === 'next' || st === 'active' ? html`<a class="btn btn-primary btn-sm" href="#/learn/${c.id}/${l.id}">Học tiếp</a>` : ''}</div>
           </li>`;
@@ -558,6 +641,7 @@
   let videoLessonId = null;
   const stopVideo = () => { if (videoTimer) clearInterval(videoTimer); videoTimer = null; };
   const PDF_PAGES = 8;
+  const STUDY_VIDEO_PCT = 90; // video watched at or above this share counts as "Học nội dung" done (decision 66)
   const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
   function materialView(c, r, l) {
@@ -572,6 +656,7 @@
           <button class="ln-play" data-action="ln-video-toggle" data-course="${c.id}" data-lesson="${l.id}" aria-label="${playing ? 'Tạm dừng' : 'Phát video'}">${icon(playing ? 'pause' : 'play', { cls: 'icon-lg' })}</button></div>
         <div class="ln-video-bar"><div class="progress od-fill" aria-label="Tiến độ video"><span data-video-fill style="width:${pct}%"></span></div><span class="xsmall mono od-nowrap" data-video-time>${mmss((total * pct) / 100)} / ${mmss(total)}</span></div>
         ${pct > 0 && pct < 100 ? html`<p class="xsmall ln-video-note">Tiếp tục từ ${mmss((total * pct) / 100)} — vị trí xem được lưu tự động.</p>` : ''}
+        ${r.studied.includes(l.id) ? '' : html`<p class="xsmall ln-video-note">Xem ít nhất ${STUDY_VIDEO_PCT}% video để đánh dấu đã học xong nội dung.</p>`}
       </div>`;
     }
     if (l.type === 'pdf') {
@@ -672,7 +757,7 @@
     return html`<ol class="list ln-side-list">${order.map((id, i) => {
       const l = Codi.lesson(c, id); const st = lessonStatus(c, r, l, cur);
       return html`<li><a href="#/learn/${c.id}/${id}" class="ln-side-item ${id === activeId ? 'is-active' : ''}" ${id === activeId ? Codi.raw('aria-current="page"') : ''} ${inSheet ? Codi.raw('data-close') : ''}>
-        <span class="ln-side-check">${st === 'done' ? icon('check-circle', { cls: 'icon-sm text-success' }) : st === 'locked' ? icon('lock', { cls: 'icon-sm' }) : html`<span class="xsmall">${i + 1}</span>`}</span>
+        <span class="ln-side-check">${st === 'done' ? icon('check-circle', { cls: 'icon-sm text-success' }) : st === 'locked' ? icon('alert-circle', { cls: 'icon-sm' }) : html`<span class="xsmall">${i + 1}</span>`}</span>
         <span class="od-fill stack-1"><span class="small od-clamp-2">${l.title}</span><span class="xsmall muted">${TYPE_LABEL[l.type]} · ${fmt.duration(l.durationMin)}${st === 'skippable' ? ' · có thể bỏ qua' : ''}</span></span></a></li>`;
     })}</ol>`;
   }
@@ -685,10 +770,8 @@
     const l = Codi.lesson(c, p.lessonId);
     if (!l) return html`<div class="page page-narrow">${ui.empty({ icon: 'map', title: 'Không tìm thấy bài học', actions: html`<a class="btn btn-primary" href="#/learn/${c.id}">Về lộ trình</a>` })}</div>`;
     if (r.pathStatus === 'none') return html`<div class="page page-narrow">${ui.empty({ icon: 'route', title: 'Thiết lập lộ trình trước khi học', body: 'Chỉ mất vài phút: đặt mục tiêu và làm bài kiểm tra đầu vào.', actions: html`<a class="btn btn-primary" href="#/learn/${c.id}/onboarding">Bắt đầu thiết lập</a>` })}</div>`;
+    // Advisory only (decision 65): the lesson always opens; a missing prerequisite shows a warning banner.
     const lock = lockInfo(c, r, l);
-    if (lock && !r.completed.includes(l.id)) {
-      return html`<div class="page page-narrow">${ui.empty({ icon: 'lock', title: 'Bài học này đang bị khoá', body: `Bạn cần học "${lock.concept}" trước (bài "${lock.lesson.title}"). Codi giữ đúng thứ tự bài học tiên quyết của khoá học.`, actions: html`<a class="btn btn-primary" href="#/learn/${c.id}/${lock.lesson.id}">Đến bài cần học trước</a><a class="btn btn-secondary" href="#/learn/${c.id}">Về lộ trình</a>` })}</div>`;
-    }
     if (r.lastActive !== new Date().toISOString().slice(0, 10)) { r.lastActive = new Date().toISOString(); }
     const order = orderOf(c, r); const idx = order.indexOf(l.id);
     const prev = idx > 0 ? order[idx - 1] : null; const next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
@@ -716,7 +799,9 @@
           </div>
         </div>
         <div class="ln-content stack-4 ${l.code ? 'is-wide' : ''}">
+          ${lock && !done ? ui.alert({ type: 'warn', title: `Nên học ${lock.concept} trước (bài ${lock.lesson.title})`, body: 'Bạn vẫn có thể học và hoàn thành bài này. Học bài tiên quyết trước sẽ giúp bạn hiểu nhanh hơn.', actions: html`<a class="btn btn-secondary btn-sm" href="#/learn/${c.id}/${lock.lesson.id}">Mở bài ${lock.lesson.title}</a>` }) : ''}
           ${r.lastUpdate && r.lastUpdate.afterLessonId === l.id ? updateNotice(c, r, true) : ''}
+          ${offerCard(c, r)}
           ${done && isCourseComplete(c, r) && r.lastUpdate && r.lastUpdate.afterLessonId === l.id ? completionCard(c) : ''}
           <header class="stack-1"><span class="xsmall muted">${chapter ? chapter.title : ''} · ${TYPE_LABEL[l.type]} · ${fmt.duration(l.durationMin)}</span><h1 class="ln-title">${l.title}</h1></header>
           ${l.code ? Codi.code.view(c, l) : html`
@@ -849,7 +934,8 @@
     const r = R(el); const id = el.dataset.course;
     if ((r.goalStep || 0) < 2) { r.goalStep = (r.goalStep || 0) + 1; save(); return; }
     r.goal = Object.assign({}, r.goalDraft); r.goalStep = 0;
-    if (r.goalEditing) { r.goalEditing = false; generatePath(id); Codi.go('/learn/' + id); ui.toast('Đã lưu mục tiêu. Codi đang xếp lại lộ trình.'); return; }
+    // A goal edit is newer explicit intent: it clears any applied adjustment before regenerating (Q39).
+    if (r.goalEditing) { r.goalEditing = false; r.adjustment = null; generatePath(id); Codi.go('/learn/' + id); ui.toast('Đã lưu mục tiêu. Codi đang xếp lại lộ trình.'); return; }
     // Move to start fork (S08b)
     r.diag.status = 'fork';
     save(false); Codi.rerender();
@@ -858,7 +944,7 @@
     const r = R(el); const id = el.dataset.course;
     r.diag.status = 'skipped'; r.pathStatus = 'ready'; r.pathSource = 'default';
     const c = Codi.course(id);
-    r.order = c.defaultOrder.slice(); r.skippable = [];
+    r.order = c.defaultOrder.slice(); r.skippable = []; r.adjustment = null;
     save(false); Codi.go('/learn/' + id);
   });
   Codi.action('ln-fork-diagnostic', (el) => {
@@ -876,7 +962,7 @@
   Codi.action('ln-diag-start', (el) => { const r = R(el); r.diag.status = 'in-progress'; save(false); Codi.go('/learn/' + el.dataset.course + '/onboarding'); });
   Codi.action('ln-diag-skip', (el) => {
     const c = Codi.course(el.dataset.course); const r = R(el);
-    r.diag.status = 'skipped'; r.pathStatus = 'ready'; r.pathSource = 'default'; r.order = c.defaultOrder.slice(); r.skippable = [];
+    r.diag.status = 'skipped'; r.pathStatus = 'ready'; r.pathSource = 'default'; r.order = c.defaultOrder.slice(); r.skippable = []; r.adjustment = null;
     save(false); Codi.go('/learn/' + c.id);
   });
   Codi.action('ln-take-diag', (el) => { const r = R(el); r.diag = { status: 'intro', index: 0, answers: {}, diagCardDismissed: r.diag.diagCardDismissed }; save(false); Codi.go('/learn/' + el.dataset.course + '/onboarding?view=intro'); });
@@ -900,6 +986,22 @@
   Codi.action('ln-make-path', (el) => { generatePath(el.dataset.course); Codi.go('/learn/' + el.dataset.course); });
   Codi.action('ln-retry-path', (el) => { generatePath(el.dataset.course); Codi.rerender(); });
   Codi.action('ln-dismiss-update', (el) => { const r = R(el); r.lastUpdate = null; save(); });
+  Codi.action('ln-offer-apply', (el) => {
+    const c = Codi.course(el.dataset.course); const r = R(el); const kind = el.dataset.kind;
+    const ids = applyOffer(c, r, kind);
+    save();
+    if (!ids) return;
+    const msg = { skip: `Đã đánh dấu ${ids.length} bài có thể bỏ qua.`, practice: `Đã đưa ${ids.length} bài luyện thêm lên sau bài vừa học.`, harder: `Đã đưa ${ids.length} bài thử thách lên trước.` }[kind];
+    ui.toast(msg, { type: 'success', actions: html`<button type="button" class="btn btn-ghost btn-sm" data-action="ln-offer-undo" data-course="${c.id}" data-at="${r.adjustment.at}">${icon('rotate-ccw', { cls: 'icon-sm' })} Hoàn tác</button>` });
+  });
+  Codi.action('ln-offer-keep', (el) => { const r = R(el); r.offer = null; save(); });
+  Codi.action('ln-offer-undo', (el) => {
+    const r = R(el); const a = r.adjustment;
+    if (!a || a.at !== el.dataset.at) return;
+    r.order = a.before.order; r.skippable = a.before.skippable; r.offer = a.offer; r.adjustment = null; r.highlight = [];
+    save();
+    ui.toast('Đã hoàn tác. Lộ trình trở về như trước.');
+  });
 
   // Player: materials
   Codi.action('ln-retry-material', (el) => { el.setAttribute('aria-busy', 'true'); el.disabled = true; setTimeout(() => { Codi.rerender(); if (Codi.state.scenario.materials === 'error') ui.toast('Vẫn chưa tải được tài liệu. Bạn có thể đọc phần tóm tắt trong lúc chờ.', { type: 'warn' }); }, 900); });
@@ -917,8 +1019,9 @@
       const fill = document.querySelector('[data-video-fill]'); const time = document.querySelector('[data-video-time]');
       if (fill) fill.style.width = rr.video[lessonId] + '%';
       if (time) time.textContent = `${mmss((total * rr.video[lessonId]) / 100)} / ${mmss(total)}`;
-      if (rr.video[lessonId] >= 100) { stopVideo(); markStudied(courseId, lessonId, true); }
-      else save(false);
+      // Study is recorded at 90%; playback continues to the end of the video.
+      if (rr.video[lessonId] >= STUDY_VIDEO_PCT && !rr.studied.includes(lessonId)) markStudied(courseId, lessonId, true);
+      if (rr.video[lessonId] >= 100) { stopVideo(); save(true); } else save(false);
     }, 400);
     Codi.rerender();
   });
@@ -1048,6 +1151,11 @@
     const nextId = currentLessonId(c, r);
     r.lastUpdate = { afterLessonId: l.id, changes, nextLessonId: nextId };
     r.highlight = changes.map((x) => x.lessonId).filter(Boolean);
+    // A new completion ends any applied adjustment (decision 67) and opens a fresh offer for this lesson (decision 66).
+    const strong = l.conceptIds.filter((k) => (r.mastery[k] || 0) >= MASTERED);
+    const weak = evidence !== null ? l.conceptIds.filter((k) => (r.mastery[k] || 0) < MASTERED) : [];
+    r.adjustment = null;
+    r.offer = { afterLessonId: l.id, strong, weak, evidence: evidence !== null };
     Codi.notify(uid(), { title: 'Lộ trình đã được cập nhật', body: `Sau bài "${l.title}".`, link: '/learn/' + c.id });
     save();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1087,7 +1195,11 @@
     .ln-row a:hover { color: var(--accent); text-decoration: underline; }
     .ln-row-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--subtle); display: grid; place-items: center; flex: none; color: var(--muted); }
     .ln-row-side { display: grid; justify-items: end; gap: var(--space-2); flex: none; }
-    .ln-locked-title { color: var(--muted); }
+    .ln-advisory { color: var(--fg); }
+    .ln-offer { border-color: var(--accent-soft-border); }
+    .ln-offer-list { display: grid; gap: var(--space-2); }
+    .ln-offer-list .panel { gap: var(--space-3); align-items: center; }
+    .ln-offer-list .panel > div { display: grid; gap: var(--space-1); }
     .ln-why summary { cursor: pointer; font-size: var(--text-sm); color: var(--accent); min-height: 32px; display: inline-flex; align-items: center; }
     .ln-why p { padding: var(--space-2) var(--space-3); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
     @media (max-width: 640px) { .ln-row { flex-wrap: wrap; } .ln-row-side { justify-items: start; width: 100%; grid-auto-flow: column; justify-content: start; } }
