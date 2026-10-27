@@ -232,9 +232,9 @@ export function githubInsights(profile: Projection): GithubInsight[] {
     const concentrated = main.share >= 70;
     insights.push({
       id: "main-language",
-      text: `${main.name} chiếm ${formatShare(main.share)}% byte ngôn ngữ đã thu thập${concentrated ? ", code của bạn tập trung chủ yếu vào ngôn ngữ này" : ""}. Đây là tỉ lệ code theo GitHub, không phải mức thành thạo.`,
+      text: `${main.name} chiếm ${formatShare(main.share)}% lượng code theo GitHub${concentrated ? ", code của bạn tập trung chủ yếu vào ngôn ngữ này" : ""}. Đây không phải mức thành thạo.`,
       basis: [
-        `Ngôn ngữ GitHub ghi nhận · ${main.repositoryCount} repo`,
+        `Tỉ lệ code GitHub ghi nhận · ${main.repositoryCount} repo`,
         ...repoNames(profile, main.repositoryIds),
       ],
     });
@@ -244,7 +244,7 @@ export function githubInsights(profile: Projection): GithubInsight[] {
     insights.push({
       id: "breadth",
       text: `Bạn dùng ${languages.length} ngôn ngữ trên các repo đã phân tích, ${main.name} là trọng tâm. Đào sâu một hướng sẽ giúp kỹ năng được chứng minh rõ hơn.`,
-      basis: [`Số ngôn ngữ có byte quan sát được · ${languages.length}`],
+      basis: [`Số ngôn ngữ có tỉ lệ code GitHub ghi nhận · ${languages.length}`],
     });
   }
 

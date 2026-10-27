@@ -63,8 +63,8 @@ export function LanguageShares({
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Bạn code bằng gì</h2>
         <p className="text-xs text-muted-foreground">
-          Tỉ lệ byte code theo GitHub trong các repo đã phân tích. Đây không
-          phải mức thành thạo và không phải tỉ lệ dòng code.
+          Tỉ lệ code theo GitHub trong các repo đã phân tích. Đây không phải
+          mức thành thạo và không phải tỉ lệ dòng code.
         </p>
       </div>
       {shares.length ? (
@@ -170,6 +170,22 @@ const GROUPS = [
   ["tool", "Công cụ & hạ tầng"],
 ] as const;
 
+/** Strength or needs-confirmation status, folded into each technology row. Missing evidence is never a weakness. */
+function strengthStatus(technology: GithubProfileProjection["technologies"][number] | undefined) {
+  const inference = technology?.inference;
+  if (
+    technology?.usageSource === "inference" &&
+    inference &&
+    inference.citations.length > 0 &&
+    inference.confidence !== "low" &&
+    (technology.usage === "regular" || technology.usage === "deep")
+  )
+    return "Điểm mạnh có bằng chứng hỗ trợ.";
+  if (inference && (inference.confidence === "low" || technology?.usage === "tried"))
+    return "Cần xác nhận · Không phải điểm yếu đã được chứng minh.";
+  return "Chưa đủ bằng chứng cho điểm mạnh.";
+}
+
 function TechnologyItem({
   row,
   maxRepos,
@@ -220,6 +236,9 @@ function TechnologyItem({
             {row.confidence
               ? ` · Độ tin cậy ${GITHUB_CONFIDENCE_LABELS[row.confidence]}`
               : ""}
+          </p>
+          <p className="font-medium text-foreground">
+            {strengthStatus(technology)}
           </p>
           {technology?.observations.map((observation) => (
             <p key={observation.id} className="break-words">
@@ -289,7 +308,7 @@ export function TechnologyUsage({
       )}
       <p className="text-xs text-muted-foreground">
         Mức dùng và độ tin cậy là ước tính từ GitHub. Không có dữ liệu lần dùng
-        gần nhất.
+        gần nhất. Không xuất hiện trên GitHub không chứng minh năng lực yếu.
       </p>
     </section>
   );

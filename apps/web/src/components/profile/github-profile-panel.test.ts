@@ -595,20 +595,12 @@ describe("GitHub profile consent and request UI", () => {
       );
       expect(technology.textContent).toContain("Ước tính từ GitHub");
       expect(technology.textContent).not.toMatch(/\d\/3/);
-      const signals = host.querySelector(
-        '[aria-label="Tín hiệu và điều cần xác nhận"]',
-      )!;
-      expect(signals.textContent).toContain(
+      expect(technology.textContent).toContain(
         usage === "tried"
-          ? "Không phải điểm yếu đã được chứng minh"
-          : "TypeScript",
+          ? "Cần xác nhận · Không phải điểm yếu đã được chứng minh."
+          : "Điểm mạnh có bằng chứng hỗ trợ.",
       );
       expect(technology.textContent).not.toContain("%");
-      expect(
-        signals.querySelector("h4")!.nextElementSibling!.textContent,
-      ).toContain(
-        usage === "tried" ? "Chưa đủ bằng chứng cho điểm mạnh" : "TypeScript",
-      );
       expect(
         host.querySelector('[aria-label="Mảng kiến thức"]')?.textContent,
       ).toContain("Độ tin cậy Thấp");
@@ -632,14 +624,12 @@ describe("GitHub profile consent and request UI", () => {
     const result = profile();
     result.technologies[0]!.usage = "deep";
     await show(result);
-    const signals = host.querySelector(
-      '[aria-label="Tín hiệu và điều cần xác nhận"]',
-    )!;
-    expect(
-      signals.querySelector("h4")!.nextElementSibling!.textContent,
-    ).toContain("Chưa đủ bằng chứng cho điểm mạnh");
-    expect(signals.textContent).toContain(
-      "Không phải điểm yếu đã được chứng minh",
+    const technology = host.querySelector('[aria-label="Công nghệ"]')!;
+    expect(technology.textContent).toContain(
+      "Cần xác nhận · Không phải điểm yếu đã được chứng minh.",
+    );
+    expect(technology.textContent).not.toContain(
+      "Điểm mạnh có bằng chứng hỗ trợ.",
     );
   });
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { BarChart } from "@codi-1/ui/components/charts";
 import { Card, CardContent } from "@codi-1/ui/components/card";
-import { CheckCircle, CircleHelp, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import {
   GITHUB_CONFIDENCE_LABELS,
   GITHUB_OVERALL_LABELS,
@@ -115,7 +115,7 @@ function Overview({ profile }: { profile: GithubProfileProjection }) {
         <Kpi
           label="Ngôn ngữ"
           value={String(languages.length)}
-          note="có byte code quan sát được"
+          note="có tỉ lệ code GitHub ghi nhận"
         />
         <Kpi
           label="Framework & công cụ"
@@ -156,9 +156,14 @@ function PushActivity({ profile }: { profile: GithubProfileProjection }) {
         }))}
         ariaLabel="Số repo theo tháng của lần đẩy code gần nhất"
         valueLabel="Repo đẩy code gần nhất"
+        format={(value) => `${value} repo`}
+        integerTicks
         emptyText="Chưa có repo nào có lần đẩy code trong 12 tháng gần nhất."
         height={150}
       />
+      <p className="text-xs text-muted-foreground">
+        Trục tung: số repo (đơn vị repo, mỗi cột là một tháng).
+      </p>
       {total > 0 && (
         <p className="text-xs text-muted-foreground">
           Tổng {total} repo trong 12 tháng.
@@ -224,19 +229,6 @@ function Insights({ profile }: { profile: GithubProfileProjection }) {
 
 function Understanding({ profile }: { profile: GithubProfileProjection }) {
   const { areas } = profile;
-  const supported = profile.technologies.filter(
-    (item) =>
-      item.usageSource === "inference" &&
-      item.inference &&
-      item.inference.citations.length > 0 &&
-      item.inference.confidence !== "low" &&
-      (item.usage === "regular" || item.usage === "deep"),
-  );
-  const uncertain = profile.technologies.filter(
-    (item) =>
-      item.inference &&
-      (item.inference.confidence === "low" || item.usage === "tried"),
-  );
   return (
     <section
       className="min-w-0 space-y-4"
@@ -250,133 +242,64 @@ function Understanding({ profile }: { profile: GithubProfileProjection }) {
           minh năng lực hay quyền tác giả.
         </p>
       </div>
-      <div className="grid min-w-0 gap-4 md:grid-cols-2">
-        <Panel>
-          <section aria-label="Mảng kiến thức" className="space-y-3">
-            <h3 className="text-sm font-semibold">Mức hiểu biết theo mảng</h3>
-            {areas.length ? (
-              <ol className="space-y-3">
-                {areas.map((area) => (
-                  <li
-                    key={area.areaId}
-                    className="min-w-0 space-y-1 border-b border-border pb-2 text-sm last:border-0 last:pb-0"
+      <Panel>
+        <section aria-label="Mảng kiến thức" className="space-y-3">
+          <h3 className="text-sm font-semibold">Mức hiểu biết theo mảng</h3>
+          {areas.length ? (
+            <ol className="grid gap-3 md:grid-cols-2">
+              {areas.map((area) => (
+                <li
+                  key={area.areaId}
+                  className="min-w-0 space-y-1 rounded-lg bg-card p-3 text-sm ring-1 ring-border"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="inline-grid size-6 shrink-0 place-items-center rounded-sm bg-muted text-muted-foreground">
+                      <Layers aria-hidden="true" className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium break-words">{area.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Chưa có dữ liệu đánh giá
+                      </p>
+                    </div>
+                    <EvidenceButton
+                      label={`Mảng kiến thức ${area.label}`}
+                      sources={area.citations}
+                    />
+                  </div>
+                  <div
+                    aria-hidden="true"
+                    data-proficiency="unknown"
+                    className="grid max-w-[220px] grid-cols-4 gap-1"
                   >
-                    <div className="flex items-start gap-2">
-                      <span className="inline-grid size-6 shrink-0 place-items-center rounded-sm bg-muted text-muted-foreground">
-                        <Layers aria-hidden="true" className="size-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium break-words">{area.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Chưa có dữ liệu đánh giá
-                        </p>
-                      </div>
-                      <EvidenceButton
-                        label={`Mảng kiến thức ${area.label}`}
-                        sources={area.citations}
-                      />
-                    </div>
-                    <div
-                      aria-hidden="true"
-                      data-proficiency="unknown"
-                      className="grid max-w-[220px] grid-cols-4 gap-1"
-                    >
-                      {[0, 1, 2, 3].map((cell) => (
-                        <span key={cell} className="h-1.5 rounded-full bg-border" />
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Độ tin cậy {GITHUB_CONFIDENCE_LABELS[area.confidence]} · Ước
-                      tính từ GitHub
-                    </p>
-                    <p className="text-xs break-words whitespace-pre-wrap text-muted-foreground">
-                      {area.explanation}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Chưa đủ bằng chứng: chưa có suy luận mảng kiến thức.
-              </p>
-            )}
-          </section>
-        </Panel>
-        <Panel>
-          <section aria-label="Tín hiệu và điều cần xác nhận" className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Điểm Codi tin</h3>
-              <h4 className="text-xs text-muted-foreground">
-                Điểm mạnh có bằng chứng hỗ trợ · Ước tính từ GitHub
-              </h4>
-              {supported.length ? (
-                <ul className="space-y-2">
-                  {supported.map((item) => (
-                    <li
-                      key={item.technologyId}
-                      className="flex items-start gap-2 rounded-sm border-l-[3px] border-success bg-card p-2 text-sm"
-                    >
-                      <CheckCircle aria-hidden="true" className="mt-1 size-4 shrink-0 text-success" />
-                      <span className="min-w-0 flex-1 break-words">
-                        {item.observations[0]?.technology} · {GITHUB_USAGE_LABELS[item.usage!]}
-                        <span className="mt-1 block text-xs text-muted-foreground">
-                          {item.inference!.explanation}
-                        </span>
-                      </span>
-                      <EvidenceButton
-                        label={`Tín hiệu ${item.observations[0]?.technology}`}
-                        sources={item.inference!.citations}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Chưa đủ bằng chứng cho điểm mạnh.
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Chỗ Codi chưa thấy</h3>
-              <h4 className="text-xs text-muted-foreground">Cần xác nhận</h4>
-              {uncertain.length ? (
-                <ul className="space-y-2">
-                  {uncertain.map((item) => (
-                    <li
-                      key={item.technologyId}
-                      className="flex items-start gap-2 rounded-sm border-l-[3px] border-warning bg-card p-2 text-sm"
-                    >
-                      <CircleHelp aria-hidden="true" className="mt-1 size-4 shrink-0 text-warning" />
-                      <span className="min-w-0 flex-1 break-words">
-                        {item.observations[0]?.technology} · Không phải điểm yếu đã được chứng minh.
-                      </span>
-                      <EvidenceButton
-                        label={`Cần xác nhận ${item.observations[0]?.technology}`}
-                        sources={item.inference!.citations}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Chưa có suy luận cần xác nhận.
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Chưa đủ bằng chứng đối với công nghệ hoặc mảng chưa có suy luận,
-                repo bị bỏ qua hay phạm vi thu thập chưa đầy đủ.
-              </p>
-              <p className="text-sm">
-                Không xuất hiện trên GitHub không chứng minh năng lực yếu.
-              </p>
-            </div>
-          </section>
-        </Panel>
-      </div>
+                    {[0, 1, 2, 3].map((cell) => (
+                      <span key={cell} className="h-1.5 rounded-full bg-border" />
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Độ tin cậy {GITHUB_CONFIDENCE_LABELS[area.confidence]} · Ước
+                    tính từ GitHub
+                  </p>
+                  <p className="text-xs break-words whitespace-pre-wrap text-muted-foreground">
+                    {area.explanation}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Chưa đủ bằng chứng: chưa có suy luận mảng kiến thức.
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Chưa đủ bằng chứng đối với mảng chưa có suy luận, repo bị bỏ qua hay
+            phạm vi thu thập chưa đầy đủ.
+          </p>
+        </section>
+      </Panel>
     </section>
   );
 }
-
 function Courses() {
   return (
     <section
