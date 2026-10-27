@@ -223,12 +223,24 @@ describe("GitHub profile consent and request UI", () => {
     expect(area.querySelector(".bg-primary")).toBeNull();
     expect(area.textContent).not.toContain("Backend");
     expect(
-      host.querySelector('[aria-label="Khoá học Codi gợi ý cho bạn"]')
-        ?.textContent,
+      host.querySelector('[aria-label="Dùng trong khoá học"]')?.textContent,
     ).toContain("chưa cung cấp gợi ý");
     expect(
       host.querySelector('[aria-label="Repo đã phân tích"]')?.textContent,
-    ).toContain("Repo #1");
+    ).toContain("linked-user/project");
+  });
+
+  it("explains languages, activity and insights with exact text values and sources", async () => {
+    await renderPanel({ initialProfile: profile(), initialLinked: true });
+    const insights = host.querySelector('[aria-label="Điều Codi rút ra"]')!;
+    expect(insights.textContent).toContain("TypeScript chiếm 100%");
+    expect(insights.textContent).toContain("Dựa trên:");
+    expect(insights.textContent).not.toMatch(/\d+ byte/);
+    const activity = host.querySelector('[aria-label="Hoạt động đẩy code"]')!;
+    expect(activity.textContent).toContain(
+      "Chưa có repo nào có lần đẩy code trong 12 tháng gần nhất.",
+    );
+    expect(host.textContent).toContain("Dùng trong khoá học");
   });
 
   it("shows the mockup result sheet only after a terminal successful response", async () => {
@@ -270,20 +282,16 @@ describe("GitHub profile consent and request UI", () => {
     await click("Phân tích GitHub");
     await submit();
     const sheet = document.querySelector('[data-mockup="resultBody"]')!;
+    expect(sheet.textContent).toContain("25%");
+    expect(sheet.textContent).toContain("75%");
     expect(
-      sheet
-        .querySelector('[aria-label="Tỉ lệ byte TypeScript"]')
-        ?.getAttribute("aria-valuenow"),
-    ).toBe("25");
-    expect(
-      sheet
+      host
+        .querySelector('[aria-label="Bạn code bằng gì"]')!
         .querySelector('[aria-label="Tỉ lệ byte Python"]')
         ?.getAttribute("aria-valuenow"),
     ).toBe("75");
-    expect(sheet.textContent).toContain("100 byte");
-    expect(sheet.textContent).toContain(
-      "không phải tỉ lệ dòng code hay mức thành thạo",
-    );
+    expect(sheet.textContent).toContain("75%");
+    expect(sheet.textContent).toContain("Ngôn ngữ trong repo công khai");
     const trigger = sheet.querySelector<HTMLButtonElement>(
       '[aria-label="Xem bằng chứng: Ngôn ngữ TypeScript"]',
     )!;
@@ -535,9 +543,8 @@ describe("GitHub profile consent and request UI", () => {
         ?.getAttribute("aria-valuenow"),
     ).toBe("75");
     expect(
-      host.querySelector('[aria-label="Tỉ lệ byte TypeScript"]')!.parentElement!
-        .textContent,
-    ).toContain("100 byte25%");
+      host.querySelector('[aria-label="Bạn code bằng gì"]')!.textContent,
+    ).toContain("TypeScript25%trong 1 repo");
     const evidence = host.querySelector<HTMLButtonElement>(
       '[aria-label="Xem bằng chứng: Ngôn ngữ Python"]',
     )!;
@@ -587,10 +594,7 @@ describe("GitHub profile consent and request UI", () => {
         ],
       );
       expect(technology.textContent).toContain("Ước tính từ GitHub");
-      expect(
-        technology.querySelectorAll('[aria-hidden="true"] > span.bg-primary')
-          .length,
-      ).toBe({ tried: 1, regular: 2, deep: 3 }[usage]);
+      expect(technology.textContent).not.toMatch(/\d\/3/);
       const signals = host.querySelector(
         '[aria-label="Tín hiệu và điều cần xác nhận"]',
       )!;
