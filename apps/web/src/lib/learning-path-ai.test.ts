@@ -88,6 +88,16 @@ describe("Gemini structured path output through the installed provider adapter",
       completionTokens: 20,
     });
   });
+  it("sends short lesson aliases instead of UUIDs and maps them back", async () => {
+    respond("L1");
+    const result = await generateLearningPath(
+      input,
+      new AbortController().signal,
+    );
+    expect(result.proposal.lessons[0]?.lessonId).toBe(lessonId);
+    const request = transport.fetch.mock.calls[0]![1].body as string;
+    expect(request).not.toContain(lessonId);
+  });
   it("still rejects non-UUID IDs after provider output validation", async () => {
     respond("not-a-uuid");
     await expect(

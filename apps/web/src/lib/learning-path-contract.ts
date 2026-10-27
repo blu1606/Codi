@@ -9,6 +9,7 @@ export class LearningPathError extends Error {
     public readonly status = 409,
   ) {
     super(message);
+    this.name = "LearningPathError";
   }
 }
 export const LESSON_PATH_STATES = [

@@ -12,6 +12,8 @@ export function pathGenerationFailure(error: unknown): PathGenerationFailure {
   if (error instanceof ZodError || error instanceof LearningPathError)
     return "invalid_output";
   if (error instanceof Error) {
+    // A bundler can load the contract module twice, so instanceof alone can miss local validation.
+    if (["ZodError", "LearningPathError"].includes(error.name)) return "invalid_output";
     if (["TimeoutError", "AbortError"].includes(error.name)) return "timeout";
     if (
       [

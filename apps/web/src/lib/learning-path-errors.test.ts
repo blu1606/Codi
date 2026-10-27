@@ -33,6 +33,10 @@ describe("sanitized path generation failures", () => {
     expect(pathGenerationFailure(new LearningPathError("foreign row"))).toBe(
       "invalid_output",
     );
+    // Same class loaded from a second module copy fails instanceof but keeps its name.
+    expect(
+      pathGenerationFailure(Object.assign(new Error("foreign row"), { name: "LearningPathError" })),
+    ).toBe("invalid_output");
   });
   it.each([new Error("private credential"), "private body", null])(
     "never includes unrecognized failure details",
