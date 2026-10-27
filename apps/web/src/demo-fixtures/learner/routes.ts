@@ -3,7 +3,7 @@ import { learnerOverviewDefault } from "./s12-dashboard";
 import { onboardingReady } from "./s08-onboarding";
 import { knowledgeMapDefault } from "./s13c-knowledge-map";
 import { tutorialAtStep } from "./s11-tutorial";
-import { tutorAnswered, tutorThreadsDefault } from "./s11-tutor";
+import { tutorChatDetails, tutorChats, tutorLessonMeta } from "./s11-tutor";
 
 /** GET endpoints of this area answered from demo data. */
 export const learnerRoutes: FixtureRoute[] = [
@@ -11,7 +11,11 @@ export const learnerRoutes: FixtureRoute[] = [
   { path: /^\/api\/learn\/[^/]+\/onboarding$/, body: () => onboardingReady },
   { path: "/api/insights/knowledge-map", body: () => knowledgeMapDefault },
   { path: /^\/api\/learn\/[^/]+\/lessons\/[^/]+\/assessments\/\d+\/tutorial$/, body: () => tutorialAtStep(0) },
-  // Tutor reads (S11a / S11t): the thread of a lesson and the learner's threads in the course.
-  { path: /^\/api\/learn\/[^/]+\/lessons\/[^/]+\/tutor$/, body: () => tutorAnswered },
-  { path: /^\/api\/learn\/[^/]+\/tutor\/threads$/, body: () => ({ threads: tutorThreadsDefault }) },
+  // Shared Tutor reads: the history, one chat, and the lesson meta of a new lesson chat.
+  { path: "/api/ai/chats", body: () => ({ chats: tutorChats }) },
+  {
+    path: /^\/api\/ai\/chats\/[^/]+$/,
+    body: (url) => tutorChatDetails[url.pathname.split("/").pop() ?? ""] ?? Object.values(tutorChatDetails)[0],
+  },
+  { path: "/api/ai/lesson", body: () => tutorLessonMeta() },
 ];
