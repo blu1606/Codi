@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { collectGithubProfile } from "./github-profile-collector";
+import {
+  collectGithubProfile,
+  type GithubRequestTiming,
+} from "./github-profile-collector";
 import {
   GITHUB_MANIFEST_PATHS,
   GITHUB_PROFILE_LIMITS,
@@ -108,8 +111,9 @@ function fixtureBody(
   variables: Record<string, unknown>,
   files: Files = DEFAULT_FILES,
 ) {
-  const count = Object.keys(variables).filter((key) => /^o\d+$/.test(key))
-    .length;
+  const count = Object.keys(variables).filter((key) =>
+    /^o\d+$/.test(key),
+  ).length;
   const data: Record<string, unknown> = {};
   for (let index = 0; index < count; index++) {
     const databaseId = idFor(String(variables[`n${index}`]));
@@ -162,6 +166,44 @@ afterEach(() => {
 });
 
 describe("GitHub public GraphQL collector", () => {
+  it("reports only safe timing fields and tolerates a failed observation sink", async () => {
+    const events: GithubRequestTiming[] = [];
+    const observed = await collectGithubProfile(appInput, {
+      fetch: transport(),
+      onRequest: (event) => {
+        events.push(event);
+        throw new Error(TOKEN);
+      },
+    });
+    expect(observed.status).toBe("complete");
+    expect(
+      events.map((event) => [event.operation, event.ordinal, event.outcome]),
+    ).toEqual([
+      ["listing", 1, "ok"],
+      ["tree", 2, "ok"],
+      ["blob", 3, "ok"],
+    ]);
+    for (const event of events) {
+      expect(Object.keys(event).sort()).toEqual(
+        [
+          "operation",
+          "ordinal",
+          "elapsedMs",
+          "collectionElapsedMs",
+          "headersMs",
+          "httpStatus",
+          "outcome",
+        ].sort(),
+      );
+      expect(event.httpStatus).toBe(200);
+      expect(event.headersMs).toBeGreaterThanOrEqual(0);
+      expect(event.elapsedMs).toBeGreaterThanOrEqual(event.headersMs!);
+    }
+    expect(JSON.stringify(events)).not.toContain(TOKEN);
+    expect(JSON.stringify(events)).not.toContain(
+      appInput.publicAccess.clientSecret,
+    );
+  });
   it.each([input, appInput])(
     "batches public metadata into three bearer POSTs and pins every file read to the commit",
     async (credentials) => {
@@ -756,7 +798,9 @@ describe("GitHub public GraphQL collector", () => {
     const fetch = transport((gql) =>
       gql.operation === "CodiPublicProfile"
         ? graph(
-            [10, 11, 12].map((id) => repo({ databaseId: id, name: `project-${id}` })),
+            [10, 11, 12].map((id) =>
+              repo({ databaseId: id, name: `project-${id}` }),
+            ),
           )
         : undefined,
     );
@@ -1230,7 +1274,9 @@ describe("GitHub public GraphQL collector", () => {
     );
     expect(result.repositories[0]?.files).toEqual([]);
     expect(
-      result.evidence.filter((item) => item.kind === "file").map((item) => item.repositoryId),
+      result.evidence
+        .filter((item) => item.kind === "file")
+        .map((item) => item.repositoryId),
     ).toEqual([11]);
     expect(result.status).toBe("partial");
     expect(fetch).toHaveBeenCalledTimes(3);
@@ -1258,7 +1304,10 @@ describe("GitHub public GraphQL collector", () => {
         return json(
           page([repo(), repo({ databaseId: 11, name: "project-11" })]),
         );
-      if (gql.operation === "CodiPublicTrees" && String(init.body).includes('"project-11"')) {
+      if (
+        gql.operation === "CodiPublicTrees" &&
+        String(init.body).includes('"project-11"')
+      ) {
         const body = fixtureBody(gql.operation, gql.variables);
         return new Response(JSON.stringify(body) + " ".repeat(5000));
       }
@@ -1274,7 +1323,9 @@ describe("GitHub public GraphQL collector", () => {
       code: "response_limit",
     });
     expect(
-      result.evidence.filter((item) => item.kind === "file").map((item) => item.repositoryId),
+      result.evidence
+        .filter((item) => item.kind === "file")
+        .map((item) => item.repositoryId),
     ).toEqual([10]);
     // Listing, the overflowing pair, its two halves, and the blob read for repository 10.
     expect(fetch).toHaveBeenCalledTimes(5);
@@ -1355,13 +1406,24 @@ describe("GitHub public GraphQL collector", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(
         () => new Promise(() => undefined),
       );
+      const onRequest = vi.fn();
       const pending = collectGithubProfile(input, {
         fetch,
+        onRequest,
         limits: { requestMs, totalMs },
       });
       await vi.advanceTimersByTimeAsync(Math.min(requestMs, totalMs));
       const result = await pending;
       expect(result.issues[0]?.code).toBe(code);
+      expect(onRequest).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          operation: "listing",
+          ordinal: 1,
+          outcome: code,
+          headersMs: null,
+          httpStatus: null,
+        }),
+      );
       expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     },
   );

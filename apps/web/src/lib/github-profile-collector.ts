@@ -186,6 +186,18 @@ export interface GithubCollectorOptions {
   fetch?: typeof globalThis.fetch;
   /** May lower, never raise, the accepted safety ceilings. */
   limits?: Partial<GithubProfileLimits>;
+  /** Server-owned observer; no identity, query variables, credentials or content. */
+  onRequest?: (event: GithubRequestTiming) => void;
+}
+
+export interface GithubRequestTiming {
+  operation: "listing" | "tree" | "blob";
+  ordinal: number;
+  elapsedMs: number;
+  collectionElapsedMs: number;
+  headersMs: number | null;
+  httpStatus: number | null;
+  outcome: "ok" | GithubReadCode;
 }
 
 class ReadFailure extends Error {
@@ -236,7 +248,8 @@ const rateLimitRetry = (headers: Headers) =>
 function batchQuery(kind: "tree" | "blob", count: number): string {
   const declarations = Array.from(
     { length: count },
-    (_, index) => `$o${index}: String!, $n${index}: String!, $e${index}: String!`,
+    (_, index) =>
+      `$o${index}: String!, $n${index}: String!, $e${index}: String!`,
   ).join(", ");
   const selections = Array.from({ length: count }, (_, index) =>
     kind === "tree"
@@ -372,6 +385,10 @@ export async function collectGithubProfile(
     if (snapshot.coverage.responseBytes >= limits.aggregateBytes)
       throw new ReadFailure("aggregate_limit");
     const controller = new AbortController();
+    const requestStarted = performance.now();
+    let headersMs: number | null = null;
+    let httpStatus: number | null = null;
+    let outcome: GithubRequestTiming["outcome"] = "ok";
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadlineCode =
@@ -406,6 +423,8 @@ export async function collectGithubProfile(
             },
           });
           // A custom transport can finish after abort; do not consume or mutate the snapshot then.
+          headersMs = Math.round(performance.now() - requestStarted);
+          httpStatus = response.status;
           if (controller.signal.aborted) {
             void response.body?.cancel().catch(() => undefined);
             throw new ReadFailure(deadlineCode);
@@ -482,7 +501,10 @@ export async function collectGithubProfile(
           }
           if (response.status === 403) {
             const message = z.object({ message: z.string() }).safeParse(parsed);
-            if (message.success && RATE_LIMIT_MESSAGE.test(message.data.message))
+            if (
+              message.success &&
+              RATE_LIMIT_MESSAGE.test(message.data.message)
+            )
               throw new ReadFailure(
                 "rate_limited",
                 403,
@@ -502,7 +524,11 @@ export async function collectGithubProfile(
                 error.message,
               ])
               .filter((label): label is string => typeof label === "string");
-            if (labels.some((label) => /rate[_ -]?limit|abuse detection/i.test(label)))
+            if (
+              labels.some((label) =>
+                /rate[_ -]?limit|abuse detection/i.test(label),
+              )
+            )
               throw new ReadFailure(
                 "rate_limited",
                 response.status,
@@ -541,24 +567,48 @@ export async function collectGithubProfile(
               ),
             );
           }
-          if (response.status === 403)
-            throw new ReadFailure("http_error", 403);
+          if (response.status === 403) throw new ReadFailure("http_error", 403);
           // Do not echo credential-bearing upstream text, even from a test/custom transport.
-          if (containsCredentials(text) || containsStructuredCredentials(parsed))
+          if (
+            containsCredentials(text) ||
+            containsStructuredCredentials(parsed)
+          )
             throw new ReadFailure("invalid_response");
           return { data: envelope.data, aliasErrors };
         })(),
       ]);
     } catch (error) {
-      throw error instanceof ReadFailure
-        ? error
-        : new ReadFailure(
-            controller.signal.aborted ? deadlineCode : "network_error",
-          );
+      const failure =
+        error instanceof ReadFailure
+          ? error
+          : new ReadFailure(
+              controller.signal.aborted ? deadlineCode : "network_error",
+            );
+      outcome = failure.code;
+      throw failure;
     } finally {
       if (timer) clearTimeout(timer);
       controller.abort();
       if (reader) void reader.cancel().catch(() => undefined);
+      // Logging failures must not change collection or cause another upstream request.
+      try {
+        options.onRequest?.({
+          operation:
+            operationName === "CodiPublicProfile"
+              ? "listing"
+              : operationName === "CodiPublicTrees"
+                ? "tree"
+                : "blob",
+          ordinal: snapshot.coverage.requests,
+          elapsedMs: Math.round(performance.now() - requestStarted),
+          collectionElapsedMs: Math.round(performance.now() - started),
+          headersMs,
+          httpStatus,
+          outcome,
+        });
+      } catch {
+        /* Observability is best effort. */
+      }
     }
   };
   const finish = () => {
@@ -770,7 +820,10 @@ export async function collectGithubProfile(
   // Stage 1: root trees pinned to each commit. Entries give file presence, mode and size.
   const readable = selected.flatMap((repo) => {
     if (repo.commitSha) return [{ repo, expression: `${repo.commitSha}:` }];
-    issue({ repositoryId: repo.id, operation: "ref" }, new ReadFailure("invalid_response"));
+    issue(
+      { repositoryId: repo.id, operation: "ref" },
+      new ReadFailure("invalid_response"),
+    );
     return [];
   });
   const trees = new Map<number, TreeEntry[]>();
