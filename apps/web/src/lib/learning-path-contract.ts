@@ -26,15 +26,31 @@ export const LESSON_PATH_LABELS: Record<LessonPathState, string> = {
   active: "Đang học",
   next: "Tiếp theo",
   skippable: "Có thể bỏ qua",
-  locked: "Bị khoá",
+  locked: "Chưa đủ tiên quyết",
   todo: "Chưa học",
 };
 const pathId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+// Options the learner may pick after completing a lesson. "keep" never writes.
+export const ADJUSTMENT_OPTIONS = ["skip-mastered", "practice", "harder", "keep"] as const;
+export type AdjustmentOption = (typeof ADJUSTMENT_OPTIONS)[number];
+export type AdjustmentOffer = {
+  afterLessonId: string;
+  insight: string;
+  options: { type: AdjustmentOption; label: string; description: string }[];
+};
 export const learningPathCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("sync") }).strict(),
   z.object({ type: z.literal("retry") }).strict(),
   z.object({ type: z.literal("ack-highlights"), pathId }).strict(),
   z.object({ type: z.literal("dismiss-update"), pathId }).strict(),
+  z
+    .object({
+      type: z.literal("adjust"),
+      afterLessonId: z.string().uuid(),
+      option: z.enum(ADJUSTMENT_OPTIONS),
+    })
+    .strict(),
+  z.object({ type: z.literal("undo-adjust"), pathId }).strict(),
   z
     .object({
       type: z.literal("review"),
@@ -110,6 +126,7 @@ export type PathInput = {
 export const levelOf = (concept: PathConcept | undefined): MasteryLevel =>
   masteryLevel(concept?.evidenceCount ? concept.probability : null);
 
+// Advisory only: a missing prerequisite never blocks opening or completing a lesson.
 export function lockInfo(input: PathInput, lesson: PathLesson) {
   for (const edge of input.edges) {
     if (
@@ -290,27 +307,26 @@ export function selectPath(
   ];
   const open = (item: PathItem) => {
     const lesson = input.lessons.find((l) => l.id === item.lessonId);
-    return (
-      !!lesson && lesson.progress !== "completed" && !lockInfo(input, lesson)
-    );
+    return !!lesson && lesson.progress !== "completed";
   };
   const current =
-    order.find((p) => open(p) && !(source === "ai" && p.isSkippable)) ??
+    order.find((p) => open(p) && !p.isSkippable) ??
     order.find(open);
   const rows = order.flatMap((item) => {
     const lesson = input.lessons.find((l) => l.id === item.lessonId);
     if (!lesson) return [];
     const lock = lockInfo(input, lesson);
+    const started = lesson.progress === "in_progress" || lesson.studied;
     const status: LessonPathState =
       lesson.progress === "completed"
         ? "done"
-        : lock
-          ? "locked"
-          : lesson.id === current?.lessonId
-            ? lesson.progress === "in_progress" || lesson.studied
-              ? "active"
-              : "next"
-            : source === "ai" && item.isSkippable
+        : lesson.id === current?.lessonId
+          ? started
+            ? "active"
+            : "next"
+          : lock
+            ? "locked"
+            : item.isSkippable
               ? "skippable"
               : "todo";
     return [
@@ -327,7 +343,7 @@ export function selectPath(
       },
     ];
   });
-  const required = rows.filter((r) => !(source === "ai" && r.isSkippable));
+  const required = rows.filter((r) => !r.isSkippable);
   const done = rows.filter((r) => r.status === "done").length;
   return {
     rows,

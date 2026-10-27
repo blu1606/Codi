@@ -6,6 +6,7 @@ import {
   recordPdfPage,
   requireLessonChecklist,
   videoPosition,
+  videoStudied,
   type ChecklistAssessment,
   type ChecklistSubmission,
 } from "./lesson-player-contract";
@@ -230,5 +231,18 @@ describe("video material duration", () => {
     expect(videoPosition(42, null, false)).toBe(42);
   });
   it("guards against early ended when material duration is known", () =>
-    expect(() => videoPosition(1, 5, true)).toThrow("chưa được xem hết"));
+    expect(() => videoPosition(1, 5, true)).toThrow("chưa được xem đủ 90%"));
+  it("counts a video as studied at exactly 90% of its duration", () => {
+    expect(videoStudied(90, 100, false)).toBe(true);
+    expect(videoStudied(89.9, 100, false)).toBe(false);
+    expect(videoStudied(100, 100, false)).toBe(true);
+  });
+  it("accepts ended at or above 90% and rejects it below", () => {
+    expect(videoPosition(90, 100, true)).toBe(90);
+    expect(() => videoPosition(89, 100, true)).toThrow("90%");
+  });
+  it("uses the native ended event when duration metadata is missing", () => {
+    expect(videoStudied(10, null, true)).toBe(true);
+    expect(videoStudied(10, null, false)).toBe(false);
+  });
 });

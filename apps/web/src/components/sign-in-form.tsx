@@ -24,7 +24,7 @@ import { safeNext } from "@/lib/safe-redirect";
 import { mapSignInError } from "@/lib/sign-in-error";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
-import Loader from "./loader";
+import { AuthFormSkeleton } from "@/components/skeletons/auth-form-skeleton";
 
 const REMEMBER_EMAIL_KEY = "codi_remember_email";
 
@@ -112,7 +112,7 @@ export default function SignInForm({
   }, [form]);
 
   if (isPending) {
-    return <Loader />;
+    return <AuthFormSkeleton />;
   }
 
   return (

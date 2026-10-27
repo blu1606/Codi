@@ -9,7 +9,9 @@ import {
   ClipboardCheck,
   Code2,
   FileText,
-  LockKeyhole,
+  Info,
+  List,
+  Map as MapIcon,
   PlayCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -23,6 +25,8 @@ import {
   type CoursePathView,
   type LessonPathState,
 } from "@/lib/learning-path-contract";
+import { PrerequisiteAdvice } from "./prerequisite-advice";
+import { PathMap } from "./path-map";
 
 type PathRow = CoursePathView["rows"][number];
 type LessonUrl = (id: string) => Route;
@@ -42,7 +46,7 @@ const STATUS_STYLES: Record<LessonPathState, string> = {
   active: "bg-primary text-primary-foreground",
   next: "bg-primary/10 text-primary",
   skippable: "bg-muted text-muted-foreground",
-  locked: "bg-muted text-muted-foreground",
+  locked: "bg-warning-soft text-warning",
   todo: "bg-muted text-muted-foreground",
 };
 
@@ -63,12 +67,16 @@ function groupByChapter(rows: PathRow[]) {
 export function LessonPath({
   data,
   lessonUrl,
+  initialView = "list",
 }: {
   data: CoursePathView;
   lessonUrl: LessonUrl;
+  /** Lab screens open the map directly; learners switch with the toggle. */
+  initialView?: "list" | "map";
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [view, setView] = useState<"list" | "map">(initialView);
   if (!data.rows.length) {
     return (
       <p className="text-muted-foreground">
@@ -91,7 +99,7 @@ export function LessonPath({
       lessonUrl={lessonUrl}
     />
   );
-  return (
+  const list = (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section aria-label="Các bài theo thứ tự lộ trình" className="min-w-0 space-y-6">
         {groupByChapter(data.rows).map((group) => (
@@ -135,6 +143,31 @@ export function LessonPath({
       </Sheet>
     </div>
   );
+  return (
+    <div className="space-y-6">
+      <div role="group" aria-label="Cách xem lộ trình" className="flex flex-wrap justify-end gap-2">
+        <Button
+          variant={view === "list" ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={view === "list"}
+          onClick={() => setView("list")}
+        >
+          <List className="size-4" />
+          Danh sách
+        </Button>
+        <Button
+          variant={view === "map" ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={view === "map"}
+          onClick={() => setView("map")}
+        >
+          <MapIcon className="size-4" />
+          Bản đồ
+        </Button>
+      </div>
+      {view === "map" ? <PathMap path={data} lessonUrl={lessonUrl} /> : list}
+    </div>
+  );
 }
 
 function LessonStep({
@@ -161,7 +194,7 @@ function LessonStep({
     row.status === "done" ? (
       <CheckCircle2 aria-hidden="true" className="size-5 text-success" />
     ) : locked ? (
-      <LockKeyhole aria-hidden="true" className="size-4 text-muted-foreground" />
+      <Info aria-hidden="true" className="size-4 text-warning" />
     ) : (
       number
     );
@@ -200,13 +233,9 @@ function LessonStep({
               <span>{minutes(row)} phút</span>
             </p>
             <h3 className="font-medium">
-              {locked ? (
-                <span className="text-muted-foreground">{row.title}</span>
-              ) : (
-                <Link href={lessonUrl(row.id)} className="hover:underline">
-                  {row.title}
-                </Link>
-              )}
+              <Link href={lessonUrl(row.id)} className="hover:underline">
+                {row.title}
+              </Link>
             </h3>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -241,9 +270,7 @@ function LessonStep({
           </ul>
         )}
         {row.lock && row.status !== "done" && (
-          <p className="text-sm">
-            Cần học trước: {row.lock.concept} ({row.lock.lessonTitle})
-          </p>
+          <PrerequisiteAdvice advice={row.lock} lessonUrl={lessonUrl} />
         )}
         <div className="flex flex-wrap items-center gap-2">
           {isCurrent && (
@@ -276,7 +303,6 @@ function StepDetail({
   lessonUrl: LessonUrl;
 }) {
   const Icon = KIND_ICONS[row.kind ?? "reading"];
-  const locked = row.status === "locked";
   return (
     <div className="space-y-5">
       <div className="space-y-2">
@@ -308,15 +334,19 @@ function StepDetail({
       </section>
       <section className="space-y-1" aria-labelledby="lesson-step-prereq">
         <h4 id="lesson-step-prereq" className="text-sm font-semibold">
-          Cần học trước
+          Kiến thức nên học trước
         </h4>
-        <p className="text-sm text-muted-foreground">
-          {row.status === "done"
-            ? "Bạn đã hoàn thành bài này."
-            : row.lock
-              ? `${row.lock.concept}, học trong bài "${row.lock.lessonTitle}".`
-              : "Không có bài tiên quyết nào đang chặn."}
-        </p>
+        {row.status === "done" ? (
+          <p className="text-sm text-muted-foreground">
+            Bạn đã hoàn thành bài này.
+          </p>
+        ) : row.lock ? (
+          <PrerequisiteAdvice advice={row.lock} lessonUrl={lessonUrl} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Không có kiến thức tiên quyết nào cần xem lại.
+          </p>
+        )}
       </section>
       {row.mastery.length > 0 && (
         <section className="space-y-2" aria-labelledby="lesson-step-mastery">
@@ -341,30 +371,24 @@ function StepDetail({
           Codi đánh dấu bài này có thể bỏ qua. Bạn vẫn có thể mở bài.
         </p>
       )}
-      {locked ? (
-        <p className="text-sm text-muted-foreground">
-          Hoàn thành bài tiên quyết để mở bài này.
-        </p>
-      ) : (
-        <Link
-          className={cn(
-            buttonVariants({
-              variant:
-                row.status === "next" || row.status === "active"
-                  ? "default"
-                  : "outline",
-            }),
-            "w-full",
-          )}
-          href={lessonUrl(row.id)}
-        >
-          {row.status === "done"
-            ? "Xem lại bài"
-            : row.status === "next" || row.status === "active"
-              ? "Học tiếp"
-              : "Mở bài học"}
-        </Link>
-      )}
+      <Link
+        className={cn(
+          buttonVariants({
+            variant:
+              row.status === "next" || row.status === "active"
+                ? "default"
+                : "outline",
+          }),
+          "w-full",
+        )}
+        href={lessonUrl(row.id)}
+      >
+        {row.status === "done"
+          ? "Xem lại bài"
+          : row.status === "next" || row.status === "active"
+            ? "Học tiếp"
+            : "Mở bài học"}
+      </Link>
     </div>
   );
 }

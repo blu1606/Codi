@@ -74,7 +74,7 @@ export function KnowledgeMapList({
               <td className="p-3">
                 <MasteryChip level={n.level} />
                 {n.locked && (
-                  <p className="mt-1 text-muted-foreground">Chưa mở khoá</p>
+                  <p className="mt-1 text-muted-foreground">Chưa đủ tiên quyết</p>
                 )}
               </td>
               <td className="p-3">
@@ -155,7 +155,7 @@ export function KnowledgeMapMastery({ data }: { data: KnowledgeMapView }) {
                 aria-valuemax={4}
                 aria-valuenow={n.level}
                 aria-valuetext={
-                  n.locked ? "Chưa mở khoá" : MASTERY_LABELS[n.level]
+                  n.locked ? "Chưa đủ tiên quyết" : MASTERY_LABELS[n.level]
                 }
                 className="col-span-2 row-start-2 h-3 overflow-hidden rounded bg-muted min-[481px]:col-span-1 min-[481px]:row-start-auto"
               >
@@ -165,7 +165,7 @@ export function KnowledgeMapMastery({ data }: { data: KnowledgeMapView }) {
                 />
               </span>
               <span className="whitespace-nowrap text-right text-foreground tabular-nums">
-                {n.locked ? "Chưa mở khoá" : shortMasteryLabel(n.level)}
+                {n.locked ? "Chưa đủ tiên quyết" : shortMasteryLabel(n.level)}
               </span>
             </div>
           ))}
@@ -190,8 +190,8 @@ export function KnowledgeMapNode({
     <button
       type="button"
       aria-pressed={selected}
-      aria-label={`${n.name}: ${n.locked ? "Chưa mở khoá" : MASTERY_LABELS[n.level]}${n.recommended ? " · Bài học được gợi ý" : ""}`}
-      title={`${n.name} — ${n.locked ? "Chưa mở khoá — cần học khái niệm tiên quyết trước" : MASTERY_LABELS[n.level]}`}
+      aria-label={`${n.name}: ${n.locked ? "Chưa đủ tiên quyết" : MASTERY_LABELS[n.level]}${n.recommended ? " · Bài học được gợi ý" : ""}`}
+      title={`${n.name} — ${n.locked ? "Chưa đủ tiên quyết — nên học khái niệm tiên quyết trước" : MASTERY_LABELS[n.level]}`}
       onClick={() => onSelect(n.id)}
       className={cn(
         "absolute grid content-center gap-0.5 rounded-md border border-border-strong px-2.5 py-1.5 text-left outline-none hover:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
@@ -218,7 +218,7 @@ export function KnowledgeMapNode({
       >
         {n.locked ? (
           <>
-            <LockKeyhole aria-hidden="true" className="size-3.5" /> Chưa mở khoá
+            <LockKeyhole aria-hidden="true" className="size-3.5" /> Chưa đủ tiên quyết
           </>
         ) : (
           <>
@@ -279,26 +279,26 @@ export function ConceptDetails({
         <ul className="space-y-2">
           {node.lessons.map((lesson) => (
             <li key={lesson.id}>
-              {lesson.locked ? (
-                <span className="text-muted-foreground">
-                  {lesson.title} · Bị khoá, cần hoàn thành bài tiên quyết
+              {/* Prerequisites are advisory: a locked lesson stays openable with a hint. */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 flex-1 break-words text-sm">
+                  {lesson.title}
+                  {lesson.locked && (
+                    <span className="block text-xs text-muted-foreground">
+                      Chưa đủ tiên quyết · nên học bài tiên quyết trước
+                    </span>
+                  )}
                 </span>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0 flex-1 break-words text-sm">
-                    {lesson.title}
-                  </span>
-                  <Link
-                    href={
-                      `/learn/${encodeURIComponent(data.courseId!)}/${encodeURIComponent(lesson.id)}` as Route
-                    }
-                    className={cn(buttonVariants({ size: "sm" }), "shrink-0")}
-                    aria-label={`Học bài này: ${lesson.title}`}
-                  >
-                    Học bài này <ArrowRight aria-hidden="true" className="size-4" />
-                  </Link>
-                </div>
-              )}
+                <Link
+                  href={
+                    `/learn/${encodeURIComponent(data.courseId!)}/${encodeURIComponent(lesson.id)}` as Route
+                  }
+                  className={cn(buttonVariants({ size: "sm", variant: lesson.locked ? "outline" : "default" }), "shrink-0")}
+                  aria-label={`Học bài này: ${lesson.title}`}
+                >
+                  Học bài này <ArrowRight aria-hidden="true" className="size-4" />
+                </Link>
+              </div>
             </li>
           ))}
         </ul>

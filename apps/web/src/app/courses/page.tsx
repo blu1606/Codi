@@ -28,6 +28,7 @@ import { authClient } from "@/lib/auth-client";
 import { CatalogCourseCard } from "@/components/courses/catalog-course-card";
 import cardStyles from "@/components/courses/catalog-course-card.module.css";
 import AuthModal from "@/components/auth/auth-modal";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
 
 const CATEGORIES = [
   "Tất cả",
@@ -59,7 +60,8 @@ const SORT_OPTIONS: { value: CatalogSortOption; label: string }[] = [
 
 function CatalogSkeleton() {
   return (
-    <div className={cardStyles.grid} aria-busy="true">
+    <LoadingRegion label="Đang tải danh sách khoá học…">
+      <div className={cardStyles.grid}>
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className={cardStyles.card}>
           <div className="aspect-video w-full bg-muted animate-pulse" />
@@ -78,6 +80,7 @@ function CatalogSkeleton() {
         </div>
       ))}
     </div>
+    </LoadingRegion>
   );
 }
 

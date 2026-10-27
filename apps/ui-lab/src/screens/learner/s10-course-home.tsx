@@ -8,6 +8,7 @@ import {
   coursePathGenerating,
   coursePathNone,
   coursePathReady,
+  coursePathSoftLocked,
   coursePathUpdated,
 } from "@/demo-fixtures/learner/s10-course-home";
 import type { CoursePathView } from "@/lib/learning-path-contract";
@@ -37,8 +38,12 @@ export const s10CourseHomeScreen: Screen = {
     generating: pathState("Đang xếp lộ trình", coursePathGenerating),
     ready: pathState("Lộ trình cá nhân hoá", coursePathReady),
     updated: pathState("Vừa cập nhật", coursePathUpdated),
+    "soft-locked": pathState("Chưa đủ tiên quyết (có cảnh báo)", coursePathSoftLocked),
     failed: pathState("AI chưa sẵn sàng", coursePathFailed, { mockupScenario: { pathAI: "fail" } }),
     completed: pathState("Hoàn thành khoá (S11f)", coursePathCompleted),
+    "map-view": pathState("Bản đồ lộ trình (chế độ xem Bản đồ)", coursePathReady, {
+      render: () => <CourseHome courseId={COURSE_HOME_COURSE_ID} dismissalScope="lab:learner" initialPathView="map" />,
+    }),
     loading: pathState("Đang tải", coursePathReady, {
       handlers: [http.post(endpoint, async () => { await delay("infinite"); return HttpResponse.json({}); })],
     }),

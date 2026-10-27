@@ -54,7 +54,7 @@ const lessons: RowSeed[] = [
   { id: "lesson-js-006", title: "Sự kiện click và form", chapterId: chapter3.id, chapterTitle: chapter3.title, durationSeconds: 1320, skillIds: [5], progress: "not_started", studied: false, status: "todo", reason: "Sau khi nắm DOM, bạn sẽ xử lý được form." },
   {
     id: "lesson-js-007", title: "Gọi API với fetch", chapterId: chapter3.id, chapterTitle: chapter3.title, durationSeconds: 1500, skillIds: [6], progress: "not_started", studied: false,
-    status: "locked", reason: "Cần học xong bài trước để mở khoá.",
+    status: "locked", reason: "Nên học xong bài trước để hiểu rõ hơn.",
     lock: { concept: "Bất đồng bộ", lessonId: "lesson-js-006", lessonTitle: "Sự kiện click và form" },
   },
 ];
@@ -93,6 +93,23 @@ function pathView(overrides: { rows?: RowSeed[] } & Partial<Omit<CoursePathView,
     ...rest,
   };
 }
+
+/** Soft lock: lesson 005 is advisory-locked behind 002, which is not finished yet. 005 stays openable. */
+export const coursePathSoftLocked: CoursePathView = pathView({
+  rows: lessons.map((l) => {
+    if (l.id === "lesson-js-002") return { ...l, progress: "not_started" as const, studied: false, status: "next" as const, reason: "Nền tảng để mở bài DOM." };
+    if (l.id === "lesson-js-005")
+      return {
+        ...l,
+        progress: "not_started" as const,
+        studied: false,
+        status: "locked" as const,
+        reason: "Bài DOM là bước tiếp theo sau hàm.",
+        lock: { concept: "Hàm", lessonId: "lesson-js-002", lessonTitle: "Hàm và phạm vi" },
+      };
+    return l;
+  }),
+});
 
 /** Personalised path, AI-ordered, with one locked lesson and the current lesson highlighted. */
 export const coursePathReady: CoursePathView = pathView({

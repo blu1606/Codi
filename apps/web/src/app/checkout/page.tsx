@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState, useRef } from "react";
+import { CheckoutSkeleton } from "@/components/skeletons/checkout-skeleton";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -74,6 +75,7 @@ function formatDatetime(iso: string | null | undefined): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
+
 
 export default function CheckoutPage({
   searchParams,
@@ -383,12 +385,9 @@ export default function CheckoutPage({
 
   if (isSessionLoading || loading) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center p-8 space-y-4">
-        <Loader2 className="size-8 animate-spin text-primary" />
-        <p className="text-muted-foreground animate-pulse text-base">
-          {orderParam ? "Đang tải thông tin thanh toán…" : "Đang tạo đơn hàng…"}
-        </p>
-      </div>
+      <CheckoutSkeleton
+        label={orderParam ? "Đang tải thông tin thanh toán…" : "Đang tạo đơn hàng…"}
+      />
     );
   }
 

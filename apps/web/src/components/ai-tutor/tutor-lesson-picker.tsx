@@ -85,7 +85,6 @@ export function TutorLessonPicker({
                 <Button
                   variant="ghost"
                   className="h-auto min-h-11 w-full flex-col items-start gap-0 whitespace-normal py-2 text-left"
-                  disabled={lesson.locked}
                   onClick={() => {
                     onOpenChange(false);
                     onPick({ id: lesson.id, title: lesson.title });
@@ -94,7 +93,7 @@ export function TutorLessonPicker({
                   <span className="text-sm">{lesson.title}</span>
                   <span className="text-xs text-muted-foreground">
                     {lesson.chapterTitle}
-                    {lesson.locked ? " · đang khoá" : ""}
+                    {lesson.locked ? " · Chưa đủ tiên quyết" : ""}
                   </span>
                 </Button>
               </li>

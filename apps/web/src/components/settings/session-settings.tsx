@@ -1,10 +1,13 @@
 "use client";
 
 import { Button } from "@codi-1/ui/components/button";
-import { ChevronRight, Loader2, Monitor, Smartphone } from "lucide-react";
+import { ChevronRight, Monitor, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
+import { ListRowsSkeleton } from "@/components/skeletons/list-rows-skeleton";
 import { authClient } from "@/lib/auth-client";
 
 interface DeviceSession {
@@ -83,11 +86,11 @@ export default function SessionSettings({ revision }: { revision: number }) {
     <div>
       <button type="button" aria-expanded={expanded} aria-controls="settings-session-list" onClick={() => setExpanded((value) => !value)} className="flex w-full items-center justify-between gap-4 rounded-lg py-5 text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
         <span className="text-sm font-semibold">Thiết Bị Đã Đăng Nhập</span>
-        <span className="flex items-center gap-3 text-sm" aria-live="polite">{loading ? <Loader2 aria-label="Đang tải thiết bị" className="size-4 animate-spin" /> : error ? "Không thể tải" : `${sessions?.length ?? 0} phiên`}<ChevronRight aria-hidden="true" className={`size-5 transition-transform ${expanded ? "rotate-90" : ""}`} /></span>
+        <span className="flex items-center gap-3 text-sm" aria-live="polite">{loading ? <Skeleton aria-hidden="true" className="h-4 w-14" /> : error ? "Không thể tải" : `${sessions?.length ?? 0} phiên`}<ChevronRight aria-hidden="true" className={`size-5 transition-transform ${expanded ? "rotate-90" : ""}`} /></span>
       </button>
       <div id="settings-session-list" hidden={!expanded} className="space-y-3 rounded-lg border border-border/60 p-4">
         <div className="flex items-start justify-between gap-3"><p className="text-xs leading-relaxed text-muted-foreground">Các phiên đăng nhập đang hoạt động. Một thiết bị có thể có nhiều phiên.</p><Button variant="ghost" size="sm" disabled={loading || revoking !== null} onClick={() => setRefresh((value) => value + 1)} className="rounded-lg">Tải lại</Button></div>
-        {error ? <p role="alert" className="text-sm text-destructive">Không thể tải danh sách thiết bị. Vui lòng thử lại.</p> : loading ? <p role="status" className="text-sm text-muted-foreground">Đang tải phiên đăng nhập...</p> : (
+        {error ? <p role="alert" className="text-sm text-destructive">Không thể tải danh sách thiết bị. Vui lòng thử lại.</p> : loading ? <LoadingRegion label="Đang tải phiên đăng nhập…"><ListRowsSkeleton rows={2} /></LoadingRegion> : (
           <ul className="divide-y divide-border/60">
             {sessions?.map((session) => {
               const current = session.id === currentSessionId;

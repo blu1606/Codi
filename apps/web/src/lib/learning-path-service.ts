@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import type { Database } from "@codi-1/db";
+import type { PathChange } from "@codi-1/db/schema/learning-path-values";
 import { lockKnowledgeMap, readConfirmedKnowledgeMap } from "./confirmed-knowledge-map";
 import { courses } from "@codi-1/db/schema/courses";
 import {
@@ -58,6 +59,7 @@ import {
   pathDiff,
   pathProposal,
   selectPath,
+  type AdjustmentOffer,
   type CoursePathView,
   type KnowledgeMapView,
   type LearningPathCommand,
@@ -65,6 +67,11 @@ import {
   type PathItem,
   type PathProposal,
 } from "./learning-path-contract";
+import {
+  planAdjustment,
+  suggestAdjustment,
+  type AdjustmentFacts,
+} from "./learning-path-adjustment";
 
 type Store = Pick<Database, "select" | "insert" | "update" | "execute">;
 type GenerationResult = {
@@ -226,12 +233,7 @@ export async function loadLearningLessonAccess(
     throw new LearningPathError("Hãy thiết lập lộ trình trước khi học.");
   const lesson = ctx.input.lessons.find((l) => l.id === lessonId);
   if (!lesson) throw new LearningPathError("Không tìm thấy bài học.", 404);
-  const lock = lockInfo(ctx.input, lesson);
-  if (lesson.progress !== "completed" && lock)
-    throw new LearningPathError(
-      `Cần học trước: ${lock.concept} (${lock.lessonTitle}).`,
-      403,
-    );
+  // Soft lock: a missing prerequisite is advisory (lockInfo), never an access error.
   const row = ctx.lessonRows.find((row) => row.lesson.id === lessonId)!;
   return {
     accessible: lesson,
@@ -349,6 +351,8 @@ async function persistPath(
     model?: string;
     rationale?: string;
     afterLessonId?: string | null;
+    // Deterministic adjustments carry their own change list instead of a diff.
+    summary?: { changes: PathChange[]; message: string };
   },
 ) {
   const { enrollment: e, input, path } = ctx;
@@ -364,31 +368,9 @@ async function persistPath(
       .set({ status: "superseded", supersededAt: new Date() })
       .where(eq(personalizedLearningPaths.id, path.id));
   const changes = pathDiff(input, items);
-  // Completion can unlock rows even when their relative order does not change.
-  if (options.afterLessonId) {
-    const priorInput = {
-      ...input,
-      lessons: input.lessons.map((l) =>
-        l.id === options.afterLessonId
-          ? { ...l, progress: "in_progress" as const }
-          : l,
-      ),
-    };
-    for (const lesson of input.lessons) {
-      if (
-        lesson.progress !== "completed" &&
-        lockInfo(priorInput, lesson) &&
-        !lockInfo(input, lesson)
-      )
-        changes.push({
-          lessonId: lesson.id,
-          type: "unlocked",
-          text: `${lesson.title} đã mở khoá sau khi hoàn thành bài tiên quyết.`,
-        });
-    }
-  }
-  const summary =
-    options.trigger === "lesson_completed" || (path && changes.length)
+  const summary = options.summary
+    ? { afterLessonId: options.afterLessonId ?? null, ...options.summary }
+    : options.trigger === "lesson_completed" || (path && changes.length)
       ? {
           afterLessonId: options.afterLessonId ?? null,
           changes,
@@ -652,6 +634,185 @@ async function queue(
   });
 }
 
+// Facts PathInput does not carry: challenge lessons (coding assessments) and remedial lessons.
+async function adjustmentFacts(store: Store, courseId: string) {
+  const coding = await store
+    .select({ lessonId: assessments.lessonId })
+    .from(assessments)
+    .where(
+      and(
+        eq(assessments.courseId, courseId),
+        eq(assessments.type, "coding"),
+        eq(assessments.status, "published"),
+        eq(assessments.isDiagnostic, false),
+      ),
+    );
+  const remedial = await store
+    .select({ id: courseLessons.id })
+    .from(courseLessons)
+    .innerJoin(courseChapters, eq(courseLessons.chapterId, courseChapters.id))
+    .where(
+      and(
+        eq(courseChapters.courseId, courseId),
+        eq(courseLessons.isRemedial, true),
+        eq(courseLessons.isPublished, true),
+      ),
+    );
+  return {
+    codingLessonIds: new Set(
+      coding.map((row) => row.lessonId).filter((id): id is string => !!id),
+    ),
+    remedialLessonIds: new Set(remedial.map((row) => row.id)),
+  };
+}
+
+// Items the learner currently sees, exactly as view() derives them.
+const currentItems = (ctx: Context) =>
+  ctx.path ? ctx.input.previous : defaultItems(ctx.input);
+
+async function adjustmentFactsFor(
+  store: Store,
+  ctx: Context,
+  afterLessonId: string,
+  quizPercent: number | null,
+): Promise<AdjustmentFacts> {
+  return {
+    afterLessonId,
+    quizPercent,
+    ...(await adjustmentFacts(store, ctx.course.id)),
+  };
+}
+
+// Offered right after a completion, from state already in the transaction (no AI call).
+export async function offerPathAdjustment(
+  store: Store,
+  userId: string,
+  courseId: string,
+  afterLessonId: string,
+  quizPercent: number | null,
+): Promise<AdjustmentOffer | null> {
+  const ctx = await context(store, userId, courseId);
+  if (ctx.enrollment.pathStatus !== "ready") return null;
+  return suggestAdjustment(
+    ctx.input,
+    currentItems(ctx),
+    await adjustmentFactsFor(store, ctx, afterLessonId, quizPercent),
+  );
+}
+
+// AI rule: a deterministic adjustment supersedes this enrollment's pending completion
+// regeneration. Finishing those jobs makes the worker's commit fence drop their results.
+// The next completion queues a fresh regeneration. Goal changes are explicit resets and keep their jobs.
+async function supersedeCompletionJobs(store: Store, enrollmentId: number) {
+  await store
+    .update(learningPathJobs)
+    .set({ finishedAt: new Date() })
+    .where(
+      and(
+        eq(learningPathJobs.enrollmentId, enrollmentId),
+        isNull(learningPathJobs.finishedAt),
+        eq(learningPathJobs.trigger, "lesson_completed"),
+      ),
+    );
+}
+
+async function applyAdjustment(
+  store: Store,
+  ctx: Context,
+  command: Extract<LearningPathCommand, { type: "adjust" }>,
+) {
+  // "keep" only dismisses; the server records nothing and changes nothing.
+  if (command.option === "keep") return;
+  const { enrollment: e, path, input } = ctx;
+  if (e.pathStatus !== "ready" || !path)
+    throw new LearningPathError("Lộ trình chưa sẵn sàng để điều chỉnh.", 409);
+  const lesson = input.lessons.find((l) => l.id === command.afterLessonId);
+  if (!lesson) throw new LearningPathError("Không tìm thấy bài học.", 404);
+  if (lesson.progress !== "completed")
+    throw new LearningPathError(
+      "Chỉ điều chỉnh lộ trình sau khi hoàn thành bài học.",
+      409,
+    );
+  // Recomputed from the current path: an offer that no longer changes anything is stale.
+  const plan = planAdjustment(
+    input,
+    currentItems(ctx),
+    await adjustmentFactsFor(store, ctx, lesson.id, null),
+    command.option,
+  );
+  if (!plan)
+    throw new LearningPathError(
+      "Gợi ý này không còn phù hợp với lộ trình hiện tại. Vui lòng tải lại.",
+      409,
+    );
+  await supersedeCompletionJobs(store, e.id);
+  await persistPath(store, ctx, plan.items, {
+    generatedBy: path.generatedBy,
+    trigger: "manual",
+    afterLessonId: lesson.id,
+    rationale: path.aiRationale ?? undefined,
+    model: path.aiModel ?? undefined,
+    summary: { changes: plan.changes, message: plan.message },
+  });
+}
+
+// Restores the previous version only while the adjusted one is still the active path.
+// A restored path has no changes, so it cannot be undone again.
+async function undoAdjustment(store: Store, ctx: Context, pathId: number) {
+  const { enrollment: e, path, input } = ctx;
+  if (
+    e.pathStatus !== "ready" ||
+    !path ||
+    path.id !== pathId ||
+    path.trigger !== "manual" ||
+    !path.updateSummary?.changes.length
+  )
+    throw new LearningPathError(
+      "Không thể hoàn tác: lộ trình đã thay đổi. Vui lòng tải lại.",
+      409,
+    );
+  const [previous] = await store
+    .select()
+    .from(personalizedLearningPaths)
+    .where(
+      and(
+        eq(personalizedLearningPaths.enrollmentId, e.id),
+        eq(personalizedLearningPaths.version, path.version - 1),
+      ),
+    )
+    .limit(1);
+  if (!previous)
+    throw new LearningPathError("Không còn bản lộ trình trước để hoàn tác.", 409);
+  const saved = await store
+    .select()
+    .from(pathItems)
+    .where(eq(pathItems.pathId, previous.id))
+    .orderBy(asc(pathItems.position));
+  const known = new Set(input.lessons.map((l) => l.id));
+  const items = constrainPath(input, {
+    rationale: "Hoàn tác điều chỉnh lộ trình.",
+    lessons: saved
+      .filter((item) => known.has(item.lessonId))
+      .map((item) => ({
+        lessonId: item.lessonId,
+        reason: item.reason ?? "Theo thứ tự bài học tiên quyết.",
+        isSkippable: item.isSkippable,
+      })),
+  });
+  await supersedeCompletionJobs(store, e.id);
+  await persistPath(store, ctx, items, {
+    generatedBy: path.generatedBy,
+    trigger: "manual",
+    afterLessonId: path.updateSummary?.afterLessonId ?? null,
+    rationale: path.aiRationale ?? undefined,
+    model: path.aiModel ?? undefined,
+    summary: {
+      changes: [],
+      message: "Đã hoàn tác điều chỉnh. Thứ tự các bài trở về như trước.",
+    },
+  });
+}
+
 // Public integration hook for #98: invoke inside the same lesson-completion transaction.
 // It consumes actual progress; the client cannot forge a completion through this module.
 export async function reconcileLearningPath(
@@ -772,6 +933,10 @@ export function createLearningPathService(
                 : { updateDismissedAt: new Date() },
             )
             .where(eq(personalizedLearningPaths.id, path.id));
+        } else if (command.type === "adjust") {
+          await applyAdjustment(tx, ctx, command);
+        } else if (command.type === "undo-adjust") {
+          await undoAdjustment(tx, ctx, command.pathId);
         } else if (command.type === "review") {
           await saveCourseReview(
             tx,

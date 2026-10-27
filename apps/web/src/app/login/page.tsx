@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import SignInForm from "@/components/sign-in-form";
+import { AuthFormSkeleton } from "@/components/skeletons/auth-form-skeleton";
 import SignUpForm from "@/components/sign-up-form";
 import { onboardingReturnPath } from "@/lib/onboarding-return";
 import { safeNext } from "@/lib/safe-redirect";
@@ -41,8 +42,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-[400px] flex items-center justify-center text-sm text-muted-foreground">
-          Đang tải biểu mẫu...
+        <div className="flex min-h-[400px] w-full max-w-md items-center justify-center">
+          <AuthFormSkeleton />
         </div>
       }
     >

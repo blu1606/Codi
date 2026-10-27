@@ -14,6 +14,8 @@ import { TutorLessonPicker } from "@/components/ai-tutor/tutor-lesson-picker";
 import { TutorThreadList } from "@/components/ai-tutor/tutor-thread-list";
 import type { TutorCodeBridge } from "@/components/ai-tutor/tutor-bridge";
 import type { TutorThreadSummary } from "@/lib/ai-tutor-contract";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
+import { ListRowsSkeleton } from "@/components/skeletons/list-rows-skeleton";
 
 /**
  * Full Tutor page (Flow L6c): the learner's threads in this course on the left, the
@@ -194,9 +196,9 @@ export default function TutorPage({
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             {threads === null && !loadError ? (
-              <p role="status" className="text-sm text-muted-foreground">
-                Đang tải lịch sử Tutor…
-              </p>
+              <LoadingRegion label="Đang tải lịch sử Tutor…" className="w-full">
+                <ListRowsSkeleton rows={4} withAvatar={false} />
+              </LoadingRegion>
             ) : (
               <>
                 <p className="font-medium">Chưa có đoạn chat nào</p>
