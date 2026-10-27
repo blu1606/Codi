@@ -24,7 +24,7 @@ Status: extracted from the vanilla-JS clickable prototype (`docs/mockup/js/*.js`
 | 6 | Enrolment | `core.js` `enroll`, `isEnrolled`; `learner-commerce.js` `markPaid`, `cm-enroll-free` |
 | 7 | Course onboarding (goal, fork, diagnostic) | `learner-learning.js` `/learn/:courseId/onboarding` route, `ln-goal-*`, `ln-fork-*`, `ln-diag-*`, `ln-take-diag` |
 | 8 | Personal path | `learner-learning.js` `generatePath`, `ln-make-path`, `ln-retry-path`, `ln-edit-goal`, `ln-goal-next` |
-| 9 | Lesson checklist & completion | `learner-learning.js` `checklist`, `lessonStatus`, `lockInfo`, `ln-complete`, `ln-mark-studied` |
+| 9 | Lesson checklist & completion, adaptive offer | `learner-learning.js` `checklist`, `lessonStatus`, `lockInfo` (advisory), `ln-complete`, `ln-mark-studied`, `offerChoices`, `applyOffer`, `offerCard`, `ln-offer-apply/keep/undo` |
 | 10 | Quiz attempt | `learner-learning.js` `quizSection`, `ln-quiz-*` |
 | 11 | Assignment submission | `learner-learning.js` `assignmentSection`, `runUpload`, `ln-assign-*`, `ln-resubmit*` |
 | 12 | Coding exercise attempt | `coding-practice.js` `status`, `score`, `run`, `grade`, `cp-run`, `cp-solution`, `cp-reset` |
@@ -52,7 +52,8 @@ Each invariant names what the code enforces; violations are bugs.
 | G3 | **Never auto-redirect after success.** Payment success, lesson completion, course completion and grading "next" wait for the user. Exception: navigation after the user's own explicit submit (e.g. `tc-grade` with "Bài tiếp theo"). | `/checkout/success` route; `ln-complete` (scroll only); `cm-checkout` |
 | G4 | **Mastery is never colour-only.** Every mastery value renders with the 5-stop text label. | `ui.mastery()` used in `ln-*`, `diagResultView`, `/learn` |
 | G5 | **AI never grades and never acts without the user.** AI suggests (grade suggestion, tutor answer, KMap items, question drafts, path reason); a human or the learner commits. | `lecturer-ai.js` `gradeSuggestion`; `tutor-diff` (apply only on click); `apply()` in `lecturer-ai*.js` |
-| G6 | **Prerequisites are a hard constraint.** A lesson whose prerequisite concept is not yet covered is `locked` and cannot be opened or completed. Override only via mastery ≥ 3 on the prerequisite concept. | `learner-learning.js` `lockInfo`, `lessonStatus` |
+| G6 | **Prerequisites are advisory for lesson access; order is hard.** Path ordering always respects the prerequisite order. A lesson whose prerequisite concept is not yet covered (no completed lesson teaching it, mastery < 3) stays openable and completable; the player shows the warning "Nên học {concept} trước (bài {lesson})" with a link, and the row shows `locked` ("Chưa đủ tiên quyết"). No prerequisite check blocks `ln-complete`. *(PRODUCT decision 65; supersedes the former hard lock, Q8 resolved.)* | `learner-learning.js` `lockInfo`, `lessonStatus`, player warning in `/learn/:courseId/:lessonId` |
+| G16 | **Adaptive changes are learner-owned and never silently overwritten.** Offer options apply only on the learner's click, immediately, with a "Hoàn tác" toast (G1). An applied adjustment wins over any regenerated path order until the next lesson completion; recalculation is inline, never a full-page loading state. *(PRODUCT decision 67.)* | `learner-learning.js` `applyOffer`, `ln-offer-*`, `generatePath` (`keepAdjustment`) |
 | G7 | **Diagnostic never gates learning and never resets progress.** Taking/retaking the diagnostic keeps `completed`, `studied`, quiz records and assignment submissions. (Exception: path order can be reset; see §7 ⚠.) | `ln-fork-default`, `ln-diag-skip`, `ln-take-diag` |
 | G8 | **Never block the learner on AI failure.** Path generation failure falls back to `defaultOrder`; tutor failure shows an inline error with "Hỏi giảng viên" still available. | `generatePath` (`pathAI==='fail'`); `turn` error branch |
 | G9 | **AI never generates or applies a full solution.** Tutor diffs are ≤ 3 lines and only applied on click; hints are a 3-step ladder. | `ai-tutor.js` header rules; `tutor-diff`, `tutor-hint` |
@@ -390,18 +391,39 @@ stateDiagram-v2
 | none → ready (default) | `ln-fork-default`, `ln-diag-skip` | — | no AI call; `order = defaultOrder` |
 | ready → updated | `ln-complete` on a lesson with `pathUpdates` | pathSource `ai` | see below |
 
-**Path rows (per lesson) — `lessonStatus` enum:** `done` | `active` | `next` | `skippable` | `locked` | `todo`
+**Path rows (per lesson) — `lessonStatus` enum:** `done` | `active` | `next` | `locked` | `skippable` | `todo`. Precedence: `done` → current (`active`/`next`) → `locked` → `skippable` → `todo`.
 - `done`: lesson in `completed`.
-- `locked`: `lockInfo()` returns a prerequisite (G6). Shows "Bị khoá" and the missing concept/lesson.
 - `active` ("Đang học"): current lesson that is studied or has a quiz record.
 - `next` ("Tiếp theo"): current lesson, not yet studied.
-- `skippable` ("Có thể bỏ qua"): `pathSource==='ai'` and in `skippable`. Learner may open anyway.
+- `locked` ("Chưa đủ tiên quyết"): **advisory only** (G6). `lockInfo()` returns a prerequisite. The row stays a link and the lesson stays openable; the row shows "Nên học {concept} trước (bài {lesson})" with a link. Access, completion and current-lesson selection are unaffected.
+- `skippable` ("Có thể bỏ qua"): in `skippable`, for either path source (AI or default, since decision 67 can mark lessons). Learner may open anyway; skippable lessons are excluded from `requiredLessons` (course completion).
 - `todo` ("Chưa học").
-- Current lesson = first open (not completed, not locked) lesson in path order, preferring non-skippable.
+- Current lesson = first open (not completed) lesson in path order, preferring non-skippable. Locked lessons can be current.
 
 **`pathUpdates` on completion (`ln-complete`):** finds update where `afterLessonId === lessonId`, else `'*'`. Only when `pathSource==='ai'`. Change types applied: `moved-up` (lesson moved to the first not-completed slot), `now-skippable` (added to `skippable`), `unlocked` (notice only, no state change). Skip changes for already-completed lessons. If no change: notice "Thứ tự các bài còn lại giữ nguyên…" (ai) or "Bạn đang học theo thứ tự mặc định…" (default). Notice shows "Đã hoàn thành", change list, "Bài tiếp theo" card, and `highlight` marks changed rows once.
 
-**Ordering invariant:** the path order is an ordering only; `lockInfo` still applies. Lessons added after path generation are appended (`orderOf`). Completed lessons never revert.
+**Ordering invariant:** the path order is an ordering only and respects prerequisites; `lockInfo` is advisory and never removes access (G6). Lessons added after path generation are appended (`orderOf`). Completed lessons never revert.
+
+**Adaptive offer and adjustment (PRODUCT decisions 66–67).** Runs after `ln-complete`. State: `r.offer = {afterLessonId, strong, weak, evidence}` and `r.adjustment = {kind, at, before:{order, skippable}, offer, ids}` (null when none). Insight: `strong` = lesson concepts with mastery ≥ 3 ("đã nắm vững"); `weak` = lesson concepts with mastery < 3, only when there is evidence (quiz or coding score); otherwise the generic line "chưa có đủ kết quả…". Options are derived from the current path at render time and disappear when they no longer apply.
+
+| Option (`kind`) | Candidates (all must be not completed and not the just-completed lesson) | Guard (option shown only if non-empty) | Side effects on apply |
+|---|---|---|---|
+| `skip` "Bỏ qua bài đã vững" | lessons where every concept has mastery ≥ 3, not already skippable | — | `skippable += ids`; `highlight = ids` |
+| `practice` "Luyện thêm" | lessons teaching a `weak` concept, positioned after the insertion point (index after the completed lesson) | `weak` non-empty; `prereqsBefore` (each prerequisite concept completed, mastered, or placed before the insertion point) | `order`: ids moved to insertion point; `highlight = ids` |
+| `harder` "Nâng độ khó" | `code.kind === 'challenge'` lessons after the insertion point | `prereqsBefore` | `order`: ids moved to insertion point; `highlight = ids` |
+| keep "Giữ nguyên lộ trình" | — | always | `offer = null`; no path change |
+
+| Transition | Trigger | Guard | Side effects |
+|---|---|---|---|
+| none → offered | `ln-complete` succeeds | checklist complete | `offer` set; `adjustment` cleared; path update notice unchanged; non-blocking card on S11 and S10 |
+| offered → applied | `ln-offer-apply` (kind) | candidates non-empty | see table; `offer = null`; `adjustment` set; `save()` re-renders inline (no `generating` state, no full-page loader); toast "… · Hoàn tác" (`ln-offer-undo`, `data-at`) |
+| offered → offered | `ln-offer-keep` | — | `offer = null` (card hidden; no further offer until next completion) |
+| applied → offered | `ln-offer-undo` (toast button, matching `at`) | `adjustment.at` matches | `order`, `skippable` restored from `before`; `offer` restored; `adjustment = null`; `highlight = []`; toast "Đã hoàn tác…" |
+| applied → final | next `ln-complete` | — | `adjustment = null`; the new completion creates a new offer |
+
+- Adjustment wins: `generatePath` (goal edit, retry, diagnostic-triggered regeneration) updates `pathStatus`/`pathSource` but leaves `order`/`skippable` untouched while `adjustment` is set (G16).
+- `ln-fork-default` and `ln-diag-skip` reset the path to default order and clear `adjustment`.
+- Undo is available while the toast is visible (~7 s). After that the change stays until the next completion. ⚠ Ambiguous: no persistent undo is specified; see PRODUCT §11.
 
 **Course completion:** `isCourseComplete` = every *required* lesson (non-skippable) completed. Course completion card shows recommended next course.
 
@@ -417,7 +439,7 @@ stateDiagram-v2
 **Lesson types (`lesson.type`):** `video` | `pdf` | `reading` | `tutorial` | `code`. A lesson may have a `quiz` and/or `assignment`; coding lessons (`code`) have `code.kind` `challenge` or `tutorial`.
 
 **Checklist items (`checklist(r, lesson)`), in order:**
-1. `study` ("Học nội dung") — for non-code lessons. Done when `studied` contains the lesson (set by: video played to 100%; PDF all pages viewed; reading "Đã đánh dấu học xong nội dung" button).
+1. `study` ("Học nội dung") — for non-code lessons. Done when `studied` contains the lesson (set by: video watched to ≥ 90% (`STUDY_VIDEO_PCT`); PDF all pages viewed; reading "Đã đánh dấu học xong nội dung" button).
    - For `tutorial` code lessons: `study` = "Đi hết các bước hướng dẫn" (done when last step visited).
    - For `challenge` code lessons: `code` = "Hoàn thành bài code" (done when `passed`), replaces `study`.
 2. `quiz` ("Đạt quiz (≥ {passingScore}%)") — only if `lesson.quiz`. Done when the **latest attempt is submitted AND passed** (`submitted && score ≥ passingScore`). Retakes unlimited; a retake clears `submitted` until resubmitted.
@@ -427,25 +449,30 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> locked: prerequisite concept not covered (lockInfo)
-    locked --> open: prerequisites satisfied (completed in another lesson or mastery of prerequisite >= 3)
+    [*] --> open
+    open --> open_advisory: prerequisite concept not covered (lockInfo, advisory only)
+    open_advisory --> open: prerequisite covered (completed elsewhere or mastery >= 3)
+    open_advisory --> checklist_partial: any study/quiz/assignment/code item done
     open --> checklist_partial: any study/quiz/assignment/code item done
     checklist_partial --> checklist_complete: all items done
     checklist_complete --> completed: ln-complete (learner click)
-    open --> completed: (no checklist items except study; still requires study)
+    completed --> offer_shown: adaptive offer (non-blocking)
+    offer_shown --> [*]: keep / apply (see §8 adjustment)
     completed --> [*]
 ```
 
 | Transition | Trigger | Guard | Side effects |
 |---|---|---|---|
-| locked → open | prerequisite lesson completed or mastery(prerequisite) ≥ 3 | derived | row unlocked |
+| open ↔ advisory (`locked` row) | prerequisite coverage changes (completion or mastery) | derived (`lockInfo`) | warning shown or hidden; **access never changes** (G6) |
 | open → checklist_* | study/quiz/assignment/code action | — | checklist updated |
-| checklist_complete → completed | learner `ln-complete` | all checklist items done (action re-checks; no-op otherwise) | `completed.push`; `studied` add; **mastery update** for each lesson concept; `pathUpdates` applied; `lastUpdate` set; `Codi.notify(self, "Lộ trình đã được cập nhật")`; scroll to top |
+| checklist_complete → completed | learner `ln-complete` | all checklist items done (action re-checks; no-op otherwise) | `completed.push`; `studied` add; **mastery update** for each lesson concept; `pathUpdates` applied; `lastUpdate` set; `adjustment` cleared; `offer` set (§8); `Codi.notify(self, "Lộ trình đã được cập nhật")`; scroll to top |
 | completed → completed | — | — | — |
 
 **Mastery update on completion:** evidence = coding score (`Codi.code.score`) for code lessons; quiz `score` when submitted; otherwise `2`. Each lesson concept: `max(current, masteryFromScore(evidence))` (or 2 when no evidence). Scale: score ≥90→4, ≥70→3, ≥50→2, else 1. Labels from `ui.mastery`. (Prototype heuristic; see §8 ⚠.)
 
-**Study triggers (`markStudied`):** `ln-mark-studied` (reading) or video simulated to 100% or PDF last page. Shows toast "Đã đánh dấu học xong nội dung."
+**Study triggers (`markStudied`):** `ln-mark-studied` (reading), video simulated to ≥ 90% (playback continues to the end) or PDF last page. Shows toast "Đã đánh dấu học xong nội dung."
+
+- ✅ Decided 2026-10-27 (D19, PRODUCT decision 66): video study threshold is **90%** watched (was 100%). Each video also shows "Xem ít nhất 90% video để đánh dấu đã học xong nội dung." until studied.
 
 - ✅ Decided 2026-10-14 (D6): passing the quiz is required to complete the lesson; latest attempt counts; retakes unlimited.
 - Assignment *submission* (not grade) satisfies completion (decision 14, A7) — consistent with code.
@@ -1076,7 +1103,7 @@ These are artifacts of the prototype. Their real-world equivalents are noted so 
 |---|---|
 | Ownership, cart selector, enrolment, gating | `js/core.js` (`ownership`, `enroll`, `isEnrolled`, `cart`, `setCart`, `pendingOrderFor`, `requireAuth`, `notify`, `courseProgress`) |
 | CTA, cart, voucher, checkout, payment poll, cancel, new code, manual check | `js/learner-commerce.js` (`ctaFor`, `purchaseCard`, `purchaseCardDetail`, `addToCart`, `checkVoucher`, `cartSummary`, `createOrderFromCart`, `cancelOrder`, `markPaid`, `startSim`, route `/checkout`, route `/cart`, `cm-*` actions) |
-| Goal, fork, diagnostic, path, lock, checklist, completion, quiz, assignment, upload | `js/learner-learning.js` (`newRecord`, `lockInfo`, `lessonStatus`, `checklist`, `generatePath`, `ln-complete`, `ln-quiz-*`, `ln-assign-*`, `ln-diag-*`, `ln-fork-*`, `ln-goal-*`, `ln-make-path`) |
+| Goal, fork, diagnostic, path, lock, checklist, completion, quiz, assignment, upload | `js/learner-learning.js` (`newRecord`, `lockInfo`, `lessonStatus`, `checklist`, `generatePath`, `ln-complete`, `offerChoices`, `applyOffer`, `ln-offer-*`, `ln-quiz-*`, `ln-assign-*`, `ln-diag-*`, `ln-fork-*`, `ln-goal-*`, `ln-make-path`) |
 | Code exercise | `js/coding-practice.js` (`status`, `score`, `run`, `grade`, `cp-run`, `cp-solution`, `cp-reset`) |
 | AI tutor | `js/ai-tutor.js` (`turn`, `hintLevel`, `tutor-hint`, `tutor-diff`, `tutor-stop`, `tutor-retry`, `tutor-lecturer-send`) |
 | Lecturer course/KMap/grading/Q&A/reviews | `js/lecturer.js` (`readiness`, `kmapOf`, `runAnalysis`, `findCycle`, `contentChanged`, `tc-submit`, `tc-kmap-*`, `tc-grade`, `tc-reply`, `tc-conversation-*`, `tc-review-reply`, `tc-flag-*`) |
