@@ -31,12 +31,13 @@ export function runJavaScript(input) {
         execArgv: [],
         env: {},
         resourceLimits: {
-          maxOldGenerationSizeMb: 64,
-          maxYoungGenerationSizeMb: 8,
-          stackSizeMb: 2,
+          maxOldGenerationSizeMb: 128,
+          maxYoungGenerationSizeMb: 16,
+          stackSizeMb: 4,
         },
       });
-    } catch {
+    } catch (err) {
+      console.error("[coding-runner] Worker initialization failed:", err);
       activeWorkers--;
       reject(new Error("Sandbox unavailable"));
       return;
@@ -48,14 +49,17 @@ export function runJavaScript(input) {
       clearTimeout(timer);
       // Keep the slot until the worker has actually stopped.
       void worker.terminate().catch(() => {});
-      if (error) reject(new Error("Sandbox unavailable"));
-      else resolve(result);
+      if (error) {
+        console.error("[coding-runner] Sandbox execution failed:", error);
+        reject(new Error("Sandbox unavailable"));
+      } else resolve(result);
     };
     // Cold initialization and wall-clock watchdog failures are infrastructure errors,
     // never graded submissions. Only QuickJS guest interrupts produce graded timeouts.
+    const initTimeoutMs = process.env.NODE_ENV === "test" ? 10000 : 25000;
     let timer = setTimeout(
       () => finish(new Error("Sandbox initialization timeout")),
-      10000,
+      initTimeoutMs,
     );
     worker.on("message", (message) => {
       if (message.type === "ready") {

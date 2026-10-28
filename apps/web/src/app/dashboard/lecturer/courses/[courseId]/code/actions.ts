@@ -305,16 +305,26 @@ export async function verifySolutionCode(
   requireCodingTests(preparedTests);
 
   // 3. Thực thi an toàn trong QuickJS Worker với cơ chế lease
-  const runResult = await withRunLease(user.id, async () => {
-    return await runJavaScript({
-      code: input.solutionCode,
-      tests: preparedTests.map((t) => ({
-        id: t.id,
-        input: t.input,
-        isSample: t.isSample,
-      })),
+  let runResult;
+  try {
+    runResult = await withRunLease(user.id, async () => {
+      return await runJavaScript({
+        code: input.solutionCode,
+        tests: preparedTests.map((t) => ({
+          id: t.id,
+          input: t.input,
+          isSample: t.isSample,
+        })),
+      });
     });
-  });
+  } catch (err: any) {
+    if (err?.message === "Sandbox unavailable" || err?.message === "Sandbox busy") {
+      throw new Error(
+        "Môi trường chạy code (sandbox) đang khởi động hoặc quá tải. Vui lòng bấm thử lại sau giây lát."
+      );
+    }
+    throw err;
+  }
 
   // 4. Chấm điểm kết quả thực thi
   const outcomes = preparedTests.map((t) => {
@@ -651,16 +661,26 @@ export async function runPreviewCode(
     input.mode === "run" ? dbTests.filter((t) => t.isSample) : dbTests;
 
   // Thực thi trong sandbox QuickJS
-  const result = await withRunLease(user.id, async () => {
-    return await runJavaScript({
-      code: input.code,
-      tests: testsToRun.map((t) => ({
-        id: t.id,
-        input: t.input,
-        isSample: t.isSample,
-      })),
+  let result;
+  try {
+    result = await withRunLease(user.id, async () => {
+      return await runJavaScript({
+        code: input.code,
+        tests: testsToRun.map((t) => ({
+          id: t.id,
+          input: t.input,
+          isSample: t.isSample,
+        })),
+      });
     });
-  });
+  } catch (err: any) {
+    if (err?.message === "Sandbox unavailable" || err?.message === "Sandbox busy") {
+      throw new Error(
+        "Môi trường chạy code (sandbox) đang khởi động hoặc quá tải. Vui lòng bấm thử lại sau giây lát."
+      );
+    }
+    throw err;
+  }
 
   // Chấm điểm test cases
   const sampleOutcomes: Array<{
@@ -763,12 +783,22 @@ export async function generateAiCodingTestCases(
 
   const candidates = uniqueCandidates.slice(0, 3);
   if (candidates.length === 0) return { success: true, tests: suggestedTests };
-  const runRes = await withRunLease(user.id, async () => {
-    return await runJavaScript({
-      code: input.solutionCode,
-      tests: candidates.map((call, i) => ({ id: i + 1, input: call, isSample: false })),
+  let runRes;
+  try {
+    runRes = await withRunLease(user.id, async () => {
+      return await runJavaScript({
+        code: input.solutionCode,
+        tests: candidates.map((call, i) => ({ id: i + 1, input: call, isSample: false })),
+      });
     });
-  });
+  } catch (err: any) {
+    if (err?.message === "Sandbox unavailable" || err?.message === "Sandbox busy") {
+      throw new Error(
+        "Môi trường chạy code (sandbox) đang khởi động hoặc quá tải. Vui lòng bấm thử lại sau giây lát."
+      );
+    }
+    throw err;
+  }
 
   for (const [i, callExpr] of candidates.entries()) {
     const outcome = runRes.outcomes.find((out) => out.id === i + 1);
