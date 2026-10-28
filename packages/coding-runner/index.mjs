@@ -1,7 +1,35 @@
-import { Worker } from "node:worker_threads";
+import * as wt from "node:worker_threads";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const maxWorkers = 4;
 let activeWorkers = 0;
+
+function findWorkerFilePath() {
+  try {
+    const filename = fileURLToPath(import.meta.url);
+    const p = path.join(path.dirname(filename), "worker.mjs");
+    if (fs.existsSync(p)) return p;
+  } catch {}
+
+  let cur = process.cwd();
+  while (cur && cur !== path.dirname(cur)) {
+    const candidate = path.join(cur, "packages/coding-runner/worker.mjs");
+    if (fs.existsSync(candidate)) return candidate;
+    cur = path.dirname(cur);
+  }
+
+  return path.resolve(process.cwd(), "packages/coding-runner/worker.mjs");
+}
+
+const workerFilePath = findWorkerFilePath();
+
+function createWorkerThread(filePath, options) {
+  // Use Reflect.construct to prevent Next.js / Turbopack bundler from hijacking new Worker
+  const WorkerClass = wt.Worker;
+  return Reflect.construct(WorkerClass, [filePath, options]);
+}
 
 // The worker only hosts the WebAssembly interpreter. Learner code never executes in Node.
 export function runJavaScript(input) {
@@ -19,7 +47,7 @@ export function runJavaScript(input) {
   return new Promise((resolve, reject) => {
     let worker;
     try {
-      worker = new Worker(new URL("./worker.mjs", import.meta.url), {
+      worker = createWorkerThread(workerFilePath, {
         // Samples always precede hidden tests so hidden timeouts cannot affect public outcomes.
         workerData: {
           ...input,

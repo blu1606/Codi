@@ -33,7 +33,8 @@ export default async function CodingExerciseBuilderPage({
         initialData={data}
       />
     );
-  } catch {
+  } catch (error) {
+    console.error("[CodingExerciseBuilderPage] Error loading coding exercise:", error);
     notFound();
   }
 }
