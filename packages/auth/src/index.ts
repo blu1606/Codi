@@ -29,8 +29,9 @@ export type AuthConfig = AuthOriginConfig & {
 };
 
 export function createAuth(env: AuthConfig, database: Database) {
-  const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
-  const fromAddress = env.EMAIL_FROM || "Codi <noreply@hoangblue.dev>";
+  const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
+  const resend = resendApiKey ? new Resend(resendApiKey) : null;
+  const fromAddress = env.EMAIL_FROM || process.env.EMAIL_FROM || "Codi <noreply@hoangblue.dev>";
 
   const otpPlugin = emailOTP({
     otpLength: 6,
@@ -39,14 +40,20 @@ export function createAuth(env: AuthConfig, database: Database) {
     changeEmail: { enabled: true },
     sendVerificationOTP: async ({ email, otp, type }) => {
       if (type === "change-email" || type === "forget-password") {
-        if (!resend) throw new Error("Email delivery is not configured.");
+        if (!resend) {
+          console.warn(`\n⚠️ [Auth Warning]: Resend not configured. Fallback OTP for ${email}: ${otp}\n`);
+          throw new Error("Email delivery is not configured.");
+        }
         const result = await resend.emails.send({
           from: fromAddress,
           to: email,
           subject: type === "change-email" ? "Mã xác thực đổi email Codi" : "Mã OTP đặt lại mật khẩu Codi",
           html: type === "change-email" ? getChangeEmailOTPEmailHtml({ otp }) : getResetPasswordOTPEmailHtml({ otp }),
         });
-        if (result.error) throw new Error("Could not send the verification code.");
+        if (result.error) {
+          console.warn(`\n⚠️ [Resend Error]: ${result.error.message}\n👉 [Fallback OTP for ${email}]: ${otp} (Hết hạn sau 2 phút)\n`);
+          throw new Error("Could not send the verification code.");
+        }
         return;
       }
       if (resend) {
@@ -89,9 +96,12 @@ export function createAuth(env: AuthConfig, database: Database) {
     secret: env.BETTER_AUTH_SECRET,
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== "/email-otp/request-email-change") return;
-        // Email-change requests must report delivery failures, rather than
-        // swallowing them through Better Auth's background-task helper.
+        if (
+          ctx.path !== "/email-otp/request-email-change" &&
+          ctx.path !== "/email-otp/send-verification-otp"
+        ) return;
+        // Delivery failures must reach the user rather than being swallowed
+        // through Better Auth's background-task helper.
         return {
           context: {
             context: {
