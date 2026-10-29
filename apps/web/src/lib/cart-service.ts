@@ -251,6 +251,8 @@ export async function getPendingOrderBanner(
       id: orders.id,
       code: orders.code,
       totalAmount: orders.totalAmount,
+      receivedAmount: orders.receivedAmount,
+      paymentDeadline: orders.paymentDeadline,
       createdAt: orders.createdAt,
     })
     .from(orders)
@@ -259,6 +261,30 @@ export async function getPendingOrderBanner(
     .limit(1);
 
   if (!pending) return null;
+
+  // If the pending order's payment deadline has expired, expire it and do not show as active pending banner
+  if (pending.paymentDeadline && new Date(pending.paymentDeadline) <= new Date()) {
+    try {
+      await db
+        .update(orders)
+        .set({
+          status: "failed",
+          failReason: "expired",
+          needsReconciliation: pending.receivedAmount > 0 ? true : undefined,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(orders.id, pending.id),
+            eq(orders.userId, userId),
+            eq(orders.status, "pending"),
+          ),
+        );
+    } catch {
+      // Non-fatal if concurrent update already modified it
+    }
+    return null;
+  }
 
   const items = await db
     .select({ id: orderItems.id })

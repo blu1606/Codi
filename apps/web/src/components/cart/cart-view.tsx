@@ -235,6 +235,22 @@ export function CartView() {
       const json = await res.json();
       if (!res.ok) {
         if (res.status === 409 && json.code === "PENDING_ORDER_EXISTS") {
+          if (json.pendingOrder) {
+            setData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    pendingOrder: {
+                      id: json.pendingOrder.id,
+                      code: json.pendingOrder.code,
+                      itemCount: prev.items.length,
+                      totalAmount: json.pendingOrder.totalAmount || prev.total,
+                      createdAt: new Date().toISOString(),
+                    },
+                  }
+                : null,
+            );
+          }
           setShowReplaceModal(true);
           setCheckoutLoading(false);
           return;
