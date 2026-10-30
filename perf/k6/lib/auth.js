@@ -1,11 +1,16 @@
-// Better Auth email sign-in. k6 keeps cookies in the VU's own jar, so a VU signs in once and
-// every later request of that VU carries the session. Module state is per VU, so the flag
-// below is never shared between VUs.
+// Better Auth email sign-in. Scripts set `noCookiesReset: true`, so k6 keeps the VU's cookie jar
+// across iterations and a VU signs in once. Module state is per VU, so the flag below is never
+// shared between VUs. When a protected request returns 401, journey.js calls invalidateSession()
+// and the next iteration signs in again.
 import { check } from "k6";
 import { call } from "./http.js";
 import { accountForVu } from "../data/accounts.js";
 
 let signedIn = false;
+
+export function invalidateSession() {
+  signedIn = false;
+}
 
 export function ensureSignedIn() {
   if (signedIn) return accountForVu();

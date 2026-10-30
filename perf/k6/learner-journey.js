@@ -8,6 +8,8 @@ export { handleSummary } from "./lib/summary.js";
 const ramp = rampStages({ vus: 50, duration: "3m" });
 
 export const options = {
+  // Keep each VU's session cookie across iterations (see lib/auth.js).
+  noCookiesReset: true,
   scenarios: {
     learners: { executor: "ramping-vus", startVUs: 0, stages: ramp.stages, gracefulRampDown: "30s" },
   },

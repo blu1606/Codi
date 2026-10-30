@@ -15,6 +15,8 @@ for (let target = STEP; target <= MAX_VUS; target += STEP) {
 stages.push({ duration: "1m", target: 0 });
 
 export const options = {
+  // Keep each VU's session cookie across iterations (see lib/auth.js).
+  noCookiesReset: true,
   scenarios: {
     stress: { executor: "ramping-vus", startVUs: 0, stages, gracefulRampDown: "30s" },
   },

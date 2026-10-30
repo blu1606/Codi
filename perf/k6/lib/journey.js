@@ -3,7 +3,7 @@
 import { check, sleep } from "k6";
 import { COURSE_SLUG, ENABLE_WRITES } from "./config.js";
 import { read, write, call } from "./http.js";
-import { ensureSignedIn } from "./auth.js";
+import { ensureSignedIn, invalidateSession } from "./auth.js";
 
 function requireCourseSlug() {
   if (!COURSE_SLUG) {
@@ -43,6 +43,8 @@ export function learnerJourney({ writes = false, thinkTime = 1 } = {}) {
 
   const lessonRes = read(`/api/learn/${courseId}/lessons/${lessonId}`, "GET /api/learn/:courseId/lessons/:lessonId");
   check(lessonRes, { "lesson 200": (r) => r.status === 200 });
+  // A 401 means the VU's session expired; the next iteration signs in again.
+  if ([pathRes, accessRes, lessonRes].some((r) => r.status === 401)) invalidateSession();
   const lesson = lessonRes.json();
   sleep(thinkTime);
 
@@ -56,8 +58,9 @@ export function learnerJourney({ writes = false, thinkTime = 1 } = {}) {
   check(progressRes, { "progress saved 200": (r) => r.status === 200 });
 
   if (writes && ENABLE_WRITES) {
-    const quiz = (lesson?.requirements ?? []).find((a) => a.type === "quiz");
-    if (quiz) submitQuiz(courseId, lessonId, quiz.id);
+    // The checklist lists the lesson's quiz (key "quiz") with its assessment id.
+    const quiz = (lesson?.checklist ?? []).find((item) => item.key === "quiz");
+    if (quiz?.assessmentId) submitQuiz(courseId, lessonId, quiz.assessmentId);
   }
   sleep(thinkTime);
 }

@@ -5,6 +5,7 @@ import { thresholds } from "./lib/config.js";
 export { handleSummary } from "./lib/summary.js";
 
 export const options = {
+  noCookiesReset: true,
   vus: 1,
   iterations: 1,
   thresholds: thresholds({ writes: true }),

@@ -18,7 +18,11 @@ for (const lhr of reports) {
   const tbt = Math.round(lhr.audits["total-blocking-time"].numericValue);
   lines.push(`| ${lhr.requestedUrl} | ${perf} | ${lcp} | ${tbt} |`);
 }
-if (reports.length === 0) lines.push("No Lighthouse reports were produced.");
+if (reports.length === 0) {
+  lines.push("No Lighthouse reports were produced.");
+  const listing = fs.existsSync(dir) ? fs.readdirSync(dir).join(", ") : "directory missing";
+  console.error(`no lhr-*.json in ${path.resolve(dir)}: ${listing}`);
+}
 
 const body = `${lines.join("\n")}\n`;
 if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, body);
