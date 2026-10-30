@@ -52,10 +52,29 @@ WITH "threads" AS (
 	JOIN "course_lessons" l ON l."id" = t."lesson_id"
 	RETURNING "id", "user_id", "lesson_id"
 )
-INSERT INTO "ai_chat_messages" ("id", "chat_id", "role", "parts", "vote", "vote_reason", "created_at")
+-- A suggested change becomes the same tool part the chat stores today (output { ok, diff }), keyed by its legacy row;
+-- its applied/skipped state goes to metadata.diffs. A stopped answer keeps metadata.stopped.
+INSERT INTO "ai_chat_messages" ("id", "chat_id", "role", "parts", "metadata", "vote", "vote_reason", "created_at")
 SELECT 'legacy-' || m."id", c."id",
 	CASE m."role" WHEN 'user' THEN 'user'::"ai_chat_role" ELSE 'assistant'::"ai_chat_role" END,
-	jsonb_build_array(jsonb_build_object('type', 'text', 'text', m."body")),
+	CASE WHEN m."diff" IS NULL
+		THEN jsonb_build_array(jsonb_build_object('type', 'text', 'text', m."body"))
+		ELSE jsonb_build_array(
+			jsonb_build_object('type', 'text', 'text', m."body"),
+			jsonb_build_object(
+				'type', 'tool-suggest_code_change',
+				'toolCallId', 'legacy-' || m."id",
+				'state', 'output-available',
+				'input', jsonb_build_object('at', m."diff"->'at', 'add', m."diff"->'add'),
+				'output', jsonb_build_object('ok', true, 'diff', m."diff")
+			)
+		)
+	END,
+	jsonb_strip_nulls(jsonb_build_object(
+		'stopped', CASE WHEN m."stopped" THEN true END,
+		'diffs', CASE WHEN m."diff"->>'state' IS NOT NULL
+			THEN jsonb_build_object('legacy-' || m."id", m."diff"->>'state') END
+	)),
 	m."vote", m."vote_reason", m."created_at"
 FROM "ai_tutor_messages" m
 JOIN "chats" c ON c."user_id" = m."user_id" AND c."lesson_id" = m."lesson_id"
