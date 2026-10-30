@@ -63,11 +63,12 @@ jobs:
           LHCI_BASE_URL: ${{ steps.target.outputs.url }}
         run: node scripts/lhci-resolve-course.mjs "$LHCI_BASE_URL" >> "$GITHUB_ENV" || true
 
-      - name: Run Lighthouse CI
+      # `lhci autorun` deletes .lighthouseci/ on exit, so collect only; the upload runs last.
+      - name: Collect Lighthouse runs
         if: steps.target.outputs.url != ''
         env:
           LHCI_BASE_URL: ${{ steps.target.outputs.url }}
-        run: pnpm exec lhci autorun
+        run: pnpm exec lhci collect
 
       - name: Generate badge JSON
         id: badge
@@ -87,6 +88,10 @@ jobs:
           name: lighthouse-badge-${{ github.run_id }}
           path: badge-out/
           retention-days: 7
+
+      - name: Assert (warn-only) and upload to temporary public storage
+        if: steps.badge.outputs.written == 'true'
+        run: pnpm exec lhci assert && pnpm exec lhci upload
 
   # The only job with a write token, and it runs only after a successful measurement.
   publish:

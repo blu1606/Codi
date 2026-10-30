@@ -138,8 +138,10 @@ jobs:
       - name: Resolve a published course for the detail page
         run: node scripts/lhci-resolve-course.mjs "$LHCI_BASE_URL" >> "$GITHUB_ENV" || true
 
-      - name: Run Lighthouse CI (mobile, 3 runs per URL)
-        run: pnpm exec lhci autorun
+      # collect -> summary -> artifact -> assert/upload. `lhci autorun` removes .lighthouseci/ when it
+      # finishes, so the reports must be read and kept before the upload step.
+      - name: Collect Lighthouse runs (mobile, 3 runs per URL)
+        run: pnpm exec lhci collect
 
       - name: Summarise Lighthouse scores
         if: always()
@@ -153,6 +155,10 @@ jobs:
           path: .lighthouseci/
           retention-days: 14
           if-no-files-found: ignore
+
+      - name: Assert (warn-only) and upload to temporary public storage
+        if: always()
+        run: pnpm exec lhci assert && pnpm exec lhci upload
 
       # Production Deployment (Khi push vào main/master)
       - name: Pull Vercel Environment Information (Production)
