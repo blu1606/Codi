@@ -106,6 +106,19 @@ jobs:
             echo "Preview URL: $preview_url"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Production Deployment (Khi push vào main/master)
+      - name: Pull Vercel Environment Information (Production)
+        if: github.event_name == 'push'
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts (Production)
+        if: github.event_name == 'push'
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy Project Artifacts to Vercel (Production)
+        if: github.event_name == 'push'
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
   # Lighthouse CI on this PR's own preview. Warn-only: reports scores, never blocks merge yet.
   # Not run for fork PRs (no preview is deployed) and never for production deploys.
   lighthouse:
@@ -159,16 +172,3 @@ jobs:
       - name: Assert (warn-only) and upload to temporary public storage
         if: always()
         run: pnpm exec lhci assert && pnpm exec lhci upload
-
-      # Production Deployment (Khi push vào main/master)
-      - name: Pull Vercel Environment Information (Production)
-        if: github.event_name == 'push'
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build Project Artifacts (Production)
-        if: github.event_name == 'push'
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Deploy Project Artifacts to Vercel (Production)
-        if: github.event_name == 'push'
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
