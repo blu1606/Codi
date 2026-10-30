@@ -6,8 +6,6 @@ import type { Route } from "next";
 import {
   BookOpen,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   ClipboardCheck,
   Code2,
   FileText,
@@ -15,7 +13,6 @@ import {
   List,
   Map as MapIcon,
   PlayCircle,
-  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
@@ -87,19 +84,13 @@ export function LessonPath({
       </p>
     );
   }
-  const [expandedWhy, setExpandedWhy] = useState<Set<string>>(() => new Set());
   const current = data.rows.find((row) => row.id === data.currentLessonId);
   const selected =
     data.rows.find((row) => row.id === (picked ?? data.currentLessonId)) ??
     data.rows[0]!;
-  const toggleWhy = (id: string) => {
+  // Opening the detail sheet is a row-tap action only; "Vì sao?" never reaches this.
+  const openDetail = (id: string) => {
     setPicked(id);
-    setExpandedWhy((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
     if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
       setSheetOpen(true);
     }
@@ -132,9 +123,8 @@ export function LessonPath({
                   isLast={index === group.steps.length - 1}
                   selected={step.row.id === selected.id}
                   highlighted={data.highlights.includes(step.row.id)}
-                  isExpanded={expandedWhy.has(step.row.id)}
                   lessonUrl={lessonUrl}
-                  onToggleWhy={toggleWhy}
+                  onOpenDetail={openDetail}
                 />
               ))}
             </ol>
@@ -189,18 +179,16 @@ function LessonStep({
   isLast,
   selected,
   highlighted,
-  isExpanded,
   lessonUrl,
-  onToggleWhy,
+  onOpenDetail,
 }: {
   step: Step;
   isCurrent: boolean;
   isLast: boolean;
   selected: boolean;
   highlighted: boolean;
-  isExpanded: boolean;
   lessonUrl: LessonUrl;
-  onToggleWhy: (id: string) => void;
+  onOpenDetail: (id: string) => void;
 }) {
   const { row, number } = step;
   const Icon = KIND_ICONS[row.kind ?? "reading"];
@@ -232,6 +220,11 @@ function LessonStep({
       </div>
       <article
         aria-current={isCurrent ? "step" : undefined}
+        onClick={(event) => {
+          // Links, buttons and the "Vì sao?" disclosure keep their own behaviour; the rest of the card opens the detail.
+          if ((event.target as HTMLElement).closest("a,button,summary,details")) return;
+          onOpenDetail(row.id);
+        }}
         className={cn(
           "min-w-0 flex-1 space-y-3 rounded-xl border bg-card p-4 text-card-foreground",
           selected && "border-primary ring-1 ring-primary",
@@ -293,37 +286,19 @@ function LessonStep({
               Học tiếp
             </Link>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={isExpanded}
-            aria-controls={`lesson-why-${row.id}`}
-            onClick={() => onToggleWhy(row.id)}
-            className="gap-1.5 text-xs"
-          >
-            Vì sao?
-            {isExpanded ? (
-              <ChevronUp className="size-3.5" aria-hidden="true" />
-            ) : (
-              <ChevronDown className="size-3.5" aria-hidden="true" />
-            )}
-            <span className="sr-only">: {row.title}</span>
-          </Button>
         </div>
-        {isExpanded && (
-          <div
-            id={`lesson-why-${row.id}`}
-            className="rounded-lg border border-border/60 bg-muted/50 p-3 text-xs space-y-1.5 animate-in fade-in-50 duration-200"
-          >
-            <p className="flex items-center gap-1.5 font-medium text-foreground">
-              <Sparkles className="size-3.5 text-primary shrink-0" aria-hidden="true" />
-              Vì sao bài này nằm trong lộ trình của bạn:
-            </p>
-            <p className="text-muted-foreground leading-relaxed">
-              {row.reason || "Theo thứ tự mặc định của giảng viên."}
-            </p>
-          </div>
-        )}
+        <details
+          open={row.status === "active" || row.status === "next"}
+          className="text-sm"
+        >
+          <summary className="inline-flex min-h-8 cursor-pointer items-center text-primary">
+            Vì sao?
+            <span className="sr-only">: {row.title}</span>
+          </summary>
+          <p className="mt-2 rounded-lg border border-border bg-muted/50 p-3 leading-relaxed text-muted-foreground">
+            {row.reason || "Theo thứ tự mặc định của khoá học (thứ tự bài học tiên quyết)."}
+          </p>
+        </details>
       </article>
     </li>
   );

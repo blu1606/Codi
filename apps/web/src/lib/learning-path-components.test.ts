@@ -186,36 +186,76 @@ describe("learner course-home interactions", () => {
     ).toHaveLength(1);
   });
 
-  it("toggles inline expandable why reason directly on lesson card click", async () => {
+  it("opens the why disclosure by default only for the active or next lesson", async () => {
     const data = home();
     data.rows[0]!.reason = "Khái niệm nền tảng cần nắm trước khi học tiếp.";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
     await render(
-      createElement(CourseHome, {
-        courseId: "owned",
-        dismissalScope: "test-session",
-      }),
+      createElement(CourseHome, { courseId: "owned", dismissalScope: "test-session" }),
     );
 
-    const whyButton = document.querySelector<HTMLButtonElement>(
-      `button[aria-controls="lesson-why-${data.rows[0]!.id}"]`,
-    );
-    expect(whyButton).not.toBeNull();
-    expect(whyButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(document.getElementById(`lesson-why-${data.rows[0]!.id}`)).toBeNull();
+    const [nextWhy, lockedWhy] = [...document.querySelectorAll("details")];
+    expect(data.rows[0]!.status).toBe("next");
+    expect(data.rows[1]!.status).toBe("locked");
+    expect(nextWhy!.open).toBe(true);
+    expect(nextWhy!.textContent).toContain("Khái niệm nền tảng cần nắm trước khi học tiếp.");
+    expect(lockedWhy!.open).toBe(false);
+  });
 
-    // Click to expand inline
-    await act(async () => whyButton!.click());
-    expect(whyButton?.getAttribute("aria-expanded")).toBe("true");
-    const inlineBox = document.getElementById(`lesson-why-${data.rows[0]!.id}`);
-    expect(inlineBox).not.toBeNull();
-    expect(inlineBox?.textContent).toContain("Vì sao bài này nằm trong lộ trình của bạn:");
-    expect(inlineBox?.textContent).toContain("Khái niệm nền tảng cần nắm trước khi học tiếp.");
+  it("'Vì sao?' expands inline only and never opens the detail sheet", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const data = home();
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
+      await render(
+        createElement(CourseHome, { courseId: "owned", dismissalScope: "test-session" }),
+      );
 
-    // Click again to collapse inline
-    await act(async () => whyButton!.click());
-    expect(whyButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(document.getElementById(`lesson-why-${data.rows[0]!.id}`)).toBeNull();
+      const lockedWhy = document.querySelectorAll("details")[1]!;
+      const summary = lockedWhy.querySelector("summary")!;
+      await act(async () => summary.click());
+      expect(lockedWhy.open).toBe(true);
+      expect(document.body.textContent).not.toContain("Chi tiết bài học");
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it("tapping the lesson card on a narrow screen opens the detail sheet", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const data = home();
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
+      await render(
+        createElement(CourseHome, { courseId: "owned", dismissalScope: "test-session" }),
+      );
+
+      const card = document.querySelectorAll("article")[1]!;
+      await act(async () => card.click());
+      expect(document.body.textContent).toContain("Chi tiết bài học");
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 });
 
