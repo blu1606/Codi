@@ -256,4 +256,23 @@ describe("account password recovery", () => {
       expect(rendered).not.toMatch(/\b\d{6}\b/);
     }
   });
+
+  it("answers anonymous recovery identically for existing and missing accounts when delivery fails", async () => {
+    const auth = createTestAuth();
+    await signUp(auth);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    state.sendEmail.mockResolvedValue({ data: null, error: { message: "Delivery rejected" } });
+    const anonymousReset = async (address: string) => {
+      const response = await auth.handler(new Request(`${baseURL}/api/auth/email-otp/send-verification-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: baseURL },
+        body: JSON.stringify({ email: address, type: "forget-password" }),
+      }));
+      return { status: response.status, body: await response.json() };
+    };
+    const existing = await anonymousReset(email);
+    const missing = await anonymousReset("unknown-account@example.com");
+    expect(existing).toEqual({ status: 200, body: { success: true } });
+    expect(missing).toEqual(existing);
+  });
 });
