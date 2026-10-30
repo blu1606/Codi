@@ -60,19 +60,16 @@ jobs:
           docker logs codi-ci-smoke
           exit 1
 
-  deploy:
-    name: Deploy verified commit to VPS
-    needs: validate
+  build:
+    name: Build and publish the tested image
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 35
     permissions:
       contents: read
       packages: write
-    environment: production
-    concurrency:
-      group: codi-production-deploy
-      cancel-in-progress: false
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
     steps:
       - name: Check out the verified commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -110,6 +107,21 @@ jobs:
           image_reference=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
           [[ "$image_reference" =~ ^ghcr[.]io/blu1606/codi@sha256:[0-9a-f]{64}$ ]]
           printf 'digest=%s\n' "${image_reference#*@}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy verified commit to VPS
+    needs: [validate, build]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    environment: production
+    concurrency:
+      group: codi-production-deploy
+      cancel-in-progress: false
+    steps:
       - name: Connect to VPS and deploy this exact commit
         env:
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -118,7 +130,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.CODI_SSH_USER }}
           DEPLOY_PRIVATE_KEY: ${{ secrets.CODI_SSH_PRIVATE_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.CODI_SSH_KNOWN_HOSTS }}
-          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
         shell: bash
         run: |
           set -euo pipefail
