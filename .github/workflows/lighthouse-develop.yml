@@ -1,0 +1,112 @@
+name: Lighthouse Badge (develop)
+
+# Measures the public /courses page on the develop preview and publishes the median performance
+# score as a README badge. Pull requests never run this workflow.
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Origin to audit (defaults to the DEVELOP_PREVIEW_URL repository variable)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Lighthouse (mobile, /courses)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      badge: ${{ steps.badge.outputs.written }}
+    steps:
+      - name: Resolve target
+        id: target
+        env:
+          INPUT_URL: ${{ inputs.base_url }}
+          DEFAULT_URL: ${{ vars.DEVELOP_PREVIEW_URL }}
+        run: |
+          url="${INPUT_URL:-$DEFAULT_URL}"
+          if [[ -z "$url" ]]; then
+            echo "::notice::DEVELOP_PREVIEW_URL is not set; skipping the Lighthouse badge"
+            echo "url=" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=${url%/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.target.outputs.url != ''
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        if: steps.target.outputs.url != ''
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        if: steps.target.outputs.url != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: steps.target.outputs.url != ''
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve a published course for the detail page
+        if: steps.target.outputs.url != ''
+        env:
+          LHCI_BASE_URL: ${{ steps.target.outputs.url }}
+        run: node scripts/lhci-resolve-course.mjs "$LHCI_BASE_URL" >> "$GITHUB_ENV" || true
+
+      - name: Run Lighthouse CI
+        if: steps.target.outputs.url != ''
+        env:
+          LHCI_BASE_URL: ${{ steps.target.outputs.url }}
+        run: pnpm exec lhci autorun
+
+      - name: Generate badge JSON
+        id: badge
+        if: always() && steps.target.outputs.url != ''
+        run: |
+          if ls .lighthouseci/lhr-*.json >/dev/null 2>&1; then
+            node scripts/make-badges.mjs lighthouse .lighthouseci badge-out
+            echo "written=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "written=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload badge JSON
+        if: steps.badge.outputs.written == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-badge-${{ github.run_id }}
+          path: badge-out/
+          retention-days: 7
+
+  # The only job with a write token, and it runs only after a successful measurement.
+  publish:
+    name: Publish Lighthouse badge
+    needs: measure
+    if: needs.measure.outputs.badge == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download badge JSON
+        uses: actions/download-artifact@v4
+        with:
+          name: lighthouse-badge-${{ github.run_id }}
+          path: badge-out/
+
+      - name: Publish to the badges branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/publish-badges.sh badge-out
