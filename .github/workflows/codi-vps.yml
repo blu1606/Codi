@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [develop, main]
   push:
-    branches: [main]
+    branches: [main, ci/vps-deploy]
   workflow_dispatch:
 
 permissions:
@@ -33,25 +33,61 @@ jobs:
         run: pnpm run check-types
       - name: Run tests and coverage
         run: pnpm run test:coverage
+      - name: Build container without production secrets
+        run: docker build --label org.opencontainers.image.source=https://github.com/blu1606/Codi -t codi-ci:check .
+      - name: Smoke test container with a fake database
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f codi-ci-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name codi-ci-smoke -p 127.0.0.1:3001:3001 \
+            -e DATABASE_URL=postgresql://fake:fake@127.0.0.1:5432/fake \
+            -e BETTER_AUTH_SECRET=fake-runtime-secret-at-least-thirty-two-characters \
+            -e BETTER_AUTH_URL=https://codi.ddnsfree.com \
+            codi-ci:check >/dev/null
+          for attempt in {1..45}; do
+            if curl --silent --fail --max-time 2 http://127.0.0.1:3001/ >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker logs codi-ci-smoke
+          exit 1
 
   deploy:
     name: Deploy verified commit to VPS
     needs: validate
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
     environment: production
     concurrency:
       group: codi-production-deploy
       cancel-in-progress: false
-    env:
-      DEPLOY_HOST: ${{ secrets.CODI_SSH_HOST }}
-      DEPLOY_PORT: ${{ secrets.CODI_SSH_PORT }}
-      DEPLOY_USER: ${{ secrets.CODI_SSH_USER }}
-      DEPLOY_PRIVATE_KEY: ${{ secrets.CODI_SSH_PRIVATE_KEY }}
-      DEPLOY_KNOWN_HOSTS: ${{ secrets.CODI_SSH_KNOWN_HOSTS }}
     steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@v4
+      - name: Build and publish the exact commit image
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/blu1606/codi:$GITHUB_SHA"
+          docker build --label org.opencontainers.image.source=https://github.com/blu1606/Codi -t "$image" .
+          export DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GH_PACKAGES_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          docker push "$image"
       - name: Connect to VPS and deploy this exact commit
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_HOST: ${{ secrets.CODI_SSH_HOST }}
+          DEPLOY_PORT: ${{ secrets.CODI_SSH_PORT }}
+          DEPLOY_USER: ${{ secrets.CODI_SSH_USER }}
+          DEPLOY_PRIVATE_KEY: ${{ secrets.CODI_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.CODI_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
@@ -69,7 +105,7 @@ jobs:
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/codi_deploy_key" "$HOME/.ssh/known_hosts"
           trap 'rm -f "$HOME/.ssh/codi_deploy_key" "$HOME/.ssh/known_hosts"' EXIT
-          ssh -i "$HOME/.ssh/codi_deploy_key" \
+          printf '%s\n%s\n' "$GITHUB_ACTOR" "$GH_PACKAGES_TOKEN" | ssh -i "$HOME/.ssh/codi_deploy_key" \
             -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
             -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
