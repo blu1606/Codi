@@ -6,6 +6,8 @@ import type { Route } from "next";
 import {
   BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ClipboardCheck,
   Code2,
   FileText,
@@ -13,6 +15,7 @@ import {
   List,
   Map as MapIcon,
   PlayCircle,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
@@ -84,13 +87,22 @@ export function LessonPath({
       </p>
     );
   }
+  const [expandedWhy, setExpandedWhy] = useState<Set<string>>(() => new Set());
   const current = data.rows.find((row) => row.id === data.currentLessonId);
   const selected =
     data.rows.find((row) => row.id === (picked ?? data.currentLessonId)) ??
     data.rows[0]!;
-  const choose = (id: string) => {
+  const toggleWhy = (id: string) => {
     setPicked(id);
-    if (!window.matchMedia("(min-width: 1024px)").matches) setSheetOpen(true);
+    setExpandedWhy((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
+      setSheetOpen(true);
+    }
   };
   const detail = (
     <StepDetail
@@ -120,8 +132,9 @@ export function LessonPath({
                   isLast={index === group.steps.length - 1}
                   selected={step.row.id === selected.id}
                   highlighted={data.highlights.includes(step.row.id)}
+                  isExpanded={expandedWhy.has(step.row.id)}
                   lessonUrl={lessonUrl}
-                  onChoose={choose}
+                  onToggleWhy={toggleWhy}
                 />
               ))}
             </ol>
@@ -176,16 +189,18 @@ function LessonStep({
   isLast,
   selected,
   highlighted,
+  isExpanded,
   lessonUrl,
-  onChoose,
+  onToggleWhy,
 }: {
   step: Step;
   isCurrent: boolean;
   isLast: boolean;
   selected: boolean;
   highlighted: boolean;
+  isExpanded: boolean;
   lessonUrl: LessonUrl;
-  onChoose: (id: string) => void;
+  onToggleWhy: (id: string) => void;
 }) {
   const { row, number } = step;
   const Icon = KIND_ICONS[row.kind ?? "reading"];
@@ -281,13 +296,34 @@ function LessonStep({
           <Button
             variant="ghost"
             size="sm"
-            aria-pressed={selected}
-            onClick={() => onChoose(row.id)}
+            aria-expanded={isExpanded}
+            aria-controls={`lesson-why-${row.id}`}
+            onClick={() => onToggleWhy(row.id)}
+            className="gap-1.5 text-xs"
           >
             Vì sao?
+            {isExpanded ? (
+              <ChevronUp className="size-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="size-3.5" aria-hidden="true" />
+            )}
             <span className="sr-only">: {row.title}</span>
           </Button>
         </div>
+        {isExpanded && (
+          <div
+            id={`lesson-why-${row.id}`}
+            className="rounded-lg border border-border/60 bg-muted/50 p-3 text-xs space-y-1.5 animate-in fade-in-50 duration-200"
+          >
+            <p className="flex items-center gap-1.5 font-medium text-foreground">
+              <Sparkles className="size-3.5 text-primary shrink-0" aria-hidden="true" />
+              Vì sao bài này nằm trong lộ trình của bạn:
+            </p>
+            <p className="text-muted-foreground leading-relaxed">
+              {row.reason || "Theo thứ tự mặc định của giảng viên."}
+            </p>
+          </div>
+        )}
       </article>
     </li>
   );
