@@ -15,6 +15,7 @@ import {
   LoaderCircle,
   Map as MapIcon,
   MessageCircle,
+  Sparkles,
   Star,
 } from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
@@ -492,36 +493,42 @@ export default function LessonPlayer({
               <ArrowRight className="size-4" />
             </Link>
           )}
-          <Link
-            href={courseHome}
-            className="inline-flex min-h-11 items-center text-sm text-primary lg:hidden"
-          >
-            Về lộ trình
-          </Link>
-          <Button
-            variant="outline"
-            className="lg:ml-auto"
-            onClick={() => {
-              setMapFrom(null);
-              setMapOpen(true);
-            }}
-          >
-            <MapIcon className="size-4" />
-            Xem lộ trình
-          </Button>
-          <Button
-            variant={qaOpen ? "secondary" : "outline"}
-            className="lg:ml-auto"
-            aria-pressed={qaOpen}
-            onClick={() => {
-              const next = !qaOpen;
-              setQaOpen(next);
-              if (next) ai.setOpen(false);
-            }}
-          >
-            <MessageCircle className="size-4" />
-            Hỏi đáp
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMapFrom(null);
+                setMapOpen(true);
+              }}
+            >
+              <MapIcon className="size-4" />
+              Xem lộ trình
+            </Button>
+            <Button
+              variant={ai.open ? "secondary" : "outline"}
+              aria-pressed={ai.open}
+              onClick={() => {
+                const next = !ai.open;
+                ai.setOpen(next);
+                if (next) setQaOpen(false);
+              }}
+            >
+              <Sparkles className="size-4" />
+              AI trợ lý
+            </Button>
+            <Button
+              variant={qaOpen ? "secondary" : "outline"}
+              aria-pressed={qaOpen}
+              onClick={() => {
+                const next = !qaOpen;
+                setQaOpen(next);
+                if (next) ai.setOpen(false);
+              }}
+            >
+              <MessageCircle className="size-4" />
+              Hỏi đáp
+            </Button>
+          </div>
         </nav>
         {errorAlert}
         <div className="space-y-2 lg:hidden">
@@ -537,8 +544,13 @@ export default function LessonPlayer({
         </div>
         <header className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            {data.lesson.chapterTitle} · {LESSON_KIND_LABELS[kind]} ·{" "}
-            {Math.ceil(data.lesson.durationSeconds / 60)} phút
+            {[
+              data.lesson.chapterTitle,
+              LESSON_KIND_LABELS[kind],
+              `${Math.ceil(data.lesson.durationSeconds / 60)} phút`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
           <h1
             ref={heading}
@@ -875,6 +887,14 @@ export default function LessonPlayer({
         title="Danh sách bài học"
         description={`${path.course.title} · ${path.done}/${path.total} bài`}
       >
+        <Link
+          href={courseHome}
+          className="mb-3 inline-flex min-h-11 items-center gap-2 text-sm text-primary"
+          onClick={() => setSidebar(false)}
+        >
+          <ArrowLeft className="size-4" />
+          Về lộ trình
+        </Link>
         {lessons}
       </Sheet>
       {reviewing && (
@@ -983,6 +1003,7 @@ function LessonList({
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {LESSON_KIND_LABELS[row.kind ?? "reading"]} ·{" "}
                 {Math.ceil(row.durationSeconds / 60)} phút
+                {row.status === "skippable" && " · có thể bỏ qua"}
               </p>
               <span className="sr-only">{LESSON_PATH_LABELS[row.status]}</span>
             </div>

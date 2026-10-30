@@ -116,4 +116,19 @@ describe("contextual request (P2)", () => {
     expect(latest.open).toBe(false);
     expect(latest.takeRequest()?.ask).toBe("Khoá này có phù hợp với tôi không?");
   });
+
+  it("reopening the panel from the page toolbar does not bring back a taken question", async () => {
+    session.user = null;
+    await act(async () => root.render(tree()));
+    act(() => latest.openWith({ ask: "Vì sao test này chưa đạt?" }));
+    act(() => latest.takeRequest());
+    act(() => latest.setOpen(false));
+    act(() => latest.setOpen(true));
+    expect(latest.open).toBe(true);
+    expect(latest.request).toBeNull();
+    expect(latest.takeRequest()).toBeNull();
+
+    act(() => latest.openWith({ ask: "Bài này dạy gì?" }));
+    expect(latest.takeRequest()?.ask).toBe("Bài này dạy gì?");
+  });
 });
