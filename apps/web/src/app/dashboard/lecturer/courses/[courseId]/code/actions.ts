@@ -13,6 +13,7 @@ import {
 } from "@codi-1/db";
 import { runJavaScript, type RunPhase } from "@codi-1/coding-runner";
 import { canonical, requireCodingTests } from "@/lib/coding-contract";
+import { runLeaseExpiresAt } from "@/lib/coding-run-lease";
 import { db } from "@/services";
 import { lockKnowledgeMap } from "@/lib/confirmed-knowledge-map";
 import { readLecturerIdentity } from "@/lib/lecturer-auth";
@@ -86,14 +87,14 @@ async function withRunLease<T>(userId: string, action: () => Promise<T>): Promis
     .values({
       userId,
       token,
-      runningUntil: sql`clock_timestamp() + interval '20 seconds'`,
+      runningUntil: runLeaseExpiresAt,
       lastStartedAt: sql`clock_timestamp()`,
     })
     .onConflictDoUpdate({
       target: codingRunLeases.userId,
       set: {
         token,
-        runningUntil: sql`clock_timestamp() + interval '20 seconds'`,
+        runningUntil: runLeaseExpiresAt,
         lastStartedAt: sql`clock_timestamp()`,
       },
       setWhere: sql`${codingRunLeases.runningUntil} <= clock_timestamp() and ${codingRunLeases.lastStartedAt} <= clock_timestamp() - interval '2 seconds'`,
