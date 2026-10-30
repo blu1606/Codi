@@ -16,11 +16,18 @@ export interface CheckoutResult {
   totalAmount: number;
 }
 
+export interface PendingOrderDetails {
+  id: number;
+  code: string;
+  totalAmount?: number;
+}
+
 export class CheckoutError extends Error {
   constructor(
     public status: number,
     message: string,
     public code?: string,
+    public pendingOrder?: PendingOrderDetails,
   ) {
     super(message);
     this.name = "CheckoutError";
@@ -81,6 +88,7 @@ export async function createOrderFromCart(
           id: orders.id,
           code: orders.code,
           status: orders.status,
+          totalAmount: orders.totalAmount,
           receivedAmount: orders.receivedAmount,
           paymentDeadline: orders.paymentDeadline,
         })
@@ -135,6 +143,11 @@ export async function createOrderFromCart(
             409,
             `Bạn đang có đơn hàng ${existingPending.code} chờ thanh toán. Vui lòng hoàn tất hoặc huỷ đơn cũ trước khi đặt đơn mới.`,
             "PENDING_ORDER_EXISTS",
+            {
+              id: existingPending.id,
+              code: existingPending.code,
+              totalAmount: existingPending.totalAmount,
+            },
           );
         }
 
