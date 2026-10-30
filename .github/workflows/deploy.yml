@@ -143,25 +143,7 @@ jobs:
 
       - name: Summarise Lighthouse scores
         if: always()
-        run: |
-          node -e '
-            const fs = require("node:fs");
-            const dir = ".lighthouseci";
-            const runs = fs.existsSync(dir)
-              ? fs.readdirSync(dir).filter((f) => /^lhr-.*\.json$/.test(f))
-                  .map((f) => JSON.parse(fs.readFileSync(`${dir}/${f}`, "utf8")))
-              : [];
-            const rows = runs.map((lhr) => [
-              lhr.requestedUrl,
-              Math.round((lhr.categories.performance.score ?? 0) * 100),
-              Math.round(lhr.audits["largest-contentful-paint"].numericValue),
-              Math.round(lhr.audits["total-blocking-time"].numericValue),
-            ]);
-            const lines = ["## Lighthouse (mobile, warn-only)", "", "| URL | Perf | LCP (ms) | TBT (ms) |", "| --- | --- | --- | --- |"];
-            for (const r of rows) lines.push(`| ${r.join(" | ")} |`);
-            if (rows.length === 0) lines.push("No Lighthouse reports were produced.");
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
-          '
+        run: node scripts/lhci-step-summary.mjs
 
       - name: Upload Lighthouse reports
         if: always()
