@@ -2,7 +2,7 @@ import { google } from "@ai-sdk/google";
 
 import { LlmProvider, type ResolvedLanguageModel } from "../provider";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 
 export class GeminiProvider extends LlmProvider {
   readonly id = "gemini";
