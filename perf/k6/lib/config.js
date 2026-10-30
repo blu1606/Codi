@@ -44,6 +44,10 @@ export function thresholds({ writes = false } = {}) {
       // Protects the target: stop the run once more than 5% of requests fail.
       { threshold: `rate<${ABORT_FAILURE_RATE}`, abortOnFail: true, delayAbortEval: "30s" },
     ],
+    // Any API answer that is not JSON means the target is broken, so the numbers are meaningless.
+    api_not_json: [{ threshold: "rate==0", abortOnFail: true }],
+    // A journey that throws stops early and makes iterations look fast; fail the run instead.
+    checks: ["rate>0.99"],
   };
   if (writes) result["http_req_duration{type:write}"] = [`p(95)<${WRITE_P95_MS}`];
   return result;

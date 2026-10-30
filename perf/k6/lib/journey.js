@@ -38,7 +38,14 @@ export function learnerJourney({ writes = false, thinkTime = 1 } = {}) {
   const pathRes = read(`/api/learn/${courseId}/path`, "GET /api/learn/:courseId/path");
   check(pathRes, { "learning path 200": (r) => r.status === 200 });
 
-  const accessRes = read(`/api/learn/${courseId}/access/${lessonId}`, "GET /api/learn/:courseId/access/:lessonId");
+  const accessPath = `/api/learn/${courseId}/access/${lessonId}`;
+  let accessRes = read(accessPath, "GET /api/learn/:courseId/access/:lessonId", [200, 409]);
+  if (accessRes.status === 409) {
+    // A fresh enrolment has no path yet. Take the onboarding route that needs no AI:
+    // skip the goal, then study in the course's default order.
+    onboardDefaultOrder(courseId);
+    accessRes = read(accessPath, "GET /api/learn/:courseId/access/:lessonId");
+  }
   check(accessRes, { "lesson access 200": (r) => r.status === 200 });
 
   const lessonRes = read(`/api/learn/${courseId}/lessons/${lessonId}`, "GET /api/learn/:courseId/lessons/:lessonId");
@@ -63,6 +70,16 @@ export function learnerJourney({ writes = false, thinkTime = 1 } = {}) {
     if (quiz?.assessmentId) submitQuiz(courseId, lessonId, quiz.assessmentId);
   }
   sleep(thinkTime);
+}
+
+// Runs once per test account. Each step is idempotent from the account's point of view: a
+// 409 means the account is already past that step.
+function onboardDefaultOrder(courseId) {
+  const path = `/api/learn/${courseId}/onboarding`;
+  for (const type of ["goal-skip", "fork-default"]) {
+    const res = write("POST", path, { type }, `POST /api/learn/:courseId/onboarding (${type})`, [200, 409]);
+    check(res, { [`onboarding ${type} ok`]: (r) => r.status === 200 || r.status === 409 });
+  }
 }
 
 // Opens a quiz attempt, answers every question with its first option, then submits.
