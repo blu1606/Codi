@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   courses,
   orders,
@@ -251,7 +251,6 @@ export async function getPendingOrderBanner(
       id: orders.id,
       code: orders.code,
       totalAmount: orders.totalAmount,
-      receivedAmount: orders.receivedAmount,
       paymentDeadline: orders.paymentDeadline,
       createdAt: orders.createdAt,
     })
@@ -262,26 +261,43 @@ export async function getPendingOrderBanner(
 
   if (!pending) return null;
 
-  // If the pending order's payment deadline has expired, expire it and do not show as active pending banner
+  // Past its payment deadline: expire it under the same code lock the payment callback takes,
+  // and re-read receivedAmount there, so a transfer that lands meanwhile is flagged for reconciliation.
   if (pending.paymentDeadline && new Date(pending.paymentDeadline) <= new Date()) {
     try {
-      await db
-        .update(orders)
-        .set({
-          status: "failed",
-          failReason: "expired",
-          needsReconciliation: pending.receivedAmount > 0 ? true : undefined,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(orders.id, pending.id),
-            eq(orders.userId, userId),
-            eq(orders.status, "pending"),
-          ),
-        );
+      await db.transaction(async (tx: any) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${pending.code}))`);
+        const [fresh] = await tx
+          .select({ receivedAmount: orders.receivedAmount })
+          .from(orders)
+          .where(
+            and(
+              eq(orders.id, pending.id),
+              eq(orders.userId, userId),
+              eq(orders.status, "pending"),
+            ),
+          )
+          .limit(1);
+        if (!fresh) return;
+
+        await tx
+          .update(orders)
+          .set({
+            status: "failed",
+            failReason: "expired",
+            needsReconciliation: fresh.receivedAmount > 0 ? true : undefined,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(orders.id, pending.id),
+              eq(orders.userId, userId),
+              eq(orders.status, "pending"),
+            ),
+          );
+      });
     } catch {
-      // Non-fatal if concurrent update already modified it
+      // Non-fatal: the banner is hidden either way; the next read retries the expiry
     }
     return null;
   }
