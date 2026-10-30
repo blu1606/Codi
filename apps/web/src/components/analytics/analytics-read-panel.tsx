@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
+import { StatCardsSkeleton } from "@/components/skeletons/stat-cards-skeleton";
 import { Button } from "@codi-1/ui/components/button";
 import type { AnalyticsPeriod, CountData, LearnerStatsData } from "@/lib/analytics-contract";
 
@@ -50,7 +53,13 @@ export function AnalyticsReadPanel({ url, title, children }: {
   const loading = !ready;
   return <section className="min-h-40 space-y-3 rounded-lg border border-border bg-card p-4" aria-label={title} aria-busy={loading}>
     <h2 className="font-semibold">{title}</h2>
-    {loading && <p role="status">Đang tải thống kê…</p>}
+    {loading && (
+      <LoadingRegion label="Đang tải thống kê…" className="space-y-4">
+        <Skeleton className="h-4 w-72 max-w-full" />
+        <StatCardsSkeleton count={4} />
+        <Skeleton className="h-48 w-full rounded-lg" />
+      </LoadingRegion>
+    )}
     {ready?.error && <div role="alert"><p>Không tải được thống kê.</p><Button variant="outline" onClick={() => setAttempt((n) => n + 1)}>Thử lại</Button></div>}
     {ready?.data && <><Range window={ready.data.window} />{children(ready.data)}</>}
   </section>;

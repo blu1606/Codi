@@ -13,6 +13,15 @@ import type {
   GithubRepositorySnapshot,
 } from "./github-profile-contract";
 
+const GRAPHQL_URL = "https://api.github.com/graphql";
+// Upper bound on repository aliases per batched query; a batch is split, never truncated.
+const MAX_ALIASES_PER_QUERY = 100;
+const REPOSITORIES_PER_PAGE = 25;
+// Regular git blobs only. Symlinks (120000) and gitlinks (160000) are never read.
+const REGULAR_FILE_MODES = new Set([0o100644, 0o100755]);
+const RATE_LIMIT_MESSAGE =
+  /(?:secondary rate limit|api rate limit exceeded|abuse detection)/i;
+
 const loginSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/);
 const idSchema = z.number().int().positive().safe();
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
@@ -92,6 +101,7 @@ const graphqlEnvelopeSchema = z.object({
       z.object({
         message: z.string(),
         type: z.string().optional(),
+        path: z.array(z.union([z.string(), z.number()])).optional(),
         extensions: z
           .object({
             type: z.string().optional(),
@@ -104,23 +114,44 @@ const graphqlEnvelopeSchema = z.object({
     .min(1)
     .optional(),
 });
-const directorySchema = z
-  .array(
-    z.object({
-      name: z.string().max(255),
-      type: z.string().max(30),
-      sha: z.string().max(64),
-      size: z.number().nonnegative().safe(),
-    }),
-  )
-  .max(1000);
-const fileSchema = z.object({
-  type: z.literal("file"),
-  sha: shaSchema,
-  size: z.number().int().nonnegative().safe(),
-  encoding: z.literal("base64"),
-  content: z.string(),
+const ownerSchema = z.object({
+  login: loginSchema,
+  databaseId: idSchema.optional(),
 });
+const treeEntrySchema = z.object({
+  name: z.string().max(255),
+  type: z.string().max(30),
+  mode: z.number().int().nonnegative().safe(),
+  oid: shaSchema,
+  object: z
+    .object({
+      byteSize: z.number().int().nonnegative().safe().optional(),
+      isBinary: z.boolean().nullish(),
+    })
+    .nullable(),
+});
+type TreeEntry = z.infer<typeof treeEntrySchema>;
+const treeAliasSchema = z
+  .object({
+    databaseId: idSchema,
+    owner: ownerSchema,
+    tree: z.object({ entries: z.array(treeEntrySchema).nullable() }).nullable(),
+  })
+  .nullable();
+const blobAliasSchema = z
+  .object({
+    databaseId: idSchema,
+    blob: z
+      .object({
+        oid: shaSchema,
+        byteSize: z.number().int().nonnegative().safe(),
+        isBinary: z.boolean().nullable(),
+        isTruncated: z.boolean(),
+        text: z.string().nullable(),
+      })
+      .nullable(),
+  })
+  .nullable();
 const publicAccessSchema = z.discriminatedUnion("mode", [
   z.strictObject({ mode: z.literal("anonymous") }),
   z.strictObject({
@@ -144,7 +175,10 @@ export interface GithubCollectorInput {
   /** Immutable GitHub numeric subject, NOT the Better Auth local account-row ID. */
   githubUserId: string;
   accessToken: string;
-  /** Trusted public REST access mode; GraphQL always uses the linked-user bearer. */
+  /**
+   * Trusted operator configuration. GraphQL always uses the linked-user bearer; the app
+   * secret is only retained for credential redaction and coverage reporting.
+   */
   publicAccess: GithubPublicAccess;
 }
 
@@ -153,6 +187,18 @@ export interface GithubCollectorOptions {
   fetch?: typeof globalThis.fetch;
   /** May lower, never raise, the accepted safety ceilings. */
   limits?: Partial<GithubProfileLimits>;
+  /** Server-owned observer; no identity, query variables, credentials or content. */
+  onRequest?: (event: GithubRequestTiming) => void;
+}
+
+export interface GithubRequestTiming {
+  operation: "listing" | "tree" | "blob";
+  ordinal: number;
+  elapsedMs: number;
+  collectionElapsedMs: number;
+  headersMs: number | null;
+  httpStatus: number | null;
+  outcome: "ok" | GithubReadCode;
 }
 
 class ReadFailure extends Error {
@@ -163,6 +209,17 @@ class ReadFailure extends Error {
   ) {
     super(code);
   }
+}
+
+interface BatchEnvelope {
+  data: unknown;
+  /** Per-alias GraphQL errors that were attributable to exactly one repository read. */
+  aliasErrors: Map<string, ReadFailure>;
+}
+
+interface BatchItem {
+  repo: GithubRepositorySnapshot;
+  expression: string;
 }
 
 function rateLimitTime(headers: Headers): string | undefined {
@@ -184,9 +241,30 @@ function rateLimitTime(headers: Headers): string | undefined {
     : undefined;
 }
 
+// Secondary-limit 403 bodies carry no reset header; retry no sooner than a minute out.
+const rateLimitRetry = (headers: Headers) =>
+  rateLimitTime(headers) ?? new Date(Date.now() + 60_000).toISOString();
+
+/** Query text for one batch; every repository and path value enters via variables. */
+function batchQuery(kind: "tree" | "blob", count: number): string {
+  const declarations = Array.from(
+    { length: count },
+    (_, index) =>
+      `$o${index}: String!, $n${index}: String!, $e${index}: String!`,
+  ).join(", ");
+  const selections = Array.from({ length: count }, (_, index) =>
+    kind === "tree"
+      ? `t${index}: repository(owner: $o${index}, name: $n${index}) { databaseId owner { login ... on User { databaseId } } tree: object(expression: $e${index}) { ... on Tree { entries { name type mode oid object { ... on Blob { byteSize isBinary } } } } } }`
+      : `f${index}: repository(owner: $o${index}, name: $n${index}) { databaseId blob: object(expression: $e${index}) { ... on Blob { oid byteSize isBinary isTruncated text } } }`,
+  );
+  const name = kind === "tree" ? "CodiPublicTrees" : "CodiPublicBlobs";
+  return `query ${name}(${declarations}) {\n  ${selections.join("\n  ")}\n}`;
+}
+
 /**
  * Server-only collector. Caller establishes session-owned linkage and analysis consent first.
- * Two repository workers share request/byte/time ceilings; identity/listing finish first.
+ * Reads are batched GraphQL: listing pages, then one tree query and blob queries per batch.
+ * Batches run sequentially, so one request is in flight at a time.
  */
 export async function collectGithubProfile(
   input: GithubCollectorInput,
@@ -240,6 +318,7 @@ export async function collectGithubProfile(
   }
   const appCredentials =
     publicAccess.data.mode === "oauth_app" ? publicAccess.data : null;
+  // Redaction set only: the app secret is never sent, but must never be echoed back.
   const basic = appCredentials
     ? Buffer.from(
         `${appCredentials.clientId}:${appCredentials.clientSecret}`,
@@ -294,28 +373,23 @@ export async function collectGithubProfile(
       stopped = true;
     return failure.code;
   };
-  const request = async (
-    path: string,
-    variables?: { first: number; after: string | null },
-  ): Promise<unknown> => {
-    const graphql = variables !== undefined;
+  const send = async (
+    operationName: string,
+    query: string,
+    variables: Record<string, unknown>,
+    isolatedAliases?: ReadonlySet<string>,
+  ): Promise<BatchEnvelope> => {
     const remainingMs = limits.totalMs - (performance.now() - started);
     if (remainingMs <= 0) throw new ReadFailure("total_timeout");
     if (snapshot.coverage.requests >= limits.requests)
       throw new ReadFailure("request_limit");
     if (snapshot.coverage.responseBytes >= limits.aggregateBytes)
       throw new ReadFailure("aggregate_limit");
-    const url = new URL(`https://api.github.com${path}`);
-    // Paths are constructed below, never sourced from Link, html_url or download_url.
-    if (
-      !path.startsWith("/") ||
-      path.startsWith("//") ||
-      url.origin !== "https://api.github.com" ||
-      url.username ||
-      url.password
-    )
-      throw new ReadFailure("invalid_response");
     const controller = new AbortController();
+    const requestStarted = performance.now();
+    let headersMs: number | null = null;
+    let httpStatus: number | null = null;
+    let outcome: GithubRequestTiming["outcome"] = "ok";
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadlineCode =
@@ -334,17 +408,9 @@ export async function collectGithubProfile(
       return await Promise.race([
         timeout,
         (async () => {
-          const response = await transport(url.toString(), {
-            method: graphql ? "POST" : "GET",
-            ...(graphql
-              ? {
-                  body: JSON.stringify({
-                    query: repositoryQuery,
-                    operationName: "CodiPublicProfile",
-                    variables,
-                  }),
-                }
-              : {}),
+          const response = await transport(GRAPHQL_URL, {
+            method: "POST",
+            body: JSON.stringify({ query, operationName, variables }),
             redirect: "error",
             credentials: "omit",
             cache: "no-store",
@@ -353,15 +419,13 @@ export async function collectGithubProfile(
               Accept: "application/vnd.github+json",
               "X-GitHub-Api-Version": "2022-11-28",
               "User-Agent": "Codi-GitHub-Profile",
-              ...(graphql ? { "Content-Type": "application/json" } : {}),
-              ...(graphql
-                ? { Authorization: `Bearer ${input.accessToken}` }
-                : basic
-                  ? { Authorization: `Basic ${basic}` }
-                  : {}),
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${input.accessToken}`,
             },
           });
           // A custom transport can finish after abort; do not consume or mutate the snapshot then.
+          headersMs = Math.round(performance.now() - requestStarted);
+          httpStatus = response.status;
           if (controller.signal.aborted) {
             void response.body?.cancel().catch(() => undefined);
             throw new ReadFailure(deadlineCode);
@@ -369,7 +433,7 @@ export async function collectGithubProfile(
           if (
             response.redirected ||
             (response.status >= 300 && response.status < 400) ||
-            (response.url && response.url !== url.toString())
+            (response.url && response.url !== GRAPHQL_URL)
           )
             throw new ReadFailure("redirect_rejected", response.status);
           if (
@@ -387,11 +451,7 @@ export async function collectGithubProfile(
           if (!response.ok && response.status !== 403)
             throw new ReadFailure(
               response.status === 401
-                ? graphql
-                  ? "connection_expired"
-                  : appCredentials
-                    ? "app_auth_failed"
-                    : "http_error"
+                ? "connection_expired"
                 : response.status === 404
                   ? "not_found"
                   : "http_error",
@@ -440,100 +500,116 @@ export async function collectGithubProfile(
               response.status,
             );
           }
-          if (graphql && response.status === 403) {
-            const message = z.object({ message: z.string() }).safeParse(parsed);
-            if (
-              message.success &&
-              /(?:secondary rate limit|api rate limit exceeded|abuse detection)/i.test(
-                message.data.message,
-              )
-            ) {
-              throw new ReadFailure(
-                "rate_limited",
-                403,
-                rateLimitTime(response.headers) ??
-                  new Date(Date.now() + 60_000).toISOString(),
-              );
-            }
-          }
-          if (graphql) {
-            const validated = graphqlEnvelopeSchema.safeParse(parsed);
-            if (!validated.success) throw new ReadFailure("invalid_response");
-            const envelope = validated.data;
-            if (envelope.errors) {
-              const labels = envelope.errors
-                .flatMap((error) => [
-                  error.type,
-                  error.extensions?.type,
-                  error.extensions?.code,
-                  error.message,
-                ])
-                .filter((label): label is string => typeof label === "string");
-              if (
-                labels.some((label) =>
-                  /rate[_ -]?limit|abuse detection/i.test(label),
-                )
-              )
-                throw new ReadFailure(
-                  "rate_limited",
-                  response.status,
-                  rateLimitTime(response.headers) ??
-                    new Date(Date.now() + 60_000).toISOString(),
-                );
-              if (
-                labels.some((label) =>
-                  /^(?:UNAUTHENTICATED|BAD_CREDENTIALS)$|bad credentials|requires authentication|token (?:has )?expired/i.test(
-                    label,
-                  ),
-                )
-              )
-                throw new ReadFailure("connection_expired", response.status);
-              // Discard the entire errored page, retaining only earlier validated pages.
-              throw new ReadFailure(
-                envelope.data == null ? "graphql_error" : "graphql_partial",
-                response.status,
-              );
-            }
-          }
           if (response.status === 403) {
             const message = z.object({ message: z.string() }).safeParse(parsed);
             if (
               message.success &&
-              /(?:secondary rate limit|api rate limit exceeded|abuse detection)/i.test(
-                message.data.message,
-              )
-            ) {
+              RATE_LIMIT_MESSAGE.test(message.data.message)
+            )
               throw new ReadFailure(
                 "rate_limited",
                 403,
-                rateLimitTime(response.headers) ??
-                  new Date(Date.now() + 60_000).toISOString(),
+                rateLimitRetry(response.headers),
               );
-            }
-            throw new ReadFailure(
-              appCredentials && !graphql ? "app_auth_failed" : "http_error",
-              403,
+          }
+          const validated = graphqlEnvelopeSchema.safeParse(parsed);
+          if (!validated.success) throw new ReadFailure("invalid_response");
+          const envelope = validated.data;
+          const aliasErrors = new Map<string, ReadFailure>();
+          if (envelope.errors) {
+            const labels = envelope.errors
+              .flatMap((error) => [
+                error.type,
+                error.extensions?.type,
+                error.extensions?.code,
+                error.message,
+              ])
+              .filter((label): label is string => typeof label === "string");
+            if (
+              labels.some((label) =>
+                /rate[_ -]?limit|abuse detection/i.test(label),
+              )
+            )
+              throw new ReadFailure(
+                "rate_limited",
+                response.status,
+                rateLimitRetry(response.headers),
+              );
+            if (
+              labels.some((label) =>
+                /^(?:UNAUTHENTICATED|BAD_CREDENTIALS)$|bad credentials|requires authentication|token (?:has )?expired/i.test(
+                  label,
+                ),
+              )
+            )
+              throw new ReadFailure("connection_expired", response.status);
+            // Only errors attributed to a batched alias are isolated; anything else discards the page.
+            const keys = envelope.errors.map((error) => {
+              const key = error.path?.[0];
+              return typeof key === "string" && isolatedAliases?.has(key)
+                ? key
+                : undefined;
+            });
+            if (envelope.data == null || keys.includes(undefined))
+              throw new ReadFailure(
+                envelope.data == null ? "graphql_error" : "graphql_partial",
+                response.status,
+              );
+            envelope.errors.forEach((error, index) =>
+              aliasErrors.set(
+                keys[index]!,
+                new ReadFailure(
+                  error.type === "NOT_FOUND" ||
+                    error.extensions?.code === "NOT_FOUND"
+                    ? "not_found"
+                    : "graphql_partial",
+                  response.status,
+                ),
+              ),
             );
           }
+          if (response.status === 403) throw new ReadFailure("http_error", 403);
           // Do not echo credential-bearing upstream text, even from a test/custom transport.
           if (
             containsCredentials(text) ||
             containsStructuredCredentials(parsed)
           )
             throw new ReadFailure("invalid_response");
-          return parsed;
+          return { data: envelope.data, aliasErrors };
         })(),
       ]);
     } catch (error) {
-      throw error instanceof ReadFailure
-        ? error
-        : new ReadFailure(
-            controller.signal.aborted ? deadlineCode : "network_error",
-          );
+      const failure =
+        error instanceof ReadFailure
+          ? error
+          : new ReadFailure(
+              controller.signal.aborted ? deadlineCode : "network_error",
+            );
+      outcome = failure.code;
+      throw failure;
     } finally {
       if (timer) clearTimeout(timer);
       controller.abort();
       if (reader) void reader.cancel().catch(() => undefined);
+      // Logging failures must not change collection or cause another upstream request.
+      try {
+        options.onRequest?.({
+          operation:
+            operationName === "CodiPublicProfile"
+              ? "listing"
+              : operationName === "CodiPublicTrees"
+                ? "tree"
+                : "blob",
+          ordinal: snapshot.coverage.requests,
+          elapsedMs: Math.round(performance.now() - requestStarted),
+          collectionElapsedMs: Math.round(performance.now() - started),
+          headersMs,
+          httpStatus,
+          outcome,
+        });
+      } catch {
+        /* Observability is best effort. */
+      }
     }
   };
   const finish = () => {
@@ -564,22 +640,24 @@ export async function collectGithubProfile(
     page++
   ) {
     const perPage = Math.min(
-      100,
+      REPOSITORIES_PER_PAGE,
       limits.listedRepos - snapshot.repositories.length,
     );
     try {
+      const result = await send("CodiPublicProfile", repositoryQuery, {
+        first: perPage,
+        after,
+      });
       const response = z
         .object({
-          data: z.object({
-            viewer: z.object({
-              databaseId: idSchema,
-              login: loginSchema,
-              repositories: z.unknown(),
-            }),
+          viewer: z.object({
+            databaseId: idSchema,
+            login: loginSchema,
+            repositories: z.unknown(),
           }),
         })
-        .parse(await request("/graphql", { first: perPage, after }));
-      const viewer = response.data.viewer;
+        .parse(result.data);
+      const viewer = response.viewer;
       if (
         String(viewer.databaseId) !== input.githubUserId ||
         (snapshot.identity &&
@@ -636,7 +714,7 @@ export async function collectGithubProfile(
       after = endCursor;
       cursors.add(endCursor!);
       if (
-        page >= Math.ceil(limits.listedRepos / 100) ||
+        page >= Math.ceil(limits.listedRepos / REPOSITORIES_PER_PAGE) ||
         snapshot.repositories.length >= limits.listedRepos
       ) {
         issue({ operation: "listing" }, new ReadFailure("pagination_limit"));
@@ -673,7 +751,7 @@ export async function collectGithubProfile(
         kind: "languages",
         repositoryId: repo.id,
         collectedAt,
-        // Official equivalent language-byte evidence endpoint, not a claim of REST transport.
+        // Official equivalent language-byte evidence endpoint, not a claim of GraphQL transport.
         sourceUrl: `https://api.github.com/repos/${repo.owner}/${repo.name}/languages`,
         bytes: Object.fromEntries(
           languages.edges
@@ -685,125 +763,220 @@ export async function collectGithubProfile(
       issue({ repositoryId: repo.id, operation: "languages" }, error);
     }
   }
-  const collectRepository = async (repo: GithubRepositorySnapshot) => {
-    if (stopped) return;
-    const scope = { repositoryId: repo.id };
-    const base = `/repos/${repo.owner}/${repo.name}`;
-    if (!repo.commitSha) {
-      issue(
-        { ...scope, operation: "ref" },
-        new ReadFailure("invalid_response"),
-      );
-      return;
-    }
-    let directory: z.infer<typeof directorySchema>;
+
+  // Runs one batched query. Per-alias failures stay on their item; a response that overflows
+  // the ceiling is split in half and retried so one large repository cannot discard the batch.
+  const readBatch = async <T extends BatchItem>(
+    kind: "tree" | "blob",
+    items: readonly T[],
+    accept: (item: T, value: unknown) => void,
+    reject: (item: T, error: unknown) => void,
+  ): Promise<void> => {
+    if (stopped || items.length === 0) return;
+    const prefix = kind === "tree" ? "t" : "f";
+    const alias = (index: number) => `${prefix}${index}`;
+    const variables = Object.fromEntries(
+      items.flatMap((item, index) => [
+        [`o${index}`, item.repo.owner],
+        [`n${index}`, item.repo.name],
+        [`e${index}`, item.expression],
+      ]),
+    );
+    let envelope: BatchEnvelope;
     try {
-      directory = directorySchema.parse(
-        await request(`${base}/contents?ref=${repo.commitSha}`),
+      envelope = await send(
+        kind === "tree" ? "CodiPublicTrees" : "CodiPublicBlobs",
+        batchQuery(kind, items.length),
+        variables,
+        new Set(items.map((_, index) => alias(index))),
       );
     } catch (error) {
-      issue({ ...scope, operation: "directory" }, error);
+      if (
+        error instanceof ReadFailure &&
+        error.code === "response_limit" &&
+        items.length > 1
+      ) {
+        const middle = Math.ceil(items.length / 2);
+        await readBatch(kind, items.slice(0, middle), accept, reject);
+        await readBatch(kind, items.slice(middle), accept, reject);
+        return;
+      }
+      for (const item of items) reject(item, error);
       return;
     }
-    // The Contents API caps directories at 1000 entries. Absence at that ceiling is unknown.
-    const directoryCapped = directory.length === 1000;
-    if (directoryCapped)
-      issue(
-        { ...scope, operation: "directory" },
-        new ReadFailure("directory_limit"),
-      );
+    items.forEach((item, index) => {
+      try {
+        const failure = envelope.aliasErrors.get(alias(index));
+        if (failure) throw failure;
+        accept(
+          item,
+          z.record(z.string(), z.unknown()).parse(envelope.data)[alias(index)],
+        );
+      } catch (error) {
+        reject(item, error);
+      }
+    });
+  };
+
+  // Stage 1: root trees pinned to each commit. Entries give file presence, mode and size.
+  const readable = selected.flatMap((repo) => {
+    if (repo.commitSha) return [{ repo, expression: `${repo.commitSha}:` }];
+    issue(
+      { repositoryId: repo.id, operation: "ref" },
+      new ReadFailure("invalid_response"),
+    );
+    return [];
+  });
+  const trees = new Map<number, TreeEntry[]>();
+  for (let start = 0; start < readable.length; start += MAX_ALIASES_PER_QUERY) {
+    await readBatch(
+      "tree",
+      readable.slice(start, start + MAX_ALIASES_PER_QUERY),
+      (item, value) => {
+        const parsed = treeAliasSchema.parse(value);
+        if (!parsed) throw new ReadFailure("not_found");
+        if (
+          parsed.databaseId !== item.repo.id ||
+          parsed.owner.login.toLowerCase() !== item.repo.owner.toLowerCase() ||
+          String(parsed.owner.databaseId) !== input.githubUserId
+        )
+          throw new ReadFailure("invalid_response");
+        // A pinned commit that no longer resolves is absence of evidence, not a missing file.
+        if (!parsed.tree) throw new ReadFailure("not_found");
+        if (!parsed.tree.entries) throw new ReadFailure("invalid_response");
+        trees.set(item.repo.id, parsed.tree.entries);
+      },
+      (item, error) =>
+        issue({ repositoryId: item.repo.id, operation: "directory" }, error),
+    );
+  }
+
+  // Stage 2 planning: decide from tree metadata alone, so oversized and binary blobs are never
+  // requested as text.
+  type BlobItem = BatchItem & {
+    path: string;
+    file: GithubRepositorySnapshot["files"][number];
+    oid: string;
+    byteSize: number;
+  };
+  const planned: BlobItem[] = [];
+  for (const repo of selected) {
+    const entries = trees.get(repo.id);
+    if (!entries || !repo.commitSha) continue;
     const readme =
-      directory
+      entries
         .filter((entry) =>
           /^readme(?:\.(?:md|markdown|rst|txt))?$/i.test(entry.name),
         )
         .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))[0]
         ?.name ?? "README.md";
     for (const path of [...GITHUB_MANIFEST_PATHS, readme]) {
-      const entry = directory.find((item) => item.name === path);
+      const entry = entries.find((item) => item.name === path);
       const file: GithubRepositorySnapshot["files"][number] = {
         path,
-        state: entry || directoryCapped ? "unavailable" : "missing",
+        state: entry ? "unavailable" : "missing",
       };
       repo.files.push(file);
-      if (!entry || stopped) continue;
-      if (entry.type !== "file" || !shaSchema.safeParse(entry.sha).success) {
-        issue(
-          { ...scope, operation: "file", path },
-          new ReadFailure("invalid_response"),
-        );
+      if (!entry) continue;
+      const scope = { repositoryId: repo.id, operation: "file" as const, path };
+      const blob = entry.object;
+      if (
+        entry.type !== "blob" ||
+        !REGULAR_FILE_MODES.has(entry.mode) ||
+        blob?.byteSize === undefined
+      ) {
+        issue(scope, new ReadFailure("invalid_response"));
         continue;
       }
-      if (entry.size > limits.fileBytes) {
-        issue(
-          { ...scope, operation: "file", path },
-          new ReadFailure("file_limit"),
-        );
+      if (blob.byteSize > limits.fileBytes) {
+        issue(scope, new ReadFailure("file_limit"));
         continue;
       }
-      try {
-        const data = fileSchema.parse(
-          await request(
-            `${base}/contents/${encodeURIComponent(path)}?ref=${repo.commitSha}`,
-          ),
-        );
-        const encoded = data.content.replace(/\n/g, "");
-        if (
-          data.size > limits.fileBytes ||
-          encoded.length > Math.ceil(limits.fileBytes / 3) * 4
-        )
-          throw new ReadFailure("file_limit");
-        if (
-          !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-            encoded,
-          )
-        )
+      if (blob.isBinary === true) {
+        issue(scope, new ReadFailure("invalid_response"));
+        continue;
+      }
+      planned.push({
+        repo,
+        expression: `${repo.commitSha}:${path}`,
+        path,
+        file,
+        oid: entry.oid,
+        byteSize: blob.byteSize,
+      });
+    }
+  }
+
+  // Stage 2: blob text, packed by estimated JSON size (escaping can expand text, so the
+  // estimate is generous and readBatch splits any batch that still overflows).
+  const batches: BlobItem[][] = [];
+  let batch: BlobItem[] = [];
+  let estimated = 0;
+  for (const item of planned) {
+    const cost = item.byteSize * 2 + 1024;
+    if (
+      batch.length &&
+      (batch.length === MAX_ALIASES_PER_QUERY ||
+        estimated + cost > limits.responseBytes)
+    ) {
+      batches.push(batch);
+      batch = [];
+      estimated = 0;
+    }
+    batch.push(item);
+    estimated += cost;
+  }
+  if (batch.length) batches.push(batch);
+  for (const items of batches) {
+    await readBatch(
+      "blob",
+      items,
+      (item, value) => {
+        const parsed = blobAliasSchema.parse(value);
+        if (!parsed) throw new ReadFailure("not_found");
+        if (parsed.databaseId !== item.repo.id)
           throw new ReadFailure("invalid_response");
-        const decoded = Buffer.from(encoded, "base64");
-        if (decoded.length > limits.fileBytes)
-          throw new ReadFailure("file_limit");
+        if (!parsed.blob) throw new ReadFailure("not_found");
+        const blob = parsed.blob;
+        if (blob.oid !== item.oid || blob.byteSize !== item.byteSize)
+          throw new ReadFailure("invalid_response");
+        // Truncated text is only a prefix and cannot prove the blob.
+        if (blob.isTruncated) throw new ReadFailure("file_limit");
+        if (blob.isBinary === true || blob.text === null)
+          throw new ReadFailure("invalid_response");
+        const decoded = Buffer.from(blob.text, "utf8");
         const sha = createHash("sha1")
           .update(`blob ${decoded.length}\0`)
           .update(decoded)
           .digest("hex");
-        if (
-          data.sha !== entry.sha ||
-          sha !== data.sha ||
-          decoded.length !== data.size ||
-          data.size !== entry.size
-        )
+        if (decoded.length !== blob.byteSize || sha !== blob.oid)
           throw new ReadFailure("invalid_response");
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(decoded);
-        if (containsCredentials(text))
+        if (containsCredentials(blob.text))
           throw new ReadFailure("invalid_response");
-        const evidenceId = `repo:${repo.id}:commit:${repo.commitSha}:file:${path}:blob:${data.sha}`;
+        const evidenceId = `repo:${item.repo.id}:commit:${item.repo.commitSha}:file:${item.path}:blob:${blob.oid}`;
         snapshot.evidence.push({
           id: evidenceId,
           kind: "file",
-          repositoryId: repo.id,
-          path,
-          commitSha: repo.commitSha,
-          blobSha: data.sha,
-          text,
+          repositoryId: item.repo.id,
+          path: item.path,
+          commitSha: item.repo.commitSha!,
+          blobSha: blob.oid,
+          text: blob.text,
           collectedAt: new Date().toISOString(),
-          sourceUrl: `https://github.com/${repo.owner}/${repo.name}/blob/${repo.commitSha}/${encodeURIComponent(path)}`,
+          sourceUrl: `https://github.com/${item.repo.owner}/${item.repo.name}/blob/${item.repo.commitSha}/${encodeURIComponent(item.path)}`,
         });
-        file.state = "collected";
-        file.evidenceId = evidenceId;
-      } catch (error) {
-        const code = issue({ ...scope, operation: "file", path }, error);
-        if (code === "not_found") file.state = "missing";
-      }
-    }
-  };
-  let nextRepository = 0;
-  const worker = async () => {
-    while (!stopped && nextRepository < selected.length) {
-      const repo = selected[nextRepository++];
-      if (repo) await collectRepository(repo);
-    }
-  };
-  await Promise.all([worker(), worker()]);
+        item.file.state = "collected";
+        item.file.evidenceId = evidenceId;
+      },
+      (item, error) => {
+        const code = issue(
+          { repositoryId: item.repo.id, operation: "file", path: item.path },
+          error,
+        );
+        if (code === "not_found") item.file.state = "missing";
+      },
+    );
+  }
   // Completion order must not affect downstream observation selection.
   const order = new Map(selected.map((repo, index) => [repo.id, index]));
   snapshot.evidence.sort(

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@codi-1/ui/components/button";
+import { CourseDetailSkeleton } from "@/components/skeletons/course-detail-skeleton";
 import { Card } from "@codi-1/ui/components/card";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -456,24 +457,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
   };
 
   if (loading) {
-    return (
-      <main className={styles.page} aria-busy="true">
-        <div className={styles.container}>
-          <div className="space-y-6 motion-safe:animate-pulse">
-            <div className="h-4 w-48 rounded bg-muted" />
-            <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-              <div className="space-y-6">
-                <div className="h-10 w-3/4 rounded bg-muted" />
-                <div className="h-16 rounded bg-muted" />
-                <div className="h-40 rounded-xl bg-muted" />
-                <div className="h-64 rounded-xl bg-muted" />
-              </div>
-              <div className="h-80 rounded-xl bg-muted" />
-            </div>
-          </div>
-        </div>
-      </main>
-    );
+    return <CourseDetailSkeleton />;
   }
 
   if (error || !detail) {
@@ -482,7 +466,7 @@ export default function CourseDetailView({ slug }: { slug: string }) {
         <div className={styles.container}>
           <Card className="mx-auto max-w-xl items-center gap-4 rounded-2xl border border-border p-8 text-center bg-card">
             <BookOpen className="size-10 text-muted-foreground mx-auto" />
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-semibold">
               {error?.notFound
                 ? "Không tìm thấy khoá học"
                 : "Chưa thể tải khoá học"}

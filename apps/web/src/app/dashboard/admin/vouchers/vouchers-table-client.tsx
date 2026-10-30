@@ -189,7 +189,7 @@ export function VouchersTableClient({ vouchers }: { vouchers: AdminVoucherItem[]
           onOpenChange={(open) => !open && setDeactivatingVoucher(null)}
           title={`Tắt mã ${deactivatingVoucher.code}?`}
           consequence="Mã ngừng áp dụng ngay cho đơn hàng mới. Đơn đã tạo trước đó giữ nguyên giảm giá."
-          reversible="Có thể bật lại bất cứ lúc nào."
+          reversible="Bật lại bất cứ lúc nào."
           danger={true}
           confirmLabel="Tắt mã"
           onConfirm={async () => {

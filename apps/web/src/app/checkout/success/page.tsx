@@ -4,7 +4,9 @@ import { use, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, CheckCircle2, Loader2, Receipt } from "lucide-react";
+import { Check, CheckCircle2, Receipt } from "lucide-react";
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
 import { Button } from "@codi-1/ui/components/button";
 import { Card, CardContent } from "@codi-1/ui/components/card";
 import {
@@ -90,10 +92,19 @@ export default function CheckoutSuccessPage({
 
   if (isSessionLoading || loading) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center p-8 space-y-4">
-        <Loader2 className="size-8 animate-spin text-primary" />
-        <p className="text-muted-foreground animate-pulse text-base">Đang tải kết quả thanh toán…</p>
-      </div>
+      <LoadingRegion label="Đang tải kết quả thanh toán…" className="container mx-auto max-w-2xl space-y-6 px-4 py-12">
+        <div className="flex flex-col items-center gap-3">
+          <Skeleton className="size-16 rounded-full" />
+          <Skeleton className="h-7 w-72 max-w-full" />
+          <Skeleton className="h-4 w-80 max-w-full" />
+        </div>
+        <div className="space-y-4 rounded-xl border border-border bg-card p-6">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+        <Skeleton className="h-12 w-full rounded-lg" />
+      </LoadingRegion>
     );
   }
 
@@ -129,7 +140,7 @@ export default function CheckoutSuccessPage({
         <div className="flex size-16 items-center justify-center rounded-full bg-success-soft text-success">
           <Check className="size-9 stroke-[2.5]" />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">Thanh toán thành công!</h1>
+        <h1 className="text-3xl tracking-tight">Thanh toán thành công!</h1>
         <p className="text-muted-foreground text-sm">
           Đơn <span className="font-mono font-semibold text-foreground">{order.code}</span> · {formatVnd(order.totalAmount)} · {formatDatetime(order.paidAt)}
         </p>

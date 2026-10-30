@@ -383,7 +383,7 @@ export function CodingBuilderClient({
           </Link>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">{title || "Bài tập code chưa đặt tên"}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{title || "Bài tập code chưa đặt tên"}</h1>
             <span className="px-2.5 py-0.5 text-xs font-semibold rounded-md bg-primary/10 text-primary border border-primary/20">
               Bài tập code (S23b)
             </span>

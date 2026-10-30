@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
@@ -10,9 +10,11 @@ import {
   CheckCircle2,
   Circle,
   GraduationCap,
+  Info,
   List,
   LoaderCircle,
-  LockKeyhole,
+  Map as MapIcon,
+  MessageCircle,
   Star,
 } from "lucide-react";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
@@ -33,8 +35,13 @@ import LessonTutorial from "@/components/lesson-tutorial";
 import { LESSON_KIND_LABELS } from "@/lib/lesson-kind";
 import {
   LESSON_PATH_LABELS,
+  type AdjustmentOffer,
+  type AdjustmentOption,
   type CoursePathView,
 } from "@/lib/learning-path-contract";
+import { PathAdjustOffer } from "@/components/learning-path/path-adjust-offer";
+import { PrerequisiteAdvice } from "@/components/learning-path/prerequisite-advice";
+import { PathMap } from "@/components/learning-path/path-map";
 import type {
   LessonPlayerCommand,
   LessonPlayerView,
@@ -42,25 +49,111 @@ import type {
 } from "@/lib/lesson-player-contract";
 import { readLessonResponse } from "@/lib/lesson-player-http";
 import { ReviewForm } from "../course-home";
+import { LessonQAPanel } from "@/components/tutor/lesson-qa-panel";
+import {
+  TutorBridgeContext,
+  type TutorBridge,
+  type TutorCodeBridge,
+  type TutorOpenRequest,
+} from "@/components/ai-tutor/tutor-bridge";
+import TutorPanel from "@/components/ai-tutor/tutor-panel";
+import { TutorLauncher } from "@/components/ai-tutor/tutor-launcher";
+import TutorSelectionToolbar from "@/components/ai-tutor/tutor-selection-toolbar";
+
+// Remembered per browser tab so the panel stays open while the learner moves between lessons.
+const TUTOR_OPEN_KEY = "codi:tutor-open";
+function rememberTutor(open: boolean) {
+  try {
+    if (open) sessionStorage.setItem(TUTOR_OPEN_KEY, "1");
+    else sessionStorage.removeItem(TUTOR_OPEN_KEY);
+  } catch {
+    /* storage unavailable: the panel just starts closed next lesson */
+  }
+}
 
 export default function LessonPlayer({
   courseId,
   lessonId,
+  viewerName = null,
+  initialTutor,
+  initialAdjustment = null,
+  /** Opens the path map at mount (lab screens only); `animateFrom` starts its progress marker. */
+  initialPathMap,
 }: {
   courseId: string;
   lessonId: string;
+  /** Signed-in learner's name, for the tutor greeting. */
+  viewerName?: string | null;
+  /** Opens the tutor at mount (lab screens only): the launcher popup, or the panel with an optional first question. */
+  initialTutor?: { mode: "popup" } | { mode: "panel"; ask?: string };
+  /** Shows a completion offer at mount (lab screens only). */
+  initialAdjustment?: AdjustmentOffer | null;
+  initialPathMap?: { animateFrom?: string | null };
 }) {
   const [data, setData] = useState<LessonPlayerView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sidebar, setSidebar] = useState(false);
+  const [qaOpen, setQaOpen] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [materialId, setMaterialId] = useState<number | null>(null);
+  // Completion offer: shown beside the lesson, never blocking the next step.
+  const [offer, setOffer] = useState<AdjustmentOffer | null>(initialAdjustment);
+  const [completing, setCompleting] = useState(false);
+  const [applying, setApplying] = useState<AdjustmentOption | null>(null);
+  const [applied, setApplied] = useState<{ summary: string } | null>(null);
+  const [offerError, setOfferError] = useState<string | null>(null);
+  // The path map opens from the lesson header, or from the completion offer with progress animating to the next node.
+  const [mapOpen, setMapOpen] = useState(!!initialPathMap);
+  const [mapFrom, setMapFrom] = useState<string | null>(initialPathMap?.animateFrom ?? null);
   const mounted = useRef(false);
   const queue = useRef(Promise.resolve());
   const revision = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const codeBridge = useRef<TutorCodeBridge | null>(null);
+  const [codeVersion, setCodeVersion] = useState(0);
+  const [tutorOpen, setTutorOpen] = useState(initialTutor?.mode === "panel");
+  const [launcherOpen, setLauncherOpen] = useState(initialTutor?.mode === "popup");
+  const [tutorRequest, setTutorRequest] = useState<
+    (TutorOpenRequest & { id: number }) | null
+  >(() =>
+    initialTutor?.mode === "panel" && initialTutor.ask
+      ? { id: 1, ask: initialTutor.ask }
+      : null,
+  );
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(TUTOR_OPEN_KEY)) setTutorOpen(true);
+    } catch {
+      /* storage unavailable */
+    }
+    const media = window.matchMedia("(min-width: 1280px)");
+    const sync = () => setWide(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  const toggleTutor = (open: boolean) => {
+    setTutorOpen(open);
+    rememberTutor(open);
+  };
+  const tutor = useMemo<TutorBridge>(
+    () => ({
+      open: (request = {}) => {
+        setTutorRequest({ ...request, id: Date.now() });
+        setTutorOpen(true);
+        rememberTutor(true);
+      },
+      registerCode: (bridge) => {
+        codeBridge.current = bridge;
+        setCodeVersion((version) => version + 1);
+      },
+    }),
+    [],
+  );
   const courseHome = `/learn/${encodeURIComponent(courseId)}` as Route;
   const endpoint = `/api/learn/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`;
   const lessonUrl = (id: string) =>
@@ -104,6 +197,7 @@ export default function LessonPlayer({
           else {
             setData(body);
             setError(null);
+            if ("adjustment" in body) setOffer(body.adjustment ?? null);
           }
         }
       });
@@ -176,6 +270,7 @@ export default function LessonPlayer({
   async function complete() {
     if (busy) return;
     setBusy(true);
+    setCompleting(true);
     try {
       await send({ type: "complete" });
       toast.success("Đã hoàn thành bài học.");
@@ -184,7 +279,65 @@ export default function LessonPlayer({
     } catch {
       /* send renders the server failure inline */
     } finally {
+      setCompleting(false);
       setBusy(false);
+    }
+  }
+  // A new lesson starts without the previous lesson's offer (the first run keeps the mount value).
+  const offerLesson = useRef(lessonId);
+  useEffect(() => {
+    if (offerLesson.current === lessonId) return;
+    offerLesson.current = lessonId;
+    setOffer(null);
+    setApplied(null);
+    setOfferError(null);
+    setApplying(null);
+  }, [lessonId]);
+  async function chooseAdjustment(option: AdjustmentOption) {
+    if (applying) return;
+    // "Keep" only dismisses: nothing is written.
+    if (option === "keep") {
+      setOffer(null);
+      return;
+    }
+    setApplying(option);
+    setOfferError(null);
+    try {
+      const path = await pathCommand({
+        type: "adjust",
+        afterLessonId: lessonId,
+        option,
+      });
+      const changes = path.update?.changes ?? [];
+      const summary = changes.length
+        ? changes.map((change) => change.text).join(" ")
+        : (path.update?.message ?? "Thứ tự các bài còn lại không đổi.");
+      setApplied({ summary });
+      setOffer(null);
+      toast.success("Đã cập nhật lộ trình.", {
+        duration: 7000,
+        action: {
+          label: "Hoàn tác",
+          onClick: () => void undoAdjustment(path.pathId!),
+        },
+      });
+    } catch (cause) {
+      setOfferError(
+        cause instanceof Error ? cause.message : "Chưa thể cập nhật lộ trình.",
+      );
+    } finally {
+      setApplying(null);
+    }
+  }
+  async function undoAdjustment(pathId: number) {
+    try {
+      await pathCommand({ type: "undo-adjust", pathId });
+      setApplied(null);
+      toast.success("Đã hoàn tác điều chỉnh lộ trình.");
+    } catch (cause) {
+      toast.error(
+        cause instanceof Error ? cause.message : "Chưa thể hoàn tác.",
+      );
     }
   }
   const saveMedia = useCallback(
@@ -207,6 +360,7 @@ export default function LessonPlayer({
       "Không thể cập nhật khoá học.",
     );
     setData((previous) => (previous ? { ...previous, path: body } : previous));
+    return body;
   }
   const errorAlert = error && (
     <Alert variant="destructive">
@@ -249,6 +403,7 @@ export default function LessonPlayer({
   const prev = path.rows[index - 1];
   const next = path.rows[index + 1];
   const current = path.rows.find((row) => row.id === path.currentLessonId);
+  const ownRow = path.rows.find((row) => row.id === lessonId);
   const isCode = data.checklist.some((item) => item.key === "code");
   const kind =
     path.rows.find((row) => row.id === lessonId)?.kind ??
@@ -303,8 +458,15 @@ export default function LessonPlayer({
   );
   const update = path.update?.afterLessonId === lessonId ? path.update : null;
 
+  const docked = tutorOpen && wide;
   return (
-    <main className="grid w-full min-w-0 gap-6 p-4 lg:grid-cols-[18.5rem_minmax(0,1fr)] lg:gap-0 lg:p-0">
+    <TutorBridgeContext.Provider value={tutor}>
+    <main
+      className={cn(
+        "grid w-full min-w-0 gap-6 p-4 lg:grid-cols-[18.5rem_minmax(0,1fr)] lg:gap-0 lg:p-0",
+        docked && "xl:grid-cols-[18.5rem_minmax(0,1fr)_24rem]",
+      )}
+    >
       <aside
         className="hidden min-w-0 space-y-2 self-start border-r px-3 py-2 lg:sticky lg:top-16 lg:block lg:max-h-[calc(100svh-4rem)] lg:overflow-y-auto"
         aria-label="Lộ trình bài học"
@@ -335,10 +497,10 @@ export default function LessonPlayer({
         </p>
         {lessons}
       </aside>
-      <div className="min-w-0 space-y-6 lg:px-6 lg:pb-6">
+      <div ref={content} className="min-w-0 space-y-6 lg:px-6 lg:pb-6">
         <nav
           aria-label="Điều hướng bài học"
-          className="flex flex-wrap items-center gap-2 border-b pb-3"
+          className="sticky top-16 z-20 flex flex-wrap items-center gap-2 border-b bg-background py-3"
         >
           <Button
             variant="outline"
@@ -368,10 +530,34 @@ export default function LessonPlayer({
           )}
           <Link
             href={courseHome}
-            className="ml-auto inline-flex min-h-11 items-center text-sm text-primary lg:hidden"
+            className="inline-flex min-h-11 items-center text-sm text-primary lg:hidden"
           >
             Về lộ trình
           </Link>
+          <Button
+            variant="outline"
+            className="lg:ml-auto"
+            onClick={() => {
+              setMapFrom(null);
+              setMapOpen(true);
+            }}
+          >
+            <MapIcon className="size-4" />
+            Xem lộ trình
+          </Button>
+          <Button
+            variant={qaOpen ? "secondary" : "outline"}
+            className="lg:ml-auto"
+            aria-pressed={qaOpen}
+            onClick={() => {
+              const next = !qaOpen;
+              setQaOpen(next);
+              if (next) toggleTutor(false);
+            }}
+          >
+            <MessageCircle className="size-4" />
+            Hỏi đáp
+          </Button>
         </nav>
         {errorAlert}
         <div className="space-y-2 lg:hidden">
@@ -401,6 +587,10 @@ export default function LessonPlayer({
             <p className="text-muted-foreground">{data.lesson.description}</p>
           )}
         </header>
+        <TaskStepper items={data.checklist} />
+        {ownRow?.lock && ownRow.status !== "done" && (
+          <PrerequisiteAdvice advice={ownRow.lock} lessonUrl={lessonUrl} />
+        )}
         {data.completed && (
           <Card className="border-success">
             <CardContent className="space-y-4 py-5" aria-live="polite">
@@ -467,6 +657,25 @@ export default function LessonPlayer({
             </CardContent>
           </Card>
         )}
+        {(completing || offer || applied) && (
+          <PathAdjustOffer
+            offer={offer}
+            completing={completing}
+            applying={applying}
+            applied={applied}
+            error={offerError}
+            onChoose={(option) => void chooseAdjustment(option)}
+            onDismiss={() => {
+              setOffer(null);
+              setApplied(null);
+              setOfferError(null);
+            }}
+            onViewPath={() => {
+              setMapFrom(lessonId);
+              setMapOpen(true);
+            }}
+          />
+        )}
         {path.complete && (
           <Card className="border-success">
             <CardContent className="space-y-4 py-6">
@@ -526,6 +735,11 @@ export default function LessonPlayer({
             </CardContent>
           </Card>
         )}
+        <section
+          id={isCode ? undefined : taskAnchor(STUDY_TASK)}
+          aria-label="Nội dung bài học"
+          className="scroll-mt-40 space-y-6"
+        >
         {!isCode && materialContent}
         {data.lesson.body && !isCode ? (
           <Card>
@@ -577,25 +791,26 @@ export default function LessonPlayer({
             )}
           </div>
         )}
+        </section>
         {data.checklist
           .filter((item) => item.key === "code")
-          .map((item) =>
-            item.tutorial ? (
-              <LessonTutorial
-                key={item.assessmentId}
-                endpoint={`${endpoint}/assessments/${item.assessmentId}/tutorial`}
-                onChanged={() => send({ type: "open" })}
-              />
-            ) : (
-              <LessonCoding
-                key={item.assessmentId}
-                endpoint={`${endpoint}/assessments/${item.assessmentId}/coding`}
-                onChanged={() => send({ type: "open" })}
-              />
-            ),
-          )}
+          .map((item) => (
+            <div key={item.assessmentId} id={taskAnchor(item)} className="scroll-mt-40">
+              {item.tutorial ? (
+                <LessonTutorial
+                  endpoint={`${endpoint}/assessments/${item.assessmentId}/tutorial`}
+                  onChanged={() => send({ type: "open" })}
+                />
+              ) : (
+                <LessonCoding
+                  endpoint={`${endpoint}/assessments/${item.assessmentId}/coding`}
+                  onChanged={() => send({ type: "open" })}
+                />
+              )}
+            </div>
+          ))}
         {isCode && material && (
-          <details className="rounded-lg border p-4">
+          <details id={taskAnchor(STUDY_TASK)} className="scroll-mt-40 rounded-lg border p-4">
             <summary className="cursor-pointer text-sm font-medium">
               Tài liệu tham khảo của bài học
             </summary>
@@ -605,11 +820,12 @@ export default function LessonPlayer({
         {data.checklist
           .filter((item) => item.key === "quiz" || item.key === "assignment")
           .map((item) => (
-            <LessonAssessment
-              key={item.assessmentId}
-              endpoint={`${endpoint}/assessments/${item.assessmentId}`}
-              onChanged={() => send({ type: "open" })}
-            />
+            <div key={item.assessmentId} id={taskAnchor(item)} className="scroll-mt-40">
+              <LessonAssessment
+                endpoint={`${endpoint}/assessments/${item.assessmentId}`}
+                onChanged={() => send({ type: "open" })}
+              />
+            </div>
           ))}
         <Card id="checklist">
           <CardContent className="space-y-5 py-6">
@@ -679,6 +895,41 @@ export default function LessonPlayer({
           {path.review ? "Sửa đánh giá" : "Đánh giá khóa học"}
         </Button>
       </div>
+      {tutorOpen && (
+        <TutorPanel
+          endpoint={`${endpoint}/tutor`}
+          request={tutorRequest}
+          code={codeBridge}
+          codeVersion={codeVersion}
+          docked={wide}
+          onClose={() => toggleTutor(false)}
+          expandHref={
+            `/learn/${encodeURIComponent(courseId)}/tutor?lesson=${encodeURIComponent(lessonId)}` as Route
+          }
+        />
+      )}
+      {!tutorOpen && !qaOpen && (
+        <TutorLauncher
+          endpoint={`${endpoint}/tutor`}
+          viewerName={viewerName}
+          open={launcherOpen}
+          onOpenChange={setLauncherOpen}
+          onAsk={(ask) => {
+            tutor.open(ask ? { ask } : {});
+            setLauncherOpen(false);
+          }}
+        />
+      )}
+      <TutorSelectionToolbar root={content} />
+      <Sheet
+        open={mapOpen}
+        onOpenChange={setMapOpen}
+        title="Lộ trình của bạn"
+        description={`${path.course.title} · ${path.done}/${path.total} bài`}
+        className="sm:max-w-lg"
+      >
+        <PathMap path={path} lessonUrl={lessonUrl} animateFrom={mapFrom} />
+      </Sheet>
       <Sheet
         open={sidebar}
         onOpenChange={setSidebar}
@@ -699,7 +950,51 @@ export default function LessonPlayer({
           }}
         />
       )}
+      <LessonQAPanel
+        open={qaOpen}
+        onOpenChange={setQaOpen}
+        courseId={courseId}
+        lessonId={lessonId}
+        lessonTitle={data.lesson.title}
+      />
     </main>
+    </TutorBridgeContext.Provider>
+  );
+}
+
+// The study section and the task sections that the stepper jumps to.
+const STUDY_TASK = { key: "study", assessmentId: undefined } as const;
+function taskAnchor(item: { key: string; assessmentId?: number | null }) {
+  return item.key === "study" ? "lesson-task-study" : `lesson-task-${item.assessmentId}`;
+}
+
+// Compact checklist at the top: each task jumps to its section, so quizzes and code are one tap away.
+function TaskStepper({ items }: { items: LessonPlayerView["checklist"] }) {
+  return (
+    <nav aria-label="Các việc cần làm trong bài" className="rounded-xl border bg-card p-2">
+      <ol className="grid gap-1 sm:grid-cols-3">
+        {items.map((item) => (
+          <li key={`${item.key}:${item.assessmentId ?? "study"}`}>
+            <a
+              href={`#${taskAnchor(item)}`}
+              className="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {item.done ? (
+                <CheckCircle2 aria-hidden="true" className="size-5 shrink-0 text-success" />
+              ) : (
+                <Circle aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{item.label}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {item.done ? "Đã xong" : "Chưa xong"} · Đến phần này
+                </span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -726,9 +1021,9 @@ function LessonList({
                 className="mt-1 size-4 shrink-0 text-success"
               />
             ) : row.status === "locked" ? (
-              <LockKeyhole
+              <Info
                 aria-hidden="true"
-                className="mt-1 size-4 shrink-0 text-muted-foreground"
+                className="mt-1 size-4 shrink-0 text-warning"
               />
             ) : (
               <span className="text-sm text-muted-foreground">
@@ -755,7 +1050,7 @@ function LessonList({
           </div>
           {row.lock && row.status !== "done" && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Cần học trước: {row.lock.concept}
+              Nên học trước: {row.lock.concept}
             </p>
           )}
         </li>

@@ -1,5 +1,5 @@
 "use client";
-import { Eye, EyeOff, GraduationCap } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Alert } from "@codi-1/ui/components/alert";
 import { Button } from "@codi-1/ui/components/button";
@@ -24,7 +24,7 @@ import { safeNext } from "@/lib/safe-redirect";
 import { mapSignInError } from "@/lib/sign-in-error";
 import GitHubSignInButton from "./github-button";
 import GoogleSignInButton from "./google-button";
-import Loader from "./loader";
+import { AuthFormSkeleton } from "@/components/skeletons/auth-form-skeleton";
 
 const REMEMBER_EMAIL_KEY = "codi_remember_email";
 
@@ -112,16 +112,13 @@ export default function SignInForm({
   }, [form]);
 
   if (isPending) {
-    return <Loader />;
+    return <AuthFormSkeleton />;
   }
 
   return (
     <div className="w-full">
-      <Card className="border-primary/15 bg-card text-card-foreground shadow-xl shadow-primary/10 dark:border-primary/25 dark:shadow-primary/20">
+      <Card>
         <CardHeader className="text-center pb-3 pt-5 px-5 space-y-2">
-          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 mb-1">
-            <GraduationCap className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
           <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
             Chào mừng trở lại!
           </CardTitle>

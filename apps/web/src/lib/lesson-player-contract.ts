@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { CoursePathView } from "./learning-path-contract";
+import type {
+  AdjustmentOffer,
+  CoursePathView,
+} from "./learning-path-contract";
 import { LearningPathError } from "./learning-path-contract";
 
 const materialId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
@@ -208,6 +211,8 @@ export type LessonPlayerView = {
   completed: boolean;
   checklist: ChecklistItem[];
   path: CoursePathView;
+  // Present only in the response to a completion that was just recorded.
+  adjustment?: AdjustmentOffer | null;
 };
 
 export type LessonMediaUpdate = Pick<
@@ -220,6 +225,20 @@ export type LessonPlayerResponse<C extends LessonPlayerCommand> = C extends {
   ? LessonMediaUpdate
   : LessonPlayerView;
 
+// A video counts as studied once the learner has watched 90% of it (owner decision).
+export const VIDEO_STUDY_RATIO = 0.9;
+
+// Without duration metadata there is nothing to measure, so the native ended event decides.
+export function videoStudied(
+  seconds: number,
+  duration: number | null,
+  ended: boolean,
+) {
+  return duration && duration > 0
+    ? seconds >= duration * VIDEO_STUDY_RATIO
+    : ended;
+}
+
 export function videoPosition(
   seconds: number,
   duration: number | null,
@@ -227,7 +246,7 @@ export function videoPosition(
 ) {
   const position =
     duration && duration > 0 ? Math.min(seconds, duration) : seconds;
-  if (ended && duration && duration > 0 && position < duration - 2)
-    throw new LearningPathError("Video chưa được xem hết.");
+  if (ended && !videoStudied(position, duration, ended))
+    throw new LearningPathError("Video chưa được xem đủ 90% thời lượng.");
   return position;
 }

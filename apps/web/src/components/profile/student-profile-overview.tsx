@@ -2,11 +2,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, CheckCircle2, Clock3, TrendingUp, Wallet } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
+import { ListRowsSkeleton } from "@/components/skeletons/list-rows-skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@codi-1/ui/components/card";
 type ProfileData = { activities: { occurredAt: string; type: string }[]; enrollments: { enrollment: { progress: number }; course: { id: string; title: string } }[]; transactions: { id: string; createdAt: string; courseId: string; amount: number; currency: string; status: string }[] };
-export default function StudentProfileOverview() {
+export type StudentProfileTab = "overview" | "courses" | "transactions";
+
+export default function StudentProfileOverview({ tab }: { tab: StudentProfileTab }) {
   const currentYear = new Date().getFullYear();
-  const [tab, setTab] = useState("overview");
   const [year, setYear] = useState(currentYear);
   const [data, setData] = useState<ProfileData | null>(null);
   const [activities, setActivities] = useState<ProfileData["activities"]>([]);
@@ -161,29 +165,11 @@ export default function StudentProfileOverview() {
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
-      <nav
-        className="order-1 flex gap-1 border-b border-border"
-        aria-label="Điều hướng hồ sơ"
-      >
-        {[
-          ["overview", "Tổng quan"],
-          ["courses", "Khóa học"],
-          ["transactions", "Giao dịch"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`border-b-2 px-3 py-2 text-xs ${tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
       {loading && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Đang tải dữ liệu hồ sơ…
-        </p>
+        <LoadingRegion label="Đang tải dữ liệu hồ sơ…" className="flex flex-col gap-5">
+          <Skeleton className="h-40 w-full rounded-xl" />
+          <ListRowsSkeleton rows={3} withAvatar={false} />
+        </LoadingRegion>
       )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
@@ -401,8 +387,8 @@ export function ProfileStats(){
  const [status,setStatus]=useState<"loading"|"error"|"success">("loading");
  const [stats,setStats]=useState({progress:"",activeDays:""});
  useEffect(()=>{fetch(`/api/student/profile?year=${new Date().getFullYear()}`).then(async r=>{const v=await r.json().catch(()=>null);if(!r.ok)throw new Error(typeof v?.error==="string"?v.error:"Không thể tải thống kê");return v as ProfileData}).then(v=>{const p=v.enrollments.length?`${Math.round(v.enrollments.reduce((s,r)=>s+r.enrollment.progress,0)/v.enrollments.length)}%`:"Chưa có dữ liệu";const d=new Set(v.activities.map(a=>new Date(a.occurredAt).toLocaleDateString("en-CA"))).size;setStats({progress:p,activeDays:d?`${d} ngày`:"Chưa có dữ liệu"});setStatus("success")}).catch(()=>setStatus("error"))},[]);
- if(status==="loading") return <div role="status" className="grid gap-3 sm:grid-cols-2"><Stat icon={<TrendingUp/>} label="Tiến độ trung bình" value="Đang tải…"/><Stat icon={<Clock3/>} label="Ngày hoạt động" value="Đang tải…"/></div>;
+ if(status==="loading") return <LoadingRegion label="Đang tải thống kê hồ sơ…" className="grid gap-3 sm:grid-cols-2"><Stat icon={<TrendingUp/>} label="Tiến độ trung bình"/><Stat icon={<Clock3/>} label="Ngày hoạt động"/></LoadingRegion>;
  if(status==="error") return <div role="alert" className="text-sm text-destructive">Không thể tải thống kê hồ sơ.</div>;
  return <div className="grid gap-3 sm:grid-cols-2"><Stat icon={<TrendingUp/>} label="Tiến độ trung bình" value={stats.progress}/><Stat icon={<Clock3/>} label="Ngày hoạt động" value={stats.activeDays}/></div>
 }
-function Stat({icon,label,value}:{icon:React.ReactNode;label:string;value:string}){return <Card><CardContent className="flex items-center gap-3 p-4"><span className="text-primary">{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p><p className="font-semibold">{value}</p></div></CardContent></Card>}
+function Stat({icon,label,value}:{icon:React.ReactNode;label:string;value?:string}){return <Card><CardContent className="flex items-center gap-3 p-4"><span className="text-primary">{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p>{value===undefined?<Skeleton className="mt-1 h-5 w-24"/>:<p className="font-semibold">{value}</p>}</div></CardContent></Card>}

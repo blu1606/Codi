@@ -12,6 +12,7 @@
     "check-types": "pnpm -r check-types",
     "check:standards": "tsx scripts/check-design-standards.ts",
     "dev:web": "pnpm --filter web dev",
+    "lab": "pnpm --filter ui-lab dev",
     "start": "pnpm --filter web start",
     "start:web": "pnpm --filter web start",
     "db:push": "pnpm --filter @codi-1/db db:push",

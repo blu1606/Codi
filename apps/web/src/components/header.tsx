@@ -12,7 +12,6 @@ import { Skeleton } from "@codi-1/ui/components/skeleton";
 import { cn } from "@codi-1/ui/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import { useActiveRole } from "@/hooks/use-active-role";
-import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 import NotificationMenu from "./notification-menu";
 import BrandLogo from "./brand-logo";
@@ -54,7 +53,6 @@ export default function Header() {
       </div>
       <div data-codi-intro-account className="flex shrink-0 items-center gap-1 sm:gap-2">
         {role === ROLE.LEARNER && <CartNavButton />}
-        <ModeToggle />
         {hydrated ? <><NotificationMenu /><UserMenu role={role} /></> : <Skeleton className="size-11 rounded-full" aria-label="Đang tải tài khoản" />}
       </div>
     </div>

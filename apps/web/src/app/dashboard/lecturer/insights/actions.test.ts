@@ -1,23 +1,28 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { FINANCE_UNAVAILABLE } from "@/lib/analytics-contract";
-const mocks = vi.hoisted(() => ({ verify: vi.fn(), select: vi.fn() }));
+const mocks = vi.hoisted(() => ({ verify: vi.fn(), insights: vi.fn() }));
 vi.mock("@/lib/lecturer-auth", () => ({ verifyLecturerSession: mocks.verify }));
-vi.mock("@/services", () => ({ db: { select: mocks.select } }));
+vi.mock("@/services", () => ({ db: {} }));
+vi.mock("@/lib/revenue-analytics-service", () => ({ getLecturerInsights: mocks.insights }));
 import { getLecturerInsightsData } from "./actions";
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.verify.mockResolvedValue({ id: "teacher" });
-  mocks.select.mockReturnValue({ from: () => ({ where: async () => [] }) });
+  mocks.insights.mockResolvedValue({ state: "no-courses" });
 });
-it("authenticates but never queries or estimates money", async () => {
-  expect(await getLecturerInsightsData()).toEqual({
-    state: "unavailable",
-    message: FINANCE_UNAVAILABLE,
-  });
-  expect(mocks.select).not.toHaveBeenCalled();
+
+it("scopes revenue to the verified lecturer, not to any caller-supplied identity", async () => {
+  expect(await getLecturerInsightsData("30")).toEqual({ state: "no-courses" });
+  expect(mocks.insights).toHaveBeenCalledWith({}, "teacher", "30");
 });
-it("does not expose even unavailable lecturer data to a forbidden caller", async () => {
+
+it("does not expose revenue to a forbidden caller", async () => {
   mocks.verify.mockRejectedValueOnce(new Error("Forbidden"));
-  await expect(getLecturerInsightsData()).rejects.toThrow("Forbidden");
-  expect(mocks.select).not.toHaveBeenCalled();
+  await expect(getLecturerInsightsData("30")).rejects.toThrow("Forbidden");
+  expect(mocks.insights).not.toHaveBeenCalled();
+});
+
+it("accepts only the S29b period options", async () => {
+  await expect(getLecturerInsightsData("365")).rejects.toThrow("Invalid analytics period");
+  expect(mocks.insights).not.toHaveBeenCalled();
 });

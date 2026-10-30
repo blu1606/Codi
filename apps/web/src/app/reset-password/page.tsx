@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
-import Loader from "@/components/loader";
+import { AuthFormSkeleton } from "@/components/skeletons/auth-form-skeleton";
 import AccountResetPasswordForm from "@/components/settings/account-reset-password-form";
 
 function TokenResetPasswordContent() {
@@ -187,7 +187,7 @@ function ResetPasswordContent() {
 export default function ResetPasswordPage() {
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <Suspense fallback={<Loader />}>
+      <Suspense fallback={<div className="w-full max-w-md"><AuthFormSkeleton /></div>}>
         <ResetPasswordContent />
       </Suspense>
     </div>

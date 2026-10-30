@@ -85,6 +85,10 @@ export function createAuth(env: AuthConfig, database: Database) {
       accountLinking: {
         enabled: true,
         trustedProviders: ["google", "github"],
+        // Linking GitHub for the skill profile happens from a signed-in session, and a
+        // learner's GitHub email rarely equals their Codi email. Better Auth only applies
+        // this to explicit linkSocial flows, not to sign-in auto-linking.
+        allowDifferentEmails: true,
       },
     },
     secret: env.BETTER_AUTH_SECRET,

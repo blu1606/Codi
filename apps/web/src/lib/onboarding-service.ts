@@ -458,7 +458,9 @@ export function createOnboardingService(db: Database) {
         const { enrollment: e, diagnostic, attempt } = ctx;
         let patch: Partial<Enrollment> = {};
         if (
-          command.type === "goal-pick" ||
+          command.type === "goal-save-draft" ||
+      command.type === "goal-commit" ||
+      command.type === "goal-pick" ||
           command.type === "goal-next" ||
           command.type === "goal-back" ||
           command.type === "goal-skip" ||

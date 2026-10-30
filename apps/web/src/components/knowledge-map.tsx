@@ -1,9 +1,12 @@
 "use client";
 
+import { KnowledgeMapSkeleton } from "@/components/skeletons/knowledge-map-skeleton";
 import { useEffect, useId, useMemo, useState } from "react";
-import { BarChart3, ChevronDown, Lightbulb, LoaderCircle } from "lucide-react";
+import Link from "next/link";
+import type { Route } from "next";
+import { BarChart3, ChevronDown, Lightbulb } from "lucide-react";
 import { Alert } from "@codi-1/ui/components/alert";
-import { Button } from "@codi-1/ui/components/button";
+import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
@@ -110,14 +113,12 @@ export default function KnowledgeMap({
               Mỗi ô là một khái niệm; mũi tên chỉ khái niệm cần học trước.
             </p>
           </div>
-          <Button
-            variant="outline"
-            disabled
-            title="Thống kê học tập chưa khả dụng"
-            className="border-border-strong disabled:opacity-100"
+          <Link
+            href={"/insights/stats" as Route}
+            className={buttonVariants({ variant: "outline" })}
           >
             <BarChart3 className="size-4" /> Thống kê học tập
-          </Button>
+          </Link>
         </header>
       )}
       {error && (
@@ -136,9 +137,7 @@ export default function KnowledgeMap({
         </Alert>
       )}
       {loading ? (
-        <p role="status" className="flex items-center gap-2">
-          <LoaderCircle className="size-5 animate-spin" /> Đang tải bản đồ…
-        </p>
+        <KnowledgeMapSkeleton />
       ) : (
         data && (
           <>
@@ -195,7 +194,7 @@ export default function KnowledgeMap({
                       <p className="text-sm leading-[1.55] text-muted-foreground">
                         {data.nodes.filter((n) => n.level >= 3).length}/
                         {data.nodes.length} khái niệm đã thành thạo ·{" "}
-                        {data.nodes.filter((n) => n.locked).length} chưa mở khoá
+                        {data.nodes.filter((n) => n.locked).length} chưa đủ tiên quyết
                       </p>
                     </CardHeader>
                     <CardContent className="space-y-3 px-0">

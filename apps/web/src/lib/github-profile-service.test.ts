@@ -52,12 +52,25 @@ function harness() {
     },
   });
   const graphql = vi.fn(async () => json(graphqlBody()));
-  const directory = vi.fn(async () => json([]));
-  const githubFetch = vi.fn<typeof fetch>(async (url) => {
+  // Batched root-tree read (one alias per repository); the default has no manifest entries.
+  const directory = vi.fn(async () =>
+    json({
+      data: {
+        t0: {
+          databaseId: 1,
+          owner: { login: "learner", databaseId: 123 },
+          tree: { entries: [] },
+        },
+      },
+    }),
+  );
+  const githubFetch = vi.fn<typeof fetch>(async (url, init) => {
     const path = new URL(String(url)).pathname;
-    if (path === "/graphql") return graphql();
-    if (path.endsWith("/contents")) return directory();
-    throw new Error("unexpected_fixture_path");
+    if (path !== "/graphql") throw new Error("unexpected_fixture_path");
+    const operation = JSON.parse(String(init?.body)).operationName;
+    if (operation === "CodiPublicProfile") return graphql();
+    if (operation === "CodiPublicTrees") return directory();
+    throw new Error("unexpected_fixture_operation");
   });
   const analysis = {
     technologies: { t0: null },
@@ -429,12 +442,12 @@ describe("GitHub direct request orchestration", () => {
     expect(h.aiFetch).not.toHaveBeenCalled();
   });
 
-  it("returns failed app authentication without anonymous or bearer fallback", async () => {
+  it("returns failed authentication on a tree read without anonymous or bearer fallback", async () => {
     const h = harness();
     h.directory.mockResolvedValue(json({}, 401));
     expect(await runGithubProfileRequest(body, h.options)).toMatchObject({
       ok: false,
-      code: "app_auth_failed",
+      code: "connection_expired",
     });
     expect(h.directory).toHaveBeenCalledTimes(1);
     expect(h.aiFetch).not.toHaveBeenCalled();

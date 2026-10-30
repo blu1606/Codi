@@ -79,12 +79,12 @@ export function PublicationPreviewClient({ course, onClose }: { course: CourseDa
     ...lessons.map(lesson => ({ id: lesson.id, title: lesson.title, lesson })),
   ];
   const selected = items[index];
-  return <div role="dialog" aria-modal="true" aria-label="Xem trước nội dung quản trị"
+  return <div role="dialog" aria-modal="true" aria-label="Xem trước như học viên"
     className="fixed inset-0 z-50 flex flex-col overflow-auto bg-background p-4">
     <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background pb-3">
       <div>
-        <h2 className="font-semibold">Xem trước nội dung quản trị · {course.title}</h2>
-        <p className="text-sm text-muted-foreground">Bản xem trước giới hạn: không lưu tiến độ, điểm hoặc bài nộp; không chạy mã.</p>
+        <p className="text-sm font-semibold text-foreground">Bạn đang xem trước như học viên · {course.title}</p>
+        <p className="text-xs text-muted-foreground">Bản xem trước giới hạn: không lưu tiến độ, điểm hoặc bài nộp; không chạy mã.</p>
       </div>
       <Button variant="outline" onClick={onClose}>Thoát xem trước</Button>
     </div>

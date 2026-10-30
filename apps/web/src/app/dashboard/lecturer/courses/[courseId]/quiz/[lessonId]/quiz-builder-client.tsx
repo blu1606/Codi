@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,11 +10,13 @@ import {
   ArrowUp,
   Check,
   CheckCircle2,
+  ClipboardPaste,
   FileQuestion,
   HelpCircle,
   Loader2,
   Plus,
   Save,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,7 +33,11 @@ import {
 import { Input } from "@codi-1/ui/components/input";
 import { Textarea } from "@codi-1/ui/components/textarea";
 import { cn } from "@codi-1/ui/lib/utils";
+import { QuizAiDialog, type AiQuizRequest } from "@/components/quiz-builder/quiz-ai-dialog";
+import { QuizImportDialog } from "@/components/quiz-builder/quiz-import-dialog";
+import { DEFAULT_MAX_QUIZ_OPTIONS, type QuizImportDraft } from "@/lib/quiz-import";
 import {
+  generateAiQuizQuestions,
   type QuizQuestionInput,
   saveQuizData,
 } from "../../actions";
@@ -39,6 +45,8 @@ import {
 interface QuizQuestionState extends QuizQuestionInput {
   id?: number;
   optionIds?: number[];
+  /** UI only: explanation field opened by "Thêm giải thích". Not sent on save. */
+  showExplanation?: boolean;
 }
 
 interface CourseLessonOption {
@@ -59,6 +67,21 @@ interface QuizBuilderClientProps {
     questions: QuizQuestionState[];
     allCourseLessons?: CourseLessonOption[];
   };
+}
+
+type QuizFieldErrors = {
+  passingScore?: string;
+  questions: Record<number, { text?: string; options?: string; correct?: string }>;
+};
+
+function InlineError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+      <AlertCircle className="size-3.5 shrink-0" />
+      <span>{message}</span>
+    </p>
+  );
 }
 
 export function QuizBuilderClient({
@@ -88,6 +111,44 @@ export function QuizBuilderClient({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<QuizFieldErrors>({ questions: {} });
+  const [importOpen, setImportOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+
+  // Thêm câu hỏi từ nhập hàng loạt hoặc AI vào cuối danh sách (chưa lưu)
+  const appendQuestions = (added: QuizQuestionState[]) => {
+    if (added.length === 0) return;
+    setQuestions((prev) => [...prev, ...added]);
+    setIsDirty(true);
+  };
+
+  const handleImportDrafts = (drafts: QuizImportDraft[]) => {
+    appendQuestions(
+      drafts.map((draft) => ({
+        text: draft.text,
+        options: draft.options,
+        correctIndex: draft.correctIndex,
+        explanation: draft.explanation,
+      })),
+    );
+    toast.success(`Đã thêm ${drafts.length} câu vào danh sách. Nhớ lưu bài trắc nghiệm.`);
+  };
+
+  const handleGenerateAi = (request: AiQuizRequest) =>
+    generateAiQuizQuestions(courseId, lessonId, request.count, request.difficulty, {
+      sourceText: request.sourceMode === "paste" ? request.sourceText : undefined,
+      focus: request.focus,
+    });
+
+  const handleApplyAiQuestions = (aiQuestions: QuizQuestionInput[]) => {
+    appendQuestions(aiQuestions);
+    toast.success(`Đã thêm ${aiQuestions.length} câu AI tạo vào danh sách. Nhớ lưu bài trắc nghiệm.`);
+  };
+
+  // Lỗi hiện ngay dưới trường; xoá khi người dùng sửa lại nội dung quiz
+  useEffect(() => {
+    setFieldErrors({ questions: {} });
+  }, [questions, passingScore]);
 
   // Thêm một câu hỏi mới rỗng
   const handleAddQuestion = () => {
@@ -151,6 +212,15 @@ export function QuizBuilderClient({
     setIsDirty(true);
   };
 
+  // Mở ô giải thích (chỉ là trạng thái giao diện, không đánh dấu thay đổi)
+  const handleShowExplanation = (qIndex: number) => {
+    setQuestions((prev) => {
+      const copy = [...prev];
+      copy[qIndex] = { ...copy[qIndex], showExplanation: true };
+      return copy;
+    });
+  };
+
   // Thay đổi giải thích đáp án
   const handleExplanationChange = (qIndex: number, explanation: string) => {
     setQuestions((prev) => {
@@ -189,8 +259,8 @@ export function QuizBuilderClient({
     if (isLocked) return;
     setQuestions((prev) => {
       const copy = [...prev];
-      if (copy[qIndex].options.length >= 6) {
-        toast.error("Mỗi câu hỏi tối đa 6 phương án lựa chọn.");
+      if (copy[qIndex].options.length >= DEFAULT_MAX_QUIZ_OPTIONS) {
+        toast.error(`Mỗi câu hỏi tối đa ${DEFAULT_MAX_QUIZ_OPTIONS} phương án lựa chọn.`);
         return prev;
       }
       copy[qIndex] = {
@@ -234,10 +304,10 @@ export function QuizBuilderClient({
   const handleSaveQuiz = async () => {
     if (isLocked) return;
 
-    // Validate client-side
+    const next: QuizFieldErrors = { questions: {} };
+
     if (passingScore < 1 || passingScore > 100) {
-      toast.error("Điểm đạt phải nằm trong khoảng từ 1% đến 100%.");
-      return;
+      next.passingScore = "Điểm đạt phải nằm trong khoảng từ 1% đến 100%.";
     }
 
     if (questions.length === 0) {
@@ -245,16 +315,14 @@ export function QuizBuilderClient({
       return;
     }
 
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
+    questions.forEach((q, i) => {
+      const issues: { text?: string; options?: string; correct?: string } = {};
       if (!q.text || !q.text.trim()) {
-        toast.error(`Câu ${i + 1}: Vui lòng nhập nội dung câu hỏi.`);
-        return;
+        issues.text = "Vui lòng nhập nội dung câu hỏi.";
       }
       const filledOptions = q.options.filter((o) => o && o.trim().length > 0);
       if (filledOptions.length < 2) {
-        toast.error(`Câu ${i + 1}: Cần ít nhất 2 phương án trả lời có nội dung.`);
-        return;
+        issues.options = "Cần ít nhất 2 phương án trả lời có nội dung.";
       }
       if (
         q.correctIndex === undefined ||
@@ -262,9 +330,14 @@ export function QuizBuilderClient({
         q.correctIndex >= q.options.length ||
         !q.options[q.correctIndex]?.trim()
       ) {
-        toast.error(`Câu ${i + 1}: Vui lòng chọn một phương án có nội dung làm đáp án đúng.`);
-        return;
+        issues.correct = "Vui lòng chọn một phương án có nội dung làm đáp án đúng.";
       }
+      if (Object.keys(issues).length > 0) next.questions[i] = issues;
+    });
+
+    if (next.passingScore || Object.keys(next.questions).length > 0) {
+      setFieldErrors(next);
+      return;
     }
 
     try {
@@ -313,7 +386,7 @@ export function QuizBuilderClient({
           </Link>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="text-2xl font-semibold tracking-tight">
               {isEntry ? "Bài kiểm tra đầu vào (Diagnostic Test)" : `Quiz: ${lesson?.title || "Bài học"}`}
             </h1>
             {isEntry ? (
@@ -383,22 +456,42 @@ export function QuizBuilderClient({
           ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* CỘT TRÁI (2/3): DANH SÁCH CÂU HỎI */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
+        <div className="lg:col-span-2 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-semibold text-foreground flex items-center gap-2">
               <FileQuestion className="size-4 text-primary" />
               Danh sách câu hỏi ({questions.length} câu)
             </div>
             {!isLocked && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddQuestion}
-                className="gap-1.5 text-xs cursor-pointer"
-              >
-                <Plus className="size-3.5" />
-                Thêm câu hỏi
-              </Button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setImportOpen(true)}
+                  className="gap-1.5 text-xs cursor-pointer"
+                >
+                  <ClipboardPaste className="size-3.5" />
+                  Nhập hàng loạt
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAiOpen(true)}
+                  className="gap-1.5 text-xs cursor-pointer"
+                >
+                  <Sparkles className="size-3.5" />
+                  Tạo bằng AI
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddQuestion}
+                  className="gap-1.5 text-xs cursor-pointer"
+                >
+                  <Plus className="size-3.5" />
+                  Thêm câu hỏi
+                </Button>
+              </div>
             )}
           </div>
 
@@ -407,12 +500,17 @@ export function QuizBuilderClient({
               key={qIndex}
               className="border border-border/80 shadow-xs transition-colors"
             >
-              <CardHeader className="py-3 px-4 sm:px-6 bg-muted/30 border-b border-border/60">
+              <CardHeader className="py-2 px-3 gap-0 bg-muted/30 border-b border-border/60 [.border-b]:pb-2">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-sm text-foreground">
                       Câu {qIndex + 1}
                     </span>
+                    {q.aiGenerated && (
+                      <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        AI tạo
+                      </span>
+                    )}
                   </div>
 
                   {!isLocked && (
@@ -451,7 +549,7 @@ export function QuizBuilderClient({
                 </div>
               </CardHeader>
 
-              <CardContent className="p-4 sm:p-6 space-y-5">
+              <CardContent className="p-3 space-y-3">
                 {/* Nội dung câu hỏi */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground">
@@ -463,8 +561,10 @@ export function QuizBuilderClient({
                     disabled={isLocked}
                     onChange={(e) => handleQuestionTextChange(qIndex, e.target.value)}
                     placeholder="Nhập nội dung câu hỏi trắc nghiệm..."
-                    className="text-sm"
+                    className="field-sizing-content min-h-0 text-sm"
+                    aria-invalid={!!fieldErrors.questions[qIndex]?.text}
                   />
+                  {fieldErrors.questions[qIndex]?.text && <InlineError message={fieldErrors.questions[qIndex]?.text} />}
                 </div>
 
                 {/* Gắn bài học tương ứng cho câu hỏi Diagnostic (Finding 8) */}
@@ -493,7 +593,7 @@ export function QuizBuilderClient({
                 )}
 
                 {/* Danh sách lựa chọn trả lời */}
-                <div className="space-y-2.5">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <span>Các phương án lựa chọn (Click chọn đáp án đúng)</span>
@@ -504,6 +604,10 @@ export function QuizBuilderClient({
                     </span>
                   </div>
 
+                  {(fieldErrors.questions[qIndex]?.options || fieldErrors.questions[qIndex]?.correct) && (
+                    <InlineError message={fieldErrors.questions[qIndex]?.options || fieldErrors.questions[qIndex]?.correct} />
+                  )}
+
                   <div className="space-y-2">
                     {q.options.map((optText, optIndex) => {
                       const isCorrect = q.correctIndex === optIndex;
@@ -511,10 +615,8 @@ export function QuizBuilderClient({
                         <div
                           key={optIndex}
                           className={cn(
-                            "flex items-center gap-2.5 p-2 rounded-lg border transition-colors",
-                            isCorrect
-                              ? "border-primary/60 bg-primary/5"
-                              : "border-border/80 bg-background"
+                            "flex items-center gap-2 rounded-md px-1.5 py-0.5 transition-colors",
+                            isCorrect ? "bg-primary/5" : ""
                           )}
                         >
                           {/* Nút chọn đáp án đúng */}
@@ -546,7 +648,7 @@ export function QuizBuilderClient({
                             }
                             placeholder={`Phương án ${String.fromCharCode(65 + optIndex)}...`}
                             className={cn(
-                              "h-9 text-sm flex-1",
+                              "h-8 text-sm flex-1",
                               isCorrect && "font-medium"
                             )}
                           />
@@ -570,7 +672,7 @@ export function QuizBuilderClient({
                     })}
                   </div>
 
-                  {!isLocked && q.options.length < 6 && (
+                  {!isLocked && q.options.length < DEFAULT_MAX_QUIZ_OPTIONS && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -584,35 +686,40 @@ export function QuizBuilderClient({
                   )}
                 </div>
 
-                {/* Giải thích đáp án */}
-                <div className="space-y-1.5 pt-1 border-t border-border/40">
-                  <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <HelpCircle className="size-3.5" />
-                    <span>Giải thích đáp án (học viên sẽ thấy sau khi nộp bài)</span>
-                  </label>
-                  <Textarea
-                    rows={2}
-                    value={q.explanation || ""}
-                    disabled={isLocked}
-                    onChange={(e) => handleExplanationChange(qIndex, e.target.value)}
-                    placeholder="Giải thích vì sao phương án này là đúng..."
-                    className="text-xs"
-                  />
-                </div>
+                {/* Giải thích đáp án: thu gọn khi trống */}
+                {!q.explanation && !q.showExplanation ? (
+                  !isLocked && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleShowExplanation(qIndex)}
+                      className="h-7 px-2 text-xs text-muted-foreground gap-1 cursor-pointer self-start"
+                    >
+                      <Plus className="size-3.5" />
+                      Thêm giải thích
+                    </Button>
+                  )
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <HelpCircle className="size-3.5" />
+                      <span>Giải thích đáp án (học viên sẽ thấy sau khi nộp bài)</span>
+                    </label>
+                    <Textarea
+                      rows={2}
+                      value={q.explanation || ""}
+                      disabled={isLocked}
+                      onChange={(e) => handleExplanationChange(qIndex, e.target.value)}
+                      placeholder="Giải thích vì sao phương án này là đúng..."
+                      className="field-sizing-content min-h-0 text-xs"
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
 
-          {!isLocked && (
-            <Button
-              variant="outline"
-              onClick={handleAddQuestion}
-              className="w-full py-6 border-dashed border-border/80 gap-2 cursor-pointer hover:bg-muted/30"
-            >
-              <Plus className="size-4" />
-              Thêm câu hỏi mới
-            </Button>
-          )}
         </div>
 
         {/* CỘT PHẢI (1/3): THIẾT LẬP */}
@@ -638,6 +745,7 @@ export function QuizBuilderClient({
                     max={100}
                     value={passingScore}
                     disabled={isLocked}
+                    aria-invalid={!!fieldErrors.passingScore}
                     onChange={(e) => {
                       setPassingScore(Number(e.target.value) || 0);
                       setIsDirty(true);
@@ -646,6 +754,7 @@ export function QuizBuilderClient({
                   />
                   <span className="text-xs text-muted-foreground">% câu trả lời đúng</span>
                 </div>
+                {fieldErrors.passingScore && <InlineError message={fieldErrors.passingScore} />}
                 <p className="text-[11px] text-muted-foreground">
                   Học viên phải đạt từ mức điểm này trở lên để hoàn thành bài học.
                 </p>
@@ -675,6 +784,25 @@ export function QuizBuilderClient({
           </Card>
         </div>
       </div>
+
+      {!isLocked && (
+        <>
+          <QuizImportDialog
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            maxOptions={DEFAULT_MAX_QUIZ_OPTIONS}
+            onImport={handleImportDrafts}
+          />
+          <QuizAiDialog
+            open={aiOpen}
+            onOpenChange={setAiOpen}
+            lessonTitle={isEntry ? "Bài kiểm tra đầu vào" : lesson?.title || "Bài học"}
+            maxOptions={DEFAULT_MAX_QUIZ_OPTIONS}
+            onGenerate={handleGenerateAi}
+            onApply={handleApplyAiQuestions}
+          />
+        </>
+      )}
     </div>
   );
 }

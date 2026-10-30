@@ -181,6 +181,16 @@ The user must already exist (register normally first). Once one Admin exists, fu
 role changes (promoting to Lecturer/Admin, demoting) go through
 `/dashboard/admin/users` in the app.
 
+## GitHub profile analysis budget
+
+GitHub profile analysis stays disabled unless three operator variables are set in `apps/web/.env.local`:
+
+- `GITHUB_PROFILE_BUDGET_KEY`: the budget key (at most 300 characters). Treat it as a secret.
+- `GITHUB_PROFILE_BUDGET_SLOT`: `pre-integration`, `diagnostic-preintegration`, `integrated`, or `test-<slug>`.
+- `GITHUB_PROFILE_CANDIDATE_SHA`: the 40-character commit SHA the analysis is attributed to.
+
+Each budget key is capped at 5 USD of generation reservations. The values are read from the process environment only, never from request input, and must not be committed.
+
 ## Next Steps
 
 ### Preview authentication

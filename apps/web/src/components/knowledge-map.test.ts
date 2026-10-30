@@ -99,9 +99,9 @@ describe("mockup knowledge map layout", () => {
     await render();
     expect(document.querySelector("select")).toBeNull();
     expect(
-      [...document.querySelectorAll("button")].find((b) =>
-        b.textContent?.includes("Thống kê học tập"),
-      )?.disabled,
+      document
+        .querySelector('a[href="/insights/stats"]')
+        ?.textContent?.includes("Thống kê học tập"),
     ).toBe(true);
     expect(document.body.textContent).toContain("Nên ôn tiếp: Hàm");
     expect(
@@ -134,13 +134,15 @@ describe("mockup knowledge map layout", () => {
     expect(document.querySelector("tbody")?.children).toHaveLength(3);
     expect(graph.isConnected).toBe(true);
     await act(async () => concept("Lỗi").click());
-    expect(document.querySelector('a[href="/learn/owned/error"]')).toBeNull();
-    expect(document.body.textContent).toContain("Bài Lỗi · Bị khoá");
+    // Advisory lock: still openable, with the prerequisite hint.
+    expect(document.querySelector('a[href="/learn/owned/error"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Bài Lỗi");
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết · nên học bài tiên quyết trước");
     expect(
       document
         .querySelector('[role="meter"][aria-label="Lỗi"]')
         ?.getAttribute("aria-valuetext"),
-    ).toBe("Chưa mở khoá");
+    ).toBe("Chưa đủ tiên quyết");
   });
   it("shows all-unlearned evidence honestly and never recommends a locked concept", async () => {
     const data = fixture();

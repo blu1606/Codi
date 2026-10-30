@@ -15,6 +15,8 @@ const trackerId = "19a88269-9c03-4c26-921d-bcecd007906b";
 const mocks = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("sonner", () => ({ toast: mocks.toast }));
+// The GitHub card loads its own data; these tests count the workspace's goal and diagnostic requests only.
+vi.mock("@/components/profile/github-learner-card", () => ({ default: () => null }));
 let root: Root | undefined;
 const course: LearnerCourse = {
   id: "owned",
@@ -249,14 +251,15 @@ describe("learner workspace states", () => {
       document.querySelector('a[href="/insights/knowledge-map?course=owned"]'),
     ).toBeTruthy();
   });
-  it("does not provide a lesson bypass for locked rows and filters completed courses", async () => {
+  it("keeps advisory-locked rows openable with a hint and filters completed courses", async () => {
     const data = structuredClone(overview);
     data.courses[0]!.complete = true;
     data.courses[0]!.lessons[0]!.status = "locked";
     data.courses[0]!.lessons[0]!.lock = "Biến";
     await mount(createElement(ProgressResults, { data, tab: "done" }));
-    expect(document.body.textContent).toContain("Cần học trước: Biến");
-    expect(document.querySelector('a[href="/learn/owned/lesson"]')).toBeNull();
+    expect(document.body.textContent).toContain("Nên học trước: Biến");
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết");
+    expect(document.querySelector('a[href="/learn/owned/lesson"]')).not.toBeNull();
   });
 });
 describe("study tracker", () => {

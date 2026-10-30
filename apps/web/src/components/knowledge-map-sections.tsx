@@ -74,7 +74,7 @@ export function KnowledgeMapList({
               <td className="p-3">
                 <MasteryChip level={n.level} />
                 {n.locked && (
-                  <p className="mt-1 text-muted-foreground">Chưa mở khoá</p>
+                  <p className="mt-1 text-muted-foreground">Chưa đủ tiên quyết</p>
                 )}
               </td>
               <td className="p-3">
@@ -92,11 +92,18 @@ export function KnowledgeMapList({
 }
 
 const masteryColors = [
-  "bg-card text-foreground",
-  "bg-viz-s1 text-foreground",
-  "bg-viz-s2 text-foreground",
-  "bg-viz-s3 text-viz-on-s4",
-  "bg-viz-s4 text-viz-on-s4",
+  "bg-mastery-0 text-foreground",
+  "bg-mastery-1 text-foreground",
+  "bg-mastery-2 text-foreground",
+  "bg-mastery-3 text-primary-foreground",
+  "bg-mastery-4 text-primary-foreground",
+];
+const masteryBar = [
+  "bg-mastery-0",
+  "bg-mastery-1",
+  "bg-mastery-2",
+  "bg-mastery-3",
+  "bg-mastery-4",
 ];
 const shortMasteryLabel = (level: ConceptNode["level"]) =>
   level === 0 ? MASTERY_LABELS[0] : level < 3 ? "Đang học" : "Thành thạo";
@@ -148,17 +155,17 @@ export function KnowledgeMapMastery({ data }: { data: KnowledgeMapView }) {
                 aria-valuemax={4}
                 aria-valuenow={n.level}
                 aria-valuetext={
-                  n.locked ? "Chưa mở khoá" : MASTERY_LABELS[n.level]
+                  n.locked ? "Chưa đủ tiên quyết" : MASTERY_LABELS[n.level]
                 }
                 className="col-span-2 row-start-2 h-3 overflow-hidden rounded bg-muted min-[481px]:col-span-1 min-[481px]:row-start-auto"
               >
                 <span
-                  className="block h-full rounded bg-viz-1"
+                  className={cn("block h-full rounded", masteryBar[n.level])}
                   style={{ width: `${n.level * 25}%` }}
                 />
               </span>
               <span className="whitespace-nowrap text-right text-foreground tabular-nums">
-                {n.locked ? "Chưa mở khoá" : shortMasteryLabel(n.level)}
+                {n.locked ? "Chưa đủ tiên quyết" : shortMasteryLabel(n.level)}
               </span>
             </div>
           ))}
@@ -183,8 +190,8 @@ export function KnowledgeMapNode({
     <button
       type="button"
       aria-pressed={selected}
-      aria-label={`${n.name}: ${n.locked ? "Chưa mở khoá" : MASTERY_LABELS[n.level]}${n.recommended ? " · Bài học được gợi ý" : ""}`}
-      title={`${n.name} — ${n.locked ? "Chưa mở khoá — cần học khái niệm tiên quyết trước" : MASTERY_LABELS[n.level]}`}
+      aria-label={`${n.name}: ${n.locked ? "Chưa đủ tiên quyết" : MASTERY_LABELS[n.level]}${n.recommended ? " · Bài học được gợi ý" : ""}`}
+      title={`${n.name} — ${n.locked ? "Chưa đủ tiên quyết — nên học khái niệm tiên quyết trước" : MASTERY_LABELS[n.level]}`}
       onClick={() => onSelect(n.id)}
       className={cn(
         "absolute grid content-center gap-0.5 rounded-md border border-border-strong px-2.5 py-1.5 text-left outline-none hover:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card",
@@ -211,7 +218,7 @@ export function KnowledgeMapNode({
       >
         {n.locked ? (
           <>
-            <LockKeyhole aria-hidden="true" className="size-3.5" /> Chưa mở khoá
+            <LockKeyhole aria-hidden="true" className="size-3.5" /> Chưa đủ tiên quyết
           </>
         ) : (
           <>
@@ -221,8 +228,7 @@ export function KnowledgeMapNode({
                   key={level}
                   className={cn(
                     "h-1 w-2 rounded-sm bg-border-strong",
-                    level <= n.level &&
-                      (n.level >= 3 ? "bg-viz-on-s4" : "bg-viz-1"),
+                    level <= n.level && masteryBar[n.level],
                   )}
                 />
               ))}
@@ -273,26 +279,26 @@ export function ConceptDetails({
         <ul className="space-y-2">
           {node.lessons.map((lesson) => (
             <li key={lesson.id}>
-              {lesson.locked ? (
-                <span className="text-muted-foreground">
-                  {lesson.title} · Bị khoá, cần hoàn thành bài tiên quyết
+              {/* Prerequisites are advisory: a locked lesson stays openable with a hint. */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 flex-1 break-words text-sm">
+                  {lesson.title}
+                  {lesson.locked && (
+                    <span className="block text-xs text-muted-foreground">
+                      Chưa đủ tiên quyết · nên học bài tiên quyết trước
+                    </span>
+                  )}
                 </span>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0 flex-1 break-words text-sm">
-                    {lesson.title}
-                  </span>
-                  <Link
-                    href={
-                      `/learn/${encodeURIComponent(data.courseId!)}/${encodeURIComponent(lesson.id)}` as Route
-                    }
-                    className={cn(buttonVariants({ size: "sm" }), "shrink-0")}
-                    aria-label={`Học bài này: ${lesson.title}`}
-                  >
-                    Học bài này <ArrowRight aria-hidden="true" className="size-4" />
-                  </Link>
-                </div>
-              )}
+                <Link
+                  href={
+                    `/learn/${encodeURIComponent(data.courseId!)}/${encodeURIComponent(lesson.id)}` as Route
+                  }
+                  className={cn(buttonVariants({ size: "sm", variant: lesson.locked ? "outline" : "default" }), "shrink-0")}
+                  aria-label={`Học bài này: ${lesson.title}`}
+                >
+                  Học bài này <ArrowRight aria-hidden="true" className="size-4" />
+                </Link>
+              </div>
             </li>
           ))}
         </ul>

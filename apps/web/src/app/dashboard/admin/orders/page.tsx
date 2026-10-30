@@ -7,6 +7,9 @@ import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
 import { getAdminOrders, type AdminOrdersFilter } from "@/lib/admin-orders-service";
 import { OrdersTableClient } from "./orders-table-client";
+import { DemoDataBadge } from "@/demo-fixtures/demo-fallback-provider";
+import { withDemoFallback } from "@/demo-fixtures/demo-mode";
+import { adminOrderRows, adminOrderStats } from "@/demo-fixtures/commerce/s34-admin-orders";
 
 export default async function AdminOrdersPage({
   searchParams,
@@ -34,7 +37,10 @@ export default async function AdminOrdersPage({
     reconciliationOnly,
   };
 
-  const { orders, stats } = await getAdminOrders(db, filter);
+  const { data: { orders, stats }, demo } = await withDemoFallback(
+    () => getAdminOrders(db, filter),
+    () => ({ orders: adminOrderRows, stats: adminOrderStats }),
+  );
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
@@ -46,13 +52,14 @@ export default async function AdminOrdersPage({
           <ArrowLeft className="size-3.5" /> Quay lại Bàn làm việc
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Đơn hàng & giao dịch</h1>
+          <h1 className="text-2xl tracking-tight">Đơn hàng & giao dịch</h1>
           <p className="text-sm text-muted-foreground">
             Thanh toán chuyển khoản VietQR, xác nhận tự động theo nội dung chuyển khoản.
           </p>
         </div>
       </div>
 
+      {demo && <DemoDataBadge />}
       <OrdersTableClient
         orders={orders}
         stats={stats}

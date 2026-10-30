@@ -79,7 +79,7 @@ function home(): CoursePathView {
   };
 }
 describe("learner course-home interactions", () => {
-  it("renders prerequisite explanation and prevents a locked lesson from becoming a link", async () => {
+  it("keeps a prerequisite-locked lesson openable with an advisory warning (soft lock)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(home())));
     await render(
       createElement(CourseHome, {
@@ -90,10 +90,15 @@ describe("learner course-home interactions", () => {
     expect(
       document.querySelector('a[href="/learn/owned/first"]'),
     ).not.toBeNull();
-    expect(document.querySelector('a[href="/learn/owned/locked"]')).toBeNull();
-    expect(document.body.textContent).toContain("Cần học trước: Chuỗi");
+    expect(
+      document.querySelector('a[href="/learn/owned/locked"]'),
+    ).not.toBeNull();
+    expect(document.body.textContent).toContain(
+      "Nên học Chuỗi trước (bài Chuỗi)",
+    );
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết");
+    expect(document.body.textContent).not.toContain("Bị khoá");
     expect(document.body.textContent).toContain("Làm bài kiểm tra đầu vào");
-    expect(document.body.textContent).toContain("Chưa học");
   });
   it("dismisses the diagnostic prompt for this tab/session and shows it in a new session", async () => {
     const fetcher = vi
@@ -246,9 +251,10 @@ describe("read-only learner knowledge map", () => {
     expect(document.querySelector("table")).not.toBeNull();
     expect(document.querySelectorAll("tbody tr")).toHaveLength(2);
     await act(async () => button("Mảng").click());
-    expect(document.body.textContent).toContain("Bài Mảng · Bị khoá");
-    expect(document.querySelector('a[href="/learn/owned/locked"]')).toBeNull();
-    expect(document.querySelector('a[aria-label^="Học bài này"]')).toBeNull();
+    // Soft prerequisite lock: the lesson stays openable and carries an advisory hint.
+    expect(document.body.textContent).toContain("Bài Mảng");
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết");
+    expect(document.querySelector('a[href="/learn/owned/locked"]')?.getAttribute("aria-label")).toBe("Học bài này: Bài Mảng");
     await act(async () => button("Chuỗi").click());
     const lessonCta = document.querySelector('a[href="/learn/owned/first"]');
     expect(lessonCta?.textContent).toContain("Học bài này");

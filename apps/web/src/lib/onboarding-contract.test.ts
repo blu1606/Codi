@@ -46,6 +46,48 @@ const setup = (e: Enrollment, command: OnboardingCommand) => ({
   ...goalTransition(e, command),
 });
 
+describe("client-run goal wizard: save once on finish or as a draft on exit", () => {
+  const draft = { goal: "project", level: "basic", hours: 2 } as const;
+  it("commits a complete draft to the fork in one write", () => {
+    expect(setup(enrollment(), { type: "goal-commit", draft })).toMatchObject({
+      learningGoal: "project",
+      selfAssessedLevel: "basic",
+      weeklyGoalMinutes: 120,
+      goalStep: 0,
+      goalDraft: {},
+      diagnosticStatus: "fork",
+    });
+  });
+  it("re-plans instead of forking when committing an edited goal", () => {
+    const e = enrollment({ goalSetAt: new Date(), goalEditing: true, diagnosticStatus: "done" });
+    expect(setup(e, { type: "goal-commit", draft })).toMatchObject({
+      goalEditing: false,
+      pathStatus: "generating",
+      diagnosticStatus: "done",
+    });
+  });
+  it("saves a partial draft so the learner resumes at the same step", () => {
+    expect(
+      setup(enrollment(), { type: "goal-save-draft", step: 1, draft: { goal: "interview" } }),
+    ).toMatchObject({ goalStep: 1, goalDraft: { goal: "interview" }, goalSetAt: null });
+  });
+  it("rejects a draft that skips an unanswered step", () => {
+    expect(() =>
+      goalTransition(enrollment(), { type: "goal-save-draft", step: 2, draft: { goal: "project" } }),
+    ).toThrow("Vui lòng chọn một câu trả lời.");
+  });
+  it("rejects goal writes once the goal is saved and not being edited", () => {
+    const e = enrollment({ goalSetAt: new Date() });
+    expect(() => goalTransition(e, { type: "goal-commit", draft })).toThrow("Mục tiêu đã lưu");
+    expect(() => goalTransition(e, { type: "goal-save-draft", step: 0, draft: {} })).toThrow("Mục tiêu đã lưu");
+  });
+  it("rejects an incomplete commit at the schema boundary", () => {
+    expect(
+      onboardingCommand.safeParse({ type: "goal-commit", draft: { goal: "project", level: "basic" } }).success,
+    ).toBe(false);
+  });
+});
+
 describe("onboarding goal transitions and guards", () => {
   it("persists each choice and advances exactly one acknowledged step to the fork", () => {
     let e = enrollment();

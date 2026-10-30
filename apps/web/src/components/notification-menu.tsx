@@ -1,9 +1,11 @@
 "use client";
 
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
 import { useEffect, useRef, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, LoaderCircle } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 import { Button } from "@codi-1/ui/components/button";
 import { Alert } from "@codi-1/ui/components/alert";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@codi-1/ui/components/empty";
@@ -82,7 +84,7 @@ export default function NotificationMenu() {
         {unread > 0 && <DropdownMenuItem disabled={busy} onClick={(event) => { event.preventDefault(); void markRead(); }}><CheckCheck aria-hidden="true" />Đánh dấu tất cả đã đọc</DropdownMenuItem>}
         <DropdownMenuSeparator />
         {error && <div className="space-y-2 p-2"><Alert variant="destructive">{error}</Alert><Button variant="outline" onClick={() => setRefresh((value) => value + 1)}>Thử lại</Button></div>}
-        {!current && !error && <div role="status" className="flex items-center gap-2 p-4 text-sm text-muted-foreground"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />Đang tải thông báo…</div>}
+        {!current && !error && <LoadingRegion label="Đang tải thông báo…" className="space-y-3 p-4">{[0, 1, 2].map((i) => <div key={i} className="flex gap-3"><Skeleton className="size-8 shrink-0 rounded-full" /><div className="flex min-w-0 flex-1 flex-col gap-2"><Skeleton className="h-3.5 w-4/5" /><Skeleton className="h-3 w-2/5" /></div></div>)}</LoadingRegion>}
         {current?.items.length === 0 && <Empty className="p-5"><EmptyHeader><EmptyMedia variant="icon"><Bell aria-hidden="true" /></EmptyMedia><EmptyTitle>Chưa có thông báo.</EmptyTitle><EmptyDescription>Thông báo về học tập sẽ xuất hiện tại đây.</EmptyDescription></EmptyHeader></Empty>}
         {current && <div className="max-h-[min(60dvh,400px)] overflow-y-auto">{current.items.map((item) => <DropdownMenuItem key={item.id} disabled={busy} onClick={(event) => { event.preventDefault(); void markRead(item); }} className={cn("my-1 flex min-h-11 items-start rounded-md p-3 whitespace-normal", !item.readAt && "bg-accent")}>
           <span aria-hidden="true" className={cn("mt-1.5 size-2 shrink-0 rounded-full", item.readAt ? "bg-border" : "bg-primary")} />

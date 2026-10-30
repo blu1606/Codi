@@ -23,6 +23,7 @@ source of truth for business states).
 | `course_discussions` | same, root rows carry `status` (`unanswered · answered`) | Public lesson Q&A (§14.1). |
 | — | `course_conversations`, `conversation_messages` | Private learner ↔ lecturer threads; lecturer/admin resolve (D9). |
 | — | `notifications`, `feedback_snippets`, `ai_content_drafts` | In-app bell (D15), "Mẫu nhận xét", AI drafts (§19). |
+| — | `ai_tutor_messages` | In-lesson AI tutor thread per learner + lesson, max 40 rows; votes, ≤ 3-line diff state, stopped turns (§13). Hint steps stay in `ai_interaction_logs.hint_level`, so clearing the thread keeps them. |
 | DECIMAL money | `integer` VND | VND has no minor unit; matches existing `price`. |
 
 All new tables are created with RLS enabled and no policies: the app reaches Postgres as the owner through
@@ -35,7 +36,7 @@ tables are read by everyone; schema changes to a table go through its owner.
 
 | Workstream | Epic | Tables |
 |---|---|---|
-| Foundation + Learner learning | #94 (@SteveJoy-ux) | `notifications`, `student_enrollments` (goal / diagnostic / path columns), `lesson_progress`, `assessment_submissions` + `assessment_answers` + `coding_test_results` (learner side), `enrollment_skill_mastery`, `personalized_learning_paths`, `path_items`, `course_discussions`, `course_conversations` + `conversation_messages` (learner side), `course_reviews`, `ai_interaction_logs` (tutor) |
+| Foundation + Learner learning | #94 (@SteveJoy-ux) | `notifications`, `student_enrollments` (goal / diagnostic / path columns), `lesson_progress`, `assessment_submissions` + `assessment_answers` + `coding_test_results` (learner side), `enrollment_skill_mastery`, `personalized_learning_paths`, `path_items`, `course_discussions`, `course_conversations` + `conversation_messages` (learner side), `course_reviews`, `ai_interaction_logs` (tutor), `ai_tutor_messages` |
 | Commerce, AI advisor, Admin ops | #103 (@GnadiahHna) | `student_cart`, `vouchers`, `orders`, `order_items`, `order_events`, `payments`, `student_transactions` (retire), `courses.price*` / `hidden_reason`, `user.banned` / `user_roles` (admin), `ai_interaction_logs` (advisor) |
 | Lecturer workspace + Publication | #112 (@taidz0987-dot) | `courses` (lifecycle), `course_details`, `course_chapters`, `course_lessons`, `lesson_materials`, `skills`, `skill_prerequisites`, `lesson_skills`, `assessments`, `quiz_questions`, `quiz_options`, `coding_exercises`, `coding_test_cases`, `course_publication_requests`, `publication_review_criteria`, `publication_review_flags`, `feedback_snippets`, `ai_content_drafts`, grading writes on `assessment_submissions`, lecturer side of conversations / reviews |
 

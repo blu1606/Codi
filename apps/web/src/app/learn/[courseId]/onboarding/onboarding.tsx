@@ -12,6 +12,8 @@ import {
 } from "@codi-1/ui/components/alert";
 import { ConfirmDialog } from "@codi-1/ui/components/confirm-dialog";
 import { toast } from "sonner";
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
 import {
   showDiagnosticResult,
   type OnboardingCommand,
@@ -101,7 +103,7 @@ export default function Onboarding({
       if (command.type !== "goal-pick" && command.type !== "answer")
         heading.current?.focus();
       if (
-        (command.type === "goal-next" || command.type === "goal-skip") &&
+        (command.type === "goal-commit" || command.type === "goal-next" || command.type === "goal-skip") &&
         data?.enrollment.goalEditing &&
         !body.enrollment.goalEditing
       )
@@ -186,13 +188,22 @@ export default function Onboarding({
   );
   const progress = (value: number, total: number, label: string) => (
     <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
-      <progress
-        className="h-2 w-full accent-primary"
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <div
+        role="progressbar"
         aria-label={label}
-        value={value}
-        max={total}
-      />
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={value}
+        className="flex gap-1"
+      >
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={`h-1.5 flex-1 rounded-full ${i < value ? "bg-primary" : "bg-muted"}`}
+          />
+        ))}
+      </div>
     </div>
   );
   const action = (
@@ -215,13 +226,12 @@ export default function Onboarding({
   );
   if (loading)
     return shell(
-      <div
-        role="status"
-        className="flex items-center gap-3 py-12 text-muted-foreground"
-      >
-        <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-        Đang tải thiết lập của bạn…
-      </div>,
+      <LoadingRegion label="Đang tải thiết lập của bạn…" className="space-y-4 py-6">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-11 w-40 rounded-lg" />
+      </LoadingRegion>,
     );
   if (!data)
     return shell(

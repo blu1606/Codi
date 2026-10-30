@@ -2,9 +2,8 @@
 import { createElement as h, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AdminInsightsView } from "../../app/dashboard/admin/insights/admin-insights-view";
 import { LearnerStatsView } from "../../app/insights/stats/learner-stats-view";
-import { AdminFinanceView } from "../../app/dashboard/admin/finance/admin-finance-view";
+import { learnerStats, learnerStatsDiagnosticSkipped, learnerStatsLittleData, learnerStatsNoActivity } from "../../demo-fixtures/commerce/s13b-learner-stats";
 const window = { start: "2026-10-16T17:00:00.000Z", end: "2026-10-23T17:00:00.000Z", timeZone: "Asia/Ho_Chi_Minh", period: "7" };
 let container: HTMLDivElement;
 let root: Root;
@@ -19,43 +18,45 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
 const ok = (data: unknown) => ({ ok: true, json: async () => data });
-describe("analytics client states (controlled HTTP doubles)", () => {
-  it("loads independent cards, preserves successful counts and retries failure", async () => {
-    let resolveUsers!: (value: unknown) => void;
-    fetcher.mockImplementation((url: string) => {
-      if (url.includes("users")) return new Promise((resolve) => { resolveUsers = resolve; });
-      if (url.includes("courses")) return Promise.resolve(ok({ value: 0, window }));
-      return Promise.resolve({ ok: false });
-    });
-    await act(async () => root.render(h(AdminInsightsView)));
-    expect(container.textContent).toContain("Đang tải thống kê");
-    expect(container.textContent).toContain("Không có bản ghi");
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
-    await act(async () => resolveUsers(ok({ value: 12, window })));
-    expect(container.textContent).toContain("12");
-    expect(fetcher).toHaveBeenCalledWith("/api/admin/insights/users?period=30", expect.objectContaining({ cache: "no-store" }));
-    fetcher.mockResolvedValue(ok({ value: 9, window }));
-    await act(async () => (container.querySelector("button") as HTMLButtonElement).click());
-    expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.textContent).toContain("9");
-    expect(container.textContent).toContain("12");
-  });
-  it("uses learner response and course/period request, distinguishes unavailable from empty", async () => {
-    fetcher.mockResolvedValue(ok({ enrollments: 0, completedLessons: 0, studiedLessons: 0, studyMinutes: null, window }));
+describe("learner analytics client states (controlled HTTP doubles)", () => {
+  it("renders learner stats from the response and requests the selected course and period", async () => {
+    fetcher.mockResolvedValue(ok(learnerStats));
     await act(async () => root.render(h(LearnerStatsView, { initialPeriod: "7", initialCourse: "c/a" })));
     expect(fetcher).toHaveBeenCalledWith("/api/insights/stats?period=7&course=c%2Fa", expect.anything());
-    expect(container.textContent).toContain("Học bài đầu tiên");
-    expect(container.textContent).toContain("Chưa khả dụng: giờ học");
-    expect(container.textContent).not.toContain("0 giờ");
-    expect(container.querySelector('a[href="/dashboard"]')).not.toBeNull();
+    expect(container.textContent).toContain("Giờ học trong kỳ");
+    expect(container.textContent).toContain("Lịch học");
+    expect(container.textContent).toContain("Mức thành thạo theo kỹ năng");
+    expect(container.textContent).not.toContain("Chưa khả dụng");
     const select = container.querySelector("select")!;
     await act(async () => { select.value = "30"; select.dispatchEvent(new Event("change", { bubbles: true })); });
     expect(fetcher).toHaveBeenLastCalledWith("/api/insights/stats?period=30&course=c%2Fa", expect.anything());
   });
-  it("retains honest finance unavailability without fake amounts, export or queue links", async () => {
-    await act(async () => root.render(h(AdminFinanceView)));
-    expect(container.textContent).toContain("Chưa khả dụng");
-    expect(container.querySelectorAll("a,button,table")).toHaveLength(0);
-    expect(fetcher).not.toHaveBeenCalled();
+  it("expands the detail cards with the small-sample caution and the selected quiz donut", async () => {
+    fetcher.mockResolvedValue(ok(learnerStats));
+    await act(async () => root.render(h(LearnerStatsView, { initialPeriod: "30", initialCourse: "all" })));
+    expect(container.textContent).not.toContain("Điểm quiz & bài code theo thời gian");
+    const toggle = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Xem chi tiết (2 thẻ)"))!;
+    await act(async () => toggle.click());
+    expect(container.textContent).toContain("Điểm quiz & bài code theo thời gian");
+    expect(container.textContent).toContain("Mẫu nhỏ (n = 4)");
+    expect(container.textContent).toContain("Kết quả một bài quiz");
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+  it("shows the no-activity call to action instead of empty charts", async () => {
+    fetcher.mockResolvedValue(ok(learnerStatsNoActivity));
+    await act(async () => root.render(h(LearnerStatsView, { initialPeriod: "30", initialCourse: "all" })));
+    expect(container.textContent).toContain("Học bài đầu tiên");
+    expect(container.querySelector('a[href="/dashboard"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Lịch học");
+  });
+  it("flags little data and the skipped diagnostic without trend claims", async () => {
+    fetcher.mockResolvedValue(ok(learnerStatsLittleData));
+    await act(async () => root.render(h(LearnerStatsView, { initialPeriod: "30", initialCourse: "all" })));
+    expect(container.textContent).toContain("Mới có 2 ngày học");
+    fetcher.mockResolvedValue(ok(learnerStatsDiagnosticSkipped));
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(h(LearnerStatsView, { initialPeriod: "30", initialCourse: "all" })));
+    expect(container.textContent).toContain("Bạn đã bỏ qua bài kiểm tra đầu vào");
   });
 });

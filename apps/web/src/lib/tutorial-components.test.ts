@@ -4,6 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import LessonTutorial from "../components/lesson-tutorial";
 import {
+  TutorBridgeContext,
+  type TutorCodeBridge,
+} from "../components/ai-tutor/tutor-bridge";
+import {
   tutorialTransition,
   tutorialView,
   type TutorialCommand,
@@ -339,5 +343,52 @@ describe("tutorial workspace", () => {
         b.textContent?.startsWith("Chạy"),
       )?.disabled,
     ).toBe(true);
+  });
+});
+describe("tutorial run errors and the AI tutor", () => {
+  it("offers 'Hỏi AI trợ lý' on a run error and lends the step, code and error as context", async () => {
+    const view = {
+      ...tutorialView(steps, null, false, "javascript", "main.js"),
+      code: '// Bấm "Chạy"\nconsole.lg("Xin chào Codi!");',
+      lastRun: {
+        phase: "runtime" as const,
+        logs: [],
+        error: '"not a function"',
+        line: 2,
+        outcomes: [],
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(view)));
+    let lent: TutorCodeBridge | null = null;
+    const tutor = {
+      open: vi.fn(),
+      registerCode: vi.fn((code: TutorCodeBridge | null) => (lent = code)),
+    };
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () =>
+      root!.render(
+        createElement(
+          TutorBridgeContext.Provider,
+          { value: tutor },
+          createElement(LessonTutorial, {
+            endpoint: "/api/tutorial",
+            onChanged: vi.fn(),
+          }),
+        ),
+      ),
+    );
+    await click("Hỏi AI trợ lý: Giải thích lỗi này");
+    expect(tutor.open).toHaveBeenCalledWith({
+      ask: 'Code của mình báo lỗi “Dòng 2: "not a function"”. Lỗi này nghĩa là gì và mình nên xem chỗ nào?',
+    });
+    const code = lent as TutorCodeBridge | null;
+    expect(code?.task()).toEqual({
+      label: "Bước 1/3: Chào mừng",
+      text: "Bước 1/3: Chào mừng\nViết và chạy JavaScript ngay trên trình duyệt.",
+    });
+    expect(code?.getCode()).toContain('console.lg("Xin chào Codi!");');
+    expect(code?.runError()).toBe('Dòng 2: "not a function"');
   });
 });

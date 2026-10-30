@@ -227,6 +227,20 @@ export function AiAdvisorView({
         body: JSON.stringify({
           prompt: queryText,
           intake: activeIntake,
+          // Earlier turns of this chat, so follow-up questions keep their context.
+          history: messages
+            .filter((m) => (m.role === "user" || m.role === "ai") && m.text && !m.stopped)
+            .slice(-6)
+            .map((m) => ({
+              role: m.role,
+              text: m.text,
+              courseIds: [
+                ...new Set([
+                  ...(m.courses ?? []).map((c) => c.id),
+                  ...(m.order ?? []).map((o) => o.id),
+                ]),
+              ],
+            })),
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -711,9 +725,9 @@ export function AiAdvisorView({
         {/* Header */}
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Gợi ý khoá học từ danh mục</h1>
+            <h1 className="text-2xl tracking-tight">Tư vấn khoá học cùng AI</h1>
             <p className="mt-1 text-xs text-muted-foreground">
-              Bản thử nghiệm dùng quy tắc đối chiếu danh mục khoá học đã xuất bản; không dùng mô hình AI để phân tích.
+              Codi chỉ gợi ý từ các khoá học đã xuất bản trên Codi.
             </p>
             {messages.length === 0 ? (
               <p className="text-muted-foreground text-sm mt-1">
@@ -736,6 +750,46 @@ export function AiAdvisorView({
           )}
         </header>
 
+        {messages.length === 0 && (
+          <div className="w-full">
+          <form
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault();
+              handleSend(inputText);
+            }}
+            className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 shadow-lg focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20"
+          >
+            <label className="sr-only" htmlFor="advisor-q">
+              Câu hỏi cho Codi
+            </label>
+            <input
+              id="advisor-q"
+              type="text"
+              name="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={
+                messages.length === 0
+                  ? "Ví dụ: Mình muốn làm web, nên học khoá nào trước?"
+                  : "Hỏi tiếp…"
+              }
+              autoComplete="off"
+              disabled={busy || loadingContext || !initData}
+              className="flex-1 min-w-0 bg-transparent px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={busy || loadingContext || !initData || !inputText.trim()}
+              className="gap-1.5"
+            >
+              <Send className="size-4" />
+              <span className="hidden sm:inline">Hỏi Codi</span>
+            </Button>
+          </form>
+          </div>
+        )}
+
         {!loadingContext && !initData && (
           <Alert variant="destructive">
             <AlertTitle>Không thể tải ngữ cảnh gợi ý khoá học</AlertTitle>
@@ -750,7 +804,7 @@ export function AiAdvisorView({
             <Link href="/login?callbackURL=/ai" className="text-primary font-medium underline">
               Đăng nhập
             </Link>{" "}
-            để xem tiến độ và ưu tiên khoá học chưa sở hữu.
+            để Codi gợi ý theo tiến độ học của bạn.
           </p>
         )}
 
@@ -761,7 +815,7 @@ export function AiAdvisorView({
             role="group"
             aria-label="Codi đang hiểu về bạn"
           >
-            <span className="font-semibold text-muted-foreground">Codi đang hiểu về bạn:</span>
+            <span className="font-semibold text-muted-foreground">Codi đang hiểu về bạn</span>
             {intakeItems.map((item) => (
               <span
                 key={item.key}
@@ -816,7 +870,7 @@ export function AiAdvisorView({
               })}
             </ul>
             <p className="text-xs text-muted-foreground pt-1">
-              Gợi ý theo quy tắc có thể chưa phù hợp với bạn. Hãy xem kỹ trang chi tiết khoá học trước khi mua.
+              AI có thể trả lời sai. Hãy xem kỹ trang chi tiết khoá học trước khi mua.
             </p>
           </section>
         )}
@@ -848,7 +902,7 @@ export function AiAdvisorView({
                     aria-busy="true"
                   >
                     <span className="inline-block size-2 animate-ping rounded-full bg-primary" />
-                    <span>Đang đối chiếu danh mục…</span>
+                    <span>Codi đang suy nghĩ…</span>
                     <Button
                       type="button"
                       variant="ghost"
@@ -939,12 +993,9 @@ export function AiAdvisorView({
                 );
               }
 
-              // Catalog-rules answer message
+              // Model answer grounded in the published catalogue
               return (
                 <div key={m.id} className="flex flex-col gap-4 text-sm leading-relaxed">
-                  <p className="text-xs text-muted-foreground">
-                    Gợi ý theo quy tắc danh mục · Không phải phân tích từ mô hình AI.
-                  </p>
                   {m.text && (
                     <div className="whitespace-pre-line text-foreground">{m.text}</div>
                   )}
@@ -1112,8 +1163,8 @@ export function AiAdvisorView({
           </div>
         )}
 
-        {/* Sticky Composer */}
-        <div className="sticky bottom-4 z-10 w-full pt-4">
+        {messages.length > 0 && (
+          <div className="sticky bottom-4 z-10 w-full pt-4">
           <form
             onSubmit={(e: FormEvent) => {
               e.preventDefault();
@@ -1149,7 +1200,8 @@ export function AiAdvisorView({
               <span className="hidden sm:inline">Hỏi Codi</span>
             </Button>
           </form>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

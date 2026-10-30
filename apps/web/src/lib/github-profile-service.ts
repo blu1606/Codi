@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   collectGithubProfile,
   type GithubPublicAccess,
+  type GithubRequestTiming,
 } from "./github-profile-collector";
 import type { GithubCollectionSnapshot } from "./github-profile-contract";
 import {
@@ -74,6 +75,7 @@ export interface GithubProfileServiceOptions {
   ai: Pick<GithubProfileAiOptions, "apiKey" | "reserveGeneration" | "fetch">;
   /** Trusted offline transport seam; never supplied by a client. */
   githubFetch?: typeof globalThis.fetch;
+  onGithubRequest?: (event: GithubRequestTiming) => void;
 }
 
 const messages = {
@@ -268,6 +270,7 @@ export async function runGithubProfileRequest(
           },
           {
             limits: { totalMs: GITHUB_PROFILE_SERVICE_LIMITS.collectionMs },
+            onRequest: options.onGithubRequest,
             fetch: scopedFetch(
               options.githubFetch ?? globalThis.fetch,
               collectionSignal,

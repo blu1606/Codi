@@ -1,0 +1,341 @@
+{
+  "lesson": {
+    "id": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+    "title": "Thử thách: Thống kê đơn hàng",
+    "chapterTitle": "Luyện tập lập trình",
+    "description": null,
+    "body": "Thử thách này luyện cách \"gộp\" một mảng đơn hàng thành con số thống kê: tổng tiền, đơn lớn nhất và số đơn theo trạng thái. Cả ba đều giải gọn được bằng `reduce`, kết hợp `filter`/`map` khi cần. Đọc hướng dẫn dưới đây, rồi tự viết code trước khi xem gợi ý.\n\n## Dữ liệu đầu vào\n\nMỗi đơn hàng là một đối tượng có `id`, `price` và `status`:\n\n```js\nconst orders = [\n  { id: 'DH01', price: 590000, status: 'paid' },\n  { id: 'DH02', price: 1290000, status: 'pending' },\n  { id: 'DH03', price: 350000, status: 'paid' },\n];\n```\n\n## reduce hoạt động thế nào\n\n`arr.reduce((acc, item) => ..., init)` duyệt từng phần tử; giá trị trả về của mỗi lần gọi trở thành `acc` cho lần tiếp theo. `init` là giá trị khởi đầu của `acc`.\n\n```js\n[1, 2, 3].reduce((tong, x) => tong + x, 0);\n// lần 1: tong = 0, x = 1 → 1\n// lần 2: tong = 1, x = 2 → 3\n// lần 3: tong = 3, x = 3 → 6\n```\n\n> **Luôn truyền giá trị khởi đầu** khi mảng có thể rỗng: `[].reduce((a, b) => a + b)` ném `TypeError`, còn `[].reduce((a, b) => a + b, 0)` trả về `0`.\n\n## Bước 1 — Tổng tiền\n\nGộp `price` của mọi đơn, khởi đầu từ `0`. Có thể dùng destructuring ngay trong tham số: `(tong, { price }) => tong + price`.\n\n## Bước 2 — Đơn lớn nhất\n\nMảng rỗng phải trả về `null`, nên kiểm tra `orders.length` trước. Sau đó dùng `reduce` **không** có giá trị khởi đầu: `acc` bắt đầu bằng phần tử đầu tiên, và mỗi bước giữ lại đơn có `price` lớn hơn.\n\n```js\nconst lonNhat = [3, 8, 5].reduce((max, x) => (x > max ? x : max));\n// 8\n```\n\n## Bước 3 — Đếm theo trạng thái\n\nLần này `acc` là một **đối tượng**, khởi đầu `{}`. Với mỗi đơn, tăng `acc[status]` thêm 1 (dùng `?? 0` hoặc `|| 0` cho lần đầu gặp trạng thái đó), rồi **trả về `acc`**:\n\n```js\nconst dem = ['a', 'b', 'a'].reduce((acc, k) => {\n  acc[k] = (acc[k] ?? 0) + 1;\n  return acc;\n}, {});\n// { a: 2, b: 1 }\n```\n\nQuên `return acc` là lỗi phổ biến nhất: lần lặp sau sẽ nhận `undefined`.\n\n## filter và map khi nào?\n\n- Chỉ tính tổng các đơn đã thanh toán: `orders.filter((o) => o.status === 'paid')` rồi mới `reduce`.\n- Lấy danh sách mã đơn: `orders.map((o) => o.id)`.\n\n## Kiểm tra trước khi nộp\n\n- Mảng rỗng: `tongTien([])` → `0`, `donLonNhat([])` → `null`, `demTheoTrangThai([])` → `{}`.\n- Không sửa mảng `orders` gốc.\n- Bấm **Chạy** để xem kết quả các test.\n\n## Đọc thêm\n\n- Array methods (map, filter, reduce): https://javascript.info/array-methods\n\n## Nguồn\n\n- Video: F8 Official — https://www.youtube.com/@F8VNOfficial\n",
+    "durationSeconds": 1500
+  },
+  "materials": [
+    {
+      "id": 30,
+      "title": "Phương thức reduce có logic như thế nào? | JavaScript reduce",
+      "type": "video",
+      "url": "https://www.youtube.com/watch?v=y8ZkHEpF9zM",
+      "durationSeconds": 825
+    }
+  ],
+  "media": {},
+  "positionSeconds": 0,
+  "studied": false,
+  "completed": false,
+  "checklist": [
+    {
+      "key": "code",
+      "assessmentId": 138,
+      "label": "Hoàn thành bài code",
+      "done": false,
+      "note": "Nộp bài để chấm"
+    }
+  ],
+  "path": {
+    "rows": [
+      {
+        "id": "eab288f3-a31f-4ad3-a16f-da038f93e4c1",
+        "title": "Biến, hằng và kiểu dữ liệu",
+        "chapterId": "7fa39196-c831-451d-a0c1-1f83468c19f6",
+        "chapterTitle": "Làm quen JavaScript",
+        "durationSeconds": 960,
+        "skillIds": [
+          158
+        ],
+        "progress": "completed",
+        "studied": true,
+        "lessonId": "eab288f3-a31f-4ad3-a16f-da038f93e4c1",
+        "reason": "Bạn đã biết khai báo biến — có thể lướt nhanh.",
+        "isSkippable": true,
+        "status": "done",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 158,
+            "name": "Biến & kiểu dữ liệu",
+            "level": 4
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "17a6b1bd-96b7-4fb7-af82-222a6ca41ee7",
+        "title": "Hàm và phạm vi",
+        "chapterId": "7fa39196-c831-451d-a0c1-1f83468c19f6",
+        "chapterTitle": "Làm quen JavaScript",
+        "durationSeconds": 1200,
+        "skillIds": [
+          159
+        ],
+        "progress": "completed",
+        "studied": true,
+        "lessonId": "17a6b1bd-96b7-4fb7-af82-222a6ca41ee7",
+        "reason": "Hàm là điều kiện trước Mảng, Đối tượng và Bất đồng bộ.",
+        "isSkippable": false,
+        "status": "done",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 159,
+            "name": "Hàm",
+            "level": 3
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "24ce2fab-9dbf-4900-a51d-12aaf3988c36",
+        "title": "Làm việc với mảng",
+        "chapterId": "2cb2cd49-3b6b-4bd4-a6f2-36c18cde173f",
+        "chapterTitle": "Dữ liệu có cấu trúc",
+        "durationSeconds": 1080,
+        "skillIds": [
+          160
+        ],
+        "progress": "completed",
+        "studied": true,
+        "lessonId": "24ce2fab-9dbf-4900-a51d-12aaf3988c36",
+        "reason": "Kết quả đầu vào cho thấy bạn còn yếu phần mảng.",
+        "isSkippable": false,
+        "status": "done",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 160,
+            "name": "Mảng",
+            "level": 3
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "56f73c1d-47fc-4807-ae52-87089d6d07c4",
+        "title": "Đối tượng và destructuring",
+        "chapterId": "2cb2cd49-3b6b-4bd4-a6f2-36c18cde173f",
+        "chapterTitle": "Dữ liệu có cấu trúc",
+        "durationSeconds": 1020,
+        "skillIds": [
+          161
+        ],
+        "progress": "completed",
+        "studied": true,
+        "lessonId": "56f73c1d-47fc-4807-ae52-87089d6d07c4",
+        "reason": "Cần cho bài DOM và dự án cuối khoá.",
+        "isSkippable": false,
+        "status": "done",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 161,
+            "name": "Đối tượng",
+            "level": 2
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "bedaf193-5537-4de7-a390-f4b157b55307",
+        "title": "Hướng dẫn: Viết và chạy JavaScript",
+        "chapterId": "0e6c3151-fda6-4314-a980-4ec656b8c59a",
+        "chapterTitle": "Luyện tập lập trình",
+        "durationSeconds": 1200,
+        "skillIds": [
+          160
+        ],
+        "progress": "completed",
+        "studied": true,
+        "lessonId": "bedaf193-5537-4de7-a390-f4b157b55307",
+        "reason": "Thực hành ngay sau phần mảng giúp bạn nhớ lâu hơn.",
+        "isSkippable": false,
+        "status": "done",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 160,
+            "name": "Mảng",
+            "level": 3
+          }
+        ],
+        "kind": "tutorial"
+      },
+      {
+        "id": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+        "title": "Thử thách: Thống kê đơn hàng",
+        "chapterId": "0e6c3151-fda6-4314-a980-4ec656b8c59a",
+        "chapterTitle": "Luyện tập lập trình",
+        "durationSeconds": 1500,
+        "skillIds": [
+          160
+        ],
+        "progress": "not_started",
+        "studied": false,
+        "lessonId": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+        "reason": "Kiểm tra lại kỹ năng mảng trước khi sang DOM.",
+        "isSkippable": false,
+        "status": "next",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 160,
+            "name": "Mảng",
+            "level": 3
+          }
+        ],
+        "kind": "coding"
+      },
+      {
+        "id": "568f51b3-6f4e-485c-a09c-5affed8c4954",
+        "title": "Chọn và thay đổi phần tử DOM",
+        "chapterId": "b72e8947-18ec-40f9-abd8-791825ee1f53",
+        "chapterTitle": "Trình duyệt và DOM",
+        "durationSeconds": 1140,
+        "skillIds": [
+          162
+        ],
+        "progress": "not_started",
+        "studied": false,
+        "lessonId": "568f51b3-6f4e-485c-a09c-5affed8c4954",
+        "reason": "Mục tiêu \"Làm được dự án\" cần thao tác DOM thành thạo.",
+        "isSkippable": false,
+        "status": "todo",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 162,
+            "name": "DOM & sự kiện",
+            "level": 1
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "fbda8d8b-89b6-4161-a581-4c9b55a6cec5",
+        "title": "Sự kiện và event delegation",
+        "chapterId": "b72e8947-18ec-40f9-abd8-791825ee1f53",
+        "chapterTitle": "Trình duyệt và DOM",
+        "durationSeconds": 900,
+        "skillIds": [
+          162
+        ],
+        "progress": "not_started",
+        "studied": false,
+        "lessonId": "fbda8d8b-89b6-4161-a581-4c9b55a6cec5",
+        "reason": "Bổ sung cho bài DOM; ngắn và thực hành nhiều.",
+        "isSkippable": false,
+        "status": "todo",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 162,
+            "name": "DOM & sự kiện",
+            "level": 1
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "e463a4b9-1379-4b14-a630-32395e242c51",
+        "title": "Promise là gì",
+        "chapterId": "4b6542bc-f82c-4932-a330-ac66ce7d5165",
+        "chapterTitle": "Bất đồng bộ",
+        "durationSeconds": 1260,
+        "skillIds": [
+          163
+        ],
+        "progress": "not_started",
+        "studied": false,
+        "lessonId": "e463a4b9-1379-4b14-a630-32395e242c51",
+        "reason": "Bạn chọn \"Tôi chưa biết\" ở câu Promise.",
+        "isSkippable": false,
+        "status": "todo",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 163,
+            "name": "Bất đồng bộ",
+            "level": 0
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "a8689f9e-7ba7-4e58-a193-f1ab1a6b2e89",
+        "title": "async/await và xử lý lỗi",
+        "chapterId": "4b6542bc-f82c-4932-a330-ac66ce7d5165",
+        "chapterTitle": "Bất đồng bộ",
+        "durationSeconds": 1140,
+        "skillIds": [
+          163
+        ],
+        "progress": "not_started",
+        "studied": false,
+        "lessonId": "a8689f9e-7ba7-4e58-a193-f1ab1a6b2e89",
+        "reason": "Tiếp nối trực tiếp bài Promise.",
+        "isSkippable": false,
+        "status": "todo",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 163,
+            "name": "Bất đồng bộ",
+            "level": 0
+          }
+        ],
+        "kind": "video"
+      },
+      {
+        "id": "6ed0d48c-2494-4949-a962-8c00a37c7bd9",
+        "title": "Dự án nhỏ: Ứng dụng thời tiết",
+        "chapterId": "4b6542bc-f82c-4932-a330-ac66ce7d5165",
+        "chapterTitle": "Bất đồng bộ",
+        "durationSeconds": 1800,
+        "skillIds": [
+          162,
+          163
+        ],
+        "progress": "not_started",
+        "studied": false,
+        "lessonId": "6ed0d48c-2494-4949-a962-8c00a37c7bd9",
+        "reason": "Bài tổng hợp, đáp ứng mục tiêu dự án.",
+        "isSkippable": false,
+        "status": "todo",
+        "lock": null,
+        "mastery": [
+          {
+            "id": 162,
+            "name": "DOM & sự kiện",
+            "level": 1
+          },
+          {
+            "id": 163,
+            "name": "Bất đồng bộ",
+            "level": 0
+          }
+        ],
+        "kind": "video"
+      }
+    ],
+    "currentLessonId": "241c0bba-1cc6-4c8b-a5d0-bff447b311ad",
+    "done": 5,
+    "total": 11,
+    "percent": 45,
+    "complete": false,
+    "course": {
+      "id": "course-js-001",
+      "title": "JavaScript nền tảng",
+      "slug": "javascript-nen-tang"
+    },
+    "status": "ready",
+    "source": "ai",
+    "goal": "project",
+    "hours": 5,
+    "goalEditing": false,
+    "diagnosticStatus": "done",
+    "showDiagnosticCard": false,
+    "pathId": 163,
+    "rationale": "Lộ trình được sắp theo mục tiêu học và kết quả bài kiểm tra đầu vào của bạn.",
+    "updating": false,
+    "highlights": [],
+    "update": null,
+    "review": null,
+    "recommendation": null
+  }
+}

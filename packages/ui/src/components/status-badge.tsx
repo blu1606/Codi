@@ -33,10 +33,14 @@ const statuses = {
   },
 } as const;
 
+export type OrderStatus = keyof (typeof statuses)["order"];
+export type CourseStatus = keyof (typeof statuses)["course"];
+
 type StatusBadgeProps = { [K in keyof typeof statuses]: { kind: K; status: keyof (typeof statuses)[K]; className?: string } }[keyof typeof statuses];
 export function StatusBadge(props: StatusBadgeProps) {
   const entries: Record<string, { label: string; tone: string; Icon: typeof Clock }> = statuses[props.kind];
-  const entry = entries[props.status]!;
+  // Unknown values from loosely typed rows still get a readable label instead of the raw enum.
+  const entry = entries[props.status as string] ?? { label: String(props.status), tone: neutral, Icon: Clock };
   return <span className={cn("inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium", entry.tone, props.className)}>
     <entry.Icon aria-hidden="true" className="size-3.5" />{entry.label}
   </span>;

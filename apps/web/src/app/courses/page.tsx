@@ -28,6 +28,7 @@ import { authClient } from "@/lib/auth-client";
 import { CatalogCourseCard } from "@/components/courses/catalog-course-card";
 import cardStyles from "@/components/courses/catalog-course-card.module.css";
 import AuthModal from "@/components/auth/auth-modal";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
 
 const CATEGORIES = [
   "Tất cả",
@@ -59,7 +60,8 @@ const SORT_OPTIONS: { value: CatalogSortOption; label: string }[] = [
 
 function CatalogSkeleton() {
   return (
-    <div className={cardStyles.grid} aria-busy="true">
+    <LoadingRegion label="Đang tải danh sách khoá học…">
+      <div className={cardStyles.grid}>
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className={cardStyles.card}>
           <div className="aspect-video w-full bg-muted animate-pulse" />
@@ -78,6 +80,7 @@ function CatalogSkeleton() {
         </div>
       ))}
     </div>
+    </LoadingRegion>
   );
 }
 
@@ -507,7 +510,7 @@ export default function CoursesPage() {
       <div className="container mx-auto max-w-7xl px-4 sm:px-6">
         {/* Header (Screenshot 3 & S01 Mockup) */}
         <div className="mb-6">
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+          <h1 className="text-3xl tracking-tight text-foreground sm:text-4xl">
             Khoá học
           </h1>
           <p className="mt-1.5 text-sm sm:text-base text-muted-foreground">
@@ -518,7 +521,7 @@ export default function CoursesPage() {
         {/* 4-Control Filter Bar matching Screenshot 3 */}
         <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-end">
           {/* 1. Tìm kiếm */}
-          <div ref={searchContainerRef} className="lg:col-span-6 relative">
+          <div ref={searchContainerRef} className="lg:col-span-4 relative">
             <label htmlFor="f-search" className="block text-xs font-bold text-foreground mb-1.5">
               Tìm kiếm
             </label>
@@ -780,6 +783,25 @@ export default function CoursesPage() {
               ))}
             </select>
           </div>
+          {/* 5. Sắp xếp */}
+          <div className="lg:col-span-2">
+            <label htmlFor="f-sort" className="block text-xs font-bold text-foreground mb-1.5">
+              Sắp xếp
+            </label>
+            <select
+              id="f-sort"
+              aria-label="Sắp xếp danh sách khóa học"
+              value={selectedSort}
+              onChange={(e) => setSelectedSort(e.target.value as CatalogSortOption)}
+              className="w-full h-10 px-3 rounded-lg bg-card border border-border text-sm text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Feedback Alert if any */}
@@ -814,7 +836,6 @@ export default function CoursesPage() {
         {/* Active Filter Chips */}
         {activeChips.length > 0 && (
           <div className="my-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground font-medium">Bộ lọc đang chọn:</span>
             {activeChips.map((chip) => (
               <span
                 key={chip.key}
@@ -841,30 +862,11 @@ export default function CoursesPage() {
           </div>
         )}
 
-        {/* Results Counter & Sort (Screenshot 3 & S01 Mockup) */}
+        {/* Results counter */}
         <div className="my-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground font-medium" role="status">
+          <p className="text-sm text-muted-foreground" role="status">
             {loading ? "Đang tải danh sách khoá học…" : `${filteredCourses.length} khoá học`}
           </p>
-          <div className="flex items-center gap-2">
-            <label htmlFor="f-sort" className="text-xs text-muted-foreground font-medium shrink-0">
-              Sắp xếp:
-            </label>
-            <select
-              id="f-sort"
-              aria-label="Sắp xếp danh sách khóa học"
-              value={selectedSort}
-              onChange={(e) => setSelectedSort(e.target.value as CatalogSortOption)}
-              className="h-9 px-2.5 rounded-lg bg-card border border-border text-xs text-foreground shadow-xs focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-
-            </select>
-          </div>
         </div>
 
         {/* Course Cards Grid or States */}

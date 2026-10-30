@@ -7,6 +7,9 @@ import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
 import { getAdminPublishedCourses } from "@/lib/admin-courses-service";
 import { CourseActionsClient } from "./course-actions-client";
+import { DemoDataBadge } from "@/demo-fixtures/demo-fallback-provider";
+import { withDemoFallback } from "@/demo-fixtures/demo-mode";
+import { adminCourses } from "@/demo-fixtures/commerce/s33-admin-courses";
 
 export default async function AdminCoursesPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -15,7 +18,7 @@ export default async function AdminCoursesPage() {
   const active = await getActiveRoles(db, session.user.id);
   if (!active.includes(ROLE.ADMIN)) redirect("/dashboard");
 
-  const courses = await getAdminPublishedCourses(db);
+  const { data: courses, demo } = await withDemoFallback(() => getAdminPublishedCourses(db), () => adminCourses);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
@@ -27,13 +30,14 @@ export default async function AdminCoursesPage() {
           <ArrowLeft className="size-3.5" /> Quay lại Bàn làm việc
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Khóa học đã xuất bản</h1>
+          <h1 className="text-2xl tracking-tight">Khóa học đã xuất bản</h1>
           <p className="text-sm text-muted-foreground">
             Ẩn khoá học hoặc đổi giá. Mọi thay đổi đều được thông báo cho giảng viên.
           </p>
         </div>
       </div>
 
+      {demo && <DemoDataBadge />}
       <CourseActionsClient courses={courses} />
     </div>
   );

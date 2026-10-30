@@ -200,7 +200,7 @@ describe("GitHub profile consent and request UI", () => {
   it("keeps mockup cards and unknown area segments without fabricating domains or mastery", async () => {
     await renderPanel({ initialProfile: profile(), initialLinked: true });
     expect(
-      host.querySelector('[data-mockup="resultPage.header"] h1')?.textContent,
+      host.querySelector('[data-mockup="resultPage.header"] h2')?.textContent,
     ).toBe("@linked-user");
     const header = host.querySelector('[data-mockup="resultPage.header"]')!;
     expect(header.firstElementChild?.className).toContain("w-full");
@@ -223,12 +223,24 @@ describe("GitHub profile consent and request UI", () => {
     expect(area.querySelector(".bg-primary")).toBeNull();
     expect(area.textContent).not.toContain("Backend");
     expect(
-      host.querySelector('[aria-label="Khoá học Codi gợi ý cho bạn"]')
-        ?.textContent,
+      host.querySelector('[aria-label="Dùng trong khoá học"]')?.textContent,
     ).toContain("chưa cung cấp gợi ý");
     expect(
       host.querySelector('[aria-label="Repo đã phân tích"]')?.textContent,
-    ).toContain("Repo #1");
+    ).toContain("linked-user/project");
+  });
+
+  it("explains languages, activity and insights with exact text values and sources", async () => {
+    await renderPanel({ initialProfile: profile(), initialLinked: true });
+    const insights = host.querySelector('[aria-label="Điều Codi rút ra"]')!;
+    expect(insights.textContent).toContain("TypeScript chiếm 100%");
+    expect(insights.textContent).toContain("Dựa trên:");
+    expect(insights.textContent).not.toMatch(/\d+ byte/);
+    const activity = host.querySelector('[aria-label="Hoạt động đẩy code"]')!;
+    expect(activity.textContent).toContain(
+      "Chưa có repo nào có lần đẩy code trong 12 tháng gần nhất.",
+    );
+    expect(host.textContent).toContain("Dùng trong khoá học");
   });
 
   it("shows the mockup result sheet only after a terminal successful response", async () => {
@@ -270,20 +282,16 @@ describe("GitHub profile consent and request UI", () => {
     await click("Phân tích GitHub");
     await submit();
     const sheet = document.querySelector('[data-mockup="resultBody"]')!;
+    expect(sheet.textContent).toContain("25%");
+    expect(sheet.textContent).toContain("75%");
     expect(
-      sheet
-        .querySelector('[aria-label="Tỉ lệ byte TypeScript"]')
-        ?.getAttribute("aria-valuenow"),
-    ).toBe("25");
-    expect(
-      sheet
+      host
+        .querySelector('[aria-label="Bạn code bằng gì"]')!
         .querySelector('[aria-label="Tỉ lệ byte Python"]')
         ?.getAttribute("aria-valuenow"),
     ).toBe("75");
-    expect(sheet.textContent).toContain("100 byte");
-    expect(sheet.textContent).toContain(
-      "không phải tỉ lệ dòng code hay mức thành thạo",
-    );
+    expect(sheet.textContent).toContain("75%");
+    expect(sheet.textContent).toContain("Ngôn ngữ trong repo công khai");
     const trigger = sheet.querySelector<HTMLButtonElement>(
       '[aria-label="Xem bằng chứng: Ngôn ngữ TypeScript"]',
     )!;
@@ -535,9 +543,8 @@ describe("GitHub profile consent and request UI", () => {
         ?.getAttribute("aria-valuenow"),
     ).toBe("75");
     expect(
-      host.querySelector('[aria-label="Tỉ lệ byte TypeScript"]')!.parentElement!
-        .textContent,
-    ).toContain("100 byte25%");
+      host.querySelector('[aria-label="Bạn code bằng gì"]')!.textContent,
+    ).toContain("TypeScript25%trong 1 repo");
     const evidence = host.querySelector<HTMLButtonElement>(
       '[aria-label="Xem bằng chứng: Ngôn ngữ Python"]',
     )!;
@@ -587,24 +594,13 @@ describe("GitHub profile consent and request UI", () => {
         ],
       );
       expect(technology.textContent).toContain("Ước tính từ GitHub");
-      expect(
-        technology.querySelectorAll('[aria-hidden="true"] > span.bg-primary')
-          .length,
-      ).toBe({ tried: 1, regular: 2, deep: 3 }[usage]);
-      const signals = host.querySelector(
-        '[aria-label="Tín hiệu và điều cần xác nhận"]',
-      )!;
-      expect(signals.textContent).toContain(
+      expect(technology.textContent).not.toMatch(/\d\/3/);
+      expect(technology.textContent).toContain(
         usage === "tried"
-          ? "Không phải điểm yếu đã được chứng minh"
-          : "TypeScript",
+          ? "Cần xác nhận · Không phải điểm yếu đã được chứng minh."
+          : "Điểm mạnh có bằng chứng hỗ trợ.",
       );
       expect(technology.textContent).not.toContain("%");
-      expect(
-        signals.querySelector("h4")!.nextElementSibling!.textContent,
-      ).toContain(
-        usage === "tried" ? "Chưa đủ bằng chứng cho điểm mạnh" : "TypeScript",
-      );
       expect(
         host.querySelector('[aria-label="Mảng kiến thức"]')?.textContent,
       ).toContain("Độ tin cậy Thấp");
@@ -628,14 +624,12 @@ describe("GitHub profile consent and request UI", () => {
     const result = profile();
     result.technologies[0]!.usage = "deep";
     await show(result);
-    const signals = host.querySelector(
-      '[aria-label="Tín hiệu và điều cần xác nhận"]',
-    )!;
-    expect(
-      signals.querySelector("h4")!.nextElementSibling!.textContent,
-    ).toContain("Chưa đủ bằng chứng cho điểm mạnh");
-    expect(signals.textContent).toContain(
-      "Không phải điểm yếu đã được chứng minh",
+    const technology = host.querySelector('[aria-label="Công nghệ"]')!;
+    expect(technology.textContent).toContain(
+      "Cần xác nhận · Không phải điểm yếu đã được chứng minh.",
+    );
+    expect(technology.textContent).not.toContain(
+      "Điểm mạnh có bằng chứng hỗ trợ.",
     );
   });
 
@@ -925,8 +919,8 @@ describe("GitHub profile consent and request UI", () => {
     await submit();
     expect(auth.linkSocial).toHaveBeenCalledWith({
       provider: "github",
-      callbackURL: "/profile/github",
-      errorCallbackURL: "/profile/github",
+      callbackURL: "/profile?tab=nang-luc",
+      errorCallbackURL: "/profile?tab=nang-luc",
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(host.textContent).toContain("không tự phân tích khi bạn quay lại");
@@ -976,8 +970,8 @@ describe("GitHub profile consent and request UI", () => {
     await submit();
     expect(auth.linkSocial).toHaveBeenCalledExactlyOnceWith({
       provider: "github",
-      callbackURL: "/profile/github",
-      errorCallbackURL: "/profile/github",
+      callbackURL: "/profile?tab=nang-luc",
+      errorCallbackURL: "/profile?tab=nang-luc",
     });
     expect(button("Phân tích lại").disabled).toBe(true);
     expect(host.textContent).toContain("Ước tính ban đầu.");

@@ -3,19 +3,18 @@
 import { useEffect, useState } from "react";
 import type { Route } from "next";
 import Link from "next/link";
+import { CourseLogo } from "@codi-1/ui/components/course-logo";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BookOpen,
+  ChartColumn,
   Check,
   ChevronDown,
   Flame,
   GraduationCap,
   LoaderCircle,
-  MessageSquare,
   Sparkles,
-  Target,
-  Trophy,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,8 +27,6 @@ import { Button, buttonVariants } from "@codi-1/ui/components/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@codi-1/ui/components/card";
 import {
   Dialog,
@@ -39,7 +36,8 @@ import {
   DialogTitle,
 } from "@codi-1/ui/components/dialog";
 import { MasteryChip } from "@codi-1/ui/components/mastery-chip";
-import { Skeleton } from "@codi-1/ui/components/skeleton";
+import GithubLearnerCard from "@/components/profile/github-learner-card";
+import { LearnerWorkspaceSkeleton } from "@/components/skeletons/learner-workspace-skeleton";
 import { cn } from "@codi-1/ui/lib/utils";
 import { GOAL_LABELS } from "@/lib/onboarding-contract";
 import type {
@@ -215,49 +213,29 @@ export default function LearnerWorkspace({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            className={buttonVariants({ variant: "outline" })}
-            href={progress ? "/dashboard" : "/progress"}
-          >
-            {progress ? (
-              <BookOpen className="size-4" />
-            ) : (
+          {progress ? (
+            <Link
+              className={buttonVariants({ variant: "outline" })}
+              href={"/insights/stats" as Route}
+            >
+              <ChartColumn className="size-4" />
+              Xem thống kê
+            </Link>
+          ) : (
+            <Link
+              className={buttonVariants({ variant: "outline" })}
+              href="/progress"
+            >
               <GraduationCap className="size-4" />
-            )}
-            {progress ? "Bàn làm việc" : "Tiến độ & kết quả"}
-          </Link>
+              Tiến độ & kết quả
+            </Link>
+          )}
           <Link className={buttonVariants({ variant: "ghost" })} href="/ai">
             <Sparkles className="size-4" />
             Hỏi AI Codi
           </Link>
         </div>
       </header>
-      <nav aria-label="Học tập của tôi" className="flex gap-4 border-b text-sm">
-        <Link
-          href="/dashboard"
-          aria-current={!progress ? "page" : undefined}
-          className={cn(
-            "min-h-11 border-b-2 py-3",
-            !progress
-              ? "border-primary font-semibold text-primary"
-              : "border-transparent text-muted-foreground",
-          )}
-        >
-          Bàn làm việc
-        </Link>
-        <Link
-          href="/progress"
-          aria-current={progress ? "page" : undefined}
-          className={cn(
-            "min-h-11 border-b-2 py-3",
-            progress
-              ? "border-primary font-semibold text-primary"
-              : "border-transparent text-muted-foreground",
-          )}
-        >
-          Tiến độ & kết quả
-        </Link>
-      </nav>
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Chưa thể tải hoặc cập nhật dữ liệu học tập</AlertTitle>
@@ -273,13 +251,13 @@ export default function LearnerWorkspace({
         </Alert>
       )}
       {loading && !data ? (
-        <WorkspaceLoading />
+        <LearnerWorkspaceSkeleton progress={progress} />
       ) : data ? (
         progress ? (
           <ProgressResults data={data} tab={tab} />
         ) : data.courses.length ? (
           <>
-            <WeeklyGoal
+            <GoalProgressCard
               data={data}
               edit={(id) => {
                 const c = data.courses.find((c) => c.id === id);
@@ -293,9 +271,8 @@ export default function LearnerWorkspace({
                 }
               }}
             />
-            <StatTiles data={data} />
-            <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-              <div className="min-w-0 space-y-6">
+            <div className="grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+              <div className="min-w-0 space-y-8">
                 {data.continueCourseId && (
                   <ContinueLearning
                     course={data.courses.find(
@@ -307,11 +284,15 @@ export default function LearnerWorkspace({
                   .filter((c) => c.showDiagnostic && !c.complete)
                   .map((c) => (
                     <Card key={c.id}>
-                      <CardContent className="space-y-3">
+                      <CardContent
+                        role="status"
+                        className="space-y-3"
+                      >
                         <div className="flex items-start justify-between gap-3">
-                          <h2 className="text-lg font-semibold">
-                            Cá nhân hoá lộ trình
-                          </h2>
+                          <p className="font-semibold">
+                            Cá nhân hoá lộ trình — làm bài kiểm tra đầu vào
+                            (~10 phút)
+                          </p>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -322,14 +303,13 @@ export default function LearnerWorkspace({
                             <X className="size-4" />
                           </Button>
                         </div>
-                        <p className="text-sm font-medium">{c.title}</p>
                         <p className="text-sm text-muted-foreground">
-                          Làm bài kiểm tra đầu vào (~10 phút) để Codi bỏ qua
-                          phần bạn đã biết và tập trung vào phần còn thiếu.
+                          Giúp Codi bỏ qua phần bạn đã biết và tập trung vào
+                          phần còn thiếu.
                         </p>
                         <Button
-                          variant="outline"
-                          className="min-w-52"
+                          variant="secondary"
+                          size="sm"
                           disabled={busy === c.id}
                           onClick={() =>
                             void openOnboarding(c, "diagnostic-retake")
@@ -343,11 +323,11 @@ export default function LearnerWorkspace({
                       </CardContent>
                     </Card>
                   ))}
+                <GithubLearnerCard />
                 <MyCourses courses={data.courses} />
               </div>
               <Updates data={data} />
             </div>
-            <SkillBadges courses={data.courses} />
             {data.recommendations.length > 0 && (
               <section className="space-y-4" aria-labelledby="recommendations">
                 <h2 id="recommendations" className="text-lg font-semibold">
@@ -356,7 +336,7 @@ export default function LearnerWorkspace({
                 <div className="grid gap-4 sm:grid-cols-3">
                   {data.recommendations.map((c) => (
                     <Card key={c.id} className="overflow-hidden py-0">
-                      <CourseCover cover={c.cover} />
+                      <CourseCover cover={c.cover} slug={c.slug} title={c.title} />
                       <CardContent className="space-y-2 pb-4">
                         <Link
                           href={
@@ -424,24 +404,6 @@ export default function LearnerWorkspace({
   );
 }
 
-function WorkspaceLoading() {
-  return (
-    <div
-      role="status"
-      aria-label="Đang tải dữ liệu học tập"
-      className="space-y-4"
-    >
-      <span className="sr-only">Đang tải dữ liệu học tập…</span>
-      <Skeleton className="h-40 w-full rounded-lg" />
-      <div className="grid gap-4 sm:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-24 rounded-lg" />
-        ))}
-      </div>
-      <Skeleton className="h-64 w-full rounded-lg" />
-    </div>
-  );
-}
 function WorkspaceEmpty() {
   return (
     <Card>
@@ -468,10 +430,14 @@ function WorkspaceEmpty() {
 }
 function CourseCover({
   cover,
+  slug,
+  title,
   className,
   small = false,
 }: {
   cover: string | null;
+  slug: string;
+  title?: string;
   className?: string;
   small?: boolean;
 }) {
@@ -490,7 +456,7 @@ function CourseCover({
           className="size-full object-cover"
         />
       ) : (
-        <BookOpen className={small ? "size-7" : "size-14"} aria-hidden="true" />
+        <CourseLogo slug={slug} title={title} size={small ? "sm" : "md"} className="size-full rounded-none" />
       )}
     </div>
   );
@@ -500,9 +466,9 @@ function ContinueLearning({ course: c }: { course: LearnerCourse }) {
   const lesson = c.lessons.find((l) => l.id === c.nextLessonId);
   return (
     <Card className="overflow-hidden py-0">
-      <CardContent className="grid gap-0 p-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-        <CourseCover cover={c.cover} className="sm:aspect-auto sm:h-full" />
-        <section className="space-y-4 p-5" aria-labelledby="continue-title">
+      <CardContent className="grid gap-0 p-0 sm:grid-cols-[5fr_6fr]">
+        <CourseCover cover={c.cover} slug={c.slug} title={c.title} className="sm:aspect-auto sm:h-full" />
+        <section className="space-y-4 p-6" aria-labelledby="continue-title">
           <p className="text-sm font-semibold text-primary">Tiếp tục học</p>
           <h2 id="continue-title" className="text-xl font-semibold">
             {c.title}
@@ -552,7 +518,7 @@ function ContinueLearning({ course: c }: { course: LearnerCourse }) {
     </Card>
   );
 }
-function WeeklyGoal({
+function GoalProgressCard({
   data,
   edit,
 }: {
@@ -560,19 +526,21 @@ function WeeklyGoal({
   edit: (id: string) => void;
 }) {
   const w = data.weekly;
-  const percent = Math.round((w.minutes / w.goalMinutes) * 100);
+  const percent = w.goalMinutes
+    ? Math.round((w.minutes / w.goalMinutes) * 100)
+    : 0;
+  const skills = data.courses
+    .flatMap((c) => c.skills.map((s) => ({ ...s, course: c.title })))
+    .filter((s) => s.level >= 3);
   return (
     <Card>
-      <CardContent className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <section className="space-y-3" aria-labelledby="weekly-goal">
+      <CardContent className="space-y-5">
+        <h2 className="text-lg font-semibold">Mục tiêu & tiến độ</h2>
+        <section className="space-y-2" aria-labelledby="weekly-goal">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2
-              id="weekly-goal"
-              className="flex items-center gap-2 font-semibold"
-            >
-              <Target className="size-5 text-primary" />
+            <h3 id="weekly-goal" className="text-sm font-semibold">
               Mục tiêu hàng tuần
-            </h2>
+            </h3>
             <div className="flex items-center gap-2">
               {w.assumed && (
                 <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
@@ -597,82 +565,45 @@ function WeeklyGoal({
           <p className="text-sm text-muted-foreground">
             {w.minutes} phút / {w.goalMinutes} phút · {percent}% tuần này
           </p>
-          <ol
-            className="flex flex-wrap gap-2"
-            aria-label="Hoạt động học trong tuần"
-          >
-            {w.days.map((day, i) => (
-              <li
-                key={day.date}
-                aria-label={`${new Date(`${day.date}T00:00:00Z`).toLocaleDateString("vi-VN", { timeZone: "UTC" })}: ${day.studied ? "Đã học" : "Chưa có hoạt động"}${day.today ? ", hôm nay" : ""}`}
-                className={cn(
-                  "flex size-9 items-center justify-center rounded-full border text-xs",
-                  day.studied
-                    ? "border-primary bg-accent font-semibold text-accent-foreground"
-                    : "text-muted-foreground",
-                  day.today &&
-                    "ring-2 ring-ring ring-offset-2 ring-offset-background",
-                )}
-              >
-                {day.studied ? (
-                  <>
-                    <Check className="size-4" />
-                    <span className="sr-only">
-                      {i === 6 ? "CN" : `T${i + 2}`}
-                    </span>
-                  </>
-                ) : i === 6 ? (
-                  "CN"
-                ) : (
-                  `T${i + 2}`
-                )}
-              </li>
-            ))}
-          </ol>
-          <p className="text-xs text-muted-foreground">
-            Thời gian được ghi nhận khi trang bài học đang hoạt động. Ngày học
-            được tính khi bạn hoàn thành một hoạt động học tập.
-          </p>
         </section>
-        <div className="flex items-center gap-3 sm:border-l sm:pl-6">
-          <Flame className="size-8 text-primary" aria-hidden="true" />
-          <div>
-            <p className="font-display text-2xl font-semibold">{w.streak}</p>
+        {w.streak > 0 && (
+          <div className="flex items-center gap-3">
+            <Flame className="size-8 text-primary" aria-hidden="true" />
+            <p className="text-3xl font-normal text-primary">{w.streak}</p>
             <p className="text-sm text-muted-foreground">ngày liên tiếp</p>
           </div>
-        </div>
+        )}
+        {skills.length > 0 && (
+          <section className="space-y-2" aria-labelledby="skill-badges">
+            <h3 id="skill-badges" className="text-sm font-semibold">
+              Kỹ năng thành thạo
+            </h3>
+            <ul className="flex flex-wrap gap-2">
+              {skills.slice(0, 5).map((s) => (
+                <li key={s.id}>
+                  <Link
+                    href="/progress"
+                    title={`${s.name} · ${s.course}`}
+                    className="inline-flex min-h-11 flex-wrap items-center gap-2 rounded-full border bg-card px-3 py-2 text-sm hover:bg-accent"
+                  >
+                    <span>{s.name}</span>
+                    <MasteryChip level={s.level} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {skills.length > 5 && (
+              <p className="text-sm text-muted-foreground">
+                +{skills.length - 5} kỹ năng khác
+              </p>
+            )}
+          </section>
+        )}
       </CardContent>
     </Card>
   );
 }
-function StatTiles({ data }: { data: LearnerOverview }) {
-  const entries = [
-    ["Khoá đang học", data.stats.active, "active"],
-    ["Bài học đã hoàn thành", data.stats.lessons, "active"],
-    ["Bài tập chờ chấm", data.stats.pending, "active"],
-    ["Nhận xét từ giảng viên", data.stats.feedback, "active"],
-  ] as const;
-  return (
-    <section
-      aria-label="Tổng quan học tập"
-      className="grid grid-cols-2 gap-3 lg:grid-cols-4"
-    >
-      {entries.map(([label, value, tab]) => (
-        <Card key={label}>
-          <CardContent>
-            <Link
-              href={`/progress?tab=${tab}` as Route}
-              className="block space-y-2 hover:text-primary"
-            >
-              <p className="font-display text-2xl font-semibold">{value}</p>
-              <p className="text-sm text-muted-foreground">{label}</p>
-            </Link>
-          </CardContent>
-        </Card>
-      ))}
-    </section>
-  );
-}
+
 function MyCourses({ courses }: { courses: LearnerCourse[] }) {
   return (
     <section className="space-y-4" aria-labelledby="my-courses">
@@ -693,7 +624,7 @@ function MyCourses({ courses }: { courses: LearnerCourse[] }) {
             <Card>
               <CardContent className="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-4 sm:flex sm:flex-wrap">
                 <div className="w-16 shrink-0 overflow-hidden rounded-lg sm:w-20">
-                  <CourseCover cover={c.cover} small />
+                  <CourseCover cover={c.cover} slug={c.slug} title={c.title} small />
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">
                   <Link
@@ -746,110 +677,68 @@ function MyCourses({ courses }: { courses: LearnerCourse[] }) {
   );
 }
 function Updates({ data }: { data: LearnerOverview }) {
+  const rows = [
+    { value: data.stats.pending, label: "Bài tập đang chờ chấm" },
+    { value: data.stats.answered, label: "Câu hỏi đã được trả lời" },
+    { value: data.stats.lessons, label: "Bài học đã hoàn thành" },
+  ];
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Cập nhật cho bạn</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <Link
-          href="/progress"
-          className="flex items-center gap-3 text-sm hover:text-primary"
-        >
-          <MessageSquare className="size-5 text-primary" />
-          <span>
-            <strong>{data.stats.answered}</strong> câu hỏi đã được trả lời
-          </span>
-        </Link>
-        {data.latestFeedback ? (
-          <section
-            className="space-y-3 border-t pt-4"
-            aria-labelledby="latest-feedback"
-          >
-            <h2 id="latest-feedback" className="font-semibold">
-              Nhận xét mới nhất
-            </h2>
-            <p className="text-sm font-medium">
-              {data.latestFeedback.lessonTitle} ·{" "}
-              {number(data.latestFeedback.score)}/
-              {number(data.latestFeedback.maxScore)}
-            </p>
-            <p className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground">
-              {data.latestFeedback.text}
-            </p>
+    <aside
+      aria-label="Cập nhật từ giảng viên"
+      className="grid gap-4 rounded-lg bg-muted p-6 lg:sticky lg:top-24"
+    >
+      <h2 className="text-lg font-semibold">Cập nhật cho bạn</h2>
+      <ul className="grid gap-1">
+        {rows.map((row) => (
+          <li key={row.label}>
             <Link
               href="/progress"
-              className="text-sm font-medium text-primary hover:underline"
+              className="-mx-3 flex min-h-11 items-center gap-3 rounded-sm px-3 py-2 text-sm hover:bg-card"
             >
-              Xem tất cả nhận xét
+              <span className="min-w-[2ch] text-xl font-semibold tabular-nums text-primary">
+                {row.value}
+              </span>
+              <span>{row.label}</span>
             </Link>
-          </section>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Nhận xét của giảng viên sẽ xuất hiện ở đây sau khi bài tập được
-            chấm.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-function SkillBadges({ courses }: { courses: LearnerCourse[] }) {
-  const skills = courses.flatMap((c) =>
-    c.skills.map((s) => ({ ...s, course: c.title })),
-  );
-  if (!skills.length) return null;
-  const earned = skills.filter((s) => s.level >= 3),
-    learning = skills.filter((s) => s.level < 3);
-  return (
-    <section className="space-y-4" aria-labelledby="skill-badges">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2
-          id="skill-badges"
-          className="flex items-center gap-2 text-lg font-semibold"
+          </li>
+        ))}
+      </ul>
+      {data.latestFeedback ? (
+        <section
+          className="grid gap-2 border-t pt-4"
+          aria-labelledby="latest-feedback"
         >
-          <Trophy className="size-5 text-primary" />
-          Kỹ năng của bạn
-        </h2>
-        <Link href="/progress" className="text-sm font-medium text-primary">
-          Xem mức thành thạo
-        </Link>
-      </div>
-      {[
-        { label: "Kỹ năng thành thạo", list: earned },
-        { label: "Đang xây dựng", list: learning },
-      ].map(
-        (group) =>
-          group.list.length > 0 && (
-            <div key={group.label} className="space-y-2">
-              <h3 className="text-sm font-medium">
-                {group.label} · {group.list.length}
-              </h3>
-              <ul className="flex flex-wrap gap-2">
-                {group.list.slice(0, 5).map((s) => (
-                  <li key={s.id}>
-                    <Link
-                      href="/progress"
-                      title={`${s.name} · ${s.course}`}
-                      className="inline-flex min-h-11 flex-wrap items-center gap-2 rounded-full border bg-card px-3 py-2 text-sm hover:bg-accent"
-                    >
-                      <span>{s.name}</span>
-                      <MasteryChip level={s.level} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              {group.list.length > 5 && (
-                <p className="text-xs text-muted-foreground">
-                  +{group.list.length - 5} kỹ năng khác trong Tiến độ & kết quả
-                </p>
-              )}
-            </div>
-          ),
+          <h3
+            id="latest-feedback"
+            className="text-sm font-semibold text-primary"
+          >
+            Nhận xét mới nhất
+          </h3>
+          <p className="font-semibold">
+            {data.latestFeedback.lessonTitle} ·{" "}
+            {number(data.latestFeedback.score)}/
+            {number(data.latestFeedback.maxScore)}
+          </p>
+          <p className="line-clamp-3 whitespace-pre-wrap text-sm text-muted-foreground">
+            {data.latestFeedback.text}
+          </p>
+          <Link
+            href="/progress"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Xem tất cả nhận xét
+          </Link>
+        </section>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Nhận xét của giảng viên sẽ xuất hiện ở đây sau khi bài tập được
+          chấm.
+        </p>
       )}
-    </section>
+    </aside>
   );
 }
+
 export function ProgressResults({
   data,
   tab,
@@ -957,7 +846,6 @@ export function ProgressResults({
                           "Trạng thái",
                           "Quiz",
                           "Bài tập",
-                          "Code",
                         ].map((label) => (
                           <th
                             key={label}
@@ -976,20 +864,16 @@ export function ProgressResults({
                             scope="row"
                             className="min-w-40 px-3 py-4 align-top font-medium"
                           >
-                            {l.status === "locked" ? (
-                              <>
-                                <span>{l.title}</span>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Cần học trước: {l.lock}
-                                </p>
-                              </>
-                            ) : (
-                              <Link
-                                href={`${home(c)}/${l.id}` as Route}
-                                className="text-primary hover:underline"
-                              >
-                                {l.title}
-                              </Link>
+                            <Link
+                              href={`${home(c)}/${l.id}` as Route}
+                              className="text-primary hover:underline"
+                            >
+                              {l.title}
+                            </Link>
+                            {l.status === "locked" && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Nên học trước: {l.lock}
+                              </p>
                             )}
                           </th>
                           <td className="px-3 py-4 align-top">
@@ -1006,20 +890,18 @@ export function ProgressResults({
                               {l.status === "done"
                                 ? "Hoàn thành"
                                 : l.status === "locked"
-                                  ? "Bị khoá"
+                                  ? "Chưa đủ tiên quyết"
                                   : "Chưa hoàn thành"}
                             </span>
                           </td>
-                          {(["quiz", "assignment", "coding"] as const).map(
+                          {(["quiz", "assignment"] as const).map(
                             (type) => (
                               <td
                                 key={type}
                                 className="min-w-32 px-3 py-4 align-top"
                               >
-                                {l.results.some((r) => r.type === type) ? (
-                                  l.results
-                                    .filter((r) => r.type === type)
-                                    .map((r) => (
+                                {resultsOf(l.results, type).length ? (
+                                  resultsOf(l.results, type).map((r) => (
                                       <ResultCell key={r.id} result={r} />
                                     ))
                                 ) : (
@@ -1071,6 +953,13 @@ export function ProgressResults({
         </Card>
       )}
     </section>
+  );
+}
+function resultsOf(results: LearnerResult[], type: "quiz" | "assignment") {
+  return results.filter((r) =>
+    type === "assignment"
+      ? r.type === "assignment" || r.type === "coding"
+      : r.type === "quiz",
   );
 }
 function ResultCell({ result: r }: { result: LearnerResult }) {
