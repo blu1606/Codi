@@ -6,7 +6,8 @@
     ".": {
       "types": "./index.d.ts",
       "default": "./index.mjs"
-    }
+    },
+    "./worker.mjs": "./worker.mjs"
   },
   "dependencies": {
     "quickjs-emscripten": "^0.32.0"

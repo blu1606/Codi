@@ -82,5 +82,26 @@ describe("Course Ownership State Machine (STATE-MACHINES.md §2)", () => {
       });
       expect(result).toEqual({ ownership: "not-owned" });
     });
+
+    it("resolves to 'not-owned' or 'in-cart' when pendingOrderId is null (e.g. order cancelled/expired)", () => {
+      // When an order is cancelled or expired, pendingOrderId is null
+      const notInCartResult = resolveCourseOwnership({
+        signedIn: true,
+        isEnrolled: false,
+        pendingOrderId: null,
+        isInCart: false,
+        price: 590000,
+      });
+      expect(notInCartResult).toEqual({ ownership: "not-owned" });
+
+      const inCartResult = resolveCourseOwnership({
+        signedIn: true,
+        isEnrolled: false,
+        pendingOrderId: null,
+        isInCart: true,
+        price: 590000,
+      });
+      expect(inCartResult).toEqual({ ownership: "in-cart" });
+    });
   });
 });

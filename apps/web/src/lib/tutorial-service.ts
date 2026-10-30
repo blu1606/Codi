@@ -9,6 +9,7 @@ import {
 } from "@codi-1/db/schema/coding-exercises";
 import type { TutorialProgress } from "@codi-1/db/schema/coding-tutorial";
 import { runJavaScript } from "@codi-1/coding-runner";
+import { runLeaseExpiresAt } from "./coding-run-lease";
 import { loadLearningLessonAccess } from "./learning-path-service";
 import { LearningPathError } from "./learning-path-contract";
 import {
@@ -126,14 +127,14 @@ export function createTutorialService(db: Database, runner = runJavaScript) {
           .values({
             userId: scope.userId,
             token,
-            runningUntil: sql`clock_timestamp() + interval '20 seconds'`,
+            runningUntil: runLeaseExpiresAt,
             lastStartedAt: sql`clock_timestamp()`,
           })
           .onConflictDoUpdate({
             target: codingRunLeases.userId,
             set: {
               token,
-              runningUntil: sql`clock_timestamp() + interval '20 seconds'`,
+              runningUntil: runLeaseExpiresAt,
               lastStartedAt: sql`clock_timestamp()`,
             },
             setWhere: sql`${codingRunLeases.runningUntil} <= clock_timestamp() and ${codingRunLeases.lastStartedAt} <= clock_timestamp() - interval '2 seconds'`,

@@ -46,7 +46,8 @@ export default async function CourseTabEditorPage({ params }: CourseTabProps) {
         data={{ ...data, kmapData, publicationData }}
       />
     );
-  } catch {
+  } catch (error) {
+    console.error("[CourseTabEditorPage] Error loading course tab:", error);
     notFound();
   }
 }

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, isNull, or } from "drizzle-orm";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
 import { courses, orders, orderItems, orderEvents } from "@codi-1/db";
 import { studentEnrollments, studentTransactions } from "@codi-1/db/schema/student-profile";
@@ -111,15 +111,21 @@ export async function createBuyNowOrder(
     };
   }
 
-  // Also check legacy studentTransactions for fallback
+  // Also check legacy studentTransactions for fallback only if active and not cancelled/expired
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
   const [existingTx] = await db
     .select({ id: studentTransactions.id, amount: studentTransactions.amount })
     .from(studentTransactions)
+    .leftJoin(orders, eq(orders.code, studentTransactions.id))
     .where(
       and(
         eq(studentTransactions.userId, userId),
         eq(studentTransactions.status, "pending"),
-        eq(studentTransactions.courseId, targetCourse.id)
+        eq(studentTransactions.courseId, targetCourse.id),
+        // If an associated canonical order exists, it must be pending
+        or(isNull(orders.id), eq(orders.status, "pending")),
+        // Must not be expired (>30 mins)
+        gte(studentTransactions.createdAt, thirtyMinutesAgo)
       )
     )
     .limit(1);

@@ -237,6 +237,8 @@ export function CartView() {
         if (res.status === 409 && json.code === "PENDING_ORDER_EXISTS") {
           setShowReplaceModal(true);
           setCheckoutLoading(false);
+          // Re-read the cart so the banner and dialog show the conflicting order's real count, date and total
+          void fetchCart(currentVoucherCode);
           return;
         }
         throw new Error(json.error || "Không thể tạo đơn hàng.");
