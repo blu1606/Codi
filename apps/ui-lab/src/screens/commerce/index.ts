@@ -10,7 +10,6 @@ import { settingsScreen, profileScreen } from "./s04b-account";
 import { checkoutScreen } from "./s06-checkout";
 import { checkoutSuccessScreen } from "./s07-checkout-success";
 import { learnerStatsScreen } from "./s13b-learner-stats";
-import { aiAdvisorScreen } from "./s17-ai-advisor";
 import { adminDashboardScreen } from "./s30-admin-dashboard";
 import { adminUsersScreen } from "./s31-admin-users";
 import { adminCoursesScreen } from "./s33-admin-courses";
@@ -22,7 +21,7 @@ import { headerScreen } from "./s40-s41-header";
 export const commerceScreens: Screen[] = [
   landingScreen, coursesScreen, courseDetailScreen, signInModalScreen, authPagesScreen,
   settingsScreen, profileScreen, cartScreen, checkoutScreen, checkoutSuccessScreen,
-  aiAdvisorScreen, learnerStatsScreen, headerScreen,
+  learnerStatsScreen, headerScreen,
   adminDashboardScreen, adminUsersScreen, adminCoursesScreen, adminOrdersScreen, adminVouchersScreen,
   adminInsightsScreen, adminFinanceScreen,
 ];

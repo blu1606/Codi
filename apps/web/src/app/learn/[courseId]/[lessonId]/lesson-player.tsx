@@ -53,28 +53,13 @@ import { LessonQAPanel } from "@/components/tutor/lesson-qa-panel";
 import {
   TutorBridgeContext,
   type TutorBridge,
-  type TutorCodeBridge,
-  type TutorOpenRequest,
 } from "@/components/ai-tutor/tutor-bridge";
-import TutorPanel from "@/components/ai-tutor/tutor-panel";
-import { TutorLauncher } from "@/components/ai-tutor/tutor-launcher";
 import TutorSelectionToolbar from "@/components/ai-tutor/tutor-selection-toolbar";
-
-// Remembered per browser tab so the panel stays open while the learner moves between lessons.
-const TUTOR_OPEN_KEY = "codi:tutor-open";
-function rememberTutor(open: boolean) {
-  try {
-    if (open) sessionStorage.setItem(TUTOR_OPEN_KEY, "1");
-    else sessionStorage.removeItem(TUTOR_OPEN_KEY);
-  } catch {
-    /* storage unavailable: the panel just starts closed next lesson */
-  }
-}
+import { useAiChat } from "@/components/ai-chat/ai-chat-provider";
 
 export default function LessonPlayer({
   courseId,
   lessonId,
-  viewerName = null,
   initialTutor,
   initialAdjustment = null,
   /** Opens the path map at mount (lab screens only); `animateFrom` starts its progress marker. */
@@ -82,9 +67,7 @@ export default function LessonPlayer({
 }: {
   courseId: string;
   lessonId: string;
-  /** Signed-in learner's name, for the tutor greeting. */
-  viewerName?: string | null;
-  /** Opens the tutor at mount (lab screens only): the launcher popup, or the panel with an optional first question. */
+  /** Opens the Tutor at mount (lab screens only), with an optional first question. */
   initialTutor?: { mode: "popup" } | { mode: "panel"; ask?: string };
   /** Shows a completion offer at mount (lab screens only). */
   initialAdjustment?: AdjustmentOffer | null;
@@ -112,48 +95,29 @@ export default function LessonPlayer({
   const revision = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const content = useRef<HTMLDivElement>(null);
-  const codeBridge = useRef<TutorCodeBridge | null>(null);
-  const [codeVersion, setCodeVersion] = useState(0);
-  const [tutorOpen, setTutorOpen] = useState(initialTutor?.mode === "panel");
-  const [launcherOpen, setLauncherOpen] = useState(initialTutor?.mode === "popup");
-  const [tutorRequest, setTutorRequest] = useState<
-    (TutorOpenRequest & { id: number }) | null
-  >(() =>
-    initialTutor?.mode === "panel" && initialTutor.ask
-      ? { id: 1, ask: initialTutor.ask }
-      : null,
-  );
-  const [wide, setWide] = useState(false);
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem(TUTOR_OPEN_KEY)) setTutorOpen(true);
-    } catch {
-      /* storage unavailable */
-    }
-    const media = window.matchMedia("(min-width: 1280px)");
-    const sync = () => setWide(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, []);
-  const toggleTutor = (open: boolean) => {
-    setTutorOpen(open);
-    rememberTutor(open);
-  };
+  // The shared Tutor panel (every screen) reads this lesson: its context chip, code bridge and entry points.
+  const ai = useAiChat();
+  const { setPage, openWith, registerCode } = ai;
   const tutor = useMemo<TutorBridge>(
-    () => ({
-      open: (request = {}) => {
-        setTutorRequest({ ...request, id: Date.now() });
-        setTutorOpen(true);
-        rememberTutor(true);
-      },
-      registerCode: (bridge) => {
-        codeBridge.current = bridge;
-        setCodeVersion((version) => version + 1);
-      },
-    }),
+    () => ({ open: openWith, registerCode }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+  useEffect(() => {
+    if (initialTutor) openWith(initialTutor.mode === "panel" && initialTutor.ask ? { ask: initialTutor.ask } : {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const lessonTitle = data?.lesson.title ?? null;
+  useEffect(() => {
+    setPage({
+      kind: "lesson",
+      courseId,
+      lessonId,
+      label: lessonTitle ? `Bài: ${lessonTitle}` : "Bài học",
+      href: `/learn/${encodeURIComponent(courseId)}/${encodeURIComponent(lessonId)}`,
+    });
+    return () => setPage(null);
+  }, [courseId, lessonId, lessonTitle, setPage]);
   const courseHome = `/learn/${encodeURIComponent(courseId)}` as Route;
   const endpoint = `/api/learn/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`;
   const lessonUrl = (id: string) =>
@@ -458,13 +422,13 @@ export default function LessonPlayer({
   );
   const update = path.update?.afterLessonId === lessonId ? path.update : null;
 
-  const docked = tutorOpen && wide;
   return (
     <TutorBridgeContext.Provider value={tutor}>
     <main
       className={cn(
         "grid w-full min-w-0 gap-6 p-4 lg:grid-cols-[18.5rem_minmax(0,1fr)] lg:gap-0 lg:p-0",
-        docked && "xl:grid-cols-[18.5rem_minmax(0,1fr)_24rem]",
+        // The Tutor panel floats over the right edge; wide screens keep the lesson clear of it.
+        ai.open && "xl:pr-[25rem]",
       )}
     >
       <aside
@@ -552,7 +516,7 @@ export default function LessonPlayer({
             onClick={() => {
               const next = !qaOpen;
               setQaOpen(next);
-              if (next) toggleTutor(false);
+              if (next) ai.setOpen(false);
             }}
           >
             <MessageCircle className="size-4" />
@@ -895,31 +859,6 @@ export default function LessonPlayer({
           {path.review ? "Sửa đánh giá" : "Đánh giá khóa học"}
         </Button>
       </div>
-      {tutorOpen && (
-        <TutorPanel
-          endpoint={`${endpoint}/tutor`}
-          request={tutorRequest}
-          code={codeBridge}
-          codeVersion={codeVersion}
-          docked={wide}
-          onClose={() => toggleTutor(false)}
-          expandHref={
-            `/learn/${encodeURIComponent(courseId)}/tutor?lesson=${encodeURIComponent(lessonId)}` as Route
-          }
-        />
-      )}
-      {!tutorOpen && !qaOpen && (
-        <TutorLauncher
-          endpoint={`${endpoint}/tutor`}
-          viewerName={viewerName}
-          open={launcherOpen}
-          onOpenChange={setLauncherOpen}
-          onAsk={(ask) => {
-            tutor.open(ask ? { ask } : {});
-            setLauncherOpen(false);
-          }}
-        />
-      )}
       <TutorSelectionToolbar root={content} />
       <Sheet
         open={mapOpen}
