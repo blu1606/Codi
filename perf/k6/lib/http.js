@@ -39,7 +39,8 @@ export function call(method, path, { type, name, body, origin = false, headers =
     // Statuses a step expects (e.g. 409 before onboarding) do not count as failed requests.
     ...(expected ? { responseCallback: http.expectedStatuses(...expected) } : {}),
   });
-  if (path.startsWith("/api/")) {
+  // A throttled sign-in answers in plain text; it is retried, not a broken target.
+  if (path.startsWith("/api/") && res.status !== 429) {
     apiNotJson.add(!String(res.headers["Content-Type"] || "").includes("application/json"));
   }
   return res;
