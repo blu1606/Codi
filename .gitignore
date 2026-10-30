@@ -98,3 +98,8 @@ plans/
 
 # Playwright e2e (apps/web/e2e): signed-in storage states
 apps/web/e2e/.auth/
+
+# Performance tests: account credentials stay out of git; results and Lighthouse output are regenerated
+perf/k6/**/*.csv
+perf/k6/results/
+.lighthouseci/

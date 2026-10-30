@@ -59,6 +59,8 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    outputs:
+      preview_url: ${{ steps.preview.outputs.preview_url }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -90,17 +92,85 @@ jobs:
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel (Preview)
+        id: preview
         if: github.event_name == 'pull_request'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           REVIEW_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           preview_url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN" --meta githubCommitSha="$REVIEW_SHA")
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
           {
             echo '## PR preview'
             echo "Source commit: \`$REVIEW_SHA\`"
             echo "Preview URL: $preview_url"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Lighthouse CI on this PR's own preview. Warn-only: reports scores, never blocks merge yet.
+  # Not run for fork PRs (no preview is deployed) and never for production deploys.
+  lighthouse:
+    name: Lighthouse CI (PR preview, warn-only)
+    needs: deploy
+    if: github.event_name == 'pull_request' && needs.deploy.result == 'success' && needs.deploy.outputs.preview_url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    env:
+      LHCI_BASE_URL: ${{ needs.deploy.outputs.preview_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve a published course for the detail page
+        run: node scripts/lhci-resolve-course.mjs "$LHCI_BASE_URL" >> "$GITHUB_ENV" || true
+
+      - name: Run Lighthouse CI (mobile, 3 runs per URL)
+        run: pnpm exec lhci autorun
+
+      - name: Summarise Lighthouse scores
+        if: always()
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const dir = ".lighthouseci";
+            const runs = fs.existsSync(dir)
+              ? fs.readdirSync(dir).filter((f) => /^lhr-.*\.json$/.test(f))
+                  .map((f) => JSON.parse(fs.readFileSync(`${dir}/${f}`, "utf8")))
+              : [];
+            const rows = runs.map((lhr) => [
+              lhr.requestedUrl,
+              Math.round((lhr.categories.performance.score ?? 0) * 100),
+              Math.round(lhr.audits["largest-contentful-paint"].numericValue),
+              Math.round(lhr.audits["total-blocking-time"].numericValue),
+            ]);
+            const lines = ["## Lighthouse (mobile, warn-only)", "", "| URL | Perf | LCP (ms) | TBT (ms) |", "| --- | --- | --- | --- |"];
+            for (const r of rows) lines.push(`| ${r.join(" | ")} |`);
+            if (rows.length === 0) lines.push("No Lighthouse reports were produced.");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-pr-${{ github.event.pull_request.number }}
+          path: .lighthouseci/
+          retention-days: 14
+          if-no-files-found: ignore
 
       # Production Deployment (Khi push vào main/master)
       - name: Pull Vercel Environment Information (Production)
