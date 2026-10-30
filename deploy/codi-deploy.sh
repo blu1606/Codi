@@ -14,6 +14,8 @@ command -v docker >/dev/null
 command -v docker-compose >/dev/null
 test -r /etc/codi/codi.env
 test -r /etc/codi/compose.yml
+available_kib=$(df -Pk "$base" | awk 'NR == 2 { print $4 }')
+[[ "$available_kib" =~ ^[0-9]+$ ]] && (( available_kib >= 8388608 )) || { echo 'Not enough free disk space to deploy safely' >&2; exit 1; }
 install -d -o root -g root -m 0755 "$base/releases"
 if [[ ! -d "$repo" ]]; then
   git init --bare "$repo" >/dev/null
