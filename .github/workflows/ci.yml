@@ -188,6 +188,37 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # Live README badges (test count, coverage). Develop pushes only; the write token is confined to this job.
+  badges:
+    name: Publish Test & Coverage Badges
+    needs: unit-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.unit-test.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download Coverage Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Generate Badge JSON
+        run: node scripts/make-badges.mjs tests coverage/junit.xml coverage/coverage-summary.json badge-out
+
+      - name: Publish Badges to the badges branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/publish-badges.sh badge-out
+
   workflow-check:
     name: Workflow & ActionLint Check
     needs: classify

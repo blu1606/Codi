@@ -1,8 +1,13 @@
 # Codi
 
 [![CI Pipeline](https://github.com/blu1606/Codi/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/blu1606/Codi/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/Coverage-100%25-brightgreen)](./docs/unit-testing.md)
-[![Unit Tests](https://img.shields.io/badge/Unit%20Tests-61%20passed-success)](./docs/unit-testing.md)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/blu1606/Codi/badges/ci/coverage.json)](https://github.com/blu1606/Codi/actions/workflows/ci.yml)
+[![Unit Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/blu1606/Codi/badges/ci/tests.json)](https://github.com/blu1606/Codi/actions/workflows/ci.yml)
+[![Lighthouse](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/blu1606/Codi/badges/perf/lighthouse-performance.json)](https://github.com/blu1606/Codi/actions/workflows/lighthouse-develop.yml)
+[![k6 p95](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/blu1606/Codi/badges/perf/k6-p95.json)](https://github.com/blu1606/Codi/actions/workflows/perf.yml)
+[![k6 errors](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/blu1606/Codi/badges/perf/k6-errors.json)](https://github.com/blu1606/Codi/actions/workflows/perf.yml)
+[![k6 max VUs](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/blu1606/Codi/badges/perf/k6-max-vus.json)](https://github.com/blu1606/Codi/actions/workflows/perf.yml)
+[![Load Test](https://github.com/blu1606/Codi/actions/workflows/perf.yml/badge.svg)](https://github.com/blu1606/Codi/actions/workflows/perf.yml)
 
 **Nền tảng học lập trình trực tuyến cá nhân hoá lộ trình bằng AI.**
 
@@ -65,6 +70,8 @@ pnpm test:coverage
 | **Tổng thể (Tất cả mục tiêu)** | **100%** | **100%** | **100%** | **100%** | **Gate: ≥ 80%** |
 
 Chi tiết kiến trúc kiểm thử, mock và kịch bản demo: [`docs/unit-testing.md`](./docs/unit-testing.md)
+
+Hiệu năng (Lighthouse CI, k6 load test, seed tài khoản test): [`docs/performance-testing.md`](./docs/performance-testing.md)
 
 ---
 

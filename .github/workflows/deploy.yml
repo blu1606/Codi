@@ -59,6 +59,8 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    outputs:
+      preview_url: ${{ steps.preview.outputs.preview_url }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -90,12 +92,14 @@ jobs:
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Project Artifacts to Vercel (Preview)
+        id: preview
         if: github.event_name == 'pull_request'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           REVIEW_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           preview_url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN" --meta githubCommitSha="$REVIEW_SHA")
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
           {
             echo '## PR preview'
             echo "Source commit: \`$REVIEW_SHA\`"
@@ -114,3 +118,58 @@ jobs:
       - name: Deploy Project Artifacts to Vercel (Production)
         if: github.event_name == 'push'
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+  # Lighthouse CI on this PR's own preview. Warn-only: reports scores, never blocks merge yet.
+  # Not run for fork PRs (no preview is deployed) and never for production deploys.
+  lighthouse:
+    name: Lighthouse CI (PR preview, warn-only)
+    needs: deploy
+    if: github.event_name == 'pull_request' && needs.deploy.result == 'success' && needs.deploy.outputs.preview_url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    env:
+      LHCI_BASE_URL: ${{ needs.deploy.outputs.preview_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve a published course for the detail page
+        run: node scripts/lhci-resolve-course.mjs "$LHCI_BASE_URL" >> "$GITHUB_ENV" || true
+
+      # collect -> summary -> artifact -> assert/upload. `lhci autorun` removes .lighthouseci/ when it
+      # finishes, so the reports must be read and kept before the upload step.
+      - name: Collect Lighthouse runs (mobile, 3 runs per URL)
+        run: pnpm exec lhci collect
+
+      - name: Summarise Lighthouse scores
+        if: always()
+        run: node scripts/lhci-step-summary.mjs
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-pr-${{ github.event.pull_request.number }}
+          path: .lighthouseci/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Assert (warn-only) and upload to temporary public storage
+        if: always()
+        run: pnpm exec lhci assert && pnpm exec lhci upload
