@@ -174,22 +174,38 @@ describe("email changes verified by OTP", () => {
     const auth = createTestAuth();
     const cookie = await signUp(auth);
     state.sendEmail.mockResolvedValue({ data: null, error: { message: "Delivery rejected" } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const response = await post(auth, "request-email-change", cookie, { newEmail });
     expect(response.status).toBe(500);
+    expect(warn).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
+    for (const call of [...warn.mock.calls, ...log.mock.calls, ...error.mock.calls]) {
+      const rendered = JSON.stringify(call);
+      expect(rendered).not.toMatch(/Fallback OTP/i);
+      expect(rendered).not.toMatch(/\b\d{6}\b/);
+    }
     expect((await (await auth.$context).internalAdapter.findUserByEmail(oldEmail))?.user.email).toBe(oldEmail);
   });
 
   it("requires email delivery to be configured", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const auth = createTestAuth(false);
     const cookie = await signUp(auth);
+    warn.mockClear();
     log.mockClear();
+    error.mockClear();
     const response = await post(auth, "request-email-change", cookie, { newEmail });
     expect(response.status).toBe(500);
+    expect(warn).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
+    for (const call of [...warn.mock.calls, ...log.mock.calls, ...error.mock.calls]) {
+      const rendered = JSON.stringify(call);
+      expect(rendered).not.toMatch(/Fallback OTP/i);
+      expect(rendered).not.toMatch(/\b\d{6}\b/);
+    }
   });
 });

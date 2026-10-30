@@ -225,17 +225,35 @@ describe("account password recovery", () => {
     const auth = createTestAuth();
     const cookie = await signUp(auth);
     state.sendEmail.mockResolvedValue({ data: null, error: { message: "Delivery rejected" } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect((await request(auth, "request-reset", cookie, {})).status).toBe(500);
+    expect(warn).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
+    for (const call of [...warn.mock.calls, ...log.mock.calls, ...error.mock.calls]) {
+      const rendered = JSON.stringify(call);
+      expect(rendered).not.toMatch(/Fallback OTP/i);
+      expect(rendered).not.toMatch(/\b\d{6}\b/);
+    }
   });
 
   it("requires email delivery configuration", async () => {
-    vi.spyOn(console, "log").mockImplementation(() => undefined);
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const auth = createTestAuth(false);
     const cookie = await signUp(auth);
+    warn.mockClear();
+    log.mockClear();
+    error.mockClear();
     expect((await request(auth, "request-reset", cookie, {})).status).toBe(500);
+    expect(warn).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    for (const call of [...warn.mock.calls, ...log.mock.calls, ...error.mock.calls]) {
+      const rendered = JSON.stringify(call);
+      expect(rendered).not.toMatch(/Fallback OTP/i);
+      expect(rendered).not.toMatch(/\b\d{6}\b/);
+    }
   });
 });
