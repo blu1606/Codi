@@ -64,6 +64,11 @@ beforeEach(() => {
             limit: mocks.pendingLimit,
           }),
         }),
+        leftJoin: () => ({
+          where: () => ({
+            limit: mocks.pendingLimit,
+          }),
+        }),
       };
     },
   }));
@@ -182,6 +187,20 @@ describe("createBuyNowOrder", () => {
               where: () => ({
                 limit: () => Promise.resolve([]),
               }),
+            }),
+          }),
+        };
+      }
+      if (callCount === 4) {
+        return {
+          from: () => ({
+            leftJoin: () => ({
+              where: () => ({
+                limit: () => Promise.resolve([]),
+              }),
+            }),
+            where: () => ({
+              limit: () => Promise.resolve([]),
             }),
           }),
         };
