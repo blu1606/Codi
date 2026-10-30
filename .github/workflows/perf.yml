@@ -1,0 +1,174 @@
+name: Load Test (k6)
+
+# Manual only. Never runs on pull requests or pushes.
+# Target must be a Vercel preview that uses its OWN database (see docs/performance-testing.md).
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Preview origin to test, e.g. https://codi-abc123.vercel.app'
+        required: true
+        type: string
+      script:
+        description: 'k6 script in perf/k6/'
+        required: true
+        default: learner-journey
+        type: choice
+        options:
+          - smoke
+          - browse
+          - learner-journey
+          - stress
+      vus:
+        description: 'Peak virtual users (blank = script default)'
+        required: false
+        type: string
+      duration:
+        description: 'Hold duration, e.g. 3m (blank = script default)'
+        required: false
+        type: string
+      course_slug:
+        description: 'Course the test accounts are enrolled in'
+        required: true
+        type: string
+      enable_writes:
+        description: 'Also submit quizzes (writes to the test database)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    name: k6 ${{ inputs.script }} against ${{ inputs.base_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      badges: ${{ steps.badges.outputs.written }}
+    steps:
+      - name: Validate target
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          ACCOUNTS_CSV_CONTENT: ${{ secrets.LOADTEST_ACCOUNTS_CSV }}
+        run: |
+          set -euo pipefail
+          base="${BASE_URL%/}"
+          if [[ ! "$base" =~ ^https://[a-z0-9-]+(\.[a-z0-9-]+)*\.vercel\.app$ ]]; then
+            echo "::error::base_url must be an https *.vercel.app preview origin"
+            exit 1
+          fi
+          if [[ -n "$PRODUCTION_URL" && "${PRODUCTION_URL%/}" == "$base" ]]; then
+            echo "::error::refusing to load-test the production URL"
+            exit 1
+          fi
+          if [[ -z "$ACCOUNTS_CSV_CONTENT" ]]; then
+            echo "::error::secret LOADTEST_ACCOUNTS_CSV is not set"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Write test accounts (outside the repository)
+        env:
+          ACCOUNTS_CSV_CONTENT: ${{ secrets.LOADTEST_ACCOUNTS_CSV }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$ACCOUNTS_CSV_CONTENT" > "$RUNNER_TEMP/accounts.csv"
+          chmod 600 "$RUNNER_TEMP/accounts.csv"
+
+      - name: Run k6
+        id: k6
+        continue-on-error: true
+        shell: bash
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          SCRIPT: ${{ inputs.script }}
+          VUS_INPUT: ${{ inputs.vus }}
+          DURATION_INPUT: ${{ inputs.duration }}
+          COURSE_SLUG: ${{ inputs.course_slug }}
+          ENABLE_WRITES_INPUT: ${{ inputs.enable_writes }}
+        run: |
+          set -o pipefail
+          mkdir -p perf/k6/results
+          args=(-e "BASE_URL=${BASE_URL%/}" -e I_UNDERSTAND_TARGET=1
+                -e "ACCOUNTS_CSV=$RUNNER_TEMP/accounts.csv" -e "COURSE_SLUG=$COURSE_SLUG"
+                -e SUMMARY_DIR=perf/k6/results)
+          [[ -n "$VUS_INPUT" ]] && args+=(-e "VUS=$VUS_INPUT")
+          [[ -n "$DURATION_INPUT" ]] && args+=(-e "DURATION=$DURATION_INPUT")
+          [[ "$ENABLE_WRITES_INPUT" == "true" ]] && args+=(-e ENABLE_WRITES=1)
+          k6 run "${args[@]}" "perf/k6/$SCRIPT.js" 2>&1 | tee perf/k6/results/k6-output.txt
+
+      - name: Step summary
+        if: always()
+        run: |
+          if [[ -f perf/k6/results/k6-output.txt ]]; then
+            { echo "## k6 ${{ inputs.script }}"; echo '```'; tail -n 30 perf/k6/results/k6-output.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Generate badge JSON
+        id: badges
+        if: always()
+        run: |
+          if [[ -f perf/k6/results/summary.json ]]; then
+            node scripts/make-badges.mjs k6 perf/k6/results/summary.json badge-out
+            echo "written=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "written=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ github.run_id }}
+          path: perf/k6/results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload badge JSON
+        if: always() && steps.badges.outputs.written == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-badges-${{ github.run_id }}
+          path: badge-out/
+          retention-days: 7
+
+      - name: Remove test accounts from the runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/accounts.csv"
+
+      - name: Fail when thresholds or checks broke
+        if: steps.k6.outcome == 'failure'
+        run: |
+          echo "::error::k6 exited non-zero (threshold or abort). See the summary and artifacts."
+          exit 1
+
+  # Only this job holds contents: write, and it only runs for a successful measurement on dispatch.
+  publish-badges:
+    name: Publish k6 badges
+    needs: k6
+    if: always() && needs.k6.outputs.badges == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download badge JSON
+        uses: actions/download-artifact@v4
+        with:
+          name: k6-badges-${{ github.run_id }}
+          path: badge-out/
+
+      - name: Publish to the badges branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/publish-badges.sh badge-out
