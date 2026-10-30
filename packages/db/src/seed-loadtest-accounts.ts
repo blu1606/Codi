@@ -158,9 +158,10 @@ async function cleanup() {
       WHERE c.contype = 'f' AND c.confrelid = '"user"'::regclass AND c.confdeltype <> 'c'`);
     await db.transaction(async (tx) => {
       for (const ref of references.rows) {
-        await tx.execute(sql`DELETE FROM ${sql.raw(ref.tbl)} WHERE ${sql.raw(`"${ref.col}"`)} = ANY(${ids})`);
+        // Drizzle expands an array parameter into a ($1, $2, ...) list, which IN accepts and ANY does not.
+        await tx.execute(sql`DELETE FROM ${sql.raw(ref.tbl)} WHERE ${sql.raw(`"${ref.col}"`)} IN ${ids}`);
       }
-      await tx.execute(sql`DELETE FROM "user" WHERE id = ANY(${ids})`);
+      await tx.execute(sql`DELETE FROM "user" WHERE id IN ${ids}`);
     });
     console.log(`Deleted ${ids.length} load-test accounts and their rows.`);
   }
