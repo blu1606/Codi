@@ -69,6 +69,7 @@ jobs:
       - name: Check out the verified commit
         uses: actions/checkout@v4
       - name: Build and publish the exact commit image
+        id: publish
         env:
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -80,6 +81,9 @@ jobs:
           trap 'rm -rf "$DOCKER_CONFIG"' EXIT
           printf '%s' "$GH_PACKAGES_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
           docker push "$image"
+          image_reference=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
+          [[ "$image_reference" =~ ^ghcr[.]io/blu1606/codi@sha256:[0-9a-f]{64}$ ]]
+          printf 'digest=%s\n' "${image_reference#*@}" >> "$GITHUB_OUTPUT"
       - name: Connect to VPS and deploy this exact commit
         env:
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,6 +92,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.CODI_SSH_USER }}
           DEPLOY_PRIVATE_KEY: ${{ secrets.CODI_SSH_PRIVATE_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.CODI_SSH_KNOWN_HOSTS }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +105,7 @@ jobs:
           [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] && (( DEPLOY_PORT >= 1 && DEPLOY_PORT <= 65535 ))
           [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           install -d -m 700 "$HOME/.ssh"
           printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$HOME/.ssh/codi_deploy_key"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
@@ -109,4 +115,4 @@ jobs:
             -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
             -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            /opt/codi/deploy.sh "$GITHUB_SHA"
+            /opt/codi/deploy.sh "$GITHUB_SHA" "$IMAGE_DIGEST"

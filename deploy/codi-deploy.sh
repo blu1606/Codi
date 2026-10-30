@@ -2,8 +2,9 @@
 # Install as /usr/local/sbin/codi-deploy, owned and writable only by root.
 set -Eeuo pipefail
 umask 027
-[[ $# == 1 && "$1" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid revision' >&2; exit 2; }
+[[ $# == 2 && "$1" =~ ^[0-9a-f]{40}$ && "$2" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid revision' >&2; exit 2; }
 revision=$1
+digest=$2
 base=/opt/codi
 repo=$base/repository.git
 release=$base/releases/$revision
@@ -42,8 +43,8 @@ export DOCKER_CONFIG="$registry_config"
 cleanup() { if [[ -n "$stage" ]]; then rm -rf -- "$stage"; fi; rm -rf -- "$registry_config"; }
 printf '%s' "$registry_token" | docker login ghcr.io --username "$registry_user" --password-stdin >/dev/null
 unset registry_token
-docker pull "ghcr.io/blu1606/codi:$revision"
-docker tag "ghcr.io/blu1606/codi:$revision" "codi-web:$revision"
+docker pull "ghcr.io/blu1606/codi@$digest"
+docker tag "ghcr.io/blu1606/codi@$digest" "codi-web:$revision"
 rm -rf -- "$registry_config"
 unset DOCKER_CONFIG
 
