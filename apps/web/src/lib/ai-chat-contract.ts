@@ -24,6 +24,8 @@ export const AI_CHAT_GUEST_TURNS = 12;
 // Turns the model sees from a stored chat.
 export const AI_CHAT_HISTORY_TURNS = 20;
 export const AI_CHAT_QUESTION_MAX = 2000;
+/** A lesson's one thread keeps its newest messages only (STATE-MACHINES §13). */
+export const LESSON_THREAD_MAX = 40;
 export const AI_CHAT_TITLE_MAX = 80;
 
 /** Where the panel is open. A lesson context is checked against the learner's access on the server. */

@@ -52,9 +52,20 @@ import {
 import TutorEscalateDialog, {
   type EscalateValues,
 } from "@/components/ai-tutor/tutor-escalate-dialog";
+import {
+  missingIntake,
+  INTAKE_FIELDS,
+  type IntakeField,
+} from "@/lib/learner-intake-contract";
 import { toChatContext, useAiChat } from "./ai-chat-provider";
 import { AiChatMessageView, type DiffActions } from "./ai-chat-message";
 import { AiDisclaimer } from "./ai-chat-chrome";
+import {
+  IntakeQuestion,
+  IntakeSummary,
+  useLearnerIntake,
+  type IntakeAsking,
+} from "./ai-chat-intake";
 
 type Chip = { id: string; label: string; fixed?: boolean };
 const short = (value: string) =>
@@ -117,8 +128,13 @@ export default function AiChatThread({
   const [escalating, setEscalating] = useState(false);
   const [convOpen, setConvOpen] = useState(false);
   const [queued, setQueued] = useState<string | null>(null);
+  // S17 intake: a question waits here while the Tutor asks what it does not know about the learner.
+  const general = kind === "general" && signedIn;
+  const intake = useLearnerIntake(general);
+  const [skipped, setSkipped] = useState<IntakeField[]>([]);
+  const [asking, setAsking] = useState<IntakeAsking | null>(null);
+  const [intakeBusy, setIntakeBusy] = useState(false);
   const originals = useRef(new Map<string, string>());
-  const handled = useRef<number | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -245,13 +261,40 @@ export default function AiChatThread({
     if (response?.ok) onLesson(await response.json());
   }
 
-  function ask(text: string) {
-    const question = text.trim();
-    if (!question || busy) return;
+  function send(question: string) {
     stick.current = true;
     setInput("");
     clearError();
     void sendMessage({ text: question.slice(0, AI_CHAT_QUESTION_MAX) });
+  }
+  function ask(text: string) {
+    const question = text.trim();
+    if (!question || busy || intakeBusy) return;
+    // Ask only what is missing, once; the question waits and is sent when the last answer or skip lands.
+    const missing = general && intake.draft ? missingIntake(intake.draft, skipped) : [];
+    if (missing.length) {
+      setInput("");
+      setAsking({ fields: missing, pending: question.slice(0, AI_CHAT_QUESTION_MAX) });
+      return;
+    }
+    send(question);
+  }
+  async function answerIntake(value: string | number | null) {
+    if (!asking || intakeBusy) return;
+    const field = asking.fields[0]!;
+    if (value !== null) {
+      setIntakeBusy(true);
+      const saved = await intake.save({ [field]: value });
+      setIntakeBusy(false);
+      if (!saved) return;
+    } else setSkipped((list) => [...list, field]);
+    const rest = asking.fields.slice(1);
+    if (rest.length) {
+      setAsking({ ...asking, fields: rest });
+      return;
+    }
+    setAsking(null);
+    if (asking.pending) send(asking.pending);
   }
   function hint() {
     if (!lesson || busy) return;
@@ -265,10 +308,10 @@ export default function AiChatThread({
   }
 
   // A contextual entry point (selection toolbar, failed test, console error) adds context and may ask right away.
+  // Taken from the provider once, so a remount of this thread (panel reopened, another chat) never sends it again.
   useEffect(() => {
-    const request = ai.request;
-    if (!request || handled.current === request.id) return;
-    handled.current = request.id;
+    const request = ai.takeRequest();
+    if (!request) return;
     setCtx((previous) => ({
       selection: request.selection ?? previous.selection,
       testId: request.testId ?? previous.testId,
@@ -391,6 +434,24 @@ export default function AiChatThread({
 
   const composer = (
     <div className="space-y-2">
+      {general && intake.draft && (
+        <IntakeSummary
+          draft={intake.draft}
+          onClear={(field) => void intake.save({ [field]: null })}
+          onEdit={() => {
+            setSkipped([]);
+            setAsking({ fields: [...INTAKE_FIELDS], pending: null });
+          }}
+        />
+      )}
+      {asking && (
+        <IntakeQuestion
+          asking={asking}
+          busy={intakeBusy}
+          onAnswer={(value) => void answerIntake(value)}
+          onSkip={() => void answerIntake(null)}
+        />
+      )}
       <form
         className="rounded-2xl border bg-background shadow-raised focus-within:ring-2 focus-within:ring-ring"
         onSubmit={(event) => {

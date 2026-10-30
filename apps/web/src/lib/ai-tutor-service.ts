@@ -190,6 +190,26 @@ export function createTutorService(db: Database) {
         return { level, logId: log!.id };
       });
     },
+    /**
+     * A retry of a hint step that was already begun: the same level and its log row, never a new step.
+     * Null when no row exists for that level (the caller then begins one).
+     */
+    async resumeHint(scope: TutorScope, level: number) {
+      const [log] = await db
+        .select({ id: aiInteractionLogs.id })
+        .from(aiInteractionLogs)
+        .where(
+          and(
+            eq(aiInteractionLogs.userId, scope.userId),
+            eq(aiInteractionLogs.lessonId, scope.lessonId),
+            eq(aiInteractionLogs.requestType, "ask_assistant"),
+            eq(aiInteractionLogs.hintLevel, level),
+          ),
+        )
+        .orderBy(desc(aiInteractionLogs.id))
+        .limit(1);
+      return log ? { level, logId: log.id } : null;
+    },
     /** The audit row for a lesson turn (the hint step's row when there is one). */
     async logTurn(scope: TutorScope, logId: number | null, log: TurnLog) {
       const audit = {

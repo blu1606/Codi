@@ -126,18 +126,20 @@ function Panel() {
                   role="menu"
                   className="absolute right-0 top-full z-10 mt-1 flex max-h-[min(28rem,70vh)] w-80 flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-pop"
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      ai.startNew();
-                      setHistoryOpen(false);
-                    }}
-                    className="flex min-h-10 items-center gap-2 border-b px-3 text-sm hover:bg-muted"
-                  >
-                    <SquarePen className="size-4" />
-                    Đoạn chat mới
-                  </button>
+                  {ai.page.kind === "general" && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        ai.startNew();
+                        setHistoryOpen(false);
+                      }}
+                      className="flex min-h-10 items-center gap-2 border-b px-3 text-sm hover:bg-muted"
+                    >
+                      <SquarePen className="size-4" />
+                      Đoạn chat mới
+                    </button>
+                  )}
                   <div className="min-h-0 flex-1 overflow-y-auto py-2">
                     <AiChatHistoryList
                       chats={ai.chats}

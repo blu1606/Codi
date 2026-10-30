@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { tool } from "ai";
 import { z } from "zod";
 import type { Database } from "@codi-1/db";
@@ -117,6 +117,21 @@ export function createAiChatService(db: Database) {
         .limit(1);
       if (taken) throw new LearningPathError("Không tìm thấy đoạn chat.", 404);
       const { context, lesson } = input;
+      // One thread per learner and lesson: a new draft for a lesson that already has one continues that thread.
+      if (context.kind === "lesson" && lesson) {
+        const [own] = await db
+          .select()
+          .from(aiChats)
+          .where(
+            and(
+              eq(aiChats.userId, input.userId),
+              eq(aiChats.kind, "lesson"),
+              eq(aiChats.lessonId, lesson.lessonId),
+            ),
+          )
+          .limit(1);
+        if (own) return summary(own);
+      }
       const [row] = await db
         .insert(aiChats)
         .values({
@@ -168,6 +183,34 @@ export function createAiChatService(db: Database) {
         .update(aiChats)
         .set({ updatedAt: new Date() })
         .where(eq(aiChats.id, chatId));
+    },
+    /** The hint step a stored question was asked as; a retry of that question reuses it. */
+    async storedHint(chatId: string, messageId: string): Promise<number | null> {
+      const [row] = await db
+        .select({ metadata: aiChatMessages.metadata })
+        .from(aiChatMessages)
+        .where(
+          and(
+            eq(aiChatMessages.chatId, chatId),
+            eq(aiChatMessages.id, messageId),
+            eq(aiChatMessages.role, "user"),
+          ),
+        )
+        .limit(1);
+      const hint = (row?.metadata as AiChatMetadata | null)?.hint;
+      return typeof hint === "number" ? hint : null;
+    },
+    /** A lesson thread keeps its newest messages only. */
+    async keepNewest(chatId: string, keep: number) {
+      await db.execute(sql`
+        DELETE FROM ai_chat_messages
+        WHERE chat_id = ${chatId}
+          AND id NOT IN (
+            SELECT id FROM ai_chat_messages
+            WHERE chat_id = ${chatId}
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${keep}
+          )`);
     },
     /** → answered | stopped: the streamed answer exactly as the learner saw it (text, reasoning, tool steps). */
     async saveAnswer(chatId: string, message: AiChatMessage) {

@@ -33,7 +33,14 @@ const SIDE = { min: 200, max: 400, initial: 260 };
 const SIDE_KEY = "codi:tutor-side";
 
 /** The Tutor as a page ("Mở toàn trang"): the same chats as the panel, with the whole history beside them. */
-export default function AiChatPage({ initialChatId }: { initialChatId: string | null }) {
+export default function AiChatPage({
+  initialChatId,
+  prompt = null,
+}: {
+  initialChatId: string | null;
+  /** A question sent from another screen: asked once, in a new chat, without opening the panel. */
+  prompt?: string | null;
+}) {
   const ai = useAiChat();
   const router = useRouter();
   const { data, error, retry, setLesson } = useConversation();
@@ -44,6 +51,16 @@ export default function AiChatPage({ initialChatId }: { initialChatId: string | 
   const [deleting, setDeleting] = useState(false);
   const resizing = useRef<{ x: number; width: number } | null>(null);
   const picked = useRef(false);
+  const asked = useRef(false);
+
+  useEffect(() => {
+    if (asked.current || !prompt) return;
+    asked.current = true;
+    ai.startNew();
+    ai.openWith({ ask: prompt }, { panel: false });
+    // Runs once for the question in the address; the chat then owns it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt]);
 
   useEffect(() => {
     try {
@@ -115,17 +132,19 @@ export default function AiChatPage({ initialChatId }: { initialChatId: string | 
         </Button>
       </div>
       <div className="space-y-0.5 px-2">
-        <button
-          type="button"
-          onClick={() => {
-            ai.startNew();
-            if (narrow()) setSideOpen(false);
-          }}
-          className="flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-sm hover:bg-muted"
-        >
-          <SquarePen className="size-4" />
-          Đoạn chat mới
-        </button>
+        {ai.page.kind === "general" && (
+          <button
+            type="button"
+            onClick={() => {
+              ai.startNew();
+              if (narrow()) setSideOpen(false);
+            }}
+            className="flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-sm hover:bg-muted"
+          >
+            <SquarePen className="size-4" />
+            Đoạn chat mới
+          </button>
+        )}
         {ai.signedIn && <HistorySearch value={search} onChange={setSearch} />}
       </div>
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-2 pb-3">

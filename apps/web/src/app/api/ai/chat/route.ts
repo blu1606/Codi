@@ -18,11 +18,14 @@ import {
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   AI_CHAT_QUESTION_MAX,
+  LESSON_THREAD_MAX,
   aiChatRequest,
   messageText,
   type AiChatMessage,
   type AiChatSummary,
 } from "@/lib/ai-chat-contract";
+import { intakeNote } from "@/lib/learner-intake-contract";
+import { readLearnerIntake } from "@/lib/learner-intake-service";
 import {
   GENERAL_SYSTEM,
   generalTools,
@@ -106,9 +109,12 @@ export async function POST(request: NextRequest) {
     } else if (body.context.kind === "lesson")
       throw new LearningPathError("Đăng nhập để hỏi Tutor về bài học.", 401);
 
+    // A retry (regenerate) of a hint question reuses its step; a failed attempt never costs the next one.
+    const retried = chat ? await chatService.storedHint(chat.id, body.message.id) : null;
     const hint =
       body.message.metadata?.hint && scope
-        ? await tutorService.beginHint(scope, question)
+        ? ((retried !== null && (await tutorService.resumeHint(scope, retried))) ||
+          (await tutorService.beginHint(scope, question)))
         : null;
     if (body.message.metadata?.hint && !scope)
       throw new LearningPathError("Gợi ý từng bước chỉ có trong bài học.", 400);
@@ -148,6 +154,8 @@ export async function POST(request: NextRequest) {
           hintLevel: hint?.level ?? null,
         })
       : generalTools(db, userId);
+    // What the learner told the Tutor (S17 intake) shapes general answers; onboarding reads the same answers.
+    const profile = userId && !scope ? intakeNote(await readLearnerIntake(db, userId)) : "";
     const system = scope
       ? tutorSystemPrompt({
           turn: hint
@@ -156,7 +164,7 @@ export async function POST(request: NextRequest) {
           lesson: scope.lesson,
           context: attached,
         })
-      : `${GENERAL_SYSTEM}${session?.user ? `\nHọc viên: ${session.user.name}` : ""}\nĐang hỏi về: ${body.context.kind === "general" ? body.context.label : "Codi"}`;
+      : `${GENERAL_SYSTEM}${session?.user ? `\nHọc viên: ${session.user.name}` : ""}${profile ? `\n${profile}` : ""}\nĐang hỏi về: ${body.context.kind === "general" ? body.context.label : "Codi"}`;
 
     const started = Date.now();
     const model = getLlmProvider().getModel();
@@ -210,6 +218,10 @@ export async function POST(request: NextRequest) {
               },
             })
             .catch((error) => console.error("Failed to save Tutor answer", error));
+        if (chat && scope && !failed)
+          await chatService
+            .keepNewest(chat.id, LESSON_THREAD_MAX)
+            .catch((error) => console.error("Failed to trim lesson thread", error));
         const usage = await Promise.resolve(result.totalUsage).catch(() => null);
         const log = {
           model: model.modelId,

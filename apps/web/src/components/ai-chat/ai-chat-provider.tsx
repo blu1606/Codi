@@ -52,8 +52,10 @@ type AiChatState = {
   codeVersion: number;
   registerCode: (bridge: TutorCodeBridge | null) => void;
   request: (TutorOpenRequest & { id: number }) | null;
-  /** Contextual entry points (selection toolbar, failing test) open the panel with context and maybe a question. */
-  openWith: (request?: TutorOpenRequest) => void;
+  /** The pending contextual request, handed out once: the first thread that takes it sends it. */
+  takeRequest: () => (TutorOpenRequest & { id: number }) | null;
+  /** Contextual entry points (selection toolbar, failing test, `/ai?prompt=`) add context and maybe a question. */
+  openWith: (request?: TutorOpenRequest, options?: { panel?: boolean }) => void;
 };
 
 const AiChatContextValue = createContext<AiChatState | null>(null);
@@ -77,6 +79,9 @@ const PATH_LABELS: [RegExp, string][] = [
   [/^\/profile/, "Hồ sơ"],
   [/^\/settings/, "Cài đặt"],
 ];
+/** The chip label for a screen reached by path (the Tutor's own page reads its origin the same way). */
+export const pathLabel = (pathname: string) =>
+  PATH_LABELS.find(([pattern]) => pattern.test(pathname))?.[1] ?? "Codi";
 // No bubble where the Tutor is the page itself or the viewer is signing in.
 const HIDDEN = /^\/(ai|login|forgot-password|reset-password|dev)(\/|$)/;
 const OPEN_KEY = "codi:tutor-open";
@@ -145,6 +150,11 @@ export function AiChatProvider({ children }: { children: ReactNode }) {
   const [request, setRequest] = useState<
     (TutorOpenRequest & { id: number }) | null
   >(null);
+  const requestRef = useRef<(TutorOpenRequest & { id: number }) | null>(null);
+
+  // Whose chats these are: a different learner (or a sign-out) starts from nothing, never from the last one's threads.
+  const userId = isPending ? undefined : (session?.user?.id ?? null);
+  const seenUser = useRef<string | null | undefined>(undefined);
 
   // Restore the panel per tab, so it stays open while the learner moves between screens and reloads.
   useEffect(() => {
@@ -177,20 +187,46 @@ export function AiChatProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // The owner changed (or signed out): the old list and open thread are dropped before anything else loads.
+  useEffect(() => {
+    if (userId === undefined) return;
+    if (seenUser.current === undefined) {
+      seenUser.current = userId;
+      return;
+    }
+    if (seenUser.current === userId) return;
+    seenUser.current = userId;
+    writeSession(ACTIVE_KEY, null);
+    requestRef.current = null;
+    setRequest(null);
+    setChats(null);
+    setActive(draft(key));
+  }, [userId, key]);
+
+  // One thread per lesson: a lesson with a saved thread opens it, even from another tab or device.
+  useEffect(() => {
+    if (!chats || active.stored || !key.startsWith("lesson:")) return;
+    const lessonId = key.slice("lesson:".length);
+    const existing = chats.find((chat) => chat.kind === "lesson" && chat.lessonId === lessonId);
+    if (existing) setActive({ id: existing.id, stored: true, key });
+  }, [chats, active.stored, key]);
+
   const refreshChats = useCallback(async () => {
     // Until the session is known the history is "loading", not "empty".
     if (isPending) return;
-    if (!signedIn) {
+    if (!userId) {
       setChats([]);
       return;
     }
     try {
       const response = await fetch("/api/ai/chats", { cache: "no-store" });
-      if (response.ok) setChats((await response.json()).chats);
+      // A reply for a learner who has since changed is dropped.
+      if (response.ok && seenUser.current === userId)
+        setChats((await response.json()).chats);
     } catch {
       /* the list keeps what it had; the thread itself still works */
     }
-  }, [signedIn, isPending]);
+  }, [userId, isPending]);
   useEffect(() => {
     void refreshChats();
   }, [refreshChats]);
@@ -203,7 +239,9 @@ export function AiChatProvider({ children }: { children: ReactNode }) {
       page,
       setPage: setOverride,
       active,
+      // A lesson keeps one thread (STATE-MACHINES §13): only the general screens start a new chat.
       startNew: () => {
+        if (page.kind === "lesson") return;
         forget(active.id);
         setActive(draft(key));
       },
@@ -227,9 +265,19 @@ export function AiChatProvider({ children }: { children: ReactNode }) {
         setCodeVersion((version) => version + 1);
       },
       request,
-      openWith: (next = {}) => {
-        setRequest({ ...next, id: Date.now() });
-        setOpen(true);
+      takeRequest: () => {
+        const taken = requestRef.current;
+        if (taken) {
+          requestRef.current = null;
+          setRequest(null);
+        }
+        return taken;
+      },
+      openWith: (next = {}, options = {}) => {
+        const value = { ...next, id: Date.now() };
+        requestRef.current = value;
+        setRequest(value);
+        if (options.panel !== false) setOpen(true);
       },
     }),
     [signedIn, open, setOpen, page, active, key, chats, refreshChats, codeVersion, request],
