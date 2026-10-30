@@ -28,7 +28,15 @@ const nextConfig: NextConfig = {
   },
   reactCompiler: true,
   transpilePackages: ["shiki"],
-  serverExternalPackages: ["@codi-1/coding-runner"],
+  serverExternalPackages: [
+    "@codi-1/coding-runner",
+    "quickjs-emscripten",
+    "quickjs-emscripten-core",
+    "@jitl/quickjs-wasmfile-debug-asyncify",
+    "@jitl/quickjs-wasmfile-debug-sync",
+    "@jitl/quickjs-wasmfile-release-asyncify",
+    "@jitl/quickjs-wasmfile-release-sync",
+  ],
 };
 
 export default withVarlock(nextConfig);
