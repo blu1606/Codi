@@ -17,6 +17,17 @@ vi.mock("../components/lesson-tutorial", () => ({
       "Tutorial workspace",
     ),
 }));
+// The shared Tutor lives in the root layout; the player only describes the lesson to it.
+vi.mock("../components/ai-chat/ai-chat-provider", () => {
+  const tutor = {
+    open: false,
+    setOpen: () => {},
+    setPage: () => {},
+    openWith: () => {},
+    registerCode: () => {},
+  };
+  return { useAiChat: () => tutor };
+});
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root | undefined;

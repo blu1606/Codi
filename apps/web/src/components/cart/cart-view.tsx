@@ -1,5 +1,6 @@
 "use client";
 
+import { CartSkeleton } from "@/components/skeletons/cart-skeleton";
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -236,6 +237,8 @@ export function CartView() {
         if (res.status === 409 && json.code === "PENDING_ORDER_EXISTS") {
           setShowReplaceModal(true);
           setCheckoutLoading(false);
+          // Re-read the cart so the banner and dialog show the conflicting order's real count, date and total
+          void fetchCart(currentVoucherCode);
           return;
         }
         throw new Error(json.error || "Không thể tạo đơn hàng.");
@@ -257,11 +260,7 @@ export function CartView() {
   };
 
   if (loading && !data) {
-    return (
-      <div className="mx-auto flex min-h-[50vh] max-w-4xl items-center justify-center p-8">
-        <p className="text-muted-foreground animate-pulse">Đang tải giỏ hàng…</p>
-      </div>
-    );
+    return <CartSkeleton />;
   }
 
   if (error && !data) {

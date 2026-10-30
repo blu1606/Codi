@@ -74,7 +74,7 @@ describe("Gemini structured path output through the installed provider adapter",
     expect(result.proposal.lessons[0]?.lessonId).toBe(lessonId);
     const request = JSON.parse(transport.fetch.mock.calls[0]![1].body);
     const schema = request.generationConfig.responseJsonSchema;
-    expect(schema.properties.lessons.maxItems).toBe(1000);
+    expect(schema.properties.lessons).not.toHaveProperty("maxItems");
     expect(
       schema.properties.lessons.items.properties.lessonId,
     ).not.toHaveProperty("format");

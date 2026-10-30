@@ -37,7 +37,7 @@ import {
 } from "@codi-1/ui/components/dialog";
 import { MasteryChip } from "@codi-1/ui/components/mastery-chip";
 import GithubLearnerCard from "@/components/profile/github-learner-card";
-import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LearnerWorkspaceSkeleton } from "@/components/skeletons/learner-workspace-skeleton";
 import { cn } from "@codi-1/ui/lib/utils";
 import { GOAL_LABELS } from "@/lib/onboarding-contract";
 import type {
@@ -251,7 +251,7 @@ export default function LearnerWorkspace({
         </Alert>
       )}
       {loading && !data ? (
-        <WorkspaceLoading />
+        <LearnerWorkspaceSkeleton progress={progress} />
       ) : data ? (
         progress ? (
           <ProgressResults data={data} tab={tab} />
@@ -404,24 +404,6 @@ export default function LearnerWorkspace({
   );
 }
 
-function WorkspaceLoading() {
-  return (
-    <div
-      role="status"
-      aria-label="Đang tải dữ liệu học tập"
-      className="space-y-4"
-    >
-      <span className="sr-only">Đang tải dữ liệu học tập…</span>
-      <Skeleton className="h-40 w-full rounded-lg" />
-      <div className="grid gap-4 sm:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-24 rounded-lg" />
-        ))}
-      </div>
-      <Skeleton className="h-64 w-full rounded-lg" />
-    </div>
-  );
-}
 function WorkspaceEmpty() {
   return (
     <Card>
@@ -882,20 +864,16 @@ export function ProgressResults({
                             scope="row"
                             className="min-w-40 px-3 py-4 align-top font-medium"
                           >
-                            {l.status === "locked" ? (
-                              <>
-                                <span>{l.title}</span>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Cần học trước: {l.lock}
-                                </p>
-                              </>
-                            ) : (
-                              <Link
-                                href={`${home(c)}/${l.id}` as Route}
-                                className="text-primary hover:underline"
-                              >
-                                {l.title}
-                              </Link>
+                            <Link
+                              href={`${home(c)}/${l.id}` as Route}
+                              className="text-primary hover:underline"
+                            >
+                              {l.title}
+                            </Link>
+                            {l.status === "locked" && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Nên học trước: {l.lock}
+                              </p>
                             )}
                           </th>
                           <td className="px-3 py-4 align-top">
@@ -912,7 +890,7 @@ export function ProgressResults({
                               {l.status === "done"
                                 ? "Hoàn thành"
                                 : l.status === "locked"
-                                  ? "Bị khoá"
+                                  ? "Chưa đủ tiên quyết"
                                   : "Chưa hoàn thành"}
                             </span>
                           </td>

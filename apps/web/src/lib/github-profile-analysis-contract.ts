@@ -331,6 +331,21 @@ export function projectGithubProfile(
   const visible = observations.filter(
     (item) => !hidden.has(githubTechnologyId(item)),
   );
+  // Display-only: the most-used language of each retained repository, by positive bytes.
+  const topLanguageByRepo = new Map<number, { name: string; bytes: number }>();
+  for (const item of evidence.values()) {
+    if (item.kind !== "languages") continue;
+    for (const [name, bytes] of Object.entries(item.bytes)) {
+      if (!Number.isSafeInteger(bytes) || bytes <= 0) continue;
+      const current = topLanguageByRepo.get(item.repositoryId);
+      if (
+        !current ||
+        bytes > current.bytes ||
+        (bytes === current.bytes && name.localeCompare(current.name, "en") < 0)
+      )
+        topLanguageByRepo.set(item.repositoryId, { name, bytes });
+    }
+  }
   const refsSurvive = (refs: z.infer<typeof supports>) =>
     refs.every((ref) =>
       visible.some(
@@ -445,6 +460,10 @@ export function projectGithubProfile(
       issues: snapshot.issues.map((item) => ({ ...item })),
       repositories: snapshot.repositories.map((repo) => ({
         id: repo.id,
+        owner: repo.owner,
+        name: repo.name,
+        pushedAt: repo.pushedAt,
+        topLanguage: topLanguageByRepo.get(repo.id)?.name ?? null,
         disposition: repo.disposition,
         excluded: corrections.excludedRepositoryIds.includes(repo.id),
         files: repo.files.map((file) => ({

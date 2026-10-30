@@ -36,9 +36,12 @@ import {
 export default function CourseHome({
   courseId,
   dismissalScope,
+  initialPathView,
 }: {
   courseId: string;
   dismissalScope: string;
+  /** Lab screens open the path map instead of the list. */
+  initialPathView?: "list" | "map";
 }) {
   const router = useRouter();
   const endpoint = `/api/learn/${encodeURIComponent(courseId)}/path`;
@@ -371,7 +374,7 @@ export default function CourseHome({
           className="space-y-6"
         >
           <PathSummary data={data} />
-          <LessonPath data={data} lessonUrl={lessonUrl} />
+          <LessonPath data={data} lessonUrl={lessonUrl} initialView={initialPathView} />
         </div>
       )}
       <ConfirmDialog

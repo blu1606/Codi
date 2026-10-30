@@ -139,6 +139,7 @@ describe("addCourseToCart", () => {
       "pending",
       fixtures.courses.available.id,
       "pending",
+      expect.any(String),
     ]);
     expect(legacyWhere.sql).toContain('"student_transactions"."user_id"');
     expect(legacyWhere.sql).toContain('"student_transactions"."status"');

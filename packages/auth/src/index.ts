@@ -29,8 +29,9 @@ export type AuthConfig = AuthOriginConfig & {
 };
 
 export function createAuth(env: AuthConfig, database: Database) {
-  const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
-  const fromAddress = env.EMAIL_FROM || "Codi <noreply@hoangblue.dev>";
+  const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
+  const resend = resendApiKey ? new Resend(resendApiKey) : null;
+  const fromAddress = env.EMAIL_FROM || process.env.EMAIL_FROM || "Codi <noreply@hoangblue.dev>";
 
   const otpPlugin = emailOTP({
     otpLength: 6,
@@ -84,6 +85,10 @@ export function createAuth(env: AuthConfig, database: Database) {
       accountLinking: {
         enabled: true,
         trustedProviders: ["google", "github"],
+        // Linking GitHub for the skill profile happens from a signed-in session, and a
+        // learner's GitHub email rarely equals their Codi email. Better Auth only applies
+        // this to explicit linkSocial flows, not to sign-in auto-linking.
+        allowDifferentEmails: true,
       },
     },
     secret: env.BETTER_AUTH_SECRET,

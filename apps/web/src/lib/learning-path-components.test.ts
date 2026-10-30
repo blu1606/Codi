@@ -79,7 +79,7 @@ function home(): CoursePathView {
   };
 }
 describe("learner course-home interactions", () => {
-  it("renders prerequisite explanation and prevents a locked lesson from becoming a link", async () => {
+  it("keeps a prerequisite-locked lesson openable with an advisory warning (soft lock)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(home())));
     await render(
       createElement(CourseHome, {
@@ -90,10 +90,15 @@ describe("learner course-home interactions", () => {
     expect(
       document.querySelector('a[href="/learn/owned/first"]'),
     ).not.toBeNull();
-    expect(document.querySelector('a[href="/learn/owned/locked"]')).toBeNull();
-    expect(document.body.textContent).toContain("Cần học trước: Chuỗi");
+    expect(
+      document.querySelector('a[href="/learn/owned/locked"]'),
+    ).not.toBeNull();
+    expect(document.body.textContent).toContain(
+      "Nên học Chuỗi trước (bài Chuỗi)",
+    );
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết");
+    expect(document.body.textContent).not.toContain("Bị khoá");
     expect(document.body.textContent).toContain("Làm bài kiểm tra đầu vào");
-    expect(document.body.textContent).toContain("Chưa học");
   });
   it("dismisses the diagnostic prompt for this tab/session and shows it in a new session", async () => {
     const fetcher = vi
@@ -180,6 +185,78 @@ describe("learner course-home interactions", () => {
       ),
     ).toHaveLength(1);
   });
+
+  it("opens the why disclosure by default only for the active or next lesson", async () => {
+    const data = home();
+    data.rows[0]!.reason = "Khái niệm nền tảng cần nắm trước khi học tiếp.";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
+    await render(
+      createElement(CourseHome, { courseId: "owned", dismissalScope: "test-session" }),
+    );
+
+    const [nextWhy, lockedWhy] = [...document.querySelectorAll("details")];
+    expect(data.rows[0]!.status).toBe("next");
+    expect(data.rows[1]!.status).toBe("locked");
+    expect(nextWhy!.open).toBe(true);
+    expect(nextWhy!.textContent).toContain("Khái niệm nền tảng cần nắm trước khi học tiếp.");
+    expect(lockedWhy!.open).toBe(false);
+  });
+
+  it("'Vì sao?' expands inline only and never opens the detail sheet", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const data = home();
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
+      await render(
+        createElement(CourseHome, { courseId: "owned", dismissalScope: "test-session" }),
+      );
+
+      const lockedWhy = document.querySelectorAll("details")[1]!;
+      const summary = lockedWhy.querySelector("summary")!;
+      await act(async () => summary.click());
+      expect(lockedWhy.open).toBe(true);
+      expect(document.body.textContent).not.toContain("Chi tiết bài học");
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it("tapping the lesson card on a narrow screen opens the detail sheet", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const data = home();
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
+      await render(
+        createElement(CourseHome, { courseId: "owned", dismissalScope: "test-session" }),
+      );
+
+      const card = document.querySelectorAll("article")[1]!;
+      await act(async () => card.click());
+      expect(document.body.textContent).toContain("Chi tiết bài học");
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
 });
 
 describe("read-only learner knowledge map", () => {
@@ -246,9 +323,10 @@ describe("read-only learner knowledge map", () => {
     expect(document.querySelector("table")).not.toBeNull();
     expect(document.querySelectorAll("tbody tr")).toHaveLength(2);
     await act(async () => button("Mảng").click());
-    expect(document.body.textContent).toContain("Bài Mảng · Bị khoá");
-    expect(document.querySelector('a[href="/learn/owned/locked"]')).toBeNull();
-    expect(document.querySelector('a[aria-label^="Học bài này"]')).toBeNull();
+    // Soft prerequisite lock: the lesson stays openable and carries an advisory hint.
+    expect(document.body.textContent).toContain("Bài Mảng");
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết");
+    expect(document.querySelector('a[href="/learn/owned/locked"]')?.getAttribute("aria-label")).toBe("Học bài này: Bài Mảng");
     await act(async () => button("Chuỗi").click());
     const lessonCta = document.querySelector('a[href="/learn/owned/first"]');
     expect(lessonCta?.textContent).toContain("Học bài này");

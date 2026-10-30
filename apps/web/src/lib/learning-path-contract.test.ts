@@ -248,7 +248,8 @@ describe("lesson states and completion", () => {
     ctx.lessons[1]!.progress = "completed";
     ctx.lessons[2]!.progress = "completed";
     expect(selectPath(ctx, items, "ai").complete).toBe(true);
-    expect(selectPath(ctx, items, "default").complete).toBe(false);
+    // Skippable is a learner-visible option on every path (AI or default), never a requirement.
+    expect(selectPath(ctx, items, "default").complete).toBe(true);
   });
   it("never reports an empty course complete and never loses added lesson rows", () => {
     const ctx = input();

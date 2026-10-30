@@ -1,7 +1,8 @@
 import type { AssessmentView } from "@/lib/assessment-contract";
 import type { CodingView } from "@/lib/coding-contract";
 import type { ChecklistItem, LessonMaterial, LessonPlayerView } from "@/lib/lesson-player-contract";
-import { coursePathReady, coursePathUpdated } from "./s10-course-home";
+import type { AdjustmentOffer, CoursePathView } from "@/lib/learning-path-contract";
+import { coursePathReady, coursePathSoftLocked, coursePathUpdated } from "./s10-course-home";
 import lessonPlayerSnapshot from "../snapshot/lesson-player.json";
 
 export const LESSON_COURSE_ID = "course-js-001";
@@ -36,7 +37,7 @@ const videoMaterial: LessonMaterial = {
 
 const brokenVideoMaterial: LessonMaterial = { ...videoMaterial, url: null };
 
-const checklistStudy: ChecklistItem = { key: "study", label: "Học xong nội dung", done: false, note: "Xem hết video để mở bài kiểm tra." };
+const checklistStudy: ChecklistItem = { key: "study", label: "Học xong nội dung", done: false, note: "Xem ít nhất 90% video hoặc đánh dấu đã học xong." };
 const checklistQuiz = (done: boolean): ChecklistItem => ({
   key: "quiz", label: "Làm quiz", done, note: "Đạt từ 70% để hoàn thành.", assessmentId: QUIZ_ASSESSMENT_ID,
 });
@@ -259,3 +260,52 @@ export const codingTimeout: CodingView = {
     outcomes: [],
   },
 };
+
+/** Soft lock: the lesson opens, with the advisory warning and a locked row in the path. */
+export const lessonSoftLocked = lessonPlayerView({ path: coursePathSoftLocked, materials: [] });
+
+/** All checklist items done, so completion is enabled and the completion offer can follow it. */
+export const lessonReadyToComplete = lessonPlayerView({
+  materials: [],
+  studied: true,
+  checklist: [{ ...checklistStudy, done: true, note: "Đã học xong nội dung" }],
+});
+
+/** Lesson with the video, quiz and assignment all still open: the task list is what the learner sees first. */
+export const lessonTasksAtTop = lessonPlayerView({
+  checklist: [checklistStudy, checklistQuiz(false), checklistAssignment(false)],
+});
+
+/** Lesson 005 has just been completed: its row is done and lesson 006 is the next node the map moves to. */
+export const coursePathAfterCompletion: CoursePathView = (() => {
+  const rows = coursePathReady.rows.map((row) => {
+    if (row.id === LESSON_ID) return { ...row, status: "done" as const, progress: "completed" as const, studied: true };
+    if (row.id === "lesson-js-006") return { ...row, status: "next" as const };
+    return row;
+  });
+  const done = rows.filter((row) => row.status === "done").length;
+  return { ...coursePathReady, rows, currentLessonId: "lesson-js-006", done, percent: Math.round((done / rows.length) * 100) };
+})();
+
+export const lessonAfterCompletion = lessonPlayerView({
+  materials: [],
+  studied: true,
+  completed: true,
+  checklist: [{ ...checklistStudy, done: true, note: "Đã học xong nội dung" }, checklistQuiz(true)],
+  path: coursePathAfterCompletion,
+});
+
+const keepOption = { type: "keep" as const, label: "Giữ nguyên lộ trình", description: "Thứ tự các bài còn lại không đổi." };
+const OFFER_BASE = {
+  afterLessonId: LESSON_ID,
+  insight: "Bài quiz gần nhất đạt 85%. Codi thấy bạn đã nắm vững Hàm. Bạn còn chưa chắc về Mảng.",
+};
+const skipOption = { type: "skip-mastered" as const, label: "Bỏ qua các bài đã nắm vững", description: "Đánh dấu 1 bài có thể bỏ qua." };
+const practiceOption = { type: "practice" as const, label: "Ôn lại trước khi học tiếp", description: "Thêm 1 bài ôn ngay sau bài vừa học." };
+const harderOption = { type: "harder" as const, label: "Làm bài code sớm hơn", description: "Đưa 1 bài code lên sớm hơn." };
+
+/** Completion offers: each shape lists only the options that would change the path, then keep. */
+export const offerSkipMastered: AdjustmentOffer = { ...OFFER_BASE, options: [skipOption, keepOption] };
+export const offerPractice: AdjustmentOffer = { ...OFFER_BASE, options: [practiceOption, keepOption] };
+export const offerHarder: AdjustmentOffer = { ...OFFER_BASE, options: [harderOption, keepOption] };
+export const offerAll: AdjustmentOffer = { ...OFFER_BASE, options: [skipOption, practiceOption, harderOption, keepOption] };

@@ -43,27 +43,27 @@ describe("knowledge map lesson CTA (UI-LRN-25)", () => {
     expect(link.getAttribute("href")).toBe("/learn/course%20%2F%20vi/lesson%20%2F%201");
   });
 
-  it("keeps locked lessons visible with the prerequisite explanation and no navigation", async () => {
+  it("keeps advisory-locked lessons openable with the prerequisite hint", async () => {
     await renderLessons([{ id: "locked", title: "Bài Mảng", locked: true }]);
-    expect(document.body.textContent).toContain("Bài Mảng · Bị khoá, cần hoàn thành bài tiên quyết");
-    expect(document.querySelector("a")).toBeNull();
-    expect(document.body.textContent).not.toContain("Học bài này");
+    expect(document.body.textContent).toContain("Bài Mảng");
+    expect(document.body.textContent).toContain("Chưa đủ tiên quyết · nên học bài tiên quyết trước");
+    expect(document.querySelector("a")?.getAttribute("href")).toBe("/learn/course%20%2F%20vi/locked");
   });
 
-  it("only offers navigation for each unlocked lesson in a mixed panel", async () => {
+  it("offers navigation for every lesson and marks only the advisory-locked one", async () => {
     await renderLessons([
-      { id: "locked", title: "Bài bị khoá", locked: true },
+      { id: "locked", title: "Bài chưa đủ tiên quyết", locked: true },
       { id: "first", title: "Bài Chuỗi", locked: false },
       { id: "second", title: "Bài luyện Chuỗi", locked: false },
     ]);
     const links = [...document.querySelectorAll("a")];
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/learn/course%20%2F%20vi/first", "/learn/course%20%2F%20vi/second",
+      "/learn/course%20%2F%20vi/locked", "/learn/course%20%2F%20vi/first", "/learn/course%20%2F%20vi/second",
     ]);
     expect(links.map((link) => link.getAttribute("aria-label"))).toEqual([
-      "Học bài này: Bài Chuỗi", "Học bài này: Bài luyện Chuỗi",
+      "Học bài này: Bài chưa đủ tiên quyết", "Học bài này: Bài Chuỗi", "Học bài này: Bài luyện Chuỗi",
     ]);
-    expect(document.body.textContent).toContain("Bài bị khoá · Bị khoá");
+    expect(document.body.textContent?.match(/Chưa đủ tiên quyết ·/g)).toHaveLength(1);
   });
 
   it("shows the empty lesson state without inventing a CTA destination", async () => {

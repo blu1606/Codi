@@ -1,46 +1,55 @@
-import type { HttpHandler } from "msw";
 import { http, HttpResponse } from "msw";
-import TutorPage from "@/app/learn/[courseId]/tutor/tutor-page";
-import { LESSON_COURSE_ID, LESSON_ID } from "@/demo-fixtures/learner/s11-lesson-player";
+import AiChatPage from "@/components/ai-chat/ai-chat-page";
 import {
-  tutorAnswered,
-  tutorHintLevel2,
-  tutorThreadsDefault,
-  tutorThreadsEmpty,
+  TUTOR_CHAT_GENERAL,
+  TUTOR_CHAT_LESSON,
 } from "@/demo-fixtures/learner/s11-tutor";
 import type { Screen, ScreenState } from "../screen-types";
+import { seedTutor, tutorAsk, tutorStream } from "../../shell/tutor-handlers";
 
-const courseApi = `/api/learn/${LESSON_COURSE_ID}`;
-const route = { pathname: `/learn/${LESSON_COURSE_ID}/tutor`, params: { courseId: LESSON_COURSE_ID } };
-
-/** The Tutor page's reads: the learner's threads in the course, and the open lesson's thread. */
-function pageHandlers(threads: object[] | null, thread: object, status = 200): HttpHandler[] {
-  return [
-    http.get(`${courseApi}/tutor/threads`, () =>
-      status === 200 ? HttpResponse.json({ threads }) : HttpResponse.json({ error: "Không tải được lịch sử Tutor." }, { status }),
-    ),
-    http.get(`${courseApi}/lessons/${LESSON_ID}/tutor`, () => HttpResponse.json(thread)),
-  ];
-}
-
-const page = (label: string, handlers: HttpHandler[], lessonId: string | null): ScreenState => ({
+const page = (label: string, chat: string | null, extra: Partial<ScreenState> = {}): ScreenState => ({
   label,
-  route: { ...route, ...(lessonId ? { search: { lesson: lessonId } } : {}) },
-  handlers,
-  render: () => <TutorPage courseId={LESSON_COURSE_ID} initialLessonId={lessonId} />,
+  route: { pathname: "/ai", ...(chat ? { search: { c: chat } } : {}) },
+  render: () => {
+    seedTutor({ open: false });
+    return <AiChatPage initialChatId={chat} />;
+  },
+  ...extra,
 });
 
+/** The Tutor page (S17 `/ai`, "Mở toàn trang"): every chat across screens, with the history sidebar. */
 export const s11tTutorPageScreen: Screen = {
-  id: "S11t",
-  title: "Tutor · trang đầy đủ",
+  id: "S17",
+  title: "Tutor · toàn trang và panel",
   group: "Học tập",
   role: "learner",
-  // The mockup has no full Tutor page; the side-by-side view opens the lesson it belongs to.
-  mockupHash: `#/learn/${LESSON_COURSE_ID}/${LESSON_ID}`,
+  // The mockup has no shared Tutor page; the side-by-side view opens its AI advisor page.
+  mockupHash: "#/ai",
   states: {
-    "history-answer": page("Lịch sử + câu trả lời", pageHandlers(tutorThreadsDefault, tutorAnswered), LESSON_ID),
-    "history-hint": page("Lịch sử + gợi ý 2/3", pageHandlers(tutorThreadsDefault, tutorHintLevel2), LESSON_ID),
-    empty: page("Chưa có đoạn chat", pageHandlers(tutorThreadsEmpty, tutorAnswered), null),
-    "history-error": page("Lỗi tải lịch sử", pageHandlers(null, tutorAnswered, 500), LESSON_ID),
+    "new-chat": page("Đoạn chat mới", null),
+    "lesson-chat": page("Đoạn chat trong bài (có nguồn)", TUTOR_CHAT_LESSON),
+    "general-chat": page("Gợi ý khoá học (thẻ khoá, so sánh)", TUTOR_CHAT_GENERAL),
+    "history-empty": page("Chưa có lịch sử", null, {
+      handlers: [http.get("/api/ai/chats", () => HttpResponse.json({ chats: [] }))],
+    }),
+    guest: page("Khách (không lưu lịch sử)", null, { role: "guest" }),
+    "panel-general": {
+      label: "Panel trên trang chung (Học tập của tôi)",
+      route: { pathname: "/dashboard" },
+      handlers: [tutorAsk(() => tutorStream())],
+      render: () => {
+        seedTutor({ chats: { general: TUTOR_CHAT_GENERAL } });
+        return <main className="p-6 text-sm text-muted-foreground">Trang Học tập của tôi</main>;
+      },
+    },
+    "panel-guest": {
+      label: "Panel của khách (gợi ý chọn khoá)",
+      role: "guest",
+      route: { pathname: "/courses" },
+      render: () => {
+        seedTutor();
+        return <main className="p-6 text-sm text-muted-foreground">Danh mục khoá học</main>;
+      },
+    },
   },
 };

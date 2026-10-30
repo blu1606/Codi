@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { APIError } from "better-auth/api";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
@@ -189,6 +190,18 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const started = performance.now();
+  const correlationId = randomUUID();
+  const observe = (event: Record<string, unknown>) => {
+    try {
+      console.info(
+        "github-profile-timing",
+        JSON.stringify({ correlationId, ...event }),
+      );
+    } catch {
+      /* Logging must not affect profile publication or reservations. */
+    }
+  };
   // Reject cross-origin and missing-origin mutations before session, token or GitHub access.
   if (
     request.headers.get("origin") !== request.nextUrl.origin ||
@@ -234,6 +247,12 @@ export async function POST(request: NextRequest) {
     const result = await bounded(
       runGithubProfileRequest(input, {
         abortSignal: signal,
+        onGithubRequest: (event) =>
+          observe({
+            phase: "github",
+            ...event,
+            routeElapsedMs: Math.round(performance.now() - started),
+          }),
         publicAccess: {
           mode: "oauth_app",
           clientId: ENV.GITHUB_CLIENT_ID,
@@ -290,6 +309,11 @@ export async function POST(request: NextRequest) {
     );
     signal.throwIfAborted();
     if (!result.ok) {
+      observe({
+        phase: "result",
+        code: result.code,
+        routeElapsedMs: Math.round(performance.now() - started),
+      });
       if (activeConflict)
         return failure("active_request", "Một lượt phân tích đang chạy.", 409);
       const status =
@@ -316,6 +340,14 @@ export async function POST(request: NextRequest) {
       );
     }
     if (result.generation && claim) {
+      observe({
+        phase: "generation",
+        reservedMaximumCostMicroUsd:
+          result.generation.reservedMaximumCostMicroUsd,
+        inputTokens: result.generation.inputTokens,
+        outputTokens: result.generation.outputTokens,
+        routeElapsedMs: Math.round(performance.now() - started),
+      });
       await bounded(
         currentStore.publish(
           claim,

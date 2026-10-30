@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { collectGithubProfile } from "./github-profile-collector";
-import { GITHUB_PROFILE_LIMITS } from "./github-profile-contract";
+import {
+  collectGithubProfile,
+  type GithubRequestTiming,
+} from "./github-profile-collector";
+import {
+  GITHUB_MANIFEST_PATHS,
+  GITHUB_PROFILE_LIMITS,
+} from "./github-profile-contract";
 import { extractGithubTechnologies } from "./github-profile-extraction";
 import { projectGithubProfile } from "./github-profile-analysis-contract";
 
@@ -23,6 +29,7 @@ const BASIC = Buffer.from("test-app-id:test-app-client-secret").toString(
   "base64",
 );
 const COMMIT = "a".repeat(40);
+const GRAPHQL = "https://api.github.com/graphql";
 const json = (value: unknown, status = 200, headers?: HeadersInit) =>
   new Response(JSON.stringify(value), { status, headers });
 const languages = (overrides: Record<string, unknown> = {}) => ({
@@ -68,49 +75,172 @@ const manifest = JSON.stringify({
   dependencies: { react: "^19", next: "^16" },
   scripts: { install: "DO NOT EXECUTE" },
 });
-const blob = (text = manifest) => {
-  const data = Buffer.from(text);
+const sha1 = (data: Buffer) =>
+  createHash("sha1")
+    .update("blob " + data.length + "\0")
+    .update(data)
+    .digest("hex");
+const blobOf = (text: string) => {
+  const bytes = Buffer.from(text);
   return {
-    type: "file",
-    size: data.length,
-    sha: createHash("sha1")
-      .update("blob " + data.length + "\0")
-      .update(data)
-      .digest("hex"),
-    encoding: "base64",
-    content: data.toString("base64"),
+    oid: sha1(bytes),
+    byteSize: bytes.length,
+    isBinary: false,
+    isTruncated: false,
+    text,
   };
 };
+// Fixture repositories are named project-<databaseId>; the default repository is project (10).
+const idFor = (name: string) => {
+  const match = /^project-(\d+)$/.exec(name);
+  return match ? Number(match[1]) : 10;
+};
+type Files = Record<string, string>;
+const DEFAULT_FILES: Files = { "package.json": manifest };
+const treeEntries = (files: Files) =>
+  Object.entries(files).map(([name, text]) => ({
+    name,
+    type: "blob",
+    mode: 0o100644,
+    oid: sha1(Buffer.from(text)),
+    object: { byteSize: Buffer.byteLength(text), isBinary: false },
+  }));
+// Mirrors the batched query aliases: t<i> for trees, f<i> for blobs, pinned by $e<i>.
+function fixtureBody(
+  operation: string,
+  variables: Record<string, unknown>,
+  files: Files = DEFAULT_FILES,
+) {
+  const count = Object.keys(variables).filter((key) =>
+    /^o\d+$/.test(key),
+  ).length;
+  const data: Record<string, unknown> = {};
+  for (let index = 0; index < count; index++) {
+    const databaseId = idFor(String(variables[`n${index}`]));
+    if (operation === "CodiPublicTrees")
+      data[`t${index}`] = {
+        databaseId,
+        owner: { login: "learner", databaseId: 123 },
+        tree: { entries: treeEntries(files) },
+      };
+    if (operation === "CodiPublicBlobs") {
+      const path = String(variables[`e${index}`]).slice(COMMIT.length + 1);
+      data[`f${index}`] = {
+        databaseId,
+        blob: files[path] === undefined ? null : blobOf(files[path]),
+      };
+    }
+  }
+  return { data };
+}
+interface Gql {
+  operation: string;
+  variables: Record<string, unknown>;
+}
 type Handler = (
-  url: URL,
+  gql: Gql,
+  url: string,
   init: RequestInit,
 ) => Response | Promise<Response | undefined> | undefined;
-function transport(handler?: Handler) {
+function transport(handler?: Handler, files?: Files) {
   return vi.fn<typeof fetch>(async (url, init) => {
-    const parsed = new URL(String(url));
-    const custom = await handler?.(parsed, init!);
+    const body = JSON.parse(String(init!.body)) as {
+      operationName: string;
+      variables: Record<string, unknown>;
+    };
+    const gql = { operation: body.operationName, variables: body.variables };
+    const custom = await handler?.(gql, String(url), init!);
     if (custom) return custom;
-    if (parsed.pathname === "/graphql") return graph([repo()]);
-    if (parsed.pathname.endsWith("/contents"))
-      return json([
-        {
-          name: "package.json",
-          ...blob(),
-          download_url: "https://attacker.invalid/secret",
-        },
-      ]);
-    if (parsed.pathname.endsWith("/contents/package.json")) return json(blob());
-    throw new Error("Unexpected fixture path: " + parsed.pathname);
+    if (gql.operation === "CodiPublicProfile") return graph([repo()]);
+    return json(fixtureBody(gql.operation, gql.variables, files));
   });
 }
+const operationsOf = (fetch: { mock: { calls: unknown[][] } }) =>
+  fetch.mock.calls.map(
+    ([, init]) =>
+      JSON.parse(String((init as RequestInit).body)).operationName as string,
+  );
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("GitHub public GraphQL collector", () => {
+  it("keeps listing below the per-request deadline without reducing repository coverage", async () => {
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout", "performance", "Date"],
+    });
+    const fetch = transport(async (gql) => {
+      if (gql.operation !== "CodiPublicProfile") return;
+      const first = Number(gql.variables.first);
+      const offset = Number(gql.variables.after ?? 0);
+      await new Promise((resolve) => setTimeout(resolve, first * 110));
+      const end = Math.min(100, offset + first);
+      return json(
+        page(
+          Array.from({ length: end - offset }, (_, i) =>
+            repo({
+              databaseId: offset + i + 1,
+              name: `project-${offset + i + 1}`,
+              isFork: true,
+            }),
+          ),
+          end < 100,
+          end < 100 ? String(end) : null,
+        ),
+      );
+    });
+    const pending = collectGithubProfile(input, {
+      fetch,
+      limits: { totalMs: 25_000 },
+    });
+    await vi.advanceTimersByTimeAsync(25_000);
+    const result = await pending;
+    expect(result.coverage.listingComplete).toBe(true);
+    expect(result.repositories).toHaveLength(100);
+    expect(result.issues).toEqual([]);
+    expect(result.coverage.elapsedMs).toBe(11_000);
+  });
+  it("reports only safe timing fields and tolerates a failed observation sink", async () => {
+    const events: GithubRequestTiming[] = [];
+    const observed = await collectGithubProfile(appInput, {
+      fetch: transport(),
+      onRequest: (event) => {
+        events.push(event);
+        throw new Error(TOKEN);
+      },
+    });
+    expect(observed.status).toBe("complete");
+    expect(
+      events.map((event) => [event.operation, event.ordinal, event.outcome]),
+    ).toEqual([
+      ["listing", 1, "ok"],
+      ["tree", 2, "ok"],
+      ["blob", 3, "ok"],
+    ]);
+    for (const event of events) {
+      expect(Object.keys(event).sort()).toEqual(
+        [
+          "operation",
+          "ordinal",
+          "elapsedMs",
+          "collectionElapsedMs",
+          "headersMs",
+          "httpStatus",
+          "outcome",
+        ].sort(),
+      );
+      expect(event.httpStatus).toBe(200);
+      expect(event.headersMs).toBeGreaterThanOrEqual(0);
+      expect(event.elapsedMs).toBeGreaterThanOrEqual(event.headersMs!);
+    }
+    expect(JSON.stringify(events)).not.toContain(TOKEN);
+    expect(JSON.stringify(events)).not.toContain(
+      appInput.publicAccess.clientSecret,
+    );
+  });
   it.each([input, appInput])(
-    "batches public metadata with bearer POST and keeps REST files public and commit-pinned",
+    "batches public metadata into three bearer POSTs and pins every file read to the commit",
     async (credentials) => {
       const fetch = transport();
       const result = await collectGithubProfile(credentials, { fetch });
@@ -118,45 +248,50 @@ describe("GitHub public GraphQL collector", () => {
       expect(result.coverage.requests).toBe(3);
       expect(result.identity).toEqual({ id: "123", login: "learner" });
       expect(result.coverage.listingComplete).toBe(true);
+      expect(operationsOf(fetch)).toEqual([
+        "CodiPublicProfile",
+        "CodiPublicTrees",
+        "CodiPublicBlobs",
+      ]);
       for (const [url, init] of fetch.mock.calls) {
-        const parsed = new URL(String(url));
-        expect(parsed.origin).toBe("https://api.github.com");
-        const graphql = parsed.pathname === "/graphql";
+        expect(url).toBe(GRAPHQL);
         expect(init).toMatchObject({
-          method: graphql ? "POST" : "GET",
+          method: "POST",
           redirect: "error",
           credentials: "omit",
           cache: "no-store",
         });
         expect(new Headers(init?.headers).get("authorization")).toBe(
-          graphql
-            ? "Bearer " + TOKEN
-            : credentials.publicAccess.mode === "oauth_app"
-              ? "Basic " + BASIC
-              : null,
+          "Bearer " + TOKEN,
         );
-        if (!graphql) {
-          expect(parsed.pathname).toContain("/contents");
-          expect(parsed.searchParams.get("ref")).toBe(COMMIT);
-        }
       }
-      const body = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
-      expect(body).toMatchObject({
+      const listing = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body));
+      expect(listing).toMatchObject({
         operationName: "CodiPublicProfile",
-        variables: { first: 100, after: null },
+        variables: { first: 25, after: null },
       });
-      expect(body.query).toMatch(/viewer\s*\{/);
-      expect(body.query).toContain("privacy: PUBLIC");
-      expect(body.query).toContain("ownerAffiliations: OWNER");
-      expect(body.query).toContain("field: PUSHED_AT, direction: DESC");
-      expect(body.query).not.toMatch(
+      expect(listing.query).toMatch(/viewer\s*\{/);
+      expect(listing.query).toContain("privacy: PUBLIC");
+      expect(listing.query).toContain("ownerAffiliations: OWNER");
+      expect(listing.query).toContain("field: PUSHED_AT, direction: DESC");
+      expect(listing.query).not.toMatch(
         /contributionsCollection|email|contents|object\(/,
       );
+      const tree = JSON.parse(String(fetch.mock.calls[1]?.[1]?.body));
+      expect(tree.variables).toEqual({
+        o0: "learner",
+        n0: "project",
+        e0: COMMIT + ":",
+      });
+      expect(tree.query).toContain("object(expression: $e0)");
+      expect(tree.query).not.toContain("contents");
+      const blobs = JSON.parse(String(fetch.mock.calls[2]?.[1]?.body));
+      expect(blobs.variables.e0).toBe(COMMIT + ":package.json");
       expect(
         result.evidence.find((item) => item.kind === "file"),
       ).toMatchObject({
         commitSha: COMMIT,
-        blobSha: blob().sha,
+        blobSha: blobOf(manifest).oid,
         text: manifest,
         sourceUrl:
           "https://github.com/learner/project/blob/" + COMMIT + "/package.json",
@@ -193,20 +328,28 @@ describe("GitHub public GraphQL collector", () => {
         "attacker.invalid",
       ])
         expect(JSON.stringify(result)).not.toContain(forbidden);
+      expect(JSON.stringify(fetch.mock.calls)).not.toContain(
+        "test-app-client-secret",
+      );
     },
   );
 
   it("paginates cursor variables and respects a nonmultiple listing ceiling", async () => {
-    const fetch = transport((url, init) => {
-      if (url.pathname !== "/graphql") return;
-      const { first, after } = JSON.parse(String(init.body)).variables;
+    const fetch = transport((gql) => {
+      if (gql.operation !== "CodiPublicProfile") return;
+      const { first, after } = gql.variables as {
+        first: number;
+        after: string | null;
+      };
+      const offset = after ? Number(after) : 0;
       return json(
         page(
-          Array.from({ length: first }, (_, i) =>
-            repo({ databaseId: (after ? 101 : 1) + i }),
-          ),
-          !after,
-          after ? null : "cursor-1",
+          Array.from({ length: first }, (_, i) => {
+            const databaseId = offset + 1 + i;
+            return repo({ databaseId, name: `project-${databaseId}` });
+          }),
+          offset + first < 101,
+          offset + first < 101 ? String(offset + first) : null,
         ),
       );
     });
@@ -217,19 +360,22 @@ describe("GitHub public GraphQL collector", () => {
     expect(result.repositories).toHaveLength(101);
     expect(result.coverage.listingComplete).toBe(true);
     expect(
-      JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)).variables,
-    ).toEqual({ first: 1, after: "cursor-1" });
+      JSON.parse(String(fetch.mock.calls[4]?.[1]?.body)).variables,
+    ).toEqual({ first: 1, after: "100" });
   });
 
-  it.each([1, 100])(
-    "caps three listing pages with %i nodes per page and ignores Link URLs",
+  it.each([1, 25])(
+    "bounds listing pages with %i nodes per page and ignores Link URLs",
     async (length) => {
       let count = 0;
-      const fetch = transport((url) =>
-        url.pathname === "/graphql"
+      const fetch = transport((gql) =>
+        gql.operation === "CodiPublicProfile"
           ? json(
               page(
-                Array.from({ length }, () => repo({ databaseId: ++count })),
+                Array.from({ length }, () => {
+                  const databaseId = ++count;
+                  return repo({ databaseId, name: `project-${databaseId}` });
+                }),
                 true,
                 "cursor-" + count,
               ),
@@ -242,7 +388,7 @@ describe("GitHub public GraphQL collector", () => {
         fetch,
         limits: { selectedRepos: 1 },
       });
-      expect(count).toBe(length * 3);
+      expect(count).toBe(length * 12);
       expect(result.coverage.listingComplete).toBe(false);
       expect(result.issues).toContainEqual({
         operation: "listing",
@@ -281,8 +427,8 @@ describe("GitHub public GraphQL collector", () => {
   ])(
     "rejects nonpublic, foreign or malformed repository output atomically",
     async (entry) => {
-      const fetch = transport((url) =>
-        url.pathname === "/graphql"
+      const fetch = transport((gql) =>
+        gql.operation === "CodiPublicProfile"
           ? graph([repo({ databaseId: 11 }), entry])
           : undefined,
       );
@@ -297,7 +443,7 @@ describe("GitHub public GraphQL collector", () => {
     },
   );
 
-  it("blocks evidence and REST reads on numeric identity mismatch", async () => {
+  it("blocks evidence and batched reads on numeric identity mismatch", async () => {
     const fetch = transport();
     const result = await collectGithubProfile(
       { ...input, githubUserId: "124" },
@@ -330,8 +476,8 @@ describe("GitHub public GraphQL collector", () => {
     "rejects invalid subsequent page %s, retaining only earlier validated data",
     async (failure) => {
       let count = 0;
-      const fetch = transport((url) => {
-        if (url.pathname !== "/graphql") return;
+      const fetch = transport((gql) => {
+        if (gql.operation !== "CodiPublicProfile") return;
         if (++count === 1) return json(page([repo()], true, "cursor-1"));
         return json(
           page(
@@ -376,7 +522,7 @@ describe("GitHub public GraphQL collector", () => {
     [{ ...page(), errors: [] }, "invalid_response"],
     [{ ...page(), errors: [{ message: 123 }] }, "invalid_response"],
   ] as const)(
-    "distinguishes errors from malformed envelopes without REST fallback",
+    "distinguishes errors from malformed envelopes without fallback reads",
     async (response, code) => {
       const fetch = transport(() => json(response));
       const result = await collectGithubProfile(input, { fetch });
@@ -389,13 +535,13 @@ describe("GitHub public GraphQL collector", () => {
 
   it("retains earlier validated pages but discards all data from partial-error pages", async () => {
     let count = 0;
-    const fetch = transport((url) =>
-      url.pathname === "/graphql"
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicProfile"
         ? json(
             ++count === 1
               ? page([repo()], true, "next")
               : {
-                  ...page([repo({ databaseId: 11 })]),
+                  ...page([repo({ databaseId: 11, name: "project-11" })]),
                   errors: [{ message: "resolver unavailable" }],
                 },
           )
@@ -438,17 +584,17 @@ describe("GitHub public GraphQL collector", () => {
   );
 
   it.each([401, 403])(
-    "stops on REST app auth failure %i without fallback",
+    "stops on tree-read auth failure %i without fallback",
     async (status) => {
-      const fetch = transport((url) =>
-        url.pathname.endsWith("/contents")
+      const fetch = transport((gql) =>
+        gql.operation === "CodiPublicTrees"
           ? json({ message: "Bad credentials test-app-client-secret" }, status)
           : undefined,
       );
       const result = await collectGithubProfile(appInput, { fetch });
       expect(result.issues[0]).toMatchObject({
         operation: "directory",
-        code: "app_auth_failed",
+        code: status === 401 ? "connection_expired" : "http_error",
         httpStatus: status,
       });
       expect(result.evidence.map((item) => item.kind)).toEqual(["languages"]);
@@ -475,8 +621,8 @@ describe("GitHub public GraphQL collector", () => {
   );
 
   it("retains fork/empty/capped metadata and selects by pushed time then ID", async () => {
-    const fetch = transport((url) =>
-      url.pathname === "/graphql"
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicProfile"
         ? graph([
             repo({ databaseId: 13, isFork: true }),
             repo({ databaseId: 12, isEmpty: true, defaultBranchRef: null }),
@@ -507,8 +653,8 @@ describe("GitHub public GraphQL collector", () => {
 
   it("does not confuse zero disk size with an empty repository", async () => {
     const result = await collectGithubProfile(input, {
-      fetch: transport((url) =>
-        url.pathname === "/graphql"
+      fetch: transport((gql) =>
+        gql.operation === "CodiPublicProfile"
           ? graph([repo({ diskUsage: 0 })])
           : undefined,
       ),
@@ -518,8 +664,8 @@ describe("GitHub public GraphQL collector", () => {
   });
 
   it("does not invent branches or files when a nonempty repository has no ref", async () => {
-    const fetch = transport((url) =>
-      url.pathname === "/graphql"
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicProfile"
         ? graph([repo({ defaultBranchRef: null })])
         : undefined,
     );
@@ -531,6 +677,7 @@ describe("GitHub public GraphQL collector", () => {
     expect(result.repositories[0]).toMatchObject({
       defaultBranch: "",
       commitSha: null,
+      files: [],
     });
     expect(result.evidence.map((item) => item.kind)).toEqual(["languages"]);
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -564,8 +711,8 @@ describe("GitHub public GraphQL collector", () => {
     "rejects truncated/malformed language totals but keeps files",
     async (value, code) => {
       const result = await collectGithubProfile(input, {
-        fetch: transport((url) =>
-          url.pathname === "/graphql"
+        fetch: transport((gql) =>
+          gql.operation === "CodiPublicProfile"
             ? graph([repo({ languages: value })])
             : undefined,
         ),
@@ -618,33 +765,158 @@ describe("GitHub public GraphQL collector", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("enforces the full 60-request cap across GraphQL and REST", async () => {
-    const fetch = transport((url) => {
-      if (url.pathname === "/graphql")
-        return graph(
-          Array.from({ length: 15 }, (_, i) =>
-            repo({ databaseId: i + 1, name: `project-${i}` }),
-          ),
-        );
-      if (url.pathname.endsWith("/contents"))
-        return json(
-          ["package.json", "requirements.txt", "README.md"].map((name) => ({
-            name,
-            ...blob(),
-          })),
-        );
-      if (url.pathname.includes("/contents/")) return json(blob());
+  it("uses three requests for 15 repositories and keeps one request in flight", async () => {
+    let active = 0;
+    let peak = 0;
+    const base = transport((gql) =>
+      gql.operation === "CodiPublicProfile"
+        ? graph(
+            Array.from({ length: 15 }, (_, i) =>
+              repo({ databaseId: i + 1, name: `project-${i + 1}` }),
+            ),
+          )
+        : undefined,
+    );
+    const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
+      active++;
+      peak = Math.max(peak, active);
+      try {
+        return await base(url, init);
+      } finally {
+        active--;
+      }
     });
     const result = await collectGithubProfile(input, { fetch });
-    expect(fetch).toHaveBeenCalledTimes(60);
-    expect(result.coverage.requests).toBe(60);
-    expect(result.issues.some((item) => item.code === "request_limit")).toBe(
-      true,
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result.coverage.requests).toBe(3);
+    expect(result.coverage.selected).toBe(15);
+    expect(result.issues).toEqual([]);
+    expect(result.status).toBe("complete");
+    expect(result.evidence.filter((item) => item.kind === "file")).toHaveLength(
+      15,
     );
-    expect(result.status).toBe("partial");
+    expect(peak).toBe(1);
   });
 
-  it("shares aggregate bytes across the GraphQL response and REST file reads", async () => {
+  it("packs blob aliases by the per-query ceiling across all manifests and the README", async () => {
+    const files: Files = Object.fromEntries(
+      [...GITHUB_MANIFEST_PATHS, "README.md"].map((path) => [
+        path,
+        `content of ${path}`,
+      ]),
+    );
+    const fetch = transport(
+      (gql) =>
+        gql.operation === "CodiPublicProfile"
+          ? graph(
+              Array.from({ length: 15 }, (_, i) =>
+                repo({ databaseId: i + 1, name: `project-${i + 1}` }),
+              ),
+            )
+          : undefined,
+      files,
+    );
+    const result = await collectGithubProfile(input, { fetch });
+    // Listing, one tree query, and 105 blob aliases split at the 100-alias ceiling.
+    expect(operationsOf(fetch)).toEqual([
+      "CodiPublicProfile",
+      "CodiPublicTrees",
+      "CodiPublicBlobs",
+      "CodiPublicBlobs",
+    ]);
+    expect(result.evidence.filter((item) => item.kind === "file")).toHaveLength(
+      105,
+    );
+    expect(result.status).toBe("complete");
+  });
+
+  it("enforces the request ceiling during batched reads", async () => {
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicProfile"
+        ? graph(
+            [10, 11, 12].map((id) =>
+              repo({ databaseId: id, name: `project-${id}` }),
+            ),
+          )
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, {
+      fetch,
+      limits: { requests: 2 },
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.coverage.requests).toBe(2);
+    expect(result.status).toBe("partial");
+    expect(result.issues.some((issue) => issue.code === "request_limit")).toBe(
+      true,
+    );
+    expect(result.evidence.map((item) => item.kind)).toEqual([
+      "languages",
+      "languages",
+      "languages",
+    ]);
+  });
+
+  it("bounds all requests including identity", async () => {
+    const fetch = transport();
+    const result = await collectGithubProfile(input, {
+      fetch,
+      limits: { requests: 2 },
+    });
+    expect(result.issues[0]?.code).toBe("request_limit");
+    expect(result.coverage.requests).toBe(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects attempts to raise accepted ceilings before any request", async () => {
+    const fetch = transport();
+    const result = await collectGithubProfile(input, {
+      fetch,
+      limits: { requests: 61 },
+    });
+    expect(result.issues[0]?.code).toBe("invalid_input");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("enforces declared and streamed response size independently", async () => {
+    const declaredFetch = transport(
+      () => new Response("{}", { headers: { "content-length": "1048577" } }),
+    );
+    expect(
+      (await collectGithubProfile(input, { fetch: declaredFetch })).issues[0]
+        ?.code,
+    ).toBe("response_limit");
+    const streamedFetch = transport(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array(1025));
+              controller.close();
+            },
+          }),
+        ),
+    );
+    const result = await collectGithubProfile(input, {
+      fetch: streamedFetch,
+      limits: { responseBytes: 1024 },
+    });
+    expect(result.issues[0]?.code).toBe("response_limit");
+    expect(result.coverage.responseBytes).toBe(1024);
+  });
+
+  it("enforces aggregate response budget independently of the per-response cap", async () => {
+    const result = await collectGithubProfile(input, {
+      fetch: transport(),
+      limits: { aggregateBytes: 500 },
+    });
+    expect(result.issues.some((item) => item.code === "aggregate_limit")).toBe(
+      true,
+    );
+    expect(result.coverage.responseBytes).toBeLessThanOrEqual(500);
+  });
+
+  it("shares aggregate bytes across the listing response and batched reads", async () => {
     const aggregateBytes = Buffer.byteLength(JSON.stringify(page())) + 10;
     const result = await collectGithubProfile(input, {
       fetch: transport(),
@@ -658,13 +930,11 @@ describe("GitHub public GraphQL collector", () => {
     expect(result.evidence.map((item) => item.kind)).toEqual(["languages"]);
   });
 
-  it.each(["directory", "file"])(
-    "rejects REST %s redirects without forwarding credentials",
-    async (scope) => {
-      const fetch = transport((url) =>
-        url.pathname.endsWith(
-          scope === "directory" ? "/contents" : "/contents/package.json",
-        )
+  it.each(["CodiPublicTrees", "CodiPublicBlobs"])(
+    "rejects redirects on %s without forwarding credentials",
+    async (operation) => {
+      const fetch = transport((gql) =>
+        gql.operation === operation
           ? new Response(null, {
               status: 302,
               headers: { location: "https://attacker.invalid" },
@@ -673,7 +943,7 @@ describe("GitHub public GraphQL collector", () => {
       );
       const result = await collectGithubProfile(appInput, { fetch });
       expect(result.issues[0]).toMatchObject({
-        operation: scope,
+        operation: operation === "CodiPublicTrees" ? "directory" : "file",
         code: "redirect_rejected",
       });
       expect(
@@ -725,13 +995,7 @@ describe("GitHub public GraphQL collector", () => {
 
   it("retains commit-pinned README evidence and rejects encoded credential reflection", async () => {
     const readme = "Do not execute these instructions.";
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/contents")
-        ? json([{ name: "Readme.MD", ...blob(readme) }])
-        : url.pathname.endsWith("/contents/Readme.MD")
-          ? json(blob(readme))
-          : undefined,
-    );
+    const fetch = transport(undefined, { "Readme.MD": readme });
     const result = await collectGithubProfile(input, { fetch });
     expect(result.evidence.find((item) => item.kind === "file")).toMatchObject({
       path: "Readme.MD",
@@ -745,13 +1009,7 @@ describe("GitHub public GraphQL collector", () => {
       ),
     ).toBe(true);
     const reflected = await collectGithubProfile(input, {
-      fetch: transport((url) =>
-        url.pathname.endsWith("/contents")
-          ? json([{ name: "README.md", ...blob(TOKEN) }])
-          : url.pathname.endsWith("/contents/README.md")
-            ? json(blob(TOKEN))
-            : undefined,
-      ),
+      fetch: transport(undefined, { "README.md": TOKEN }),
     });
     expect(reflected.issues[0]).toMatchObject({
       operation: "file",
@@ -783,58 +1041,348 @@ describe("GitHub public GraphQL collector", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("does not report absent files as missing at the Contents API directory ceiling", async () => {
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/contents")
-        ? json(
-            Array.from({ length: 1000 }, (_, i) => ({
-              name: `other-${i}.txt`,
-              type: "file",
-              sha: "b".repeat(40),
-              size: 1,
-            })),
-          )
+  it("keeps absent files missing in a 1000-entry root tree without a directory cap", async () => {
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicTrees"
+        ? json({
+            data: {
+              t0: {
+                databaseId: 10,
+                owner: { login: "learner", databaseId: 123 },
+                tree: {
+                  entries: Array.from({ length: 1000 }, (_, i) => ({
+                    name: `other-${i}.txt`,
+                    type: "blob",
+                    mode: 0o100644,
+                    oid: "b".repeat(40),
+                    object: { byteSize: 1, isBinary: false },
+                  })),
+                },
+              },
+            },
+          })
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.issues).toEqual([]);
+    // Six manifests plus the README fallback, none present in the tree.
+    expect(result.repositories[0]?.files).toHaveLength(
+      GITHUB_MANIFEST_PATHS.length + 1,
+    );
+    expect(
+      result.repositories[0]?.files.every((file) => file.state === "missing"),
+    ).toBe(true);
+    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
+    expect(result.status).toBe("complete");
+  });
+
+  it.each([
+    ["not_found", null, "missing"],
+    ["http_error", 500, "unavailable"],
+  ] as const)(
+    "retains missing file versus failed file (%s)",
+    async (code, status, state) => {
+      const result = await collectGithubProfile(input, {
+        fetch: transport((gql) =>
+          gql.operation === "CodiPublicBlobs"
+            ? status === null
+              ? json({ data: { f0: null } })
+              : json({}, status)
+            : undefined,
+        ),
+      });
+      expect(
+        result.repositories[0]?.files.find(
+          (file) => file.path === "package.json",
+        )?.state,
+      ).toBe(state);
+      expect(result.issues[0]).toMatchObject({
+        operation: "file",
+        path: "package.json",
+        code,
+      });
+    },
+  );
+
+  it("rejects tampered immutable blob provenance", async () => {
+    const forged = "t".repeat(Buffer.byteLength(manifest));
+    const result = await collectGithubProfile(input, {
+      fetch: transport((gql) =>
+        gql.operation === "CodiPublicBlobs"
+          ? json({
+              data: {
+                f0: {
+                  databaseId: 10,
+                  blob: { ...blobOf(manifest), text: forged },
+                },
+              },
+            })
+          : undefined,
+      ),
+    });
+    expect(result.issues[0]?.code).toBe("invalid_response");
+    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
+  });
+
+  it("does not fetch symlinks, submodules, oversized files or binary blobs", async () => {
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicTrees"
+        ? json({
+            data: {
+              t0: {
+                databaseId: 10,
+                owner: { login: "learner", databaseId: 123 },
+                tree: {
+                  entries: [
+                    {
+                      name: "package.json",
+                      type: "blob",
+                      mode: 0o120000,
+                      oid: "b".repeat(40),
+                      object: { byteSize: 10, isBinary: false },
+                    },
+                    {
+                      name: "README.md",
+                      type: "commit",
+                      mode: 0o160000,
+                      oid: "c".repeat(40),
+                      object: null,
+                    },
+                    {
+                      name: "go.mod",
+                      type: "blob",
+                      mode: 0o100644,
+                      oid: "d".repeat(40),
+                      object: { byteSize: 65537, isBinary: false },
+                    },
+                  ],
+                },
+              },
+            },
+          })
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
+    expect(result.issues.map((item) => item.code)).toEqual([
+      "invalid_response",
+      "file_limit",
+      "invalid_response",
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("requests no text for binary or oversized blobs and skips truncated text", async () => {
+    const binaryAndLarge = await collectGithubProfile(input, {
+      fetch: transport((gql) =>
+        gql.operation === "CodiPublicTrees"
+          ? json({
+              data: {
+                t0: {
+                  databaseId: 10,
+                  owner: { login: "learner", databaseId: 123 },
+                  tree: {
+                    entries: [
+                      {
+                        name: "package.json",
+                        type: "blob",
+                        mode: 0o100644,
+                        oid: "b".repeat(40),
+                        object: { byteSize: 65537, isBinary: false },
+                      },
+                      {
+                        name: "requirements.txt",
+                        type: "blob",
+                        mode: 0o100644,
+                        oid: "c".repeat(40),
+                        object: { byteSize: 12, isBinary: true },
+                      },
+                    ],
+                  },
+                },
+              },
+            })
+          : undefined,
+      ),
+    });
+    expect(binaryAndLarge.issues).toMatchObject([
+      { operation: "file", path: "package.json", code: "file_limit" },
+      { operation: "file", path: "requirements.txt", code: "invalid_response" },
+    ]);
+    expect(binaryAndLarge.repositories[0]?.files[0]?.state).toBe("unavailable");
+    expect(binaryAndLarge.coverage.requests).toBe(2);
+
+    const truncated = await collectGithubProfile(input, {
+      fetch: transport((gql) =>
+        gql.operation === "CodiPublicBlobs"
+          ? json({
+              data: {
+                f0: {
+                  databaseId: 10,
+                  blob: { ...blobOf(manifest), isTruncated: true },
+                },
+              },
+            })
+          : undefined,
+      ),
+    });
+    expect(truncated.issues[0]).toMatchObject({ code: "file_limit" });
+    expect(truncated.evidence.filter((item) => item.kind === "file")).toEqual(
+      [],
+    );
+  });
+
+  it("treats a pinned commit that no longer resolves as not_found without inventing files", async () => {
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicTrees"
+        ? json({
+            data: {
+              t0: {
+                databaseId: 10,
+                owner: { login: "learner", databaseId: 123 },
+                tree: null,
+              },
+            },
+          })
         : undefined,
     );
     const result = await collectGithubProfile(input, { fetch });
     expect(result.issues[0]).toMatchObject({
       operation: "directory",
-      code: "directory_limit",
+      code: "not_found",
     });
-    expect(
-      result.repositories[0]?.files.every(
-        (file) => file.state === "unavailable",
-      ),
-    ).toBe(true);
-    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
+    expect(result.repositories[0]?.files).toEqual([]);
+    expect(result.status).toBe("partial");
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    [401, {}, "connection_expired"],
-    [403, {}, "http_error"],
-    [404, {}, "not_found"],
-    [429, { "retry-after": "120" }, "rate_limited"],
-    [
-      403,
-      { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1800000000" },
-      "rate_limited",
-    ],
-  ] as const)(
-    "distinguishes identity status %i",
-    async (status, headers, code) => {
-      const fetch = transport(() => json({ message: TOKEN }, status, headers));
-      const result = await collectGithubProfile(input, { fetch });
-      expect(result.issues[0]).toMatchObject({ code, httpStatus: status });
-      if (code === "rate_limited")
-        expect(result.issues[0]?.retryAt).toEqual(expect.any(String));
-      expect(JSON.stringify(result)).not.toContain(TOKEN);
-      expect(fetch).toHaveBeenCalledTimes(1);
-    },
-  );
+  it("rejects a tree read whose repository identity changed after listing", async () => {
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicTrees"
+        ? json({
+            data: {
+              t0: {
+                databaseId: 999,
+                owner: { login: "learner", databaseId: 123 },
+                tree: { entries: [] },
+              },
+            },
+          })
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.issues[0]).toMatchObject({
+      operation: "directory",
+      code: "invalid_response",
+    });
+    expect(result.repositories[0]?.files).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("isolates a per-alias GraphQL error to its own repository", async () => {
+    const fetch = transport((gql) => {
+      if (gql.operation === "CodiPublicProfile")
+        return json(
+          page([repo(), repo({ databaseId: 11, name: "project-11" })]),
+        );
+      if (gql.operation !== "CodiPublicTrees") return undefined;
+      const body = fixtureBody(gql.operation, gql.variables) as {
+        data: Record<string, unknown>;
+      };
+      return json({
+        data: { t0: null, t1: body.data.t1 },
+        errors: [
+          {
+            type: "NOT_FOUND",
+            path: ["t0"],
+            message: "Could not resolve to a Repository",
+          },
+        ],
+      });
+    });
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        repositoryId: 10,
+        operation: "directory",
+        code: "not_found",
+      }),
+    );
+    expect(result.repositories[0]?.files).toEqual([]);
+    expect(
+      result.evidence
+        .filter((item) => item.kind === "file")
+        .map((item) => item.repositoryId),
+    ).toEqual([11]);
+    expect(result.status).toBe("partial");
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("fails a whole batch on an unattributable GraphQL error and keeps languages", async () => {
+    const fetch = transport((gql) => {
+      if (gql.operation !== "CodiPublicTrees") return undefined;
+      const body = fixtureBody(gql.operation, gql.variables);
+      return json({ ...body, errors: [{ message: "upstream partial" }] });
+    });
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.issues[0]).toMatchObject({
+      repositoryId: 10,
+      operation: "directory",
+      code: "graphql_partial",
+    });
+    expect(result.evidence.map((item) => item.kind)).toEqual(["languages"]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("splits an overflowing batch and isolates a repository that stays oversize", async () => {
+    const fetch = transport((gql, _url, init) => {
+      if (gql.operation === "CodiPublicProfile")
+        return json(
+          page([repo(), repo({ databaseId: 11, name: "project-11" })]),
+        );
+      if (
+        gql.operation === "CodiPublicTrees" &&
+        String(init.body).includes('"project-11"')
+      ) {
+        const body = fixtureBody(gql.operation, gql.variables);
+        return new Response(JSON.stringify(body) + " ".repeat(5000));
+      }
+      return undefined;
+    });
+    const result = await collectGithubProfile(input, {
+      fetch,
+      limits: { responseBytes: 4096 },
+    });
+    expect(result.issues).toContainEqual({
+      repositoryId: 11,
+      operation: "directory",
+      code: "response_limit",
+    });
+    expect(
+      result.evidence
+        .filter((item) => item.kind === "file")
+        .map((item) => item.repositoryId),
+    ).toEqual([10]);
+    // Listing, the overflowing pair, its two halves, and the blob read for repository 10.
+    expect(fetch).toHaveBeenCalledTimes(5);
+  });
+
+  it("reports a whole-page GraphQL error without data as graphql_error", async () => {
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicTrees"
+        ? json({ errors: [{ message: "upstream failure" }] })
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, { fetch });
+    expect(result.issues[0]).toMatchObject({
+      operation: "directory",
+      code: "graphql_error",
+    });
+  });
 
   it("stops on public rate limit and retains earlier observations", async () => {
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/contents")
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicTrees"
         ? json({}, 429, { "retry-after": "60" })
         : undefined,
     );
@@ -849,8 +1397,8 @@ describe("GitHub public GraphQL collector", () => {
   });
 
   it("recognizes a secondary rate limit without reset/retry headers", async () => {
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/contents")
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicTrees"
         ? json(
             {
               message: "You have exceeded a secondary rate limit. Please wait.",
@@ -868,161 +1416,20 @@ describe("GitHub public GraphQL collector", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it.each([404, 500])(
-    "retains missing file versus failed file (%i)",
-    async (status) => {
-      const result = await collectGithubProfile(input, {
-        fetch: transport((url) =>
-          url.pathname.endsWith("/contents/package.json")
-            ? json({}, status)
-            : undefined,
-        ),
-      });
-      expect(
-        result.repositories[0]?.files.find(
-          (file) => file.path === "package.json",
-        )?.state,
-      ).toBe(status === 404 ? "missing" : "unavailable");
-      expect(result.issues[0]?.code).toBe(
-        status === 404 ? "not_found" : "http_error",
-      );
-    },
-  );
-
-  it("rejects tampered immutable blob provenance", async () => {
-    const result = await collectGithubProfile(input, {
-      fetch: transport((url) =>
-        url.pathname.endsWith("/contents/package.json")
-          ? json({
-              ...blob(),
-              content: Buffer.from("tampered").toString("base64"),
-            })
-          : undefined,
+  it("sanitizes transport exceptions and successful responses that echo credentials", async () => {
+    const thrown = await collectGithubProfile(input, {
+      fetch: vi.fn(async () => {
+        throw new Error(`Bearer ${TOKEN}`);
+      }),
+    });
+    expect(thrown.issues[0]?.code).toBe("network_error");
+    const echoed = await collectGithubProfile(input, {
+      fetch: transport(() =>
+        json({ id: 123, login: "learner", unexpected: TOKEN }),
       ),
     });
-    expect(result.issues[0]?.code).toBe("invalid_response");
-    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
-  });
-
-  it("does not fetch symlinks, submodules, oversized files or external download URLs", async () => {
-    const fetch = transport((url) =>
-      url.pathname.endsWith("/contents")
-        ? json([
-            { name: "package.json", ...blob(), type: "symlink" },
-            { name: "README.md", ...blob(), type: "submodule" },
-            {
-              name: "go.mod",
-              ...blob(),
-              size: 65537,
-              download_url: "https://attacker.invalid",
-            },
-          ])
-        : undefined,
-    );
-    const result = await collectGithubProfile(input, { fetch });
-    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
-    expect(result.issues.map((item) => item.code)).toEqual([
-      "invalid_response",
-      "file_limit",
-      "invalid_response",
-    ]);
-    expect(fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it("bounds all requests including identity", async () => {
-    const fetch = transport();
-    const result = await collectGithubProfile(input, {
-      fetch,
-      limits: { requests: 2 },
-    });
-    expect(result.issues[0]?.code).toBe("request_limit");
-    expect(result.coverage.requests).toBe(2);
-    expect(fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it("rejects attempts to raise accepted ceilings before any request", async () => {
-    const fetch = transport();
-    const result = await collectGithubProfile(input, {
-      fetch,
-      limits: { requests: 61 },
-    });
-    expect(result.issues[0]?.code).toBe("invalid_input");
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("uses 31 requests for 15 manifests while retaining the two-worker ceiling", async () => {
-    let active = 0;
-    let peak = 0;
-    const base = transport((url) =>
-      url.pathname === "/graphql"
-        ? graph(
-            Array.from({ length: 15 }, (_, i) =>
-              repo({ databaseId: i + 1, name: `project-${i}` }),
-            ),
-          )
-        : undefined,
-    );
-    const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
-      active++;
-      peak = Math.max(peak, active);
-      try {
-        return await base(url, init);
-      } finally {
-        active--;
-      }
-    });
-    const result = await collectGithubProfile(input, { fetch });
-    expect(fetch).toHaveBeenCalledTimes(31);
-    expect(result.coverage.requests).toBe(31);
-    expect(result.issues).toEqual([]);
-    expect(peak).toBeLessThanOrEqual(2);
-  });
-
-  it("enforces declared and streamed response size independently", async () => {
-    const declaredFetch = transport(
-      () => new Response("{}", { headers: { "content-length": "1048577" } }),
-    );
-    expect(
-      (await collectGithubProfile(input, { fetch: declaredFetch })).issues[0]
-        ?.code,
-    ).toBe("response_limit");
-    const streamedFetch = transport(
-      () =>
-        new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(new Uint8Array(1025));
-              controller.close();
-            },
-          }),
-        ),
-    );
-    const result = await collectGithubProfile(input, {
-      fetch: streamedFetch,
-      limits: { responseBytes: 1024 },
-    });
-    expect(result.issues[0]?.code).toBe("response_limit");
-    expect(result.coverage.responseBytes).toBe(1024);
-  });
-
-  it("enforces aggregate response budget independently of the per-response cap", async () => {
-    const result = await collectGithubProfile(input, {
-      fetch: transport(),
-      limits: { aggregateBytes: 500 },
-    });
-    expect(result.issues.some((item) => item.code === "aggregate_limit")).toBe(
-      true,
-    );
-    expect(result.coverage.responseBytes).toBeLessThanOrEqual(500);
-  });
-
-  it("enforces decoded file byte bounds", async () => {
-    const result = await collectGithubProfile(input, {
-      fetch: transport(),
-      limits: { fileBytes: 10 },
-    });
-    expect(result.issues[0]?.code).toBe("file_limit");
-    expect(result.evidence.filter((item) => item.kind === "file")).toEqual([]);
+    expect(echoed.issues[0]?.code).toBe("invalid_response");
+    expect(JSON.stringify([thrown, echoed])).not.toContain(TOKEN);
   });
 
   it.each([
@@ -1035,13 +1442,24 @@ describe("GitHub public GraphQL collector", () => {
       const fetch = vi.fn<typeof globalThis.fetch>(
         () => new Promise(() => undefined),
       );
+      const onRequest = vi.fn();
       const pending = collectGithubProfile(input, {
         fetch,
+        onRequest,
         limits: { requestMs, totalMs },
       });
       await vi.advanceTimersByTimeAsync(Math.min(requestMs, totalMs));
       const result = await pending;
       expect(result.issues[0]?.code).toBe(code);
+      expect(onRequest).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          operation: "listing",
+          ordinal: 1,
+          outcome: code,
+          headersMs: null,
+          httpStatus: null,
+        }),
+      );
       expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     },
   );
@@ -1088,22 +1506,6 @@ describe("GitHub public GraphQL collector", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it("sanitizes transport exceptions and successful responses that echo credentials", async () => {
-    const thrown = await collectGithubProfile(input, {
-      fetch: vi.fn(async () => {
-        throw new Error(`Bearer ${TOKEN}`);
-      }),
-    });
-    expect(thrown.issues[0]?.code).toBe("network_error");
-    const echoed = await collectGithubProfile(input, {
-      fetch: transport(() =>
-        json({ id: 123, login: "learner", unexpected: TOKEN }),
-      ),
-    });
-    expect(echoed.issues[0]?.code).toBe("invalid_response");
-    expect(JSON.stringify([thrown, echoed])).not.toContain(TOKEN);
-  });
-
   it("has the accepted hard ceilings", () => {
     expect(GITHUB_PROFILE_LIMITS).toEqual({
       listedRepos: 300,
@@ -1117,31 +1519,17 @@ describe("GitHub public GraphQL collector", () => {
     });
   });
 
-  it("overlaps two repository reads without exceeding two workers and keeps evidence ordered", async () => {
-    vi.useFakeTimers();
-    let active = 0;
-    let peak = 0;
-    const fetch = transport(async (url) => {
-      if (url.pathname === "/graphql")
-        return graph(
-          [10, 11, 12, 13].map((id) =>
-            repo({ databaseId: id, name: `project-${id}` }),
-          ),
-        );
-      if (url.pathname.startsWith("/repos/")) {
-        active++;
-        peak = Math.max(peak, active);
-        await new Promise((resolve) =>
-          setTimeout(resolve, url.pathname.includes("project-10") ? 20 : 5),
-        );
-        active--;
-      }
-    });
-    const pending = collectGithubProfile(input, { fetch });
-    await vi.runAllTimersAsync();
-    const result = await pending;
-    expect(peak).toBe(2);
-    expect(active).toBe(0);
+  it("keeps evidence ordered by repository selection regardless of batch timing", async () => {
+    const fetch = transport((gql) =>
+      gql.operation === "CodiPublicProfile"
+        ? graph(
+            [10, 11, 12, 13].map((id) =>
+              repo({ databaseId: id, name: `project-${id}` }),
+            ),
+          )
+        : undefined,
+    );
+    const result = await collectGithubProfile(input, { fetch });
     expect(result.status).toBe("complete");
     expect(result.evidence.map((item) => item.repositoryId)).toEqual([
       10, 10, 11, 11, 12, 12, 13, 13,
@@ -1151,27 +1539,5 @@ describe("GitHub public GraphQL collector", () => {
         item.files.some((file) => file.state === "collected"),
       ),
     ).toBe(true);
-  });
-
-  it("shares the request ceiling across both workers and starts no extra request after exhaustion", async () => {
-    const fetch = transport((url) =>
-      url.pathname === "/graphql"
-        ? graph(
-            [10, 11, 12].map((id) =>
-              repo({ databaseId: id, name: `project-${id}` }),
-            ),
-          )
-        : undefined,
-    );
-    const result = await collectGithubProfile(input, {
-      fetch,
-      limits: { requests: 4 },
-    });
-    expect(fetch).toHaveBeenCalledTimes(4);
-    expect(result.coverage.requests).toBe(4);
-    expect(result.status).toBe("partial");
-    expect(result.issues.some((issue) => issue.code === "request_limit")).toBe(
-      true,
-    );
   });
 });

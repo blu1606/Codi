@@ -2,16 +2,12 @@ import { delay, http, HttpResponse } from "msw";
 import type { HttpHandler } from "msw";
 import LessonPlayer from "@/app/learn/[courseId]/[lessonId]/lesson-player";
 import {
-  tutorAnswered,
-  tutorCodeEmpty,
-  tutorDiffApplied,
-  tutorDiffPending,
-  tutorEmpty,
-  tutorEscalated,
-  tutorError,
-  tutorHintLevel2,
-  tutorRateLimited,
+  TUTOR_CHAT_HINT,
+  TUTOR_CHAT_LECTURER,
+  TUTOR_CHAT_LESSON,
+  tutorLessonMeta,
 } from "@/demo-fixtures/learner/s11-tutor";
+import { seedTutor, tutorAsk, tutorAskFails, tutorStream } from "../../shell/tutor-handlers";
 import {
   ASSIGNMENT_ASSESSMENT_ID,
   CODING_ASSESSMENT_ID,
@@ -34,12 +30,22 @@ import {
   lessonMaterialError,
   lessonPlayerView,
   lessonReading,
+  lessonReadyToComplete,
+  lessonAfterCompletion,
+  lessonSoftLocked,
+  lessonTasksAtTop,
   lessonVideoDefault,
+  offerAll,
+  offerHarder,
+  offerPractice,
+  offerSkipMastered,
   quizAnswering,
   quizFailed,
   quizPassed,
 } from "@/demo-fixtures/learner/s11-lesson-player";
+import { PathAdjustOffer } from "@/components/learning-path/path-adjust-offer";
 import type { AssessmentView } from "@/lib/assessment-contract";
+import type { AdjustmentOffer } from "@/lib/learning-path-contract";
 import type { CodingView } from "@/lib/coding-contract";
 import type { LessonPlayerView } from "@/lib/lesson-player-contract";
 import type { Screen, ScreenState } from "../screen-types";
@@ -82,53 +88,72 @@ const quizView = (done: boolean) => lessonPlayerView({
   ],
 });
 
-/** Tutor GET for this lesson: the thread the panel or popup reads when it opens. */
-const tutorRead = (view: object): HttpHandler => http.get(`${endpoint}/tutor`, () => HttpResponse.json(view));
+/** Completion: the first matching handler answers "complete" with the offer; every other command gets the plain view. */
+const offerState = (label: string, offer: AdjustmentOffer): ScreenState => {
+  const complete = http.post(endpoint, async ({ request }) => {
+    const body = (await request.json()) as { type?: string };
+    return HttpResponse.json(body.type === "complete" ? { ...lessonReadyToComplete, completed: true, adjustment: offer } : lessonReadyToComplete);
+  });
+  return state(label, [complete, ...playerHandlers(lessonReadyToComplete)], {
+    render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialAdjustment={offer} />,
+  });
+};
 
-/** Lesson player with the tutor opened at mount, so each thread state renders without a click. */
+/** The lesson's meta as the Tutor panel reads it (code lesson, hint ladder, lecturer). */
+const tutorMeta = (meta: object): HttpHandler => http.get("/api/ai/lesson", () => HttpResponse.json(meta));
+const lessonKey = `lesson:${LESSON_ID}`;
+
+/**
+ * Lesson player with the shared Tutor panel open at load: a new chat (optionally asking right away)
+ * or a stored chat of this lesson, so each panel state renders without a click.
+ */
 const tutorState = (
   label: string,
-  initialTutor: { mode: "popup" } | { mode: "panel"; ask?: string },
   handlers: HttpHandler[],
-  extra: Partial<ScreenState> = {},
+  { chat, ask }: { chat?: string; ask?: string } = {},
 ): ScreenState => ({
   ...state(label, handlers),
-  render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} viewerName="Nguyễn Minh Anh" initialTutor={initialTutor} />,
-  ...extra,
+  render: () => {
+    seedTutor({ chats: chat ? { [lessonKey]: chat } : {} });
+    return <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialTutor={{ mode: "panel", ask }} />;
+  },
 });
 
 const tutorStates: Record<string, ScreenState> = {
-  "tutor-launcher": state("Trợ lý · nút tròn (đóng)", playerHandlers(lessonVideoDefault)),
-  "tutor-popup": tutorState("Trợ lý · popup", { mode: "popup" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorEmpty)]),
-  "tutor-empty": tutorState("Trợ lý · gợi ý ban đầu", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorEmpty)]),
-  "tutor-answer": tutorState("Trợ lý · câu trả lời", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorAnswered)]),
-  "tutor-context": tutorState("Trợ lý · có ngữ cảnh đính kèm", { mode: "panel" }, [
+  "tutor-bubble": { ...state("Tutor · nút nổi (đóng)", playerHandlers(lessonVideoDefault)), render: () => {
+    seedTutor({ open: false });
+    return <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} />;
+  } },
+  "tutor-empty": tutorState("Tutor · đoạn chat mới, gợi ý", [...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())]),
+  "tutor-thinking": tutorState(
+    "Tutor · đang đọc bài (Dừng)",
+    [tutorAsk(() => tutorStream(undefined, { hangAfter: 0 })), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "querySelectorAll trả về gì?" },
+  ),
+  "tutor-streaming": tutorState(
+    "Tutor · suy nghĩ, dùng công cụ, trả lời từng chữ",
+    [tutorAsk(() => tutorStream(undefined, { stepMs: 700 })), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "Duyệt danh sách querySelectorAll thế nào?" },
+  ),
+  "tutor-answer": tutorState("Tutor · câu trả lời có nguồn", [...playerHandlers(lessonVideoDefault)], { chat: TUTOR_CHAT_LESSON }),
+  "tutor-context": tutorState("Tutor · có ngữ cảnh đính kèm (code, test)", [
     ...playerHandlers(lessonCodeBase, { coding: codingSomeFailed }),
-    tutorRead(tutorCodeEmpty),
+    tutorMeta(tutorLessonMeta({ isCode: true })),
   ]),
-  "tutor-thinking": tutorState("Trợ lý · đang trả lời (Dừng)", { mode: "panel", ask: "Vì sao nó trả về null?" }, [
-    http.post(`${endpoint}/tutor`, async () => {
-      await delay("infinite");
-      return HttpResponse.json({});
-    }),
-    ...playerHandlers(lessonVideoDefault),
-    tutorRead(tutorEmpty),
-  ]),
-  "tutor-hint": tutorState("Trợ lý · gợi ý 2/3", { mode: "panel" }, [
+  "tutor-diff": tutorState("Tutor · gợi ý 3/3, đề xuất chưa áp dụng", [
     ...playerHandlers(lessonCodeBase, { coding: codingIdle }),
-    tutorRead(tutorHintLevel2),
-  ]),
-  "tutor-diff": tutorState("Trợ lý · đề xuất chưa áp dụng", { mode: "panel" }, [
-    ...playerHandlers(lessonCodeBase, { coding: codingIdle }),
-    tutorRead(tutorDiffPending),
-  ]),
-  "tutor-diff-applied": tutorState("Trợ lý · đã áp dụng đề xuất", { mode: "panel" }, [
-    ...playerHandlers(lessonCodeBase, { coding: codingIdle }),
-    tutorRead(tutorDiffApplied),
-  ]),
-  "tutor-error": tutorState("Trợ lý · lỗi, thử lại", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorError)]),
-  "tutor-rate-limited": tutorState("Trợ lý · hỏi quá nhiều", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorRateLimited)]),
-  "tutor-escalated": tutorState("Trợ lý · đã hỏi giảng viên", { mode: "panel" }, [...playerHandlers(lessonVideoDefault), tutorRead(tutorEscalated)]),
+  ], { chat: TUTOR_CHAT_HINT }),
+  "tutor-error": tutorState(
+    "Tutor · tạm nghỉ, thử lại",
+    [tutorAskFails(500, "Không thể tải hoặc cập nhật lộ trình. Vui lòng thử lại."), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "Vì sao nó trả về null?" },
+  ),
+  "tutor-rate-limited": tutorState(
+    "Tutor · hỏi quá nhiều",
+    [tutorAskFails(429, "Bạn đã hỏi quá nhiều trong thời gian ngắn"), ...playerHandlers(lessonVideoDefault), tutorMeta(tutorLessonMeta())],
+    { ask: "Giải thích lại giúp mình" },
+  ),
+  "tutor-escalated": tutorState("Tutor · 👎 và giảng viên đã trả lời", [...playerHandlers(lessonVideoDefault)], { chat: TUTOR_CHAT_LECTURER }),
 };
 
 export const s11LessonPlayerScreen: Screen = {
@@ -143,6 +168,25 @@ export const s11LessonPlayerScreen: Screen = {
     "materials-error": state("Lỗi tải tài liệu", playerHandlers(lessonMaterialError), { mockupScenario: { materials: "error" } }),
     "checklist-partial": state("Checklist một phần", playerHandlers(lessonChecklistPartial)),
     completed: state("Đã hoàn thành (S11e)", playerHandlers(lessonCompleted)),
+    "soft-locked": state("Chưa đủ tiên quyết · mở được, có cảnh báo", playerHandlers(lessonSoftLocked)),
+    "offer-skip-mastered": offerState("Gợi ý sau hoàn thành · bỏ qua bài đã vững", offerSkipMastered),
+    "offer-practice": offerState("Gợi ý sau hoàn thành · luyện thêm", offerPractice),
+    "offer-harder": offerState("Gợi ý sau hoàn thành · làm bài code sớm", offerHarder),
+    "offer-all": offerState("Gợi ý sau hoàn thành · đủ các lựa chọn", offerAll),
+    "offer-applied": state("Gợi ý · đã áp dụng (hoàn tác 7 giây)", playerHandlers(lessonReadyToComplete), {
+      render: () => (
+        <div className="mx-auto max-w-xl p-6">
+          <PathAdjustOffer offer={null} completing={false} applying={null} applied={{ summary: "Bài Hàm và phạm vi được đưa lên ngay sau bài vừa học để ôn Mảng." }} error={null} onChoose={() => {}} onDismiss={() => {}} onViewPath={() => {}} />
+        </div>
+      ),
+    }),
+    "tasks-at-top": state("Nhiệm vụ ở đầu trang (quiz, bài tập)", playerHandlers(lessonTasksAtTop)),
+    "map-popup": state("Lộ trình · bản đồ mở từ bài học", playerHandlers(lessonVideoDefault), {
+      render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialPathMap={{}} />,
+    }),
+    "map-after-completion": state("Lộ trình · sau hoàn thành, tiến trình sang bài kế", playerHandlers(lessonAfterCompletion), {
+      render: () => <LessonPlayer courseId={LESSON_COURSE_ID} lessonId={LESSON_ID} initialPathMap={{ animateFrom: LESSON_ID }} />,
+    }),
     "quiz-answering": state("Quiz · đang làm (S11c)", playerHandlers(quizView(false), { quiz: quizAnswering })),
     "quiz-passed": state("Quiz · đạt (S11c)", playerHandlers(quizView(true), { quiz: quizPassed })),
     "quiz-failed": state("Quiz · chưa đạt (S11c)", playerHandlers(quizView(false), { quiz: quizFailed })),

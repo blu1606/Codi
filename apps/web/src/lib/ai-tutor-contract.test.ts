@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyDiff,
-  assertTutorIdle,
   clip,
   escalationSummary,
   lineRefs,
   nextHintLevel,
-  retryRows,
   sanitizeDiff,
-  tutorCommand,
-  tutorUserPrompt,
+  tutorEscalation,
+  tutorSystemPrompt,
   TUTOR_CONTEXT_LIMITS,
 } from "./ai-tutor-contract";
 import { LearningPathError } from "./learning-path-contract";
@@ -63,72 +61,44 @@ describe("answer line references", () => {
   });
 });
 
-describe("retry and escalation helpers", () => {
-  const thread = [
-    { id: 1, role: "user" as const, text: "Câu 1" },
-    { id: 2, role: "ai" as const, text: "Trả lời" },
-    { id: 3, role: "user" as const, text: "Câu 2" },
-    { id: 4, role: "error" as const, text: "Câu 2" },
-    { id: 5, role: "user" as const, text: "Câu 3" },
-    { id: 6, role: "user" as const, text: "Câu 4" },
-  ];
-  it("'Thử lại' removes the error and the question it failed on", () => {
-    expect(retryRows(thread, 4)).toEqual([3, 4]);
-    expect(retryRows([{ id: 9, role: "error" }], 9)).toEqual([9]);
-  });
-  it("only an error row can be retried", () => {
-    expect(() => retryRows(thread, 2)).toThrow(/thử lại/);
-    expect(() => retryRows(thread, 99)).toThrow(LearningPathError);
-  });
-  it("the AI summary is the last 3 learner questions", () => {
-    expect(escalationSummary(thread)).toBe("Câu 2 · Câu 3 · Câu 4");
-  });
-});
-
-describe("commands", () => {
-  it("escalation needs at least 10 characters", () => {
-    const base = { type: "escalate", withSummary: true };
-    expect(tutorCommand.safeParse({ ...base, text: "  ngắn  " }).success).toBe(
-      false,
+describe("escalation", () => {
+  it("the AI summary is the learner's last 3 questions", () => {
+    expect(escalationSummary(["Câu 1", "Câu 2", "Câu 3", "Câu 4"])).toBe(
+      "Câu 2 · Câu 3 · Câu 4",
     );
+    expect(escalationSummary([])).toBe("");
+  });
+  it("needs at least 10 characters", () => {
     expect(
-      tutorCommand.safeParse({ ...base, text: "Em chưa hiểu dòng 3" }).success,
+      tutorEscalation.safeParse({ text: "  ngắn  ", withSummary: true }).success,
+    ).toBe(false);
+    expect(
+      tutorEscalation.safeParse({ text: "Em chưa hiểu dòng 3", withSummary: true })
+        .success,
     ).toBe(true);
   });
-  it("rejects empty questions and unknown down-vote reasons", () => {
-    expect(
-      tutorCommand.safeParse({ type: "ask", question: "   " }).success,
-    ).toBe(false);
-    expect(
-      tutorCommand.safeParse({
-        type: "vote",
-        messageId: 1,
-        vote: "down",
-        reason: "Khác",
-      }).success,
-    ).toBe(false);
-  });
 });
 
-describe("prompt", () => {
+const lesson = {
+  title: "Hàm",
+  chapterTitle: "Cơ bản",
+  description: null,
+  body: "Hàm nhận tham số.",
+  materials: ["Video giới thiệu (video)"],
+  isCode: true,
+};
+
+describe("system prompt", () => {
   it("carries the screen's pre-context with numbered code, clipped to the shared limits", () => {
-    const prompt = tutorUserPrompt({
-      lesson: {
-        title: "Hàm",
-        chapterTitle: "Cơ bản",
-        description: null,
-        body: "Hàm nhận tham số.",
-        materials: ["Video giới thiệu (video)"],
-        isCode: true,
-      },
+    const prompt = tutorSystemPrompt({
+      turn: { type: "ask", mode: "simple" },
+      lesson,
       context: {
         task: "Bước 1/3: Gọi console.log",
         code: "console.lg('hi');",
         error: "Dòng 1: console.lg is not a function",
         selection: "x".repeat(TUTOR_CONTEXT_LIMITS.selection + 50),
       },
-      history: [{ role: "user", text: "Lỗi gì vậy?" }],
-      question: "Vì sao lỗi?",
     });
     expect(prompt).toContain(
       "Yêu cầu bài tập / bước hiện tại:\nBước 1/3: Gọi console.log",
@@ -142,33 +112,19 @@ describe("prompt", () => {
       `${"x".repeat(TUTOR_CONTEXT_LIMITS.selection - 1)}…`,
     );
     expect(prompt).not.toContain("x".repeat(TUTOR_CONTEXT_LIMITS.selection));
-    expect(prompt).toMatch(
-      /Học viên: Lỗi gì vậy\?[\s\S]*Câu hỏi: Vì sao lỗi\?$/,
-    );
   });
-});
-
-describe("one turn at a time per lesson (§13 'not busy', enforced on the server)", () => {
-  const at = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
-  it("rejects a second question while the last one is still unanswered", () => {
-    expect(() => assertTutorIdle([{ role: "user", at: at(5_000) }])).toThrow(
-      /đang trả lời câu hỏi trước/,
-    );
+  it("never asks for a full solution, and cites tool sources instead of guessing", () => {
+    const prompt = tutorSystemPrompt({ turn: { type: "ask", mode: "step" }, lesson, context: {} });
+    expect(prompt).toMatch(/Không bao giờ viết sẵn lời giải/);
+    expect(prompt).toMatch(/trích nguồn bằng link Markdown/);
+    expect(prompt).toMatch(/không bịa/);
   });
-  it("allows a new turn after an answer, an error or a limit row", () => {
-    for (const role of ["ai", "error", "limit"] as const)
-      expect(() =>
-        assertTutorIdle([
-          { role: "user", at: at(5_000) },
-          { role, at: at(1_000) },
-        ]),
-      ).not.toThrow();
-    expect(() => assertTutorIdle([])).not.toThrow();
-  });
-  it("does not block forever when a turn's server died without answering", () => {
-    expect(() =>
-      assertTutorIdle([{ role: "user", at: at(120_000) }]),
-    ).not.toThrow();
+  it("a hint step names its rung and only step 3 may suggest a change", () => {
+    const step1 = tutorSystemPrompt({ turn: { type: "hint", level: 1 }, lesson, context: {} });
+    const step3 = tutorSystemPrompt({ turn: { type: "hint", level: 3 }, lesson, context: {} });
+    expect(step1).toContain("**Gợi ý 1/3 · Hướng nghĩ**");
+    expect(step1).not.toContain("suggest_code_change");
+    expect(step3).toContain("suggest_code_change");
   });
 });
 
@@ -179,8 +135,7 @@ describe("clip", () => {
     expect(clipped.truncated).toBe(true);
     expect(clipped.text).toHaveLength(TUTOR_CONTEXT_LIMITS.code);
     expect(
-      tutorCommand.safeParse({
-        type: "escalate",
+      tutorEscalation.safeParse({
         text: "Em chưa hiểu vì sao test sai",
         code: clipped.text,
         withSummary: false,

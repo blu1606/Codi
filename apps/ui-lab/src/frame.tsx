@@ -5,6 +5,7 @@ import { setupWorker } from "msw/browser";
 import { findFixtureRoute } from "@/demo-fixtures";
 import { labWriteHandlers } from "./shell/write-handlers";
 import { Toaster } from "@codi-1/ui/components/sonner";
+import { AiChatProvider } from "@/components/ai-chat/ai-chat-provider";
 import { findScreen } from "./screens";
 import { AppChrome } from "./shell/app-chrome";
 import { sessionHandlers } from "./shell/session-handlers";
@@ -55,7 +56,10 @@ async function main() {
   document.documentElement.classList.toggle("dark", theme === "dark");
   root.render(
     <StrictMode>
-      <AppChrome layout={screen.layout ?? "app"}>{state.render()}</AppChrome>
+      {/* Same as the app's Providers: the Tutor bubble and panel live on every screen. */}
+      <AiChatProvider>
+        <AppChrome layout={screen.layout ?? "app"}>{state.render()}</AppChrome>
+      </AiChatProvider>
       <Toaster richColors />
     </StrictMode>,
   );

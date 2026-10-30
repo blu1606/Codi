@@ -57,7 +57,7 @@ Today the product has a working storefront (catalog, course detail, account, Vie
 - Payment = Vietnamese bank transfer only: VietQR + transfer content `CODI#####`, confirmed asynchronously by webhook (can take seconds to minutes). Underpayment leaves the order pending. No expiry, cancel, or failed state exists yet.
 - A lesson holds lecture video, PDF/slide deck and/or reading text, plus optional quiz, assignment and **coding exercise** (UC note; coding exercise added to the UC model 2026-10-12 as "Submit Coding Exercise"). The current DB has chapters and lessons without lesson types — content types are a UX requirement not yet backed by data.
 - **Preconditions (UC spec):** Set Course Learning Goal → before Diagnostic. Study Lesson + Submit Quiz + Submit Assignment → before Complete Course Lesson.
-- **AI rules (UC spec):** AI never starts a use case. Generate Path runs once after the entry test; Update Path runs on every Complete Course Lesson using that lesson's quiz/assignment results. Prerequisite order from the knowledge map is a hard constraint; AI decides emphasis, pace and what may be skipped, and writes the reason for the order. Mastery is computed by BKT (reproducible), not by the LLM.
+- **AI rules (UC spec):** AI never starts a use case. Generate Path runs once after the entry test; Update Path runs on every Complete Course Lesson using that lesson's quiz/assignment results. Prerequisite order from the knowledge map is a hard constraint for path ordering; the lock on an individual lesson is advisory (decision 65). AI decides emphasis, pace and what may be skipped, and writes the reason for the order. After a completion the learner may apply an adaptive adjustment; Codi never applies one silently (decision 67). Mastery is computed by BKT (reproducible), not by the LLM.
 - Diagnostic entry test is authored by the Lecturer as a course quiz flagged as entry test.
 - **Course price is owned by Admin**, not Lecturer. Publication completeness check: price, description, ≥1 lesson. Admin manual review is a separate step.
 - Knowledge map is extracted once per content change (not per learner).
@@ -195,17 +195,18 @@ Left nav sections (existing "Tài khoản" with "Thông tin tài khoản", "Mậ
 
 ### Flow L5: Personal learning path *(UC View Personalized Learning Path, Update Personalized Learning Path)*
 **Trigger:** End of onboarding; course home; learner home "Tiếp tục học".
-**Steps:** Ordered list grouped by chapter. Each lesson row: status (đã học / đang học / tiếp theo / có thể bỏ qua / bị khoá), mastery chip for its concept, duration, and a one-line **"Vì sao?"** reason written by the AI. Current lesson emphasised with primary "Học tiếp". Locked rows explain the missing prerequisite. Header: goal, progress (x/y bài), "Chỉnh mục tiêu".
-**Decision points:** Learner may open a "có thể bỏ qua" lesson anyway; cannot open a lesson whose prerequisites are unmet (Q8: hard lock vs warning).
+**Steps:** Ordered list grouped by chapter. Each lesson row: status (đã học / đang học / tiếp theo / có thể bỏ qua / chưa đủ tiên quyết), mastery chip for its concept, duration, and a one-line **"Vì sao?"** reason written by the AI. Current lesson emphasised with primary "Học tiếp". Rows whose prerequisite is not covered show the advisory line "Nên học {concept} trước (bài {lesson})" with a link. Header: goal, progress (x/y bài), "Chỉnh mục tiêu".
+**Decision points:** Learner may open any lesson, including a "có thể bỏ qua" or "chưa đủ tiên quyết" one; the prerequisite is a recommendation, not a block (decision 65, Q8 resolved).
 **Exit:** Into the lesson player.
 
 ### Flow L6: Study a lesson *(UC Study Course Lesson, Submit Course Quiz, Submit Assignment, Complete Course Lesson, Ask AI Learning Assistant, Post Course Question)*
 **Trigger:** "Học tiếp" / any unlocked lesson.
 **Steps:**
 1. Player: left sidebar = path order with completion checks and type icons; content area = video / PDF-slide viewer / reading text; header with prev/next and course progress.
-2. Lesson checklist under content *(proposed)*: Học nội dung ✓ → Làm quiz → Nộp bài tập → Bài tập code (only the steps the lesson has) — mirrors the UC precondition so the learner sees why completion is not yet available.
+2. Lesson checklist under content *(proposed)*: Học nội dung ✓ (video counts at ≥ 90% watched, decision 66) → Làm quiz → Nộp bài tập → Bài tập code (only the steps the lesson has) — mirrors the UC precondition so the learner sees why completion is not yet available.
 3. Quiz (Flow L7) and assignment (Flow L8) open in place.
 4. "Hoàn thành bài học" becomes enabled when the preconditions are met → lesson marked complete → **path update notice** ("Lộ trình đã được cập nhật" with a short list of what changed: moved up / now skippable / unlocked) → "Bài tiếp theo: …" card. No auto-advance.
+4a. **Adaptive offer** (decisions 66–67): a non-blocking card "Codi gợi ý điều chỉnh lộ trình" shows an insight ("Codi thấy bạn đã nắm vững …" / "Bạn còn chưa chắc về …") and only the options that apply now: **Bỏ qua bài đã vững**, **Luyện thêm**, **Nâng độ khó**, plus **Giữ nguyên lộ trình**. "Áp dụng" acts at once and shows a "Hoàn tác" toast; the card shows on S11 and S10 until the learner applies or keeps the plan.
 5. Side panels (one open at a time, content stays visible):
    - **AI trợ lý** — the in-lesson tutor, fully specified in Flow L6c.
    - **Hỏi đáp**: questions for this lesson, composer, lecturer replies marked with a "Giảng viên" badge, empty state "Hãy là người đầu tiên đặt câu hỏi"; plus **"Trao đổi với giảng viên"** private conversations (Flow L6d).
@@ -354,7 +355,7 @@ Legend: **E** exists (refine), **N** new.
 - *Dùng trong khoá học:* owned courses with "ước tính ban đầu cho {x}/{y} khái niệm" → links to S10; empty "Chưa áp dụng cho khoá nào".
 States: not connected (explainer of what is read + "Kết nối GitHub"), consent open (S04d), analysing (step checklist, leave-safe), ready, ready with learner edits, insufficient data, failed, connection expired, rate-limited (paused step), stale (> 90 days), re-analysing (old profile stays visible with a top progress line), deleting (confirm dialog listing what is removed and what stays). Exit: S10 of an affected course, Settings.
 
-**S04d Connect GitHub consent dialog (N, Flow L14)** — Purpose: informed consent before OAuth. Required: Codi + GitHub logos, "Codi sẽ đọc" list, "Codi sẽ không" list, delete/unlink note. Primary "Kết nối GitHub", secondary "Để sau". States: default, redirecting ("Đang mở GitHub…"), cancelled on GitHub (back with neutral note "Bạn chưa kết nối GitHub"), GitHub account already linked to another Codi account (error + "Dùng tài khoản GitHub khác").
+**S04d Connect GitHub consent dialog (N, Flow L14)** — Purpose: informed consent before OAuth. Required: Codi + GitHub logos, "Codi sẽ đọc" list, "Codi sẽ không" list, delete/unlink note. Primary "Kết nối GitHub", secondary "Để sau". States: default, redirecting ("Đang mở GitHub…"), cancelled on GitHub (back with neutral note "Bạn chưa kết nối GitHub"). A GitHub account already linked to another Codi account can still be linked (decision 68).
 
 ### Learner — commerce
 **S05 Cart `/cart` (N)** — Purpose: review before paying. Required: items, prices, voucher, total. Primary: "Thanh toán". Secondary: remove, apply voucher, continue browsing. States: empty, items, voucher applied, voucher invalid, item already owned (auto-removed notice), pending order exists (resume banner).
@@ -370,9 +371,9 @@ States: not connected (explainer of what is read + "Kết nối GitHub"), consen
 
 **S09a Diagnostic intro / S09b question / S09c result (N)** — Required: count, estimated time, not graded. Question: counter, progress, options, "Tôi chưa biết", back/next. Result: right/wrong/unknown, concept mastery (5-stop scale + text), primary "Xem lộ trình của tôi". States: in progress, resumed, submitting, result.
 
-**S10 Personal path / course home (N)** — Required: goal, progress, ordered lessons with status, mastery, reason. Primary: "Học tiếp". Secondary: edit goal, review course, open any unlocked lesson. States: **default order (not personalised yet, with "Cá nhân hoá lộ trình" card)**, generating, ready, updated (diff highlight), AI unavailable (default order), course completed.
+**S10 Personal path / course home (N)** — Required: goal, progress, ordered lessons with status, mastery, reason. Primary: "Học tiếp". Secondary: edit goal, review course, open any unlocked lesson. States: **default order (not personalised yet, with "Cá nhân hoá lộ trình" card)**, generating, ready, updated (diff highlight), adaptive offer shown (decision 66–67), adjustment applied (highlight, Hoàn tác toast), AI unavailable (default order), course completed. Rows whose prerequisite is not covered show "Chưa đủ tiên quyết" and the advisory line; they stay openable.
 
-**S11 Lesson player `/learn/[course]/[lesson]` (N)** — Required: content, path sidebar, lesson checklist, progress. Primary: next step in the checklist, then "Hoàn thành bài học". Secondary: prev/next, AI panel, Q&A panel. States: video / PDF / reading; materials loading/error; checklist partially done; completed; locked (direct URL to a locked lesson → explanation + link to prerequisite).
+**S11 Lesson player `/learn/[course]/[lesson]` (N)** — Required: content, path sidebar, lesson checklist, progress. Primary: next step in the checklist, then "Hoàn thành bài học". Secondary: prev/next, AI panel, Q&A panel. States: video / PDF / reading; materials loading/error; checklist partially done; completed; prerequisite not covered (warning "Nên học {concept} trước (bài {lesson})" with link; lesson stays openable and completable); completed with adaptive offer (insight + applicable options + Giữ nguyên, non-blocking).
 
 **S11a AI tutor panel (N, Flow L6c)** — per-lesson thread, mode chips, code-native answers (line refs, timestamp links, small diff Áp dụng/Bỏ qua/Hoàn tác, Chạy lại test), hint ladder, context chips in composer, escalation button. States: empty (contextual starters), context attached, thinking (Dừng), answer, hint n/3, diff applied, error, rate limited, escalated.
 
@@ -452,7 +453,7 @@ States: not connected (explainer of what is read + "Kết nối GitHub"), consen
 6. **Preconditions are visible, not hidden**: the lesson checklist and the publication checklist explain disabled buttons.
 7. **AI transparency**: every AI-made ordering shows its reason; AI panels state what context they use and that AI can be wrong; AI-generated knowledge maps require lecturer acceptance.
 8. **AI work states**: generating / ready / failed / stale for path generation and knowledge-map extraction; failure always has a non-AI fallback (default order).
-9. **Path change feedback**: after each completion the learner sees what changed in the path (brief, dismissible), and changed rows are highlighted on S10 once.
+9. **Path change feedback**: after each completion the learner sees what changed in the path (brief, dismissible), and changed rows are highlighted on S10 once. The adaptive offer (decision 67) is non-blocking and dismissible; applying an option is immediate with a "Hoàn tác" toast; a regenerated path never overwrites an applied adjustment.
 10. **Side panels** (AI, Q&A) keep the lesson content visible on desktop; full-screen sheet on mobile.
 11. **Resume**: diagnostic, video position, unsaved assignment draft and the last lesson are restored on return.
 12. **Destructive & monetary actions** (deactivate user, hide course, reject course, delete content, cancel order, change price, deactivate voucher) use a confirm dialog that states the consequence and reversibility; reason required for actions that affect another person (reject, hide, deactivate).
@@ -941,7 +942,7 @@ Intentional unless an Open Question below overrides them.
 9. The diagnostic is untimed, shows question count and estimated time up front, and offers "Tôi chưa biết" as a distinct answer.
 10. Diagnostic result shows per-concept mastery using the existing 5-stop scale with text labels.
 11. The personal path is a **list grouped by chapter** (not a decorative map); each lesson shows status, mastery and an AI-written reason.
-12. Prerequisite order is never violated in the UI; locked items say which prerequisite is missing.
+12. Path order respects prerequisites in the UI; items whose prerequisite is not covered say which prerequisite is missing. *Amended 2026-10-27 by decision 65: the lesson is no longer blocked.*
 13. If AI path generation fails, the learner studies in default order — never blocked.
 14. The lesson player has a path sidebar, a visible lesson checklist (study → quiz → assignment), and "Hoàn thành bài học" enabled only when the checklist is satisfied. Assignment *submission* (not grading) satisfies it.
 15. No auto-advance between lessons; after completion show what changed in the path and the next recommended lesson.
@@ -1007,6 +1008,13 @@ Intentional unless an Open Question below overrides them.
 63. The profile is **private to the learner** — lecturers and admins do not see it; lecturer analytics never use it.
 64. Deleting the profile and unlinking GitHub are separate actions in Settings; both remove the profile and its estimates but never measured results. A GitHub-only account must set a password before unlinking.
 
+*Added 2026-10-27 — adaptive path (product owner decisions):*
+
+65. **Soft prerequisite lock.** A lesson whose prerequisite concept is not yet covered can still be opened, studied and completed. The player shows an advisory warning "Nên học {concept} trước (bài {lesson})" with a link, and the path row shows "Chưa đủ tiên quyết". Path ordering still respects prerequisites. This replaces the hard lock; Q8 is resolved. *(Amends decision 12.)*
+66. **Video study threshold is 90%.** "Học nội dung" for a video is done once 90% of the video is watched (was 100%). Playback continues to the end of the video.
+67. **Adaptive offer after completion.** On completing a lesson, Codi shows a non-blocking offer with an insight (e.g. "Codi thấy bạn đã nắm vững …" / "Bạn còn chưa chắc về …") and the applicable options: *Bỏ qua bài đã vững* (lessons whose concepts are all mastered become skippable), *Luyện thêm* (existing lessons on a weak concept move up to just after the current lesson), *Nâng độ khó* (challenge lessons whose prerequisites are covered move up), and *Giữ nguyên lộ trình*. Applying is the learner's own action: it takes effect immediately with a "Hoàn tác" toast (§7.17). Recalculation is inline and never a full-page loading state. A regenerated AI path never overwrites an applied adjustment; the adjustment holds until the next lesson completion.
+68. **Shared GitHub accounts.** Several Codi accounts may link the same GitHub account; each keeps its own skill profile, corrections and estimates. Signing in with that GitHub account opens the Codi account that linked it first. *(Removes the S04d "already linked to another Codi account" error state.)*
+
 
 ---
 
@@ -1016,7 +1024,7 @@ Intentional unless an Open Question below overrides them.
 - VietQR bank transfer confirmed by webhook; transaction statuses pending/paid/failed/cancelled/refunded exist in data.
 - Lesson = video, PDF/slides, reading + optional quiz and assignment (UC note).
 - Preconditions: goal → diagnostic; study + quiz + assignment → complete lesson.
-- AI: generate path once after entry test; update after each completed lesson; prerequisite order is hard; reasons are written; BKT computes mastery; AI never initiates.
+- AI: generate path once after entry test; update after each completed lesson; prerequisite order is hard for ordering (lesson lock is advisory, decision 65); reasons are written; BKT computes mastery; AI never initiates.
 - Diagnostic = lecturer-authored quiz flagged as entry test.
 - Admin owns price; publication completeness = price + description + ≥1 lesson; admin review is separate.
 - Existing design system, mastery scale rule and form conventions.
@@ -1044,7 +1052,9 @@ Intentional unless an Open Question below overrides them.
 - **Q5** Underpayment / overpayment / wrong transfer content handling and support channel.
 - **Q6** Exact learning-goal options and time tiers.
 - ~~**Q7** Can a learner skip the diagnostic?~~ **Resolved 2026-10-12: yes** — see decision 31. Follow-up: how often to re-prompt, and does the UC spec need an alternate flow "Study in default order" for Generate Personalized Learning Path?
-- **Q8** Prerequisite-locked lessons: hard lock or "học trước bài X" warning with override?
+- ~~**Q8** Prerequisite-locked lessons: hard lock or "học trước bài X" warning with override?~~ **Resolved 2026-10-27: advisory warning, no block** — see decision 65.
+- ~~**Q38**~~ **Resolved 2026-10-27: toast only.** Adaptive changes are reversible while the "Hoàn tác" toast is visible (about 7 s), following §7.17; no persistent undo on S10.
+- ~~**Q39**~~ **Resolved 2026-10-27: yes.** A goal edit (`ln-edit-goal`) is newer explicit intent: the regenerated path replaces the order and clears any applied adjustment, so the copy "Codi xếp lại thứ tự các bài chưa học" stays true.
 - **Q9** Quiz retakes: unlimited, limited, cooldown? Which attempt counts for BKT?
 - **Q10** Assignment resubmission after grading allowed?
 - **Q11** Can a course with enrolled learners be deleted, or only hidden?

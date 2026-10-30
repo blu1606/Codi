@@ -12,6 +12,8 @@ import {
 } from "@codi-1/ui/components/alert";
 import { ConfirmDialog } from "@codi-1/ui/components/confirm-dialog";
 import { toast } from "sonner";
+import { Skeleton } from "@codi-1/ui/components/skeleton";
+import { LoadingRegion } from "@/components/skeletons/loading-region";
 import {
   showDiagnosticResult,
   type OnboardingCommand,
@@ -224,13 +226,12 @@ export default function Onboarding({
   );
   if (loading)
     return shell(
-      <div
-        role="status"
-        className="flex items-center gap-3 py-12 text-muted-foreground"
-      >
-        <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-        Đang tải thiết lập của bạn…
-      </div>,
+      <LoadingRegion label="Đang tải thiết lập của bạn…" className="space-y-4 py-6">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-11 w-40 rounded-lg" />
+      </LoadingRegion>,
     );
   if (!data)
     return shell(

@@ -18,7 +18,11 @@ vi.mock("node:worker_threads", () => ({
     }
   },
 }));
-import { runJavaScript } from "@codi-1/coding-runner";
+import {
+  RUN_FINALIZATION_MARGIN_MS,
+  RUN_LEASE_MS,
+  runJavaScript,
+} from "@codi-1/coding-runner";
 const input = {
   code: "",
   tests: [{ id: 1, input: "1", isSample: true }],
@@ -76,5 +80,25 @@ describe("sandbox lifecycle and admission", () => {
     const rejected = expect(p).rejects.toThrow("Sandbox unavailable");
     workers[0].emit("error", new Error("WASM unavailable"));
     await rejected;
+  });
+  it("settles a slow production cold start and a full execution within the run lease", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      vi.useFakeTimers();
+      const started = Date.now();
+      const settled = runJavaScript({ ...input, timeoutMs: 3000 }).then(
+        () => Date.now() - started,
+        () => Date.now() - started,
+      );
+      // Worker reaches ready just before the production init limit; it must not be cut off as cold start.
+      await vi.advanceTimersByTimeAsync(24999);
+      workers[0].emit("message", { type: "ready" });
+      await vi.advanceTimersByTimeAsync(4500);
+      const elapsed = await settled;
+      expect(elapsed).toBe(24999 + 4500);
+      expect(elapsed + RUN_FINALIZATION_MARGIN_MS).toBeLessThanOrEqual(RUN_LEASE_MS);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

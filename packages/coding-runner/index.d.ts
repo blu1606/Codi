@@ -18,3 +18,6 @@ export type RunnerResult = {
   }[];
 };
 export function runJavaScript(input: RunnerInput): Promise<RunnerResult>;
+/** Worst-case wall clock of one runner call plus its database finalization; run leases must last at least this long. */
+export const RUN_LEASE_MS: number;
+export const RUN_FINALIZATION_MARGIN_MS: number;
