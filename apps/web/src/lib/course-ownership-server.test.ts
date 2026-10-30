@@ -87,6 +87,63 @@ describe("getCourseOwnershipMap (Server DB Integration)", () => {
     });
   });
 
+  it("verifies legacy transaction query boundary: left join on orders and 30-minute expiration", async () => {
+    const leftJoinMock = vi.fn().mockReturnThis();
+    mocks.select.mockReturnValue({ from: mocks.from });
+    mocks.from.mockImplementation(() => ({
+      where: mocks.where,
+      leftJoin: leftJoinMock,
+      innerJoin: mocks.innerJoin,
+    }));
+    mocks.innerJoin.mockReturnValue({ where: mocks.where });
+
+    // 1. courses query -> course-1 published
+    mocks.where.mockResolvedValueOnce([
+      { id: "course-1", price: 200000 },
+    ]);
+    // 2. enrollments query -> not enrolled
+    mocks.where.mockResolvedValueOnce([]);
+    // 3. pending canonical orders query -> none
+    mocks.where.mockResolvedValueOnce([]);
+    // 4. legacy transactions query -> returns legacy tx (e.g. active orphan within 30 min)
+    mocks.where.mockResolvedValueOnce([
+      { courseId: "course-1", txId: "TX_12345" },
+    ]);
+    // 5. cart rows query -> empty
+    mocks.where.mockResolvedValueOnce([]);
+
+    const result = await getCourseOwnershipMap("user-1", ["course-1"]);
+    expect(result).toEqual({
+      "course-1": { ownership: "pending-payment", pendingOrderId: "TX_12345" },
+    });
+
+    // Check leftJoin and where on studentTransactions
+    expect(leftJoinMock).toHaveBeenCalled();
+    const calls = mocks.where.mock.calls;
+    // Call 4 is the legacy transactions where clause
+    const legacyWhere = calls[3][0];
+    expect(legacyWhere).toBeDefined();
+
+    // Verify dialect query parameters for user, pending status, courseIds, and cutoff date
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const dialect = new PgDialect();
+    const compiled = dialect.sqlToQuery(legacyWhere);
+    expect(compiled.sql).toContain('"student_transactions"."user_id"');
+    expect(compiled.sql).toContain('"student_transactions"."status"');
+    expect(compiled.sql).toContain('"student_transactions"."course_id"');
+    expect(compiled.sql).toContain('"orders"."id" is null');
+    expect(compiled.sql).toContain('"orders"."status"');
+    expect(compiled.sql).toContain('"student_transactions"."created_at" >=');
+
+    expect(compiled.params).toEqual([
+      "user-1",
+      "pending",
+      "course-1",
+      "pending",
+      expect.any(String),
+    ]);
+  });
+
   it("getOwnership returns 'not-owned' if course is not found in DB", async () => {
     mocks.select.mockReturnValue({ from: mocks.from });
     mocks.from.mockReturnValue({ where: mocks.where });
