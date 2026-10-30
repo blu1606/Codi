@@ -1,7 +1,110 @@
 import { describe, expect, it, vi } from "vitest";
-import { getCartSummary, removeFromCart } from "./cart-service";
+import { getCartSummary, getPendingOrderBanner, removeFromCart } from "./cart-service";
+
+function pendingBannerDb(opts: {
+  deadline: Date;
+  freshReceivedAmount?: number | null;
+}) {
+  const pending = {
+    id: 7,
+    code: "CODI77777",
+    totalAmount: 1000000,
+    paymentDeadline: opts.deadline,
+    createdAt: new Date("2026-10-30T10:00:00Z"),
+  };
+  const tx = {
+    execute: vi.fn().mockResolvedValue([]),
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          limit: vi.fn().mockResolvedValue(
+            opts.freshReceivedAmount === undefined
+              ? []
+              : [{ receivedAmount: opts.freshReceivedAmount }],
+          ),
+        }),
+      }),
+    }),
+    update: vi.fn().mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      }),
+    }),
+  };
+  const db = {
+    select: vi
+      .fn()
+      .mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue([pending]),
+            }),
+          }),
+        }),
+      })
+      .mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    transaction: vi.fn().mockImplementation(async (cb) => cb(tx)),
+  };
+  return { db, tx };
+}
 
 describe("Cart service unit tests", () => {
+  it("returns the pending banner without touching the order when the deadline has not passed", async () => {
+    const { db, tx } = pendingBannerDb({ deadline: new Date(Date.now() + 60_000) });
+
+    const banner = await getPendingOrderBanner(db as any, "user-1");
+
+    expect(banner).toMatchObject({ id: 7, code: "CODI77777", itemCount: 0, totalAmount: 1000000 });
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  it("expires a past-deadline order under the payment code lock, re-reading receivedAmount", async () => {
+    const { db, tx } = pendingBannerDb({
+      deadline: new Date(Date.now() - 60_000),
+      freshReceivedAmount: 300000,
+    });
+
+    const banner = await getPendingOrderBanner(db as any, "user-1");
+
+    expect(banner).toBeNull();
+    expect(tx.execute.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.select.mock.invocationCallOrder[0],
+    );
+    const setArgs = tx.update.mock.results[0].value.set.mock.calls[0][0];
+    expect(setArgs).toMatchObject({ status: "failed", failReason: "expired", needsReconciliation: true });
+  });
+
+  it("does not flag reconciliation when no money arrived before expiry", async () => {
+    const { db, tx } = pendingBannerDb({
+      deadline: new Date(Date.now() - 60_000),
+      freshReceivedAmount: 0,
+    });
+
+    await getPendingOrderBanner(db as any, "user-1");
+
+    const setArgs = tx.update.mock.results[0].value.set.mock.calls[0][0];
+    expect(setArgs.status).toBe("failed");
+    expect(setArgs.needsReconciliation).toBeUndefined();
+  });
+
+  it("skips the update when the order is no longer pending once the lock is held", async () => {
+    const { db, tx } = pendingBannerDb({
+      deadline: new Date(Date.now() - 60_000),
+      freshReceivedAmount: undefined,
+    });
+
+    const banner = await getPendingOrderBanner(db as any, "user-1");
+
+    expect(banner).toBeNull();
+    expect(tx.update).not.toHaveBeenCalled();
+  });
+
   it("returns empty cart summary when no items in cart", async () => {
     const mockSelect = vi.fn()
       // cart items

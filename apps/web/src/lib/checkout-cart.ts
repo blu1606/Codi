@@ -88,6 +88,7 @@ export async function createOrderFromCart(
           id: orders.id,
           code: orders.code,
           status: orders.status,
+          totalAmount: orders.totalAmount,
           receivedAmount: orders.receivedAmount,
           paymentDeadline: orders.paymentDeadline,
         })
@@ -145,7 +146,7 @@ export async function createOrderFromCart(
             {
               id: existingPending.id,
               code: existingPending.code,
-              totalAmount: summary.total,
+              totalAmount: existingPending.totalAmount,
             },
           );
         }

@@ -111,7 +111,7 @@ describe("createOrderFromCart unit tests", () => {
             orderBy: vi.fn().mockReturnValue({
               limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", paymentDeadline: new Date(Date.now() + 100000) }]),
             }),
-            limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", status: "pending", receivedAmount: 0, paymentDeadline: new Date(Date.now() + 100000) }]),
+            limit: vi.fn().mockResolvedValue([{ id: 99, code: "CODI99999", status: "pending", totalAmount: 1000000, receivedAmount: 0, paymentDeadline: new Date(Date.now() + 100000) }]),
           }),
         }),
       }),
@@ -129,6 +129,8 @@ describe("createOrderFromCart unit tests", () => {
       expect(err.status).toBe(409);
       expect(err.code).toBe("PENDING_ORDER_EXISTS");
       expect(err.message).toContain("CODI99999");
+      // The old order's own total, not the current cart total (500000)
+      expect(err.pendingOrder).toEqual({ id: 99, code: "CODI99999", totalAmount: 1000000 });
     }
   });
 
