@@ -185,6 +185,38 @@ describe("learner course-home interactions", () => {
       ),
     ).toHaveLength(1);
   });
+
+  it("toggles inline expandable why reason directly on lesson card click", async () => {
+    const data = home();
+    data.rows[0]!.reason = "Khái niệm nền tảng cần nắm trước khi học tiếp.";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(data)));
+    await render(
+      createElement(CourseHome, {
+        courseId: "owned",
+        dismissalScope: "test-session",
+      }),
+    );
+
+    const whyButton = document.querySelector<HTMLButtonElement>(
+      `button[aria-controls="lesson-why-${data.rows[0]!.id}"]`,
+    );
+    expect(whyButton).not.toBeNull();
+    expect(whyButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById(`lesson-why-${data.rows[0]!.id}`)).toBeNull();
+
+    // Click to expand inline
+    await act(async () => whyButton!.click());
+    expect(whyButton?.getAttribute("aria-expanded")).toBe("true");
+    const inlineBox = document.getElementById(`lesson-why-${data.rows[0]!.id}`);
+    expect(inlineBox).not.toBeNull();
+    expect(inlineBox?.textContent).toContain("Vì sao bài này nằm trong lộ trình của bạn:");
+    expect(inlineBox?.textContent).toContain("Khái niệm nền tảng cần nắm trước khi học tiếp.");
+
+    // Click again to collapse inline
+    await act(async () => whyButton!.click());
+    expect(whyButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById(`lesson-why-${data.rows[0]!.id}`)).toBeNull();
+  });
 });
 
 describe("read-only learner knowledge map", () => {
