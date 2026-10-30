@@ -88,9 +88,12 @@ export function LessonPath({
   const selected =
     data.rows.find((row) => row.id === (picked ?? data.currentLessonId)) ??
     data.rows[0]!;
-  const choose = (id: string) => {
+  // Opening the detail sheet is a row-tap action only; "Vì sao?" never reaches this.
+  const openDetail = (id: string) => {
     setPicked(id);
-    if (!window.matchMedia("(min-width: 1024px)").matches) setSheetOpen(true);
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
+      setSheetOpen(true);
+    }
   };
   const detail = (
     <StepDetail
@@ -121,7 +124,7 @@ export function LessonPath({
                   selected={step.row.id === selected.id}
                   highlighted={data.highlights.includes(step.row.id)}
                   lessonUrl={lessonUrl}
-                  onChoose={choose}
+                  onOpenDetail={openDetail}
                 />
               ))}
             </ol>
@@ -177,7 +180,7 @@ function LessonStep({
   selected,
   highlighted,
   lessonUrl,
-  onChoose,
+  onOpenDetail,
 }: {
   step: Step;
   isCurrent: boolean;
@@ -185,7 +188,7 @@ function LessonStep({
   selected: boolean;
   highlighted: boolean;
   lessonUrl: LessonUrl;
-  onChoose: (id: string) => void;
+  onOpenDetail: (id: string) => void;
 }) {
   const { row, number } = step;
   const Icon = KIND_ICONS[row.kind ?? "reading"];
@@ -217,6 +220,11 @@ function LessonStep({
       </div>
       <article
         aria-current={isCurrent ? "step" : undefined}
+        onClick={(event) => {
+          // Links, buttons and the "Vì sao?" disclosure keep their own behaviour; the rest of the card opens the detail.
+          if ((event.target as HTMLElement).closest("a,button,summary,details")) return;
+          onOpenDetail(row.id);
+        }}
         className={cn(
           "min-w-0 flex-1 space-y-3 rounded-xl border bg-card p-4 text-card-foreground",
           selected && "border-primary ring-1 ring-primary",
@@ -278,16 +286,19 @@ function LessonStep({
               Học tiếp
             </Link>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-pressed={selected}
-            onClick={() => onChoose(row.id)}
-          >
+        </div>
+        <details
+          open={row.status === "active" || row.status === "next"}
+          className="text-sm"
+        >
+          <summary className="inline-flex min-h-8 cursor-pointer items-center text-primary">
             Vì sao?
             <span className="sr-only">: {row.title}</span>
-          </Button>
-        </div>
+          </summary>
+          <p className="mt-2 rounded-lg border border-border bg-muted/50 p-3 leading-relaxed text-muted-foreground">
+            {row.reason || "Theo thứ tự mặc định của khoá học (thứ tự bài học tiên quyết)."}
+          </p>
+        </details>
       </article>
     </li>
   );
