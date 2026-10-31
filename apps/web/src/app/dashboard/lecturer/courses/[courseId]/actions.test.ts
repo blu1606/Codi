@@ -422,6 +422,7 @@ describe("Course Editor & Quiz Builder Actions (#114)", () => {
           body: "Nội dung",
           isFreePreview: true,
           isRemedial: false,
+          kind: "video",
         },
         materials: [
           {

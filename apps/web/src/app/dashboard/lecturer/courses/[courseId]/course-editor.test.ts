@@ -148,12 +148,19 @@ describe("lesson editor detail safety", () => {
     expect(boundary.save).not.toHaveBeenCalled();
   });
 
-  it("offers URL-only materials with no file picker or delayed upload success", async () => {
+  it("offers direct file uploads and keeps external URL materials available", async () => {
     boundary.details.mockResolvedValue(detail("A"));
     await open("A");
     await click("Thêm tài liệu");
+    expect(document.querySelector('input[type="file"]')).not.toBeNull();
+    const type = document.querySelector<HTMLSelectElement>("select")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+      setter.call(type, "link");
+      type.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     expect(document.querySelector('input[type="file"]')).toBeNull();
-    expect(document.body.textContent).toContain("Chỉ hỗ trợ đường dẫn (URL)");
+    expect(document.querySelector('input[placeholder="https://..."]')).not.toBeNull();
     vi.useFakeTimers();
     await act(async () => vi.advanceTimersByTimeAsync(1500));
     expect(boundary.success).not.toHaveBeenCalled();
@@ -164,6 +171,12 @@ describe("lesson editor detail safety", () => {
     boundary.details.mockResolvedValue(detail("A"));
     await open("A");
     await click("Thêm tài liệu");
+    const type = document.querySelector<HTMLSelectElement>("select")!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+      setter.call(type, "link");
+      type.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     const title = document.querySelector<HTMLInputElement>('input[placeholder="Ví dụ: Slide bài giảng Chương 1"]')!;
     const url = document.querySelector<HTMLInputElement>('input[placeholder="https://..."]')!;
     await act(async () => {

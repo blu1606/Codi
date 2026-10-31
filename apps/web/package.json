@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/prepare-pdf-assets.mjs && next dev --port 3001",
-    "build": "node scripts/prepare-pdf-assets.mjs && next build",
+    "build": "node scripts/prepare-pdf-assets.mjs && next build --webpack && node scripts/restore-vercel-build-lock.mjs",
     "check-types": "tsc --noEmit",
     "test:e2e": "playwright test",
     "start": "next start --port 3001",

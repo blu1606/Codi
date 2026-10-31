@@ -180,6 +180,10 @@ export function lessonMaterialUrl(value: string): string | null {
   }
 }
 
+export function hasLessonMaterialUrl(value: string): boolean {
+  return lessonMaterialUrl(value) !== null || /^r2-private:\/\/lesson-materials\/[0-9a-f-]{36}$/i.test(value);
+}
+
 export function recordPdfPage(
   previous: MediaProgress[string] | undefined,
   page: number,

@@ -207,7 +207,9 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
             id: m.id,
             type: m.type,
             title: m.title,
-            url: m.url,
+            url: m.url.startsWith("r2-private://")
+              ? `/api/lecturer/courses/${courseId}/lessons/${l.id}/materials/${m.id}`
+              : m.url,
             fileName: m.title || m.url,
           })),
           quiz: quizObj,

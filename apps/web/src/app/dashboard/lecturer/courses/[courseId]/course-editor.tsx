@@ -36,6 +36,7 @@ import {
   Video,
 } from "lucide-react";
 import { toast } from "sonner";
+import { LESSON_KIND_LABELS, type LessonKind } from "@/lib/course-content-contract";
 
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
 import { Button, buttonVariants } from "@codi-1/ui/components/button";
@@ -139,6 +140,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   // State đổi tên chương hoặc bài học (inline quick edit)
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingText, setRenamingText] = useState("");
+  const [addLessonChapterId, setAddLessonChapterId] = useState<string | null>(null);
 
   // State Trình biên tập chi tiết bài học (Lesson Editor modal - Finding 9 / S22)
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
@@ -191,11 +193,13 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
     && loadedLessonDetails?.lessonId === editingLessonId
     && loadedLessonDetails?.request === lessonDetailsRequest.current;
 
-  // Tài liệu hiện chỉ hỗ trợ URL đã được lưu trữ bên ngoài.
+  // Upload trực tiếp lên private R2 để tránh giới hạn request của serverless.
   const [showAddMaterialForm, setShowAddMaterialForm] = useState(false);
   const [newMaterialType, setNewMaterialType] = useState<"video" | "pdf" | "slide" | "document" | "link">("video");
   const [newMaterialTitle, setNewMaterialTitle] = useState("");
   const [newMaterialUrl, setNewMaterialUrl] = useState("");
+  const [newMaterialFile, setNewMaterialFile] = useState<File | null>(null);
+  const [materialUploadProgress, setMaterialUploadProgress] = useState<number | null>(null);
   const [materialErrorMessage, setMaterialErrorMessage] = useState("");
 
   // Tổng số bài học
@@ -307,11 +311,12 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   };
 
   // Thêm bài học mới
-  const handleAddLesson = async (chapterId: string) => {
+  const handleAddLesson = async (chapterId: string, kind: LessonKind) => {
     if (isLocked) return;
     try {
-      await addLesson(courseId, chapterId);
-      toast.success("Đã thêm bài học mới.");
+      await addLesson(courseId, chapterId, kind);
+      setAddLessonChapterId(null);
+      toast.success(`Đã thêm ${LESSON_KIND_LABELS[kind].toLowerCase()}.`);
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -332,10 +337,10 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   };
 
   // Di chuyển bài học
-  const handleMoveLesson = async (lessonId: string, direction: -1 | 1) => {
+  const handleMoveLesson = async (lessonId: string, destinationIndex: number) => {
     if (isLocked) return;
     try {
-      await moveLesson(courseId, lessonId, direction);
+      await moveLesson(courseId, lessonId, destinationIndex);
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -476,33 +481,56 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
   };
 
   // Thêm tài liệu mới vào bài học
-  const handleAddMaterial = (e: React.FormEvent) => {
+  const handleAddMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMaterialTitle.trim()) {
       setMaterialErrorMessage("Vui lòng nhập tên tài liệu.");
       return;
     }
-    if (!newMaterialUrl.trim()) {
+    if (newMaterialType === "link" && !newMaterialUrl.trim()) {
       setMaterialErrorMessage("Vui lòng nhập URL tài liệu.");
       return;
     }
+    if (newMaterialType !== "link" && !newMaterialFile) {
+      setMaterialErrorMessage("Vui lòng chọn tệp cần tải lên.");
+      return;
+    }
 
-    setLessonMaterialsList((prev) => [
-      ...prev,
-      {
-        type: newMaterialType,
-        title: newMaterialTitle.trim(),
-        url: newMaterialUrl.trim(),
-        fileSizeKb: null,
-        durationSeconds: null,
-      },
-    ]);
+    try {
+      if (newMaterialType === "link") {
+        setLessonMaterialsList((prev) => [...prev, { type: "link", title: newMaterialTitle.trim(), url: newMaterialUrl.trim(), fileSizeKb: null, durationSeconds: null }]);
+      } else if (newMaterialFile && editingLessonId) {
+        setMaterialUploadProgress(0);
+        const base = `/api/lecturer/courses/${courseId}/lessons/${editingLessonId}/materials`;
+        const preparedResponse = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "prepare", type: newMaterialType, name: newMaterialFile.name, size: newMaterialFile.size, contentType: newMaterialFile.type }) });
+        const prepared = await preparedResponse.json();
+        if (!preparedResponse.ok) throw new Error(prepared.error || "Không thể bắt đầu tải tệp.");
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", prepared.uploadUrl);
+          xhr.setRequestHeader("Content-Type", newMaterialFile.type);
+          xhr.upload.onprogress = (event) => { if (event.lengthComputable) setMaterialUploadProgress(Math.round(event.loaded / event.total * 100)); };
+          xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Tải tệp lên kho lưu trữ thất bại."));
+          xhr.onerror = () => reject(new Error("Mất kết nối khi tải tệp lên."));
+          xhr.send(newMaterialFile);
+        });
+        const confirmedResponse = await fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "confirm", ticket: prepared.ticket }) });
+        const confirmed = await confirmedResponse.json();
+        if (!confirmedResponse.ok) throw new Error(confirmed.error || "Không thể xác nhận tệp tải lên.");
+        setLessonMaterialsList((prev) => [...prev, confirmed]);
+      }
+      toast.success(newMaterialType === "link" ? "Đã thêm liên kết vào danh sách." : "Đã tải tài liệu lên thành công.");
+    } catch (err) {
+      setMaterialErrorMessage(err instanceof Error ? err.message : "Không thể thêm tài liệu.");
+      return;
+    } finally {
+      setMaterialUploadProgress(null);
+    }
 
     setNewMaterialTitle("");
     setNewMaterialUrl("");
     setShowAddMaterialForm(false);
     setMaterialErrorMessage("");
-    toast.success("Đã thêm tài liệu vào danh sách chuẩn bị lưu.");
   };
 
   // Xoá tài liệu khỏi danh sách bài học
@@ -671,7 +699,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                 </Button>
                 {chapters.length > 0 && (
                   <Button
-                    onClick={() => handleAddLesson(chapters[0].id)}
+                    onClick={() => setAddLessonChapterId(chapters[0].id)}
                     variant="default"
                     size="sm"
                     className="gap-1.5 cursor-pointer shadow-xs"
@@ -750,7 +778,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleAddLesson(ch.id)}
+                          onClick={() => setAddLessonChapterId(ch.id)}
                           className="gap-1 text-xs cursor-pointer"
                         >
                           <Plus className="size-3.5" />
@@ -910,7 +938,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                                 variant="ghost"
                                 size="sm"
                                 disabled={li === 0}
-                                onClick={() => handleMoveLesson(ls.id, -1)}
+                                onClick={() => handleMoveLesson(ls.id, li - 1)}
                                 className="size-8 p-0 cursor-pointer"
                                 title="Di chuyển lên"
                               >
@@ -920,7 +948,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                                 variant="ghost"
                                 size="sm"
                                 disabled={li === ch.lessons.length - 1}
-                                onClick={() => handleMoveLesson(ls.id, 1)}
+                                onClick={() => handleMoveLesson(ls.id, li + 1)}
                                 className="size-8 p-0 cursor-pointer"
                                 title="Di chuyển xuống"
                               >
@@ -1174,6 +1202,49 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
+          MODAL: CHỌN LOẠI BÀI HỌC
+          ───────────────────────────────────────────────────────────── */}
+      <Dialog
+        open={addLessonChapterId !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddLessonChapterId(null);
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Thêm bài học</DialogTitle>
+            <DialogDescription>Chọn loại nội dung ban đầu. Bạn có thể bổ sung tài liệu và bài tập sau.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([
+              ["video", "Tải video bài giảng lên."],
+              ["reading", "Soạn nội dung chữ ngay trên Codi."],
+              ["pdf", "Thêm slide hoặc tài liệu PDF."],
+              ["coding", "Tạo bài tập code và test tự động."],
+              ["tutorial", "Tạo hướng dẫn code theo từng bước."],
+            ] as const).map(([kind, description]) => (
+              <Button
+                key={kind}
+                type="button"
+                variant="outline"
+                className="h-auto min-h-16 justify-start whitespace-normal p-3 text-left"
+                disabled={isLocked}
+                onClick={() => addLessonChapterId && void handleAddLesson(addLessonChapterId, kind)}
+              >
+                <span className="min-w-0">
+                  <span className="block font-medium">{LESSON_KIND_LABELS[kind]}</span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">{description}</span>
+                </span>
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setAddLessonChapterId(null)}>Huỷ</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─────────────────────────────────────────────────────────────
           MODAL: TRÌNH BIÊN TẬP CHI TIẾT BÀI HỌC & TÀI LIỆU (S22 / Finding 9)
           ───────────────────────────────────────────────────────────── */}
       <Dialog
@@ -1388,24 +1459,19 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                     </div>
 
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-[11px]">Đường dẫn (URL)</Label>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Input
-                          value={newMaterialUrl}
-                          onChange={(e) => {
-                            setNewMaterialUrl(e.target.value);
-                            setMaterialErrorMessage("");
-                          }}
-                          placeholder="https://..."
-                          className="h-9 text-xs flex-1"
-                        />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        Chỉ hỗ trợ đường dẫn (URL) tới tài liệu đã lưu trữ. Chưa hỗ trợ tải tệp lên.
-                      </p>
+                      {newMaterialType === "link" ? (
+                        <>
+                          <Label className="text-[11px]">Đường dẫn (URL)</Label>
+                          <Input value={newMaterialUrl} onChange={(e) => { setNewMaterialUrl(e.target.value); setMaterialErrorMessage(""); }} placeholder="https://..." className="h-9 text-xs flex-1" />
+                        </>
+                      ) : (
+                        <>
+                          <Label className="text-[11px]">Tệp (tối đa 200 MB)</Label>
+                          <Input type="file" accept={newMaterialType === "video" ? "video/mp4,video/webm,video/quicktime" : newMaterialType === "pdf" ? ".pdf,application/pdf" : newMaterialType === "slide" ? ".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" : ".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"} onChange={(e) => { setNewMaterialFile(e.target.files?.[0] ?? null); setMaterialErrorMessage(""); }} className="h-9 text-xs" />
+                          {newMaterialFile && <p className="text-[11px] text-muted-foreground">{newMaterialFile.name} · {(newMaterialFile.size / 1024 / 1024).toFixed(1)} MB</p>}
+                        </>
+                      )}
+                      {materialUploadProgress !== null && <div className="space-y-1"><progress className="h-2 w-full" max={100} value={materialUploadProgress} /><p className="text-[11px] text-muted-foreground">Đang tải lên: {materialUploadProgress}%</p></div>}
 
                       {materialErrorMessage && (
                         <p className="text-[11px] text-destructive flex items-center gap-1 font-medium">
@@ -1420,7 +1486,7 @@ export function CourseEditor({ courseId, activeTab, data }: CourseEditorProps) {
                         type="button"
                         size="sm"
                         onClick={handleAddMaterial}
-                        disabled={isSavingLesson}
+                        disabled={isSavingLesson || materialUploadProgress !== null}
                         className="text-xs cursor-pointer shadow-xs"
                       >
                         Thêm vào danh sách

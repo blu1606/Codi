@@ -28,6 +28,7 @@ import { createNotificationService } from "./notification-service";
 import {
   lessonChecklist,
   lessonMaterialUrl,
+  hasLessonMaterialUrl,
   lessonPlayerCommand,
   recordPdfPage,
   requireLessonChecklist,
@@ -146,7 +147,9 @@ async function view(
       id: m.id,
       title: m.title,
       type: m.type,
-      url: lessonMaterialUrl(m.url),
+      url: m.url.startsWith("r2-private://")
+        ? `/api/learn/${courseId}/lessons/${lessonId}/materials/${m.id}`
+        : lessonMaterialUrl(m.url),
       durationSeconds: m.durationSeconds,
     })),
     media: ctx.progress?.mediaProgress ?? {},
@@ -199,7 +202,7 @@ export function createLessonPlayerService(db: Database) {
             );
           if (
             !ctx.lesson.body?.trim() &&
-            !ctx.materials.some((m) => lessonMaterialUrl(m.url))
+            !ctx.materials.some((m) => hasLessonMaterialUrl(m.url))
           )
             throw new LearningPathError("Bài học chưa có nội dung để học.");
           values.studiedAt = p?.studiedAt ?? now;
@@ -207,7 +210,7 @@ export function createLessonPlayerService(db: Database) {
           const material = ctx.materials.find(
             (m) => m.id === command.materialId,
           );
-          if (!material || !lessonMaterialUrl(material.url))
+          if (!material || !hasLessonMaterialUrl(material.url))
             throw new LearningPathError(
               "Không tìm thấy tài liệu hợp lệ của bài học.",
               404,

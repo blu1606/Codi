@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { bigint, boolean, check, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { courses } from "./courses";
 
+export const courseLessonKind = pgEnum("course_lesson_kind", ["reading", "video", "pdf", "coding", "tutorial"]);
+
 export const courseDetails = pgTable.withRLS("course_details", {
   courseId: text("course_id").primaryKey().references(() => courses.id, { onDelete: "cascade" }),
   learningOutcomes: text("learning_outcomes").array().default(sql`'{}'::text[]`).notNull(),
@@ -37,6 +39,7 @@ export const courseLessons = pgTable.withRLS("course_lessons", {
   isFreePreview: boolean("is_free_preview").default(false).notNull(),
   // Remedial lessons are only scheduled by the personalised path when mastery is low.
   isRemedial: boolean("is_remedial").default(false).notNull(),
+  kind: courseLessonKind("kind").default("reading").notNull(),
 }, (table) => [
   index("course_lessons_chapter_position_idx").on(table.chapterId, table.position),
   check("course_lessons_position_check", sql`${table.position} >= 0`),

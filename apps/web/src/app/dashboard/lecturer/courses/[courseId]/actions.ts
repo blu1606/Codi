@@ -37,6 +37,7 @@ import {
 import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
 import { AI_QUIZ_MAX_MATERIAL_CHARS, AI_QUIZ_MAX_QUESTIONS, aiQuizFailure, generateQuizDraft } from "@/lib/quiz-ai-generation";
+import { reorderLessonIds, type LessonKind } from "@/lib/course-content-contract";
 
 export interface UpdateCourseInfoInput {
   title: string;
@@ -364,10 +365,15 @@ export async function deleteChapter(courseId: string, chapterId: string) {
 export async function addLesson(
   courseId: string,
   chapterId: string,
+  kind: LessonKind = "reading",
   title?: string
 ) {
   return withCourseContentWrite(courseId, async (db) => {
   await requireCourseChapter(courseId, chapterId, db);
+
+  if (!(["reading", "video", "pdf", "coding", "tutorial"] as const).includes(kind)) {
+    throw new Error("Loại bài học không hợp lệ.");
+  }
 
   const [lastLesson] = await db
     .select({ position: courseLessons.position })
@@ -377,15 +383,17 @@ export async function addLesson(
     .limit(1);
 
   const nextPos = (lastLesson?.position ?? -1) + 1;
-  const lessonTitle = title?.trim() || `Bài học ${nextPos + 1}`;
+  const fallbackTitle = kind === "coding" ? "Bài code mới" : kind === "tutorial" ? "Hướng dẫn code mới" : "Bài học mới";
+  const lessonTitle = title?.trim() || fallbackTitle;
 
   const [inserted] = await db
     .insert(courseLessons)
     .values({
       chapterId,
       title: lessonTitle,
+      kind,
       position: nextPos,
-      durationSeconds: 600, // 10 phút mặc định
+      durationSeconds: kind === "coding" || kind === "tutorial" ? 1200 : 600,
     })
     .returning();
 
@@ -422,7 +430,7 @@ export async function renameLesson(
 export async function moveLesson(
   courseId: string,
   lessonId: string,
-  direction: -1 | 1
+  destinationIndex: number
 ) {
   return withCourseContentWrite(courseId, async (db) => {
   const current = await requireCourseLesson(courseId, lessonId, db);
@@ -433,27 +441,18 @@ export async function moveLesson(
     .where(eq(courseLessons.chapterId, current.chapterId))
     .orderBy(asc(courseLessons.position));
 
-  const idx = siblingLessons.findIndex((ls) => ls.id === lessonId);
-  if (idx === -1) return { success: false };
+  const reordered = reorderLessonIds(
+    siblingLessons.map((lesson) => lesson.id),
+    lessonId,
+    destinationIndex,
+  );
+  if (!reordered) return { success: false };
 
-  const targetIdx = idx + direction;
-  if (targetIdx < 0 || targetIdx >= siblingLessons.length) return { success: false };
-
-  const targetLs = siblingLessons[targetIdx];
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(courseLessons)
-      .set({ position: targetLs.position })
-      .where(and(eq(courseLessons.id, current.id), eq(courseLessons.chapterId, current.chapterId)));
-
-    await tx
-      .update(courseLessons)
-      .set({ position: current.position })
-      .where(and(eq(courseLessons.id, targetLs.id), eq(courseLessons.chapterId, targetLs.chapterId)));
-
-
-  });
+  for (const [position, id] of reordered.entries()) {
+    await db.update(courseLessons)
+      .set({ position })
+      .where(and(eq(courseLessons.id, id), eq(courseLessons.chapterId, current.chapterId)));
+  }
 
   return { success: true };
   });
@@ -532,6 +531,7 @@ export async function deleteLesson(courseId: string, lessonId: string) {
         body: deletedLesson.body,
         isFreePreview: deletedLesson.isFreePreview,
         isRemedial: deletedLesson.isRemedial,
+        kind: deletedLesson.kind,
       },
       materials,
       assessments: [],
@@ -582,6 +582,7 @@ export async function restoreLesson(
       body: isFull ? snapshot.lesson.body : null,
       isFreePreview: isFull ? snapshot.lesson.isFreePreview : false,
       isRemedial: isFull ? snapshot.lesson.isRemedial : false,
+      kind: isFull ? snapshot.lesson.kind : "reading",
     });
 
     // 2. Phục hồi tài liệu nếu có

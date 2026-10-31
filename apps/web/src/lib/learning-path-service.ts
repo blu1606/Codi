@@ -267,7 +267,7 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
       when exists (select 1 from ${lessonMaterials} m where m.lesson_id = ${outerLessonId} and m.type = 'video') then 'video'
       when exists (select 1 from ${lessonMaterials} m where m.lesson_id = ${outerLessonId} and m.type in ('pdf', 'slide')) then 'pdf'
       when exists (select 1 from ${assessments} a where a.lesson_id = ${outerLessonId} and a.status = 'published' and a.is_diagnostic = false and a.type = 'quiz') then 'quiz'
-      else 'reading' end`,
+      else ${courseLessons.kind} end`,
     })
     .from(courseLessons)
     .where(

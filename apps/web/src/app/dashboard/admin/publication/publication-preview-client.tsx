@@ -6,6 +6,7 @@ import { Button } from "@codi-1/ui/components/button";
 import type { CourseDataForReview, LessonLike, QuizQuestionLike } from "@/lib/publication-service";
 
 function safeUrl(value?: string | null) {
+  if (value?.startsWith("/") && !value.startsWith("//") && !/[\\\u0000-\u0020\u007f]/.test(value)) return value;
   try {
     const url = new URL(value || "");
     return ["https:", "http:"].includes(url.protocol) ? url.href : null;
