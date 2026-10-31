@@ -8,10 +8,10 @@ Trước khi đưa vào production:
 
 1. Kiểm tra migration additive và thử migration trên database riêng có schema tương đương; không dùng `db:push` hay chạy migration thử trên database production.
 2. Xác minh các biến môi trường mà từng handler cần, cấp cho worker qua cấu hình bảo mật trên server. Không đưa giá trị vào Git, container image hoặc GitHub Actions log. Chỉ bật provider sau khi được phép sử dụng.
-3. Build và kiểm tra image worker trên bản commit dự kiến. Compose có profile `ai-worker` riêng, không publish port và giới hạn CPU/RAM; worker không khởi chạy trong deploy thông thường. Chỉ bật sau khi schema, secrets, hàng đợi và kế hoạch rollout production đã được duyệt.
+3. Build và kiểm tra image worker trên bản commit dự kiến. Compose có profile `ai-worker` riêng, không publish port và giới hạn CPU/RAM. Mỗi lần deploy production phải bao gồm profile này để worker đã bật được recreate từ cùng image revision bất biến với web.
 4. Theo dõi job thất bại, lease hết hạn và log đã loại bỏ dữ liệu nhạy cảm. Kiểm tra ảnh hưởng CPU/RAM tới các ứng dụng khác trên VPS. Tắt tính năng bằng cấu hình/triển khai được kiểm thử nếu có sự cố.
 
-Profile worker được khai báo trong compose của repo nhưng pipeline production gọi `/opt/codi/deploy.sh` và dùng `/etc/codi/compose.yml` đã cài sẵn trên VPS. Pipeline không chép compose từ repo hoặc bật profile này; cần cập nhật file compose trên server riêng trước khi worker có thể được chạy. File này không tự bật cờ trên web, chạy migration hay triển khai worker.
+Profile worker được khai báo trong compose của repo; production dùng `/etc/codi/compose.yml` đã cài sẵn trên VPS. Script `/usr/local/sbin/codi-deploy` được đồng bộ từ `scripts/ops/codi-deploy` trong release và chạy Compose với profile `ai-worker`, để web/worker cùng revision được recreate và rollback cùng nhau. Compose trên VPS phải giữ profile, không publish port, giới hạn tài nguyên và env file bảo mật. Script không chạy migration và không tự bật feature flag.
 
 ## Khởi chạy và vận hành
 
