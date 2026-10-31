@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import {
   conversationMessages,
@@ -31,6 +31,7 @@ export {
  */
 export async function listLessonQuestions(
   store: Database,
+  viewerUserId: string,
   courseId: string,
   lessonId: string,
 ): Promise<LessonQuestion[]> {
@@ -52,6 +53,9 @@ export async function listLessonQuestions(
       and(
         eq(courseDiscussions.courseId, courseId),
         eq(courseDiscussions.lessonId, lessonId),
+        // Q20: a learner can only read their own question thread. The course
+        // lecturer reads all threads through the lecturer question inbox.
+        eq(courseDiscussions.authorId, viewerUserId),
         isNull(courseDiscussions.parentId),
         eq(courseDiscussions.isHidden, false),
       ),
@@ -79,6 +83,10 @@ export async function listLessonQuestions(
       and(
         inArray(courseDiscussions.parentId, parentIds),
         eq(courseDiscussions.isHidden, false),
+        or(
+          eq(courseDiscussions.authorId, viewerUserId),
+          eq(courseDiscussions.isLecturerReply, true),
+        ),
       ),
     )
     .orderBy(courseDiscussions.createdAt);
@@ -368,6 +376,8 @@ export async function postLearnerConversationReply(
   store: Database,
   userId: string,
   conversationId: number,
+  expectedCourseId: string,
+  expectedLessonId: string,
   text: string,
 ): Promise<LearnerConversationMessage> {
   const check = validateQuestionText(text);
@@ -388,7 +398,12 @@ export async function postLearnerConversationReply(
     .where(eq(courseConversations.id, conversationId))
     .limit(1);
 
-  if (!conv || conv.learnerId !== userId) {
+  if (
+    !conv ||
+    conv.learnerId !== userId ||
+    conv.courseId !== expectedCourseId ||
+    conv.lessonId !== expectedLessonId
+  ) {
     throw new Error("Không tìm thấy cuộc trao đổi.");
   }
 

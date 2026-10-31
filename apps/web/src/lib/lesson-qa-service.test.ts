@@ -120,8 +120,38 @@ describe("Lesson Q&A & Lecturer Conversations Service", () => {
         fakeStore,
         "user-1",
         99,
+        "course-1",
+        "lesson-1",
         "Em vẫn còn câu hỏi muốn hỏi thêm ạ.",
       ),
     ).rejects.toThrow("Cuộc trao đổi đã được giải quyết");
+  });
+
+  it("does not allow replying through a different course or lesson route", async () => {
+    const fakeStore = {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([{
+              id: 99,
+              learnerId: "user-1",
+              lecturerId: "lecturer-1",
+              status: "open",
+              courseId: "course-1",
+              lessonId: "lesson-1",
+            }]),
+          }),
+        }),
+      }),
+    } as any;
+
+    await expect(postLearnerConversationReply(
+      fakeStore,
+      "user-1",
+      99,
+      "different-course",
+      "lesson-1",
+      "Em vẫn còn câu hỏi muốn hỏi thêm ạ.",
+    )).rejects.toThrow("Không tìm thấy cuộc trao đổi");
   });
 });
