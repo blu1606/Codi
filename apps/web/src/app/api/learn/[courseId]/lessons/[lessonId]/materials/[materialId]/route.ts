@@ -22,7 +22,9 @@ export async function GET(request: NextRequest, context: Context) {
     if (!key || !client || !bucket || bucket === R2_BUCKET) return NextResponse.json({ error: "Không tìm thấy tài liệu." }, { status: 404, headers: privateHeaders });
     const disposition = material.type === "video" || material.type === "pdf" || material.type === "slide" ? "inline" : "attachment";
     const safeName = encodeURIComponent(material.title).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-    const url = await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: `${disposition}; filename*=UTF-8''${safeName}` }), { expiresIn: 60 });
+    // Video players issue follow-up byte-range requests throughout playback.
+    // Keep the authenticated, private URL valid long enough for those requests.
+    const url = await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: `${disposition}; filename*=UTF-8''${safeName}` }), { expiresIn: 3600 });
     return NextResponse.redirect(url, { status: 307, headers: privateHeaders });
   } catch (error) {
     return learningFailure(error);
