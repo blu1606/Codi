@@ -21,7 +21,7 @@ vi.mock("@/services", () => ({
 vi.mock("@/lib/checkout-cart", () => ({
   createOrderFromCart: mocks.createOrderFromCart,
   CheckoutError: class CheckoutError extends Error {
-    constructor(public status: number, message: string, public code?: string) {
+    constructor(public status: number, message: string, public code?: string, public pendingOrder?: unknown) {
       super(message);
       this.name = "CheckoutError";
     }
@@ -59,13 +59,14 @@ describe("POST /api/orders/checkout", () => {
     mocks.getSession.mockResolvedValueOnce({ user: { id: "u-1" } });
     mocks.requireRole.mockResolvedValueOnce(undefined);
     mocks.createOrderFromCart.mockRejectedValueOnce(
-      new CheckoutError(503, "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán."),
+      new CheckoutError(503, "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.", "PAYMENTS_UNAVAILABLE"),
     );
 
     const res = await POST(makePostRequest({}));
     expect(res.status).toBe(503);
     const data = await res.json();
     expect(data.error).toBe("Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.");
+    expect(data.code).toBe("PAYMENTS_UNAVAILABLE");
   });
 
   it("allows zero-total order to proceed even when payment gateway config is missing", async () => {

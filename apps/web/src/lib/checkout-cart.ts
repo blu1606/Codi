@@ -64,7 +64,11 @@ export async function createOrderFromCart(
 
   // Guard against missing payment gateway config for orders with total > 0
   if (summary.total > 0 && !getSepayConfig()) {
-    throw new CheckoutError(503, "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.");
+    throw new CheckoutError(
+      503,
+      "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.",
+      "PAYMENTS_UNAVAILABLE",
+    );
   }
 
   return await db.transaction(async (tx) => {
