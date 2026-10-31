@@ -84,6 +84,16 @@ describe("knowledge map worker", () => {
     expect(finish).toHaveBeenCalledWith(expect.anything(), "a", "b", "failed", "content_changed");
     expect(enqueueLatest).toHaveBeenCalledWith(expect.anything(), { courseId: "course", userId: "owner" });
   });
+  it("queues the newest generation if an obsolete analysis fails", async () => {
+    const f = fixture();
+    f.generate.mockImplementation(async () => {
+      f.course.knowledgeMapContentGeneration = 3;
+      throw new Error("provider failed");
+    });
+    await runKnowledgeMapJob(f.db, job, f.generate);
+    expect(finish).toHaveBeenCalledWith(expect.anything(), "a", "b", "failed", "analysis_failed");
+    expect(enqueueLatest).toHaveBeenCalledWith(expect.anything(), { courseId: "course", userId: "owner" });
+  });
   it("does not call AI after lecturer role is revoked", async () => {
     activeRoles.mockResolvedValue([]);
     const f = fixture();
