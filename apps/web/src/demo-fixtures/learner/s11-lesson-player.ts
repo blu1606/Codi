@@ -122,7 +122,7 @@ export const quizPassed: AssessmentView = {
   previousQuizPercent: 100,
   submission: {
     id: 901, attempt: 1, status: "graded", score: 100, quizPercent: 100, isPassed: true,
-    submittedAt: "2026-10-25T13:10:00.000Z", gradedAt: "2026-10-25T13:10:00.000Z", feedback: null,
+    submittedAt: "2026-10-25T13:10:00.000Z", gradedAt: "2026-10-25T13:10:00.000Z", feedback: null, rubricScores: null,
     fileName: null, fileUrl: null, linkUrl: null, answerText: null, draft: null,
     answers: [{ questionId: 1, optionId: 2 }, { questionId: 2, optionId: 5 }, { questionId: 3, optionId: 7 }],
     review: [
@@ -139,7 +139,7 @@ export const quizFailed: AssessmentView = {
   previousQuizPercent: 67,
   submission: {
     id: 902, attempt: 2, status: "graded", score: 67, quizPercent: 67, isPassed: false,
-    submittedAt: "2026-10-25T13:20:00.000Z", gradedAt: "2026-10-25T13:20:00.000Z", feedback: null,
+    submittedAt: "2026-10-25T13:20:00.000Z", gradedAt: "2026-10-25T13:20:00.000Z", feedback: null, rubricScores: null,
     fileName: null, fileUrl: null, linkUrl: null, answerText: null, draft: null,
     answers: [{ questionId: 1, optionId: 3 }, { questionId: 2, optionId: 5 }, { questionId: 3, optionId: 7 }],
     review: [
@@ -159,7 +159,11 @@ const assignmentBase: AssessmentView = {
   passingScore: 5,
   submissionFormat: "file_or_link",
   maxFileSizeMb: 5,
-  rubric: "Đúng logic (4 điểm) · Dùng DOM API đúng cách (3 điểm) · Xử lý mảng rỗng (3 điểm)",
+  rubric: JSON.stringify([
+    { id: "logic", name: "Đúng logic", points: 4 },
+    { id: "dom-api", name: "Dùng DOM API đúng cách", points: 3 },
+    { id: "empty-array", name: "Xử lý mảng rỗng", points: 3 },
+  ]),
   dueDays: 7,
   questions: [],
   submission: null,
@@ -173,7 +177,7 @@ export const assignmentSubmitted: AssessmentView = {
   ...assignmentBase,
   submission: {
     id: 931, attempt: 1, status: "pending", score: null, quizPercent: null, isPassed: null,
-    submittedAt: "2026-10-24T20:00:00.000Z", gradedAt: null, feedback: null,
+    submittedAt: "2026-10-24T20:00:00.000Z", gradedAt: null, feedback: null, rubricScores: null,
     fileName: "render-todos.js", fileUrl: null, linkUrl: null, answerText: "Em dùng createElement và append.", draft: null,
     answers: [], review: [],
   },
@@ -186,6 +190,7 @@ export const assignmentGraded: AssessmentView = {
     id: 932, attempt: 1, status: "graded", score: 8.5, quizPercent: null, isPassed: true,
     submittedAt: "2026-10-24T20:00:00.000Z", gradedAt: "2026-10-25T09:00:00.000Z",
     feedback: "Làm tốt! Nên thêm kiểm tra mảng rỗng để tránh lỗi khi render.",
+    rubricScores: { logic: 4, "dom-api": 2.5, "empty-array": 2 },
     fileName: "render-todos.js", fileUrl: null, linkUrl: null, answerText: null, draft: null,
     answers: [], review: [],
   },

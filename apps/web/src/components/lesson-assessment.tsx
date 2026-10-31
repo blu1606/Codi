@@ -33,6 +33,27 @@ import { readLessonResponse } from "@/lib/lesson-player-http";
 
 type Props = { endpoint: string; onChanged: () => Promise<unknown> };
 type Command = (command: AssessmentCommand) => Promise<AssessmentView>;
+
+function rubricCriteria(value: string | null) {
+  if (!value) return [] as { id: string; name: string; max: number }[];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>;
+      const id = typeof row.id === "string" ? row.id : null;
+      const name = [row.name, row.title, row.label].find((v) => typeof v === "string");
+      const max = typeof row.points === "number" ? row.points : row.maxScore;
+      return id && typeof name === "string" && typeof max === "number" && Number.isFinite(max) && max >= 0
+        ? [{ id, name, max }]
+        : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
 export default function LessonAssessment({ endpoint, onChanged }: Props) {
   const [data, setData] = useState<AssessmentView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -673,9 +694,18 @@ function AssignmentAssessment({
           <summary className="cursor-pointer text-sm font-medium">
             Thang chấm
           </summary>
-          <p className="mt-3 whitespace-pre-wrap break-words text-sm">
-            {data.rubric}
-          </p>
+          {rubricCriteria(data.rubric).length ? (
+            <ul className="mt-3 space-y-2 text-sm">
+              {rubricCriteria(data.rubric).map((criterion) => (
+                <li key={criterion.id} className="flex justify-between gap-4">
+                  <span>{criterion.name}</span>
+                  <span className="shrink-0 text-muted-foreground">{criterion.max} điểm</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 whitespace-pre-wrap break-words text-sm">{data.rubric}</p>
+          )}
         </details>
       )}
       {error && !editing && <Alert variant="destructive">{error}</Alert>}
@@ -699,6 +729,21 @@ function AssignmentAssessment({
           <p className="whitespace-pre-wrap break-words text-sm">
             {s.feedback || "Không có nhận xét."}
           </p>
+          {s.rubricScores && rubricCriteria(data.rubric).some((criterion) =>
+            Object.hasOwn(s.rubricScores!, criterion.id),
+          ) && (
+            <section aria-label="Điểm theo tiêu chí rubric" className="space-y-2 border-t border-border pt-3">
+              <h4 className="text-sm font-medium">Điểm theo từng tiêu chí</h4>
+              <dl className="space-y-1 text-sm">
+                {rubricCriteria(data.rubric).filter((criterion) => Object.hasOwn(s.rubricScores!, criterion.id)).map((criterion) => (
+                  <div key={criterion.id} className="flex justify-between gap-4">
+                    <dt>{criterion.name}</dt>
+                    <dd className="font-medium">{s.rubricScores![criterion.id]}/{criterion.max}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
           <p className="text-sm text-muted-foreground">
             Bài đã chấm không thể nộp lại.
           </p>

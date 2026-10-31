@@ -79,6 +79,7 @@ describe.each(cases)("learner feedback: %s", (_name, raw, expected) => {
   it("redacts internals at the actual assessment service DTO, preserving legitimate score", async () => {
     const dto = await assessmentDto(raw);
     expect(dto.submission?.feedback).toBe(expected);
+    expect(dto.submission?.rubricScores).toEqual(parseFeedbackAndHistory(raw).rubricScores);
     expect(dto.submission?.score).toBe(8);
     expect(dto.submission?.isPassed).toBe(true);
     expect(JSON.stringify(dto)).not.toContain("PRIVATE_");
@@ -101,6 +102,7 @@ it.each([visible, "", "Literal <!--grading_history:example--> and -->\n\n<!--gra
     const dto = await assessmentDto(raw);
     const overview = resultView(assessment, submission(raw));
     expect(dto.submission?.feedback).toBe(text);
+    expect(dto.submission?.rubricScores).toEqual({ logic: 8 });
     expect(overview.feedback).toBe(text);
     expect(dto.submission?.score).toBe(8);
     expect(overview.percent).toBe(80);

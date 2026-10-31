@@ -47,6 +47,7 @@ const sub = (
   submittedAt: null,
   gradedAt: null,
   feedback: null,
+  rubricScores: null,
   fileName: null,
   fileUrl: null,
   linkUrl: null,
@@ -365,6 +366,31 @@ describe("assignment player", () => {
     expect(document.body.textContent).toContain("Giải thích tốt");
     expect(document.body.textContent).toContain("không thể nộp lại");
     expect(document.querySelector("textarea")).toBeNull();
+  });
+  it("shows persisted rubric scores by criterion after lecturer grading", async () => {
+    await mount(
+      vi.fn().mockResolvedValue(
+        response({
+          ...assignment,
+          rubric: JSON.stringify([
+            { id: "logic", name: "Lập luận", points: 6 },
+            { id: "clarity", name: "Trình bày", points: 4 },
+          ]),
+          submission: sub({
+            status: "graded",
+            score: 8,
+            rubricScores: { logic: 5, clarity: 3 },
+          }),
+        }),
+      ),
+    );
+    expect(document.body.textContent).toContain("Điểm theo từng tiêu chí");
+    expect(document.body.textContent).toContain("Lập luận");
+    expect(document.body.textContent).toContain("6 điểm");
+    expect(document.body.textContent).toContain("Lập luận");
+    expect(document.body.textContent).toContain("5/6");
+    expect(document.body.textContent).toContain("Trình bày");
+    expect(document.body.textContent).toContain("3/4");
   });
   it("flushes unsaved keystrokes when leaving before the autosave debounce", async () => {
     const fetcher = vi.fn().mockResolvedValue(response(assignment));
