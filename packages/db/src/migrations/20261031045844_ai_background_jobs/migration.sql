@@ -1,4 +1,4 @@
-CREATE TABLE "ai_jobs" (
+CREATE TABLE IF NOT EXISTS "ai_jobs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"type" text NOT NULL,
 	"user_id" text NOT NULL,
@@ -18,11 +18,24 @@ CREATE TABLE "ai_jobs" (
 );
 --> statement-breakpoint
 ALTER TABLE "ai_jobs" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "github_generation_reservations" DROP CONSTRAINT "github_generation_reservations_request_id_key";--> statement-breakpoint
-ALTER TABLE "github_generation_reservations" DROP CONSTRAINT "github_generation_reservations_pkey";--> statement-breakpoint
-ALTER TABLE "github_generation_reservations" ADD PRIMARY KEY ("request_id");--> statement-breakpoint
-CREATE INDEX "github_generation_reservations_budget_key_idx" ON "github_generation_reservations" ("budget_key");--> statement-breakpoint
-CREATE INDEX "ai_jobs_queue_idx" ON "ai_jobs" ("status","created_at");--> statement-breakpoint
-CREATE INDEX "ai_jobs_quota_idx" ON "ai_jobs" ("type","user_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "ai_jobs_active_unique_idx" ON "ai_jobs" ("type","user_id","resource_id") WHERE "status" in ('queued', 'running');--> statement-breakpoint
-ALTER TABLE "ai_jobs" ADD CONSTRAINT "ai_jobs_user_id_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;
+ALTER TABLE "github_generation_reservations" DROP CONSTRAINT IF EXISTS "github_generation_reservations_request_id_key";--> statement-breakpoint
+DO $$ BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conrelid = 'github_generation_reservations'::regclass
+		  AND conname = 'github_generation_reservations_pkey'
+		  AND pg_get_constraintdef(oid) = 'PRIMARY KEY (request_id)'
+	) THEN
+		ALTER TABLE "github_generation_reservations" DROP CONSTRAINT IF EXISTS "github_generation_reservations_pkey";
+		ALTER TABLE "github_generation_reservations" ADD PRIMARY KEY ("request_id");
+	END IF;
+END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "github_generation_reservations_budget_key_idx" ON "github_generation_reservations" ("budget_key");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ai_jobs_queue_idx" ON "ai_jobs" ("status","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ai_jobs_quota_idx" ON "ai_jobs" ("type","user_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "ai_jobs_active_unique_idx" ON "ai_jobs" ("type","user_id","resource_id") WHERE "status" in ('queued', 'running');--> statement-breakpoint
+DO $$ BEGIN
+	IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'ai_jobs'::regclass AND conname = 'ai_jobs_user_id_user_id_fkey') THEN
+		ALTER TABLE "ai_jobs" ADD CONSTRAINT "ai_jobs_user_id_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;
+	END IF;
+END $$;
