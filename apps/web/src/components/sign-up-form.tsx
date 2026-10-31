@@ -40,6 +40,7 @@ export default function SignUpForm({
   const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const otpFailureMessage = "Mã OTP không chính xác hoặc đã hết hạn 2 phút.";
 
   const form = useForm({
     defaultValues: {
@@ -106,11 +107,11 @@ export default function SignUpForm({
               }, 1000);
             }
           },
-          onError: (ctx) => {
-            setOtpError(ctx.error.message || "Mã OTP không chính xác hoặc đã hết hạn 2 phút.");
-          },
+          onError: () => setOtpError(otpFailureMessage),
         }
       );
+    } catch {
+      setOtpError(otpFailureMessage);
     } finally {
       setVerifying(false);
     }
@@ -179,12 +180,17 @@ export default function SignUpForm({
             <div className="text-center text-xs text-muted-foreground">
               <span>Nhập nhầm email? </span>
               <Button
+                type="button"
                 variant="link"
                 size="sm"
-                onClick={() => setSignedUpEmail(null)}
+                onClick={() => {
+                  setOtp("");
+                  setOtpError(null);
+                  setSignedUpEmail(null);
+                }}
                 className="p-0 text-xs text-primary font-semibold hover:underline"
               >
-                Đăng ký lại
+                Sửa
               </Button>
             </div>
           </CardContent>

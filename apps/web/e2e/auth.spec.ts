@@ -49,7 +49,7 @@ test.describe("sign-up, OTP, password recovery, settings", () => {
     await digit(page, 1).click();
     await page.keyboard.type("000000");
     await health.expectHttp(page, { status: 400, method: "POST", pathname: "/api/auth/email-otp/verify-email" }, () => page.getByRole("button", { name: "Xác thực và hoàn tất" }).click());
-    await expect.soft(card(page).getByText(/mã .*(không đúng|không chính xác|không hợp lệ|hết hạn)/i)).toBeVisible();
+    await expect(card(page).getByText(/mã .*(không đúng|không chính xác|không hợp lệ|hết hạn)/i)).toBeVisible();
     for (let n = 1; n <= 6; n++) await expect(digit(page, n)).toHaveValue("0");
   });
 
@@ -62,9 +62,8 @@ test.describe("sign-up, OTP, password recovery, settings", () => {
 
   test("UI-COM-24 'Sửa' on the OTP screen returns to edit the email", async ({ page }) => {
     const email = await reachOtpScreen(page, "edit");
-    await expect.soft(page.getByRole("button", { name: "Sửa", exact: true })).toBeVisible();
-    // Keep the contract failure while independently exercising the existing email-edit control.
-    await page.getByRole("button", { name: /^(Sửa|Đăng ký lại)$/ }).click();
+    await expect(page.getByRole("button", { name: "Sửa", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Sửa", exact: true }).click();
     await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
     await expect(page.getByText("Xác thực tài khoản")).toHaveCount(0);
   });
