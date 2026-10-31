@@ -142,7 +142,7 @@ export default function ForgotPasswordPage() {
               </div>
               <CardTitle className="text-2xl font-bold tracking-tight">Đặt lại mật khẩu</CardTitle>
               <CardDescription className="text-xs/relaxed">
-                Nhập mã OTP gồm 6 chữ số đã gửi tới <strong>{submittedEmail}</strong> (hiệu lực 2 phút) và tạo mật khẩu mới.
+                Nếu email tồn tại, mã OTP đã được gửi tới <strong>{submittedEmail}</strong> (hiệu lực 2 phút). Nếu chưa thấy thư, hãy kiểm tra cả thư mục thư rác. Nhập mã để tạo mật khẩu mới.
               </CardDescription>
             </CardHeader>
 
