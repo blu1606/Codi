@@ -56,6 +56,7 @@ import {
 import type { FeedbackSnippetItem } from "../snippets/actions";
 import {
   gradeSubmission,
+  getAiGradingDraft,
   type GradingQueueResult,
   type SubmissionListItemDto,
 } from "./actions";
@@ -88,6 +89,8 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
   const [feedbackInput, setFeedbackInput] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAiDraftLoading, setIsAiDraftLoading] = useState(false);
+  const [aiDraftMessage, setAiDraftMessage] = useState<string | null>(null);
   const formView = useRef({ id: 0, token: "", dirty: false, revision: 0 });
 
   // Modals
@@ -109,6 +112,7 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
       setRubricScores(selectedSubmission.rubricScores || {});
       setFeedbackInput(selectedSubmission.feedback || "");
       setFormError(null);
+      setAiDraftMessage(null);
 
     } else {
       formView.current = { id: 0, token: "", dirty: false, revision: 0 };
@@ -116,9 +120,41 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
       setRubricScores({});
       setFeedbackInput("");
       setFormError(null);
+      setAiDraftMessage(null);
 
     }
   }, [selectedSubmission?.id, selectedSubmission?.viewToken]);
+
+  const requestAiGradingDraft = async () => {
+    if (!selectedSubmission || isAiDraftLoading) return;
+    const submissionId = selectedSubmission.id;
+    const revision = formView.current.revision;
+    setIsAiDraftLoading(true);
+    setAiDraftMessage(null);
+    try {
+      const result = await getAiGradingDraft({ submissionId, viewToken: formView.current.token });
+      if (formView.current.id !== submissionId) return;
+      if (!result.success || result.suggestedScore === undefined || result.feedback === undefined) {
+        setAiDraftMessage(result.error || "AI chưa gợi ý được. Vui lòng thử lại hoặc chấm bài thủ công.");
+        return;
+      }
+      if (formView.current.revision !== revision) {
+        setAiDraftMessage("Biểu mẫu đã được chỉnh trong lúc AI xử lý. Gợi ý chưa được áp dụng để tránh ghi đè nội dung của bạn; hãy yêu cầu lại.");
+        return;
+      }
+
+      if (selectedSubmission.rubric?.length && result.rubricScores) setRubricScores(result.rubricScores);
+      else setScoreInput(String(result.suggestedScore));
+      setFeedbackInput((current) => current.trim() ? `${current.trim()}\n\n${result.feedback}` : result.feedback!);
+      formView.current.dirty = true;
+      formView.current.revision++;
+      setAiDraftMessage("Đã điền bản nháp AI gợi ý. Hãy kiểm tra lại điểm và nhận xét trước khi lưu.");
+    } catch {
+      if (formView.current.id === submissionId) setAiDraftMessage("AI chưa gợi ý được. Vui lòng thử lại hoặc chấm bài thủ công.");
+    } finally {
+      setIsAiDraftLoading(false);
+    }
+  };
 
   // Compute live score from rubric if available
   const rubricList: RubricCriterion[] = selectedSubmission?.rubric || [];
@@ -759,15 +795,13 @@ export function GradingQueueClient({ data, snippets }: GradingQueueClientProps) 
                       </div>
                     )}
 
-                    {/* AI gợi ý điểm: chưa có backend (issue #232). Hiện trạng thái thật, không giả kết quả. */}
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button type="button" variant="ghost" size="sm" disabled className="gap-1.5">
-                        <Sparkles className="size-3.5" />
-                        AI gợi ý điểm và nhận xét
+                      <Button type="button" variant="ghost" size="sm" onClick={requestAiGradingDraft} disabled={isAiDraftLoading} className="gap-1.5">
+                        {isAiDraftLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                        {isAiDraftLoading ? "AI đang đọc bài nộp…" : "AI gợi ý điểm và nhận xét"}
                       </Button>
-                      <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Sắp có</span>
                     </div>
-                    <p role="status" className="text-sm text-muted-foreground">AI chấm bài chưa khả dụng. Vui lòng chấm bài thủ công theo thang điểm.</p>
+                    {aiDraftMessage && <p role="status" className="text-sm text-muted-foreground">{aiDraftMessage}</p>}
 
                     {/* Feedback Textarea + Snippet trigger */}
                     <div className="space-y-2">
