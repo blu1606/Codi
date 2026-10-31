@@ -39,9 +39,11 @@ describe("createOrderFromCart unit tests", () => {
     });
 
     const mockDb = {} as any;
-    await expect(createOrderFromCart(mockDb, "user-1")).rejects.toThrow(
-      "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.",
-    );
+    await expect(createOrderFromCart(mockDb, "user-1")).rejects.toMatchObject({
+      status: 503,
+      code: "PAYMENTS_UNAVAILABLE",
+      message: "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.",
+    });
   });
 
   it("throws 400 when cart is empty", async () => {
