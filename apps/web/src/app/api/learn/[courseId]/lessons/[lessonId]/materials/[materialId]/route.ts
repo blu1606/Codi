@@ -20,7 +20,9 @@ export async function GET(request: NextRequest, context: Context) {
     const client = getR2Client();
     const bucket = ENV.R2_ASSIGNMENT_BUCKET;
     if (!key || !client || !bucket || bucket === R2_BUCKET) return NextResponse.json({ error: "Không tìm thấy tài liệu." }, { status: 404, headers: privateHeaders });
-    const url = await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(material.title)}` }), { expiresIn: 60 });
+    const disposition = material.type === "video" || material.type === "pdf" || material.type === "slide" ? "inline" : "attachment";
+    const safeName = encodeURIComponent(material.title).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+    const url = await getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: `${disposition}; filename*=UTF-8''${safeName}` }), { expiresIn: 60 });
     return NextResponse.redirect(url, { status: 307, headers: privateHeaders });
   } catch (error) {
     return learningFailure(error);
