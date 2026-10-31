@@ -32,6 +32,23 @@ interface Failure {
   action?: "disconnect";
 }
 
+async function pollBackgroundProfile(signal: AbortSignal, jobId: string) {
+  for (;;) {
+    const response = await fetch("/api/github-profile", { credentials: "same-origin", cache: "no-store", signal });
+    const body = await response.json();
+    if (!response.ok || body?.job?.id !== jobId) throw new Error("job_unavailable");
+    if (body.job.status === "completed") return body;
+    if (body.job.status === "failed") throw new Error("job_failed");
+    if (!["queued", "running"].includes(body.job.status)) throw new Error("job_unavailable");
+    await new Promise<void>((resolve, reject) => {
+      if (signal.aborted) return reject(new Error("aborted"));
+      const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, 3000);
+      const abort = () => { clearTimeout(timer); reject(new Error("aborted")); };
+      signal.addEventListener("abort", abort, { once: true });
+    });
+  }
+}
+
 // Same GitHub mark as the existing sign-in button; the installed Lucide has no brand icons.
 const GITHUB_MARK =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z'/%3E%3C/svg%3E\")";
@@ -138,10 +155,12 @@ export default function GithubProfilePanel({
   initialProfile = null,
   initialLinked = null,
   initialLinkError = null,
+  initialJob = null,
 }: {
   initialProfile?: GithubProfileProjection | null;
   initialLinked?: boolean | null;
   initialLinkError?: "denied" | "already_linked" | "failed" | null;
+  initialJob?: { id: string; status: "queued" | "running" } | null;
 } = {}) {
   const [input, setInput] = useState("");
   const [consent, setConsent] = useState<"analysis" | "link" | null>(null);
@@ -176,6 +195,7 @@ export default function GithubProfilePanel({
     timer?: ReturnType<typeof setTimeout>;
   } | null>(null);
   const busy = pending || linking || disconnecting;
+  const initialJobId = initialJob?.id;
   const stale =
     profile &&
     Number.isFinite(Date.parse(profile.collectedAt)) &&
@@ -189,6 +209,29 @@ export default function GithubProfilePanel({
     },
     [],
   );
+
+  // Resume observing an existing job after a page reload; no new job is created.
+  useEffect(() => {
+    if (!initialJobId || active.current) return;
+    const controller = new AbortController();
+    const request = { controller };
+    active.current = request;
+    setPending(true);
+    void (async () => {
+      try {
+        const result = await pollBackgroundProfile(controller.signal, initialJobId);
+        if (active.current !== request) return;
+        if (result.job.errorCode === "no_observations") setNote("Chưa đủ dữ liệu GitHub để phân tích. Hồ sơ trước vẫn được giữ lại.");
+        else if (result.profile?.version === 1) { setNote(""); setProfile(result.profile); setResultOpen(true); }
+      } catch {
+        if (!controller.signal.aborted && active.current?.controller === controller)
+          setFailure({ code: "request_failed", error: "Chưa hoàn tất phân tích GitHub. Hồ sơ trước vẫn được giữ lại." });
+      } finally {
+        if (active.current?.controller === controller) { active.current = null; setPending(false); }
+      }
+    })();
+    return () => controller.abort();
+  }, [initialJobId]);
 
   function stopWaiting() {
     const request = active.current;
@@ -293,7 +336,7 @@ export default function GithubProfilePanel({
     setPending(true);
     let timedOut = false;
     try {
-      const result = await Promise.race([
+      let result = await Promise.race([
         (async () => {
           const response = await fetch("/api/github-profile", {
             method: "POST",
@@ -319,6 +362,18 @@ export default function GithubProfilePanel({
         }),
       ]);
       if (active.current !== request) return;
+      if (result.response.status === 202 && result.body?.job?.id) {
+        if (request.timer) { clearTimeout(request.timer); request.timer = undefined; }
+        setNote("Đang phân tích nền. Bạn có thể quay lại trang này sau.");
+        const body = await pollBackgroundProfile(request.controller.signal, result.body.job.id);
+        if (active.current !== request) return;
+        if (body.job.errorCode === "no_observations") {
+          setNote("Chưa đủ dữ liệu GitHub để phân tích. Hồ sơ trước vẫn được giữ lại.");
+          return;
+        }
+        setNote("");
+        result = { response: new Response(null, { status: 200 }), body };
+      }
       if (!result.response.ok) {
         const body = result.body as Partial<Failure> | null;
         setFailure({
@@ -350,14 +405,19 @@ export default function GithubProfilePanel({
           setResultOpen(true);
         }
       } else throw new Error("invalid_response");
-    } catch {
-      if (active.current === request)
+    } catch (error) {
+      if (active.current === request) {
+        const jobFailed = error instanceof Error && error.message === "job_failed";
+        if (jobFailed) setNote("");
         setFailure({
-          code: timedOut ? "client_timeout" : "request_failed",
+          code: timedOut ? "client_timeout" : jobFailed ? "background_failed" : "request_failed",
           error: timedOut
             ? "Đã hết thời gian chờ 60 giây. Chưa xác nhận được kết quả; yêu cầu trên máy chủ có thể vẫn đang hoàn tất. Không tự thử lại."
+            : jobFailed
+              ? "Phân tích GitHub không hoàn tất. Hồ sơ trước vẫn được giữ lại; bạn có thể thử lại."
             : "Chưa tạo được hồ sơ năng lực. Không thể đọc phản hồi máy chủ. Bạn có thể thử lại.",
         });
+      }
     } finally {
       if (request.timer) clearTimeout(request.timer);
       if (active.current === request) {

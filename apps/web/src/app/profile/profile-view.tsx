@@ -102,6 +102,7 @@ export function ProfileView({
                 initialProfile={githubState.initialProfile}
                 initialLinked={githubState.initialLinked}
                 initialLinkError={githubState.initialLinkError}
+                initialJob={githubState.initialJob}
               />
             </div>
           ) : (

@@ -96,6 +96,14 @@ afterEach(async () => {
 });
 
 describe("knowledge map client saved graph state", () => {
+  it("starts a background analysis only when configured", async () => {
+    const data = snapshot();
+    data.course.analysisAvailable = true;
+    await render(data);
+    await click("Phân tích bản đồ kiến thức");
+    expect(boundary.runKnowledgeMapAnalysis).toHaveBeenCalledWith("owned");
+    expect(document.body.textContent).toContain("Đang phân tích nội dung");
+  });
   it("explains legacy reconfirmation and clears the notice only after confirmation succeeds", async () => {
     const legacy = snapshot();
     legacy.concepts = legacy.concepts.map((concept) => ({ ...concept, review: "accepted" }));

@@ -33,6 +33,7 @@ import {
 import { Input } from "@codi-1/ui/components/input";
 import { Textarea } from "@codi-1/ui/components/textarea";
 import { cn } from "@codi-1/ui/lib/utils";
+import { startQuizGeneration, readQuizGeneration } from "../../quiz-ai-actions";
 import { QuizAiDialog, type AiQuizRequest } from "@/components/quiz-builder/quiz-ai-dialog";
 import { QuizImportDialog } from "@/components/quiz-builder/quiz-import-dialog";
 import { DEFAULT_MAX_QUIZ_OPTIONS, type QuizImportDraft } from "@/lib/quiz-import";
@@ -114,6 +115,7 @@ export function QuizBuilderClient({
   const [fieldErrors, setFieldErrors] = useState<QuizFieldErrors>({ questions: {} });
   const [importOpen, setImportOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [appliedAiJobIds, setAppliedAiJobIds] = useState<string[]>([]);
 
   // Thêm câu hỏi từ nhập hàng loạt hoặc AI vào cuối danh sách (chưa lưu)
   const appendQuestions = (added: QuizQuestionState[]) => {
@@ -134,13 +136,33 @@ export function QuizBuilderClient({
     toast.success(`Đã thêm ${drafts.length} câu vào danh sách. Nhớ lưu bài trắc nghiệm.`);
   };
 
-  const handleGenerateAi = (request: AiQuizRequest) =>
-    generateAiQuizQuestions(courseId, lessonId, request.count, request.difficulty, {
-      sourceText: request.sourceMode === "paste" ? request.sourceText : undefined,
-      focus: request.focus,
-    });
+  const resumeAiGeneration = async (signal?: AbortSignal, jobId?: string) => {
+    let result = await readQuizGeneration(courseId, lessonId, jobId);
+    if (result.status === "none") return null;
+    while (result.status === "queued" || result.status === "running") {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (signal?.aborted) return null;
+      result = await readQuizGeneration(courseId, lessonId, result.jobId);
+    }
+    if (result.status === "completed") {
+      if (appliedAiJobIds.includes(result.jobId)) return null;
+      return { success: true as const, questions: result.questions, jobId: result.jobId };
+    }
+    return { success: false as const, code: "unavailable" as const, message: "Tạo câu hỏi chưa hoàn tất. Bạn có thể thử lại.", retryable: true };
+  };
 
-  const handleApplyAiQuestions = (aiQuestions: QuizQuestionInput[]) => {
+  const handleGenerateAi = async (request: AiQuizRequest, signal?: AbortSignal) => {
+    const source = { sourceText: request.sourceMode === "paste" ? request.sourceText : undefined, focus: request.focus };
+    const job = await startQuizGeneration(courseId, lessonId, request.count, request.difficulty, source);
+    if (job.mode === "sync") return generateAiQuizQuestions(courseId, lessonId, request.count, request.difficulty, source);
+    if (job.mode === "error") return { success: false as const, code: "unavailable" as const, message: job.message, retryable: false };
+    return (await resumeAiGeneration(signal, job.id)) ?? { success: false as const, code: "unavailable" as const,
+      message: "Chưa tìm thấy tác vụ. Vui lòng thử lại.", retryable: true };
+  };
+
+  const handleApplyAiQuestions = (aiQuestions: QuizQuestionInput[], jobId?: string) => {
+    if (jobId && appliedAiJobIds.includes(jobId)) return;
+    if (jobId) setAppliedAiJobIds((ids) => [...ids, jobId]);
     appendQuestions(aiQuestions);
     toast.success(`Đã thêm ${aiQuestions.length} câu AI tạo vào danh sách. Nhớ lưu bài trắc nghiệm.`);
   };
@@ -345,6 +367,7 @@ export function QuizBuilderClient({
       await saveQuizData(courseId, lessonId, {
         passingScore,
         isEntry,
+        appliedAiJobIds,
         questions: questions.map((q) => ({
           id: q.id,
           text: q.text,
@@ -357,6 +380,7 @@ export function QuizBuilderClient({
       });
 
       setIsDirty(false);
+      setAppliedAiJobIds([]);
       toast.success(
         isEntry
           ? "Đã lưu Bài kiểm tra đầu vào thành công!"
@@ -794,6 +818,7 @@ export function QuizBuilderClient({
             onImport={handleImportDrafts}
           />
           <QuizAiDialog
+            onResume={resumeAiGeneration}
             open={aiOpen}
             onOpenChange={setAiOpen}
             lessonTitle={isEntry ? "Bài kiểm tra đầu vào" : lesson?.title || "Bài học"}

@@ -71,6 +71,7 @@ import {
   confirmKnowledgeMap,
   type KnowledgeMapDataDto,
   renameKnowledgeMapConcept,
+  runKnowledgeMapAnalysis,
   reviewKnowledgeMapItem,
 } from "./actions";
 
@@ -95,6 +96,7 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
 
   // Loading states
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isAnalysing, setIsAnalysing] = useState(false);
   const [isAcceptingAll, setIsAcceptingAll] = useState(false);
   const [showAcceptAllDialog, setShowAcceptAllDialog] = useState(false);
 
@@ -109,6 +111,26 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
   const [isAddingEdge, setIsAddingEdge] = useState(false);
 
   const { course, concepts, edges, isLocked, chapters, lessons } = data;
+
+  useEffect(() => {
+    if (!course.analysisAvailable || course.knowledgeMapStatus !== "analysing") return;
+    const timer = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(timer);
+  }, [course.analysisAvailable, course.knowledgeMapStatus, router]);
+
+  const handleAnalyse = async () => {
+    if (isLocked || isAnalysing) return;
+    try {
+      setIsAnalysing(true);
+      await runKnowledgeMapAnalysis(courseId);
+      setData((prev) => ({ ...prev, course: { ...prev.course, knowledgeMapStatus: "analysing" } }));
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Không thể bắt đầu phân tích.");
+    } finally {
+      setIsAnalysing(false);
+    }
+  };
 
   // Active / Live items (excluding declined)
   const liveConcepts = useMemo(() => concepts.filter((c) => c.review !== "declined"), [concepts]);
@@ -448,23 +470,34 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
       {/* ─────────────────────────────────────────────────────────────
           1. HEADER & STATUS BANNERS (STATE-MACHINES §18, PRODUCT S24)
           ───────────────────────────────────────────────────────────── */}
-      <Alert variant="info">
-        <AlertTitle>Phân tích AI chưa khả dụng</AlertTitle>
-        <AlertDescription>
-          Bản thử nghiệm không gọi dịch vụ AI và không tạo bản đồ mới. Nguồn AI và thời điểm tạo
-          đã lưu trước đây chưa được xác minh, không phải bằng chứng đã trích xuất nội dung.
-          Bạn vẫn có thể xem lại, sửa và xác nhận bản đồ hiện có nếu đủ điều kiện.
-          Khi chưa có bản đồ hợp lệ, khoá học chưa thể đáp ứng điều kiện bản đồ để xuất bản.
-        </AlertDescription>
-      </Alert>
-      {liveConcepts.length === 0 && (
-        <Alert variant="warning">
-          <AlertTitle>Chưa có bản đồ để xác nhận</AlertTitle>
+      {course.analysisAvailable ? (
+        <Alert variant="info">
+          <AlertTitle>Bản đồ do AI đề xuất</AlertTitle>
           <AlertDescription>
-            Bản đồ mới hoặc trống chưa thể tạo hoặc xác nhận trong bản thử nghiệm.
-            Thêm bài học không tự động tạo khái niệm hay quan hệ.
+            AI sử dụng tiêu đề, mô tả và tối đa 1.200 ký tự đầu của nội dung mỗi bài học để đề xuất khái niệm và quan hệ; chưa đọc PDF, slide hoặc video. Giảng viên cần kiểm tra và bổ sung trước khi xác nhận.
+            Bản đồ đã xác nhận và tiến độ học viên vẫn được giữ trong khi phân tích.
           </AlertDescription>
         </Alert>
+      ) : (
+        <Alert variant="info">
+          <AlertTitle>Phân tích AI chưa khả dụng</AlertTitle>
+          <AlertDescription>
+            Bản thử nghiệm không gọi dịch vụ AI và không tạo bản đồ mới. Nguồn AI và thời điểm tạo
+            đã lưu trước đây chưa được xác minh, không phải bằng chứng đã trích xuất nội dung.
+            Bạn vẫn có thể xem lại, sửa và xác nhận bản đồ hiện có nếu đủ điều kiện.
+            Khi chưa có bản đồ hợp lệ, khoá học chưa thể đáp ứng điều kiện bản đồ để xuất bản.
+          </AlertDescription>
+        </Alert>
+      )}
+      {!course.analysisAvailable && liveConcepts.length === 0 && (
+        <Alert variant="warning"><AlertTitle>Chưa có bản đồ để xác nhận</AlertTitle>
+          <AlertDescription>Bản đồ mới hoặc trống chưa thể tạo hoặc xác nhận trong bản thử nghiệm. Thêm bài học không tự động tạo khái niệm hay quan hệ.</AlertDescription>
+        </Alert>
+      )}
+      {course.analysisAvailable && !isLocked && course.knowledgeMapStatus !== "empty" && course.knowledgeMapStatus !== "analysing" && course.knowledgeMapStatus !== "failed" && (
+        <Button type="button" variant="outline" onClick={handleAnalyse} disabled={isAnalysing}>
+          {isAnalysing ? "Đang bắt đầu…" : "Phân tích bản đồ kiến thức"}
+        </Button>
       )}
       {course.requiresReconfirmation && (
         <Alert variant="info">
@@ -504,28 +537,28 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
         <Alert variant="destructive">
           <AlertTitle>Phân tích bản đồ kiến thức thất bại</AlertTitle>
           <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>Dịch vụ AI không phản hồi. Nội dung khoá học không bị ảnh hưởng.</span>
+            <span>Chưa hoàn tất phân tích. Nội dung và bản đồ đã xác nhận không bị ảnh hưởng.</span>
             <span className="flex shrink-0 items-center gap-2">
-              <Button type="button" variant="outline" size="sm" disabled className="gap-1.5">
+              <Button type="button" variant="outline" size="sm" disabled={!course.analysisAvailable || isLocked || isAnalysing} onClick={handleAnalyse} className="gap-1.5">
                 <RefreshCw className="size-3.5" />
                 Thử lại
               </Button>
-              <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Sắp có</span>
             </span>
           </AlertDescription>
         </Alert>
       )}
       {course.knowledgeMapStatus === "analysing" && (
         <Alert variant="warning">
-          <AlertTitle>Trạng thái phân tích cũ chưa được xác minh</AlertTitle>
-          <AlertDescription>Không có tác vụ AI đang chạy hoặc chức năng thử lại trong bản thử nghiệm.</AlertDescription>
+          {course.analysisAvailable ? <><AlertTitle>Đang phân tích nội dung…</AlertTitle>
+          <AlertDescription>Bạn có thể rời trang và quay lại xem kết quả.</AlertDescription></> : <><AlertTitle>Trạng thái phân tích cũ chưa được xác minh</AlertTitle>
+          <AlertDescription>Không có tác vụ AI đang chạy hoặc chức năng thử lại trong bản thử nghiệm.</AlertDescription></>}
         </Alert>
       )}
       {(course.knowledgeMapStatus === "stale" || course.confirmationUnavailable) && (
         <Alert variant="warning">
           <AlertTitle>Nội dung đã thay đổi — chưa thể xác nhận lại</AlertTitle>
           <AlertDescription>
-            Bản thử nghiệm chưa hỗ trợ phân tích hoặc kiểm tra lại bản đồ sau khi nội dung thay đổi.
+            Hãy phân tích lại và kiểm tra bản đồ sau khi nội dung thay đổi.
             Bản phát hành đã xác nhận trước đó và dữ liệu học viên được giữ nguyên;
             chỉnh sửa bản nháp không bỏ qua điều kiện xác nhận hay xuất bản.
           </AlertDescription>
@@ -1199,11 +1232,11 @@ export function KnowledgeMapClient({ initialData, courseId }: KnowledgeMapClient
                 : totalPending > 0
                 ? `Còn ${totalPending} đề xuất chưa duyệt. Chấp nhận hoặc bỏ các mục để hoàn tất.`
                 : course.knowledgeMapStatus === "stale" || course.confirmationUnavailable
-                ? "Nội dung đã thay đổi; bản thử nghiệm chưa hỗ trợ xác nhận lại."
+                ? "Nội dung đã thay đổi; hãy phân tích và kiểm tra lại."
                 : course.knowledgeMapStatus === "confirmed"
                 ? "Bản đồ đã được xác nhận và đang có hiệu lực."
                 : liveConcepts.length === 0
-                ? "Chưa có bản đồ để xác nhận; chức năng tạo bản đồ chưa khả dụng."
+                ? "Chưa có bản đồ để xác nhận; hãy phân tích nội dung."
                 : course.knowledgeMapStatus !== "ready"
                 ? "Trạng thái bản đồ hiện tại chưa cho phép xác nhận."
                 : "Tất cả đề xuất đã được xem xét xong. Sẵn sàng xác nhận!"}

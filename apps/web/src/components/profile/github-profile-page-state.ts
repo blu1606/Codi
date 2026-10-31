@@ -12,6 +12,7 @@ export interface GithubProfilePageState {
   initialLinked: boolean | null;
   initialLinkError: GithubLinkError;
   readFailed: boolean;
+  initialJob?: { id: string; status: "queued" | "running" } | null;
 }
 
 /** Link state shown in Settings → Tài khoản liên kết. Read-only. */
