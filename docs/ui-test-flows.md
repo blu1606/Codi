@@ -46,7 +46,7 @@ Tự động: `guest-catalog.spec.ts` (01–12, 14, 60, 63), `auth.spec.ts` (20�
 | UI-COM-11 | L2 | Đăng nhập từ overlay | Về đúng trang, khoá đã vào giỏ, toast, badge tăng; dọn giỏ |
 | UI-COM-12 | L2/L3 | Guest bấm "Mua ngay" | Gate, sau đăng nhập tới checkout |
 | UI-COM-13 | L2 | Đăng nhập tài khoản bị vô hiệu | Thông báo "Tài khoản đã bị vô hiệu hoá" |
-| UI-COM-14 | L3 | Guest mở `/cart` | Chuyển `/login?returnTo=/cart` |
+| UI-COM-14 | L3 | Guest mở `/cart` | Hiện giỏ trống và CTA; API dữ liệu giỏ vẫn trả 401 |
 | UI-COM-20 | A1 | Email sai, mật khẩu 3 ký tự | Lỗi inline / nút bị khoá |
 | UI-COM-21 | A1 | Đăng ký tài khoản tạm | Màn OTP 6 ô, hiện email, nút sửa, đếm ngược gửi lại |
 | UI-COM-22 | A1 | Nhập OTP sai | Lỗi tiếng Việt inline dưới ô, giữ giá trị |
@@ -79,7 +79,7 @@ Tự động: `guest-catalog.spec.ts` (01–12, 14, 60, 63), `auth.spec.ts` (20�
 | UI-COM-56 | Guard | Lecturer/admin mở `/cart` | Bị chặn hoặc chuyển hướng |
 | UI-COM-57 | Header | So badge giỏ với giỏ | Bằng nhau |
 | UI-COM-58 | Header / SM §22 | Chuông thông báo | Có số chưa đọc |
-| UI-COM-60 | L13 | Guest mở `/ai` | Trang tải được |
+| UI-COM-60 | L13 | Guest mở `/ai` | Trang và ô nhập câu hỏi tải được; không phụ thuộc tiêu đề/locale cụ thể |
 | UI-COM-61 | L13 | Landing | 3 thẻ tác vụ, gợi ý cá nhân hoá, nhắc guest đăng nhập |
 | UI-COM-62 | L13 | Gửi câu hỏi | Trạng thái suy nghĩ, câu trả lời có thẻ khoá học (tốn quota LLM) |
 | UI-COM-63 | Mobile | Catalog, chi tiết, giỏ, checkout, `/ai`, `/login` ở 390px | Không tràn ngang, CTA dùng được |

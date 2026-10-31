@@ -219,21 +219,19 @@ test.describe("guest catalog and course detail", () => {
     }
   });
 
-  test("UI-COM-14 guest opening /cart is sent to sign-in with returnTo=/cart", async ({ page, health }) => {
-    // CartView's mount effect is replayed by dev StrictMode; both observed requests must be the guard denial.
+  test("UI-COM-14 guest can view the empty cart while cart data remains protected", async ({ page, health }) => {
     await health.expectHttp(page, { status: 401, method: "GET", pathname: "/api/student/cart", maxCount: 2 }, async () => {
       await page.goto("/cart");
-      await page.waitForURL((url) => url.pathname === "/login");
-      await page.waitForLoadState("networkidle");
+      await expect(page.getByRole("heading", { name: "Giỏ hàng" })).toBeVisible();
+      await expect(page.getByText("Giỏ hàng của bạn đang trống", { exact: true })).toBeVisible();
     });
-    await page.waitForURL((url) => url.pathname === "/login");
-    expect(new URL(page.url()).searchParams.get("returnTo")).toBe("/cart");
-    await expect(page.getByLabel("Địa chỉ Email")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Khám phá khoá học" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Hỏi AI Codi" })).toBeVisible();
   });
 
-  test("UI-COM-60 guest can open the AI course advisor", async ({ page }) => {
+  test("UI-COM-60 guest can open the AI page and its question composer", async ({ page }) => {
     await page.goto("/ai");
-    await expect(page.getByRole("heading", { name: "Codi AI Course Advisor" })).toBeVisible();
+    await expect(page.getByRole("textbox").first()).toBeVisible();
   });
 
   test("UI-COM-63 catalog, course detail, /login and /ai fit 390px for a guest", { tag: "@mobile" }, async ({
@@ -245,7 +243,7 @@ test.describe("guest catalog and course detail", () => {
       ["/courses", () => page.getByRole("heading", { level: 1, name: "Khoá học" })],
       [`/courses/${course.slug}`, () => purchaseCard(page)],
       ["/login", () => page.getByLabel("Địa chỉ Email")],
-      ["/ai", () => page.getByRole("heading", { name: "Codi AI Course Advisor" })],
+      ["/ai", () => page.getByRole("textbox").first()],
     ];
     for (const [path, landmark] of ready) {
       await page.goto(path);
