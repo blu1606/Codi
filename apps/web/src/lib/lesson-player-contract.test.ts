@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   lessonChecklist,
   lessonMaterialUrl,
+  hasLessonMaterialUrl,
   lessonPlayerCommand,
   recordPdfPage,
   requireLessonChecklist,
@@ -212,6 +213,11 @@ describe("material progress and input boundaries", () => {
     "allows authored safe material URLs: %s",
     (value) => expect(lessonMaterialUrl(value)).toBe(value),
   );
+  it("accepts internal private material references only for content checks", () => {
+    expect(lessonMaterialUrl("r2-private://lesson-materials/123e4567-e89b-12d3-a456-426614174000")).toBeNull();
+    expect(hasLessonMaterialUrl("r2-private://lesson-materials/123e4567-e89b-12d3-a456-426614174000")).toBe(true);
+    expect(hasLessonMaterialUrl("r2-private://assignments/private")).toBe(false);
+  });
   it.each([
     { type: "complete", studied: true },
     { type: "study", userId: "victim" },
