@@ -165,6 +165,43 @@ describe("GitHub profile consent and request UI", () => {
     );
   }
 
+  it("does not fetch on mount without an active server-provided job", async () => {
+    await renderPanel({ initialLinked: true, initialJob: null });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("resumes polling only the active job provided by the server", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    fetcher.mockResolvedValue(json({ job: { id, status: "completed" }, profile: profile() }));
+    await renderPanel({ initialLinked: true, initialJob: { id, status: "running" } });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]![0]).toBe("/api/github-profile");
+    expect(host.textContent).toContain("@linked-user");
+  });
+
+  it("clears the background progress note when the job completes", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    fetcher.mockResolvedValueOnce(json({ job: { id, status: "queued" } }, 202))
+      .mockResolvedValueOnce(json({ job: { id, status: "completed", errorCode: null }, profile: profile() }));
+    await mount();
+    await click("Phân tích GitHub");
+    await submit();
+    expect(host.textContent).toContain("@linked-user");
+    expect(host.textContent).not.toContain("Đang phân tích nền");
+  });
+
+  it("reports a failed background job instead of a network error", async () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    fetcher.mockResolvedValueOnce(json({ job: { id, status: "queued" } }, 202))
+      .mockResolvedValueOnce(json({ job: { id, status: "failed", errorCode: "worker_failed" }, profile: null }));
+    await mount();
+    await click("Phân tích GitHub");
+    await submit();
+    expect(host.textContent).toContain("Phân tích GitHub không hoàn tất");
+    expect(host.textContent).not.toContain("Không thể đọc phản hồi máy chủ");
+    expect(host.textContent).not.toContain("Đang phân tích nền");
+  });
+
   it("distinguishes not connected, linked without profile, and unknown without starting reads", async () => {
     await renderPanel({ initialLinked: false });
     expect(host.textContent).toContain("Kết nối GitHub để Codi hiểu");

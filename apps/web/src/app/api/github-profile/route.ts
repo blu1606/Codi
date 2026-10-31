@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import { enqueueAiJob, readLatestAiJob } from "@codi-1/db/ai-jobs";
+import { parseGithubProfileInput } from "@/lib/github-profile-service";
+import { trustedBudget } from "@/lib/github-profile-budget";
 import { APIError } from "better-auth/api";
 import { getActiveRoles, ROLE } from "@codi-1/auth";
 import { auth, db } from "@/services";
@@ -8,7 +12,6 @@ import {
   createGithubProfileStore,
   GithubProfileStoreError,
   type GithubProfileRequest,
-  type GithubProfileTrustedBudget,
 } from "@/lib/github-profile-store";
 import { projectGithubProfile } from "@/lib/github-profile-analysis-contract";
 import { githubProfileAiDiagnosticsSchema } from "@/lib/github-profile-ai";
@@ -26,25 +29,6 @@ async function viewer(request: NextRequest) {
   return roles.includes(ROLE.LEARNER) ? session.user.id : null;
 }
 
-// Runtime-only operator settings. Missing settings fail closed; never read from request JSON.
-function trustedBudget(): GithubProfileTrustedBudget | undefined {
-  const budgetKey = process.env.GITHUB_PROFILE_BUDGET_KEY;
-  const slot = process.env.GITHUB_PROFILE_BUDGET_SLOT;
-  const candidateSha = process.env.GITHUB_PROFILE_CANDIDATE_SHA;
-  if (
-    !budgetKey ||
-    budgetKey.length > 300 ||
-    !slot ||
-    (slot !== "pre-integration" &&
-      slot !== "diagnostic-preintegration" &&
-      slot !== "integrated" &&
-      !(slot.trim() === slot && /^test-[a-z0-9-]{1,64}$/.test(slot))) ||
-    !candidateSha ||
-    !/^[0-9a-f]{40}$/.test(candidateSha)
-  )
-    return;
-  return { budgetKey, slot, candidateSha };
-}
 
 function bounded<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -109,6 +93,7 @@ export async function GET(request: NextRequest) {
     const stored = await createGithubProfileStore(db).read(userId);
     return NextResponse.json(
       {
+        ...(process.env.AI_BACKGROUND_WORKER_ENABLED === "true" ? { job: await readLatestAiJob(db, { type: "github_profile", userId, resourceId: userId }) } : {}),
         profile: stored
           ? projectGithubProfile(
               stored.snapshot,
@@ -214,6 +199,23 @@ export async function POST(request: NextRequest) {
       input = await inputBody(request, signal);
     } catch {
       return failure("invalid_input", "Dữ liệu gửi lên không hợp lệ.", 400);
+    }
+    if (process.env.AI_BACKGROUND_WORKER_ENABLED === "true") {
+      let parsed: ReturnType<typeof parseGithubProfileInput>;
+      try { parsed = parseGithubProfileInput(input); }
+      catch { return failure("invalid_input", "Yêu cầu hoặc tên GitHub không hợp lệ.", 400); }
+      const linked = await createGithubProfileStore(db).getLinkedAccount(userId);
+      if (!linked) return failure("github_not_linked", "Bạn chưa liên kết GitHub với tài khoản Codi này.", 409);
+      try {
+        const id = await enqueueAiJob(db, { type: "github_profile", userId, resourceId: userId,
+          payload: { ...parsed, accountId: linked.accountId, githubUserId: linked.githubUserId } });
+        return NextResponse.json({ job: { id, status: "queued" } }, { status: 202, headers: privateHeaders });
+      } catch (error) {
+        const databaseError = error as { code?: string; cause?: { code?: string } };
+        if (databaseError?.code === "active_job" || databaseError?.code === "23505" || databaseError?.cause?.code === "23505")
+          return failure("active_request", "Một lượt phân tích đang chạy.", 409);
+        return failure("store_failed", "Chưa thể tạo lượt phân tích.", 503);
+      }
     }
     const budget = trustedBudget();
     if (

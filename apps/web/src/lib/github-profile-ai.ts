@@ -26,6 +26,8 @@ export interface GithubProfileAiOptions {
   /** Trusted server input, never read from environment or returned/logged. */
   apiKey: string;
   abortSignal: AbortSignal;
+  /** Trusted worker-only deadline; the default sync route retains 25 seconds. */
+  timeoutMs?: number;
   /** Atomically consume an allowed attempt AND reserve its cost before resolving true.
    * false means no attempt consumed; a throw is ambiguous and must be reconciled by the caller.
    * Across all invocations the caller enforces the approved cumulative 5,000,000 microUSD
@@ -376,7 +378,7 @@ export async function generateGithubProfileAnalysis(
   let httpStatus: number | null = null;
   const signal = AbortSignal.any([
     options.abortSignal,
-    AbortSignal.timeout(GITHUB_PROFILE_AI_LIMITS.totalMs),
+    AbortSignal.timeout(options.timeoutMs === 75_000 ? 75_000 : GITHUB_PROFILE_AI_LIMITS.totalMs),
   ]);
   try {
     signal.throwIfAborted();

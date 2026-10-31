@@ -36,6 +36,7 @@ import {
 } from "@codi-1/db";
 import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
+import { AI_QUIZ_MAX_MATERIAL_CHARS, AI_QUIZ_MAX_QUESTIONS, aiQuizFailure, generateQuizDraft } from "@/lib/quiz-ai-generation";
 
 export interface UpdateCourseInfoInput {
   title: string;
@@ -81,6 +82,7 @@ export interface SaveQuizInput {
   passingScore: number;
   isEntry: boolean;
   questions: QuizQuestionInput[];
+  appliedAiJobIds?: string[];
 }
 
 export interface LessonSnapshot {
@@ -1014,11 +1016,43 @@ export async function saveQuizData(
         .where(and(eq(assessments.id, assessmentId), eq(assessments.courseId, courseId)));
     }
 
-
+    if (input.appliedAiJobIds?.length) {
+      const ids = [...new Set(input.appliedAiJobIds)];
+      if (ids.length > 50 || ids.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))
+        throw new Error("Danh sách bản nháp AI không hợp lệ.");
+      const { user } = await getEditableCourse(courseId, tx);
+      const acknowledged = await tx.update(aiContentDrafts).set({ status: "accepted", decidedAt: new Date() }).where(and(
+        eq(aiContentDrafts.lecturerId, user.id), eq(aiContentDrafts.courseId, courseId),
+        lessonId === "entry" ? isNull(aiContentDrafts.lessonId) : eq(aiContentDrafts.lessonId, lessonId),
+        eq(aiContentDrafts.kind, "quiz_questions"), eq(aiContentDrafts.status, "pending"),
+        inArray(sql<string>`${aiContentDrafts.payload}->>'jobId'`, ids),
+      )).returning({ id: aiContentDrafts.id });
+      if (acknowledged.length !== ids.length) throw new Error("Bản nháp AI đã thay đổi. Vui lòng tải lại trang trước khi lưu.");
+    }
   });
 
   return { success: true };
   });
+}
+
+export type AiQuizDifficulty = "easy" | "medium" | "hard";
+
+export type AiQuizGenerationErrorCode =
+  | "not_configured" // missing provider or API key
+  | "no_material" // nothing to generate from
+  | "rate_limited"
+  | "unavailable" // provider failure or timeout
+  | "invalid_output"; // model output did not match the schema
+
+export type AiQuizGenerationResult =
+  | { success: true; questions: QuizQuestionInput[]; jobId?: string }
+  | { success: false; code: AiQuizGenerationErrorCode; message: string; retryable: boolean };
+
+export interface AiQuizSourceInput {
+  /** Pasted source text. When omitted, the lesson's description and reading text are used. */
+  sourceText?: string;
+  /** Optional topic the lecturer wants the questions to focus on. */
+  focus?: string;
 }
 
 /**
@@ -1029,40 +1063,46 @@ export async function generateAiQuizQuestions(
   courseId: string,
   lessonId: string,
   count: number = 3,
-  difficulty: "easy" | "medium" | "hard" = "medium"
-): Promise<{ success: boolean; questions: QuizQuestionInput[] }> {
+  difficulty: AiQuizDifficulty = "medium",
+  source: AiQuizSourceInput = {},
+): Promise<AiQuizGenerationResult> {
   const { course, user } = await getEditableCourse(courseId);
 
   const isEntry = lessonId === "entry";
-  let contextTopic = course.title;
+  const lesson = isEntry ? null : await requireCourseLesson(courseId, lessonId);
+  const materials = isEntry
+    ? []
+    : await db
+        .select({ title: lessonMaterials.title })
+        .from(lessonMaterials)
+        .where(eq(lessonMaterials.lessonId, lessonId));
 
-  if (!isEntry) {
-    const lesson = await requireCourseLesson(courseId, lessonId);
-    if (lesson.title) {
-      contextTopic = `${course.title} - ${lesson.title}`;
-    }
+  const validCount = Math.min(Math.max(Math.trunc(count) || 1, 1), AI_QUIZ_MAX_QUESTIONS);
+  const lessonText = [lesson?.description, lesson?.body]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  const material = (source.sourceText?.trim() || lessonText).slice(0, AI_QUIZ_MAX_MATERIAL_CHARS);
+
+  if (!material) {
+    return aiQuizFailure(
+      "no_material",
+      "Bài học chưa có nội dung văn bản để AI đọc. Hãy dán nội dung vào ô bên dưới rồi tạo lại.",
+      false,
+    );
   }
 
-  const validCount = Math.min(Math.max(count, 1), 10);
-  const diffLabel =
-    difficulty === "easy" ? "Cơ bản" : difficulty === "hard" ? "Nâng cao" : "Thực hành";
-
-  const generated: QuizQuestionInput[] = [];
-  for (let i = 1; i <= validCount; i++) {
-    generated.push({
-      text: `[${diffLabel}] Câu hỏi ${i}: Khái niệm cốt lõi nào sau đây phản ánh đúng bản chất của ${contextTopic}?`,
-      options: [
-        `Tối ưu hoá luồng xử lý và đảm bảo tính toàn vẹn dữ liệu cho ${contextTopic}`,
-        `Bỏ qua quy tắc kiểm tra ràng buộc để tăng tốc độ thực thi tức thì`,
-        `Sao chép toàn bộ bộ nhớ mà không giải phóng các tham chiếu không sử dụng`,
-        `Thực thi bất đồng bộ mà không kiểm soát lỗi hoặc trạng thái trả về`,
-      ],
-      correctIndex: 0,
-      explanation: `Lựa chọn A là chính xác vì việc nắm bắt đúng bản chất của ${contextTopic} đòi hỏi tư duy tối ưu luồng dữ liệu và an toàn trạng thái.`,
-      aiGenerated: true,
-      aiReviewed: false,
-    });
-  }
+  const generated = await generateQuizDraft({
+    courseTitle: course.title,
+    lessonTitle: lesson?.title ?? null,
+    count: validCount,
+    difficulty,
+    focus: source.focus,
+    materialTitles: materials.map((row) => row.title),
+    material,
+  });
+  if (!generated.success) return generated;
+  const { questions } = generated;
 
   try {
     await db.insert(aiContentDrafts).values({
@@ -1075,15 +1115,12 @@ export async function generateAiQuizQuestions(
         courseId,
         lessonId,
         difficulty,
-        questions: generated,
+      questions,
       },
     });
   } catch {
     // Không làm gián đoạn nếu môi trường test không có bảng ai_content_drafts
   }
 
-  return {
-    success: true,
-    questions: generated,
-  };
+  return { success: true, questions };
 }
