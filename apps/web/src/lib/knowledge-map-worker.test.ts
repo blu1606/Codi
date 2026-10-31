@@ -5,7 +5,7 @@ import type { SQL } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import type { AiJob } from "@codi-1/db/ai-jobs";
 
-const { finish, lock, mapLock, activeRoles } = vi.hoisted(() => ({ finish: vi.fn(), lock: vi.fn(), mapLock: vi.fn(), activeRoles: vi.fn() }));
+const { finish, lock, mapLock, activeRoles, enqueueLatest } = vi.hoisted(() => ({ finish: vi.fn(), lock: vi.fn(), mapLock: vi.fn(), activeRoles: vi.fn(), enqueueLatest: vi.fn() }));
 vi.mock("@codi-1/auth", () => ({ ROLE: { LECTURER: "LECTURER" } }));
 vi.mock("@codi-1/db/ai-jobs", () => ({
   AiJobLeaseError: class AiJobLeaseError extends Error {},
@@ -13,6 +13,7 @@ vi.mock("@codi-1/db/ai-jobs", () => ({
   finishAiJob: finish,
 }));
 vi.mock("./confirmed-knowledge-map", () => ({ lockKnowledgeMap: mapLock }));
+vi.mock("./knowledge-map-jobs", () => ({ enqueueKnowledgeMapAnalysis: enqueueLatest }));
 import { runKnowledgeMapJob } from "./knowledge-map-worker";
 import type { ExtractedKnowledgeMap } from "./knowledge-map-extraction";
 
@@ -41,6 +42,7 @@ function fixture() {
 beforeEach(() => {
   vi.clearAllMocks();
   activeRoles.mockResolvedValue(["LECTURER"]);
+  enqueueLatest.mockResolvedValue({ queued: true, jobId: "next-job" });
   vi.stubEnv("AI_BACKGROUND_WORKER_ENABLED", "true");
   vi.stubEnv("AI_PROVIDER", "openai");
   vi.stubEnv("OPENAI_API_KEY", "test-placeholder");
@@ -80,6 +82,7 @@ describe("knowledge map worker", () => {
     await runKnowledgeMapJob(f.db, job, f.generate);
     expect(f.writes.some((write) => [skills, lessonSkills, skillPrerequisites].includes(write.table as typeof skills))).toBe(false);
     expect(finish).toHaveBeenCalledWith(expect.anything(), "a", "b", "failed", "content_changed");
+    expect(enqueueLatest).toHaveBeenCalledWith(expect.anything(), { courseId: "course", userId: "owner" });
   });
   it("does not call AI after lecturer role is revoked", async () => {
     activeRoles.mockResolvedValue([]);
