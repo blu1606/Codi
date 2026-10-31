@@ -53,6 +53,10 @@ Trước khi dùng bucket thật, quản trị viên cần cấu hình:
 - CORS cho chính xác origin app, method PUT và header Content-Type. Không cần cookie R2.
 - Lifecycle **chỉ prefix `assignment-uploads/`**, expire sau 1 ngày; không expire toàn bucket
   hoặc prefix `assignments/` vì sẽ xoá cả bài nộp đang được tham chiếu.
+- Tài liệu bài học dùng cùng private bucket nhưng có prefix riêng `lesson-material-uploads/`
+  (tệp tạm chờ xác nhận) và `lesson-materials/` (tệp đang được tham chiếu). Có thể expire
+  riêng `lesson-material-uploads/` sau 1 ngày; tuyệt đối không áp dụng lifecycle lên
+  `lesson-materials/`. CORS upload tối đa 200 MB vẫn chỉ cần PUT và Content-Type.
 - Lịch chạy `pnpm --filter web storage:assignments:sweep --apply` hằng ngày trong môi trường
   tin cậy có quyền DB read và bucket list/delete. Bỏ `--apply` để dry run. Script chỉ xoá
   object quá 24h không có reference ở cả `file_url` và `assignment_draft.fileKey`, kiểm tra lại

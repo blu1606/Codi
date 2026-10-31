@@ -146,7 +146,9 @@ async function view(
       id: m.id,
       title: m.title,
       type: m.type,
-      url: lessonMaterialUrl(m.url),
+      url: m.url.startsWith("r2-private://")
+        ? `/api/learn/${courseId}/lessons/${lessonId}/materials/${m.id}`
+        : lessonMaterialUrl(m.url),
       durationSeconds: m.durationSeconds,
     })),
     media: ctx.progress?.mediaProgress ?? {},

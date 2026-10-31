@@ -134,7 +134,7 @@ const chapterOperations = [
   ["rename chapter", (id: string) => renameChapter("own", id, "Renamed")],
   ["delete chapter", (id: string) => deleteChapter("own", id)],
   ["move chapter", (id: string) => moveChapter("own", id, 1)],
-  ["add lesson", (id: string) => addLesson("own", id, "New lesson")],
+  ["add lesson", (id: string) => addLesson("own", id, "reading", "New lesson")],
   ["restore lesson", (id: string) => restoreLesson("own", { id: "deleted", chapterId: id, title: "Restored", position: 0 })],
 ] as const;
 
@@ -182,11 +182,11 @@ describe("course-editor child membership", () => {
     const moves = writes.filter((write) => write.table === "course_lessons");
     expect(moves).toHaveLength(2);
     expect(writes.filter((write) => write.table === "courses")).toHaveLength(1);
-    expect(moves.map((write) => write.values?.position)).toEqual([1, 0]);
+    expect(moves.map((write) => write.values?.position)).toEqual([0, 1]);
     for (const [index, write] of moves.entries()) {
       expect(write.table).toBe("course_lessons");
       const { params } = dialect.sqlToQuery(write.predicate!);
-      expect(params).toEqual([index === 0 ? "own-lesson" : "own-next-lesson", "own-chapter"]);
+      expect(params).toEqual([index === 0 ? "own-next-lesson" : "own-lesson", "own-chapter"]);
     }
   });
 
