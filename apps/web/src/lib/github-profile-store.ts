@@ -97,6 +97,7 @@ export class GithubProfileStoreError extends Error {
     public readonly code:
       | "invalid_input"
       | "account_unavailable"
+      | "profile_not_found"
       | "active_request"
       | "request_fenced"
       | "invalid_profile"
@@ -440,6 +441,47 @@ export function createGithubProfileStore(
           throw new GithubProfileStoreError("invalid_profile");
         }
       });
+    },
+    async saveCorrections(userId: string, input: unknown): Promise<GithubProfileCorrections> {
+      parse(id, userId);
+      let corrections: GithubProfileCorrections;
+      try { corrections = parse(githubProfileCorrectionsSchema, input); }
+      catch { throw new GithubProfileStoreError("invalid_input"); }
+      return safe(() => database.transaction(async (tx) => {
+        const [owner] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+        if (!owner) throw new GithubProfileStoreError("account_unavailable");
+        const [stored] = await tx.select({ snapshot: githubProfiles.snapshot, analysis: githubProfiles.analysis })
+          .from(githubProfiles).where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt))).for("update");
+        if (!stored) throw new GithubProfileStoreError("profile_not_found");
+        try {
+          projectGithubProfile(stored.snapshot as GithubCollectionSnapshot, stored.analysis, corrections);
+        } catch {
+          throw new GithubProfileStoreError("invalid_input");
+        }
+        await tx.update(githubProfiles).set({ corrections }).where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt)));
+        return corrections;
+      }));
+    },
+    async deleteProfile(userId: string): Promise<boolean> {
+      parse(id, userId);
+      return safe(() => database.transaction(async (tx) => {
+        const [owner] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+        if (!owner) throw new GithubProfileStoreError("account_unavailable");
+        // Match the learner enqueue lock so a queued analysis cannot recreate deleted data.
+        let active: Awaited<ReturnType<typeof tx.execute>>;
+        try {
+          active = await tx.execute(sql`select id from ai_jobs where type = 'github_profile' and user_id = ${userId}
+            and resource_id = ${userId} and status in ('queued', 'running') for update nowait`);
+        } catch (error) {
+          const cause = error instanceof Error ? error.cause : undefined;
+          if (cause && typeof cause === "object" && "code" in cause && cause.code === "55P03")
+            throw new GithubProfileStoreError("active_request");
+          throw error;
+        }
+        if (active.rows.length) throw new GithubProfileStoreError("active_request");
+        const deleted = await tx.delete(githubProfiles).where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt))).returning({ userId: githubProfiles.userId });
+        return deleted.length > 0;
+      }));
     },
     async reserveGeneration(
       input: GithubProfileRequest,

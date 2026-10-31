@@ -509,6 +509,39 @@ describe("durable private GitHub profile store", () => {
   it("returns null for missing/unlinked/unpublished owner result", async () => {
     expect(await fixture([[]]).store.read("learner")).toBeNull();
   });
+  it("saves only schema-valid corrections for the authenticated owner profile", async () => {
+    const task = fixture([owner, [[snapshot(), analysis()]], []]);
+    await expect(task.store.saveCorrections("learner", edits)).resolves.toEqual(edits);
+    expect(task.calls[0]!.sql).toBe("begin");
+    expect(task.calls.some((call) => call.sql.includes('from "user"') && call.sql.includes("for update"))).toBe(true);
+    const read = task.calls.find((call) => call.sql.includes('from "github_profiles"'))!;
+    expect(read.sql).toContain('"github_profiles"."published_at" is not null');
+    expect(read.sql).toContain("for update");
+    expect(task.calls.at(-2)!.sql).toContain('update "github_profiles"');
+  });
+  it("rejects corrections that do not project onto the owner's current evidence", async () => {
+    const task = fixture([owner, [[snapshot(), analysis()]]]);
+    await expect(task.store.saveCorrections("learner", {
+      ...edits,
+      technologies: [edits.technologies[0]!, edits.technologies[0]!],
+    })).rejects.toMatchObject({ code: "invalid_input" });
+    expect(task.calls.some((call) => call.sql.startsWith('update "github_profiles"'))).toBe(false);
+  });
+  it("deletes only a published profile while retaining its linked account", async () => {
+    const task = fixture([owner, [], [{ userId: "learner" }]]);
+    await expect(task.store.deleteProfile("learner")).resolves.toBe(true);
+    expect(task.calls.some((call) => call.sql.includes('from "user"') && call.sql.includes("for update"))).toBe(true);
+    expect(task.calls.some((call) => call.sql.includes("from ai_jobs") && call.sql.includes("for update nowait"))).toBe(true);
+    const deletion = task.calls.at(-2)!;
+    expect(deletion.sql).toContain('delete from "github_profiles"');
+    expect(deletion.sql).toContain('"github_profiles"."published_at" is not null');
+    expect(deletion.sql).not.toContain('delete from "account"');
+  });
+  it("refuses profile deletion while an AI analysis is queued or running", async () => {
+    const task = fixture([owner, [{ id: "active-job" }]]);
+    await expect(task.store.deleteProfile("learner")).rejects.toMatchObject({ code: "active_request" });
+    expect(task.calls.some((call) => call.sql.startsWith('delete from "github_profiles"'))).toBe(false);
+  });
   it("never exposes old data if the linked numeric identity changed", async () => {
     const task = fixture([
       [
