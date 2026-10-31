@@ -363,6 +363,46 @@ describe("durable private GitHub profile store", () => {
       false,
     );
   });
+  it("locks the worker lease and publishes profile and terminal job state in one transaction", async () => {
+    const lease = { id: "33333333-3333-4333-8333-333333333333", leaseToken: "44444444-4444-4444-8444-444444444444" };
+    const task = fixture([[[lease.id]], owner, linked, profile(), [["learner"]], [["learner"]], [[lease.id]]]);
+    await task.store.publish(request, snapshot(), analysis(), lease);
+    expect(task.calls[0]!.sql).toContain("begin");
+    const lock = task.calls.findIndex((call) => call.sql.includes("from ai_jobs") && call.sql.includes("for update"));
+    const publish = task.calls.findIndex((call) => call.sql.startsWith('update "github_profiles"'));
+    const complete = task.calls.findIndex((call) => call.sql.includes("update ai_jobs"));
+    expect(lock).toBeGreaterThan(0);
+    expect(publish).toBeGreaterThan(lock);
+    expect(complete).toBeGreaterThan(publish);
+    const roleLock = task.calls.find((call) => call.sql.includes("for share of") && call.sql.includes('"user_roles"'));
+    expect(roleLock).toBeDefined();
+    expect(roleLock!.sql).toContain('"user"."banned" is not true');
+    expect(task.calls.at(-1)!.sql).toBe("commit");
+  });
+  it("rolls back profile publication if job completion loses its lease", async () => {
+    const lease = { id: "33333333-3333-4333-8333-333333333333", leaseToken: "44444444-4444-4444-8444-444444444444" };
+    const task = fixture([[[lease.id]], owner, linked, profile(), [["learner"]], [["learner"]], []]);
+    await expect(task.store.publish(request, snapshot(), analysis(), lease)).rejects.toMatchObject({ code: "store_failed" });
+    expect(task.calls.at(-1)!.sql).toBe("rollback");
+  });
+  it("rolls back worker publication if the learner was banned or revoked", async () => {
+    const lease = { id: "33333333-3333-4333-8333-333333333333", leaseToken: "44444444-4444-4444-8444-444444444444" };
+    const task = fixture([[[lease.id]], owner, linked, profile(), []]);
+    await expect(task.store.publish(request, snapshot(), analysis(), lease)).rejects.toMatchObject({ code: "request_fenced" });
+    expect(task.calls.some((call) => call.sql.startsWith('update "github_profiles"'))).toBe(false);
+    expect(task.calls.at(-1)!.sql).toBe("rollback");
+  });
+  it("checks the active learner lock before worker claim and AI budget reservation", async () => {
+    const lease = { id: "33333333-3333-4333-8333-333333333333", leaseToken: "44444444-4444-4444-8444-444444444444" };
+    const beforeClaim = fixture([[[lease.id]], owner, linked, []]);
+    await expect(beforeClaim.store.claim(claim, lease)).rejects.toMatchObject({ code: "request_fenced" });
+    expect(beforeClaim.calls.some((call) => call.sql.startsWith('insert into "github_profiles"'))).toBe(false);
+    expect(beforeClaim.calls.at(-1)!.sql).toBe("rollback");
+    const beforeBudget = fixture([[[lease.id]], owner, linked, profile(), []]);
+    await expect(beforeBudget.store.reserveGeneration(request, reservation, lease)).rejects.toMatchObject({ code: "request_fenced" });
+    expect(beforeBudget.calls.some((call) => call.sql.includes("insert into \"github_generation_reservations\""))).toBe(false);
+    expect(beforeBudget.calls.at(-1)!.sql).toBe("rollback");
+  });
   it("cannot resurrect a deleted/recreated/expired profile from a late publication", async () => {
     const task = fixture([owner, linked, []]);
     await expect(

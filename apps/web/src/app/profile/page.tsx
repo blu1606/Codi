@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getActiveRoles, ROLE } from "@codi-1/auth";
+import { readLatestAiJob } from "@codi-1/db/ai-jobs";
 import { auth, db } from "@/services";
 import { loadGithubProfilePageState } from "@/components/profile/github-profile-page-state";
 import { createGithubProfileStore } from "@/lib/github-profile-store";
@@ -34,6 +35,16 @@ export default async function ProfilePage({
           params.error,
         )
       : null;
+
+  if (github && process.env.AI_BACKGROUND_WORKER_ENABLED === "true") {
+    try {
+      const job = await readLatestAiJob(db, { type: "github_profile", userId: session.user.id, resourceId: session.user.id });
+      if (job && (job.status === "queued" || job.status === "running"))
+        github.initialJob = { id: job.id, status: job.status };
+    } catch {
+      // Keep the independently loaded profile available when job status is unavailable.
+    }
+  }
 
   return (
     <ProfileView

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, CheckCircle2, Loader2, Pencil, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@codi-1/ui/components/alert";
@@ -59,8 +59,9 @@ interface QuizAiDialogProps {
   onOpenChange: (open: boolean) => void;
   lessonTitle: string;
   maxOptions?: number;
-  onGenerate: (request: AiQuizRequest) => Promise<AiQuizGenerationResult>;
-  onApply: (questions: QuizQuestionInput[]) => void;
+  onGenerate: (request: AiQuizRequest, signal?: AbortSignal) => Promise<AiQuizGenerationResult>;
+  onResume?: (signal: AbortSignal) => Promise<AiQuizGenerationResult | null>;
+  onApply: (questions: QuizQuestionInput[], jobId?: string) => void;
 }
 
 const NETWORK_ERROR: AiError = {
@@ -76,6 +77,7 @@ export function QuizAiDialog({
   lessonTitle,
   maxOptions = DEFAULT_MAX_QUIZ_OPTIONS,
   onGenerate,
+  onResume,
   onApply,
 }: QuizAiDialogProps) {
   const [sourceMode, setSourceMode] = useState<AiQuizRequest["sourceMode"]>("lesson");
@@ -87,28 +89,56 @@ export function QuizAiDialog({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<AiError | null>(null);
   const [items, setItems] = useState<ReviewItem[] | null>(null);
+  const [draftJobId, setDraftJobId] = useState<string | undefined>();
   const [nextKey, setNextKey] = useState(1);
   const [confirmAllOpen, setConfirmAllOpen] = useState(false);
+
+  const sequence = useRef(0);
+  const activeGeneration = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!open || !onResume) return;
+    const current = ++sequence.current;
+    const controller = new AbortController();
+    setIsGenerating(true);
+    void onResume(controller.signal).then((result) => {
+      if (sequence.current !== current || !result) return;
+      if (result.success) {
+        setDraftJobId(result.jobId);
+        setItems(result.questions.map((question, key) => ({ key, question, state: "pending", editing: false })));
+        setNextKey(result.questions.length);
+      } else setError(result);
+    }).catch(() => undefined).finally(() => { if (sequence.current === current) setIsGenerating(false); });
+    return () => { controller.abort(); activeGeneration.current?.abort(); sequence.current++; };
+  // Resume once per dialog opening, not on every parent render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const request: AiQuizRequest = { count, difficulty, sourceMode, sourceText, focus };
 
   const runGeneration = async () => {
+    sequence.current++;
+    activeGeneration.current?.abort();
+    const controller = new AbortController();
+    activeGeneration.current = controller;
     setIsGenerating(true);
     setError(null);
     setConfirmAllOpen(false);
     let result: AiQuizGenerationResult;
     try {
-      result = await onGenerate(request);
+      result = await onGenerate(request, controller.signal);
     } catch {
       result = NETWORK_ERROR;
     } finally {
+      if (activeGeneration.current === controller) activeGeneration.current = null;
       setIsGenerating(false);
     }
 
+    if (controller.signal.aborted) return;
     if (!result.success) {
       setError(result);
       return;
     }
+    setDraftJobId(result.jobId);
     let key = nextKey;
     setItems(
       result.questions.map((question) => ({
@@ -174,7 +204,7 @@ export function QuizAiDialog({
 
   const handleApply = () => {
     if (!items || acceptedCount === 0) return;
-    onApply(applicableItems.map((item) => ({ ...item.question, aiGenerated: true, aiReviewed: true })));
+    onApply(applicableItems.map((item) => ({ ...item.question, aiGenerated: true, aiReviewed: true })), draftJobId);
     setItems(null);
     onOpenChange(false);
   };

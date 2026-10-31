@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
-import { assessmentAnswers, assessmentSubmissions, assessments, courses, enrollmentSkillMastery, lessonProgress, skills, studentEnrollments, studentStudyDays, type Database } from "@codi-1/db";
+import { assessmentAnswers, assessmentSubmissions, assessments, courses, enrollmentSkillMastery, lessonProgress, studentEnrollments, studentStudyDays, type Database } from "@codi-1/db";
 vi.mock("server-only", () => ({}));
 import { analyticsWindow } from "./analytics-contract";
-import { buildLearnerStats, getLearnerStatsData, masteryLevel, type LearnerStatsRows } from "./learner-insights-service";
+import { buildLearnerStats, getLearnerStatsData, masteryLevel, publishedLearnerSkills, type LearnerStatsRows } from "./learner-insights-service";
 
 const NOW = new Date("2026-10-22T18:00:00Z"); // 01:00 on 23/10 in GMT+7
 
@@ -205,7 +205,7 @@ describe("persisted learner aggregates (owner scoping)", () => {
     const data = new Map<Table, unknown[]>([
       [studentEnrollments, [{ id: 1, courseId: "course-a", courseTitle: "Khóa A", diagnosticStatus: "done", weeklyGoalMinutes: 300 }]],
       [studentStudyDays, [day("2026-10-22", 30)]],
-      [lessonProgress, []], [skills, []], [assessmentSubmissions, []], [assessmentAnswers, []],
+      [lessonProgress, []], [enrollmentSkillMastery, []], [assessmentSubmissions, []], [assessmentAnswers, []],
     ]);
     const f = database(data);
     const result = await getLearnerStatsData(f.db, "alice", "7", "all", NOW);
@@ -214,7 +214,7 @@ describe("persisted learner aggregates (owner scoping)", () => {
     expect(params(f.conditions[0]!)).toContain("alice");
     expect(params(f.conditions[1]!)).toContain("alice");
     for (const index of [2, 4, 5]) expect(params(f.conditions[index]!)).toContain(1);
-    expect(params(f.conditions[3]!)).toContain("course-a");
+    expect(params(f.conditions[3]!)).toContain(1);
   });
   it("applies the course filter to the enrollment-scoped queries", async () => {
     const f = database(new Map<Table, unknown[]>([[studentEnrollments, [{ id: 1, courseId: "course-a", courseTitle: "Khóa A", diagnosticStatus: "none", weeklyGoalMinutes: null }]]]));
@@ -222,6 +222,22 @@ describe("persisted learner aggregates (owner scoping)", () => {
     expect(params(f.conditions[0]!)).toContain("alice");
     expect(f.conditions).toHaveLength(6);
     expect(params(f.conditions[2]!)).toContain(1);
+  });
+  it("loads snapshot skills with mastery scoped to their own enrollment", async () => {
+    const published = (id: number, name: string) => ({ version: 1, publicationId: "123e4567-e89b-42d3-a456-426614174000", contentGeneration: 1,
+      publishedAt: "2026-10-30T00:00:00.000Z", skills: [{ id, name, bktPInit: 0.1, bktPLearn: 0.2, bktPGuess: 0.2, bktPSlip: 0.1 }], edges: [], links: [] });
+    const f = database(new Map<Table, unknown[]>([
+      [studentEnrollments, [
+        { id: 1, courseId: "course-a", courseTitle: "A", diagnosticStatus: "done", weeklyGoalMinutes: null, confirmedKnowledgeMap: published(10, "Tên đã xuất bản") },
+        { id: 2, courseId: "course-b", courseTitle: "B", diagnosticStatus: "done", weeklyGoalMinutes: null, confirmedKnowledgeMap: published(20, "B") },
+      ]],
+      [enrollmentSkillMastery, [{ enrollmentId: 2, skillId: 10, pMastery: 0.99, evidenceCount: 3 }]],
+    ]));
+    const data = await getLearnerStatsData(f.db, "alice", "30", "all", NOW);
+    expect(data.skills.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 10, name: "Tên đã xuất bản", courseId: "course-a", level: 0 }),
+      expect.objectContaining({ id: 20, name: "B", courseId: "course-b", level: 0 }),
+    ]));
   });
   it("fails closed on missing learner identity before querying", async () => {
     const f = database(new Map());
@@ -239,5 +255,42 @@ describe("persisted learner aggregates (owner scoping)", () => {
     expect(result).toMatchObject({ enrollments: 0, completedLessons: 0, studyMinutes: 0, streak: { current: 0, best: 0 }, scores: [], quizzes: [] });
     expect(result.window).toEqual(analyticsWindow("30", NOW));
     expect(f.conditions).toHaveLength(2);
+  });
+});
+
+describe("learner publication isolation", () => {
+  const skill = (id: number, name: string) => ({ id, name, bktPInit: 0.1, bktPLearn: 0.2, bktPGuess: 0.2, bktPSlip: 0.1 });
+  const publication = (items: ReturnType<typeof skill>[]) => ({ version: 1, publicationId: "123e4567-e89b-42d3-a456-426614174000", contentGeneration: 2,
+    publishedAt: "2026-10-30T00:00:00.000Z", skills: items, edges: [], links: [] });
+  it("uses only confirmed names and the matching enrollment+skill mastery across courses", () => {
+    const enrollments = rows().enrollments.map((row, i) => ({ ...row,
+      confirmedKnowledgeMap: publication([skill(i === 0 ? 10 : 20, i === 0 ? "Tên đã xác nhận" : "Khóa B")]) }));
+    const result = publishedLearnerSkills(enrollments, [
+      { enrollmentId: 1, skillId: 10, pMastery: 0.6, evidenceCount: 2 },
+      // A row from another enrollment must not affect the same skill ID.
+      { enrollmentId: 2, skillId: 10, pMastery: 0.99, evidenceCount: 20 },
+      { enrollmentId: 1, skillId: 20, pMastery: 0.99, evidenceCount: 20 },
+    ]);
+    expect(result).toEqual([
+      { id: 10, name: "Tên đã xác nhận", courseId: "course-a", pMastery: 0.6, evidenceCount: 2 },
+      { id: 20, name: "Khóa B", courseId: "course-b", pMastery: null, evidenceCount: null },
+    ]);
+    expect(buildLearnerStats(rows({ skills: result }), "30", "course-b", NOW).skills.items)
+      .toEqual([{ id: 20, name: "Khóa B", courseId: "course-b", courseTitle: "Khóa B", level: 0 }]);
+  });
+  it("fails closed for missing, malformed and internally inconsistent snapshots", () => {
+    const enrollment = rows().enrollments[0]!;
+    for (const snapshot of [null, {}, { ...publication([skill(1, "x")]), version: 2 },
+      { ...publication([skill(1, "x"), skill(1, "duplicate")]) },
+      { ...publication([skill(1, "x")]), links: [{ lessonId: "123e4567-e89b-42d3-a456-426614174001", skillId: 2 }] }]) {
+      expect(publishedLearnerSkills([{ ...enrollment, confirmedKnowledgeMap: snapshot }], [])).toEqual([]);
+    }
+  });
+  it("accepts a legacy snapshot with non-UUID publication and lesson IDs", () => {
+    const enrollment = rows().enrollments[0]!;
+    const snapshot = { ...publication([skill(1, "Đã công bố")]), publicationId: "confirmed-1",
+      publishedAt: "legacy", links: [{ lessonId: "lesson-1", skillId: 1 }] };
+    expect(publishedLearnerSkills([{ ...enrollment, confirmedKnowledgeMap: snapshot }], []))
+      .toMatchObject([{ id: 1, name: "Đã công bố", courseId: "course-a" }]);
   });
 });

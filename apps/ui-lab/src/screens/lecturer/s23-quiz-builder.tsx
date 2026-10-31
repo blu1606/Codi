@@ -1,8 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { QuizBuilderClient } from "@/app/dashboard/lecturer/courses/[courseId]/quiz/[lessonId]/quiz-builder-client";
 import {
-  lecturerAiRateLimited,
-  lecturerAiResult,
+  lecturerAiQuizQuestions,
   lecturerQuizBuilder,
   lecturerQuizEmpty,
   lecturerQuizEntry,
@@ -25,7 +24,7 @@ function LabScript({ steps, children }: { steps: LabStep[]; children: ReactNode 
     let cancelled = false;
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     const findButton = (label: string) =>
-      [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === label) ?? null;
+      [...document.querySelectorAll("button")].find((button) => !button.disabled && button.textContent?.trim() === label) ?? null;
     const waitFor = async <T,>(find: () => T | null): Promise<T | null> => {
       for (let i = 0; i < 40 && !cancelled; i++) {
         const found = find();
@@ -67,6 +66,17 @@ const editor = (initialData: typeof lecturerQuizBuilder) => (
 
 const openAi: LabStep = { click: "Tạo bằng AI" };
 const generate: LabStep = { click: "Tạo câu hỏi" };
+
+// Simulate only the server-action protocol; no real queue or provider is contacted.
+function workerQuizActions(outcome: "running" | "completed" | "failed") {
+  let submitted = false;
+  return {
+    startQuizGeneration: () => { submitted = true; return { ok: { mode: "queued", id: "lab-quiz-job" } }; },
+    readQuizGeneration: () => ({ ok: !submitted ? { status: "none" } : outcome === "completed"
+      ? { status: "completed", jobId: "lab-quiz-job", questions: lecturerAiQuizQuestions }
+      : { status: outcome } }),
+  };
+}
 
 export const lecturerQuizScreen: Screen = {
   id: "S23",
@@ -114,18 +124,25 @@ export const lecturerQuizScreen: Screen = {
     "ai-panel": {
       label: "AI: mở bảng tạo câu hỏi",
       route: lessonRoute,
+      actions: workerQuizActions("running"),
       render: () => <LabScript steps={[openAi]}>{editor(lecturerQuizBuilder)}</LabScript>,
+    },
+    "ai-running": {
+      label: "AI: đang xử lý nền",
+      route: lessonRoute,
+      actions: workerQuizActions("running"),
+      render: () => <LabScript steps={[openAi, generate]}>{editor(lecturerQuizBuilder)}</LabScript>,
     },
     "ai-results": {
       label: "AI: kết quả chờ duyệt",
       route: lessonRoute,
-      actions: { generateAiQuizQuestions: { ok: lecturerAiResult } },
+      actions: workerQuizActions("completed"),
       render: () => <LabScript steps={[openAi, generate]}>{editor(lecturerQuizBuilder)}</LabScript>,
     },
     "ai-error": {
       label: "AI: lỗi có thể thử lại",
       route: lessonRoute,
-      actions: { generateAiQuizQuestions: { ok: lecturerAiRateLimited } },
+      actions: workerQuizActions("failed"),
       render: () => <LabScript steps={[openAi, generate]}>{editor(lecturerQuizBuilder)}</LabScript>,
     },
   },

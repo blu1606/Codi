@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 
 // The GitHub profile lives in the "Hồ sơ năng lực" tab of /profile; old links land there.
+export default function GithubProfileRedirectPage(): Promise<never>;
+export default function GithubProfileRedirectPage(props: { searchParams?: Promise<Record<string, string | string[] | undefined>> }): Promise<never>;
 export default async function GithubProfileRedirectPage({
   searchParams,
 }: {

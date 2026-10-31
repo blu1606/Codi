@@ -36,41 +36,17 @@ beforeEach(() => {
 });
 
 describe("GET /api/courses", () => {
-  it("keeps topic eligibility inside the aggregate rather than filtering out courses", async () => {
+  it("uses only the published confirmed snapshot for topics, never live skills", async () => {
     const response = await request();
     expect(response.status).toBe(200);
     const [sql, params] = mocks.execute.mock.calls[0];
-    expect(sql).toContain('CASE WHEN (("courses"."status" = $1) and ("courses"."knowledge_map_status" = $2) and ("skills"."review" in ($3, $4))) THEN "skills"."name" END');
-    expect(params).toEqual(["published", "confirmed", "accepted", "edited", "published"]);
-    expect(sql).toContain('ARRAY_REMOVE(ARRAY_AGG(DISTINCT CASE WHEN');
-    expect(sql).toContain('ARRAY[]::text[]');
-    expect(sql.match(/where (.*?) group by/)?.[1]).toBe('"courses"."status" = $5');
+    expect(sql).toContain('"courses"."confirmed_knowledge_map"');
+    expect(sql).toContain("jsonb_array_elements");
+    expect(sql).toContain("jsonb_typeof");
+    expect(sql).not.toContain('join "skills"');
+    expect(sql).not.toContain('"knowledge_map_status"');
     expect(sql).toContain('count(distinct "student_enrollments"."id")');
-  });
-
-  it.each([
-    ["published", "confirmed", "accepted", true],
-    ["published", "confirmed", "edited", true],
-    ["published", "confirmed", "suggested", false],
-    ["published", "confirmed", "declined", false],
-    ...["empty", "analysing", "ready", "failed", "stale"].flatMap((mapState) =>
-      ["accepted", "edited"].map((review) => ["published", mapState, review, false]),
-    ),
-    ["hidden", "confirmed", "accepted", false],
-    ["hidden", "confirmed", "edited", false],
-    ["draft", "confirmed", "accepted", false],
-    ["pending", "confirmed", "accepted", false],
-    ["rejected", "confirmed", "accepted", false],
-  ])("binds topic eligibility for %s / %s / %s to %s", async (status, mapState, review, expected) => {
-    await request("?include_hidden=true");
-    const [sql, params] = mocks.execute.mock.calls[0];
-    // Exact compiled conjunction plus its bindings establish this truth table;
-    // this is not PostgreSQL row/aggregate execution.
-    expect(sql.match(/CASE WHEN (.*?) THEN/)?.[1]).toBe('(("courses"."status" = $1) and ("courses"."knowledge_map_status" = $2) and ("skills"."review" in ($3, $4)))');
-    expect(params).toEqual(["published", "confirmed", "accepted", "edited", "published", "hidden"]);
-    const [requiredStatus, requiredMapState, ...eligibleReviews] = params.slice(0, 4);
-    expect(status === requiredStatus && mapState === requiredMapState && eligibleReviews.includes(review)).toBe(expected);
-    expect(sql.match(/where (.*?) group by/)?.[1]).toBe('"courses"."status" in ($5, $6)');
+    expect(params).toEqual(["published"]);
   });
 
   it("retains courses and enrollment counts when topic arrays are empty", async () => {
@@ -86,7 +62,7 @@ describe("GET /api/courses", () => {
     expect(body.courses.map((entry: { id: string }) => entry.id)).toEqual(retainedRows.map((entry) => entry[0]));
     expect(body.courses.every((entry: { topics: string[]; enrollmentCount: number }) => entry.topics.length === 0 && entry.enrollmentCount === 2)).toBe(true);
     const [sql] = mocks.execute.mock.calls[0];
-    expect(sql.match(/where (.*?) group by/)?.[1]).toBe('"courses"."status" = $5');
+    expect(sql.match(/where (.*?) group by/)?.[1]).toBe('"courses"."status" = $1');
     expect(sql).toContain('order by count(distinct "student_enrollments"."id") desc');
   });
 
@@ -95,41 +71,41 @@ describe("GET /api/courses", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ courses: [{ ...course, enrollmentCount: 7, coverImageUrl: "/images/courses/frontend-react-nextjs.svg", instructorName: "Lecturer", topics: ["React", "Next.js"] }] });
     const [sql, params] = mocks.execute.mock.calls[0];
-    expect(sql).toContain('where "courses"."status" = $5');
+    expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('order by "courses"."title" asc, "courses"."id" asc');
     expect(sql).not.toContain(" limit ");
-    expect(params).toEqual(["published", "confirmed", "accepted", "edited", "published"]);
+    expect(params).toEqual(["published"]);
   });
 
   it("includes hidden courses when include_hidden=true is provided", async () => {
     const response = await request("?include_hidden=true");
     expect(response.status).toBe(200);
     const [sql, params] = mocks.execute.mock.calls[0];
-    expect(sql).toContain('"courses"."status" in ($5, $6)');
-    expect(params).toEqual(["published", "confirmed", "accepted", "edited", "published", "hidden"]);
+    expect(sql).toContain('"courses"."status" in ($1, $2)');
+    expect(params).toEqual(["published", "hidden"]);
   });
 
   it("sorts popular courses by actual enrollment rows, then title and ID", async () => {
     const response = await request("?sort=popular&limit=4");
     expect(response.status).toBe(200);
     const [sql, params] = mocks.execute.mock.calls[0];
-    expect(sql).toContain('where "courses"."status" = $5');
+    expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('order by count(distinct "student_enrollments"."id") desc, "courses"."title" asc, "courses"."id" asc');
-    expect(sql).toContain(" limit $6");
-    expect(params).toEqual(["published", "confirmed", "accepted", "edited", "published", 4]);
+    expect(sql).toContain(" limit $2");
+    expect(params).toEqual(["published", 4]);
   });
 
-  it("left-joins enrollment counts, covers and skills without dropping courses with no matching rows", async () => {
+  it("left-joins enrollment counts and covers without dropping courses with no matching rows", async () => {
     mocks.execute.mockResolvedValue({ rows: [row("0", null, "published", [])] });
     const response = await request();
     expect(await response.json()).toEqual({ courses: [{ ...course, enrollmentCount: 0, coverImageUrl: null, instructorName: "Lecturer", topics: [] }] });
     const [sql] = mocks.execute.mock.calls[0];
     expect(sql).toContain('count(distinct "student_enrollments"."id")');
-    expect(sql).not.toContain("count(*)");
+    expect(sql.split("case when")[0]).not.toContain("count(*)");
     expect(sql).toContain('left join "student_enrollments" on "student_enrollments"."course_id" = "courses"."id"');
     expect(sql).toContain('left join "course_details" on "course_details"."course_id" = "courses"."id"');
-    expect(sql).toContain('left join "skills" on "skills"."course_id" = "courses"."id"');
-    expect(sql).toContain('where "courses"."status" = $5');
+    expect(sql).not.toContain('left join "skills"');
+    expect(sql).toContain('where "courses"."status" = $1');
     expect(sql).toContain('"course_details"."cover_image_url"');
     expect(sql).toContain('group by "courses"."id", "course_details"."cover_image_url"');
   });
@@ -188,7 +164,7 @@ describe("GET /api/courses", () => {
 
   it.each([1, 100])("accepts the limit boundary %i", async (limit) => {
     expect((await request(`?limit=${limit}`)).status).toBe(200);
-    expect(mocks.execute.mock.calls[0][1]).toEqual(["published", "confirmed", "accepted", "edited", "published", limit]);
+    expect(mocks.execute.mock.calls[0][1]).toEqual(["published", limit]);
   });
 
   it.each(["0", "-1", "101", "1.5", "nope", ""])("rejects invalid limit %j before querying", async (limit) => {

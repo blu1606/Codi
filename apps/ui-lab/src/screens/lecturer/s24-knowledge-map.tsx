@@ -5,7 +5,8 @@ import type { Screen } from "../screen-types";
 const route = { pathname: "/dashboard/lecturer/courses/course-react-001/kmap" };
 
 function kmapTab(data: ReturnType<typeof kmapData>) {
-  return <CourseEditor courseId="course-react-001" activeTab="kmap" data={lecturerEditorData({ kmapData: data })} />;
+  const workerData = { ...data, course: { ...data.course, analysisAvailable: true } };
+  return <CourseEditor courseId="course-react-001" activeTab="kmap" data={lecturerEditorData({ kmapData: workerData })} />;
 }
 
 export const lecturerKnowledgeMapScreen: Screen = {
