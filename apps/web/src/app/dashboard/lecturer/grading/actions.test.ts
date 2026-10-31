@@ -26,6 +26,7 @@ const mockTransaction = vi.fn();
 const mockNotify = vi.fn().mockResolvedValue({ id: 1 });
 const mockNotificationContext = vi.fn();
 const mockGenerateText = vi.fn();
+const mockGenerateAiGradingDraft = vi.fn();
 
 vi.mock("@/services", () => ({
   auth: {
@@ -51,6 +52,10 @@ vi.mock("@/lib/ai", () => ({
   getLlmProvider: () => ({
     getModel: () => "mock-model",
   }),
+}));
+
+vi.mock("@/lib/ai-grading-draft", () => ({
+  generateAiGradingDraft: (...args: any[]) => mockGenerateAiGradingDraft(...args),
 }));
 
 vi.mock("ai", () => ({
@@ -370,11 +375,68 @@ describe("Lecturer Grading Server Actions", () => {
     });
   });
 
-  it("denies direct AI requests without selecting submissions or invoking a provider", async () => {
-    const result = await getAiGradingDraft(10);
+  it("denies direct AI requests for submissions outside the lecturer scope", async () => {
+    mockSelect.mockReturnValue(createMockQuery([]));
+    const result = await getAiGradingDraft({ submissionId: 10, viewToken: "view" });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("chưa khả dụng");
+    expect(result.error).toContain("không tồn tại");
+    expect(mockSelect).toHaveBeenCalledTimes(1);
+    expect(mockGenerateAiGradingDraft).not.toHaveBeenCalled();
+  });
+
+  it("requests a draft only for an owned assignment and returns it without saving a grade", async () => {
+    const row = {
+      id: 10, assessmentId: 101, enrollmentId: 2, attempt: 1, savedAt: new Date("2026-10-31T00:00:00Z"), gradedAt: null, gradedBy: null,
+      answerText: "function sort(items) { return [...items].sort(); }", fileUrl: null, fileName: null, linkUrl: null,
+      submittedAt: new Date("2026-10-30T00:00:00Z"), status: "pending", score: null,
+      instructions: "Triển khai hàm sắp xếp.", maxScore: "10", passingScore: 50,
+      rubric: JSON.stringify([{ id: "correctness", name: "Đúng yêu cầu", points: 10 }]), type: "assignment", courseId: "c1",
+    };
+    mockSelect.mockReturnValue(createMockQuery([row]));
+    mockGenerateAiGradingDraft.mockResolvedValue({ success: true, suggestedScore: 8, rubricScores: { correctness: 8 }, feedback: "Bài làm đúng yêu cầu." });
+
+    const result = await getAiGradingDraft({ submissionId: 10, viewToken: submissionIdentity(row) });
+
+    expect(result).toEqual({ success: true, suggestedScore: 8, rubricScores: { correctness: 8 }, feedback: "Bài làm đúng yêu cầu." });
+    expect(mockGenerateAiGradingDraft).toHaveBeenCalledWith({
+      instructions: "Triển khai hàm sắp xếp.", maxScore: 10,
+      rubric: [{ id: "correctness", name: "Đúng yêu cầu", points: 10 }],
+      answerText: "function sort(items) { return [...items].sort(); }",
+    });
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid IDs before reading a submission", async () => {
+    expect(await getAiGradingDraft({ submissionId: 0, viewToken: "view" })).toMatchObject({ success: false });
     expect(mockSelect).not.toHaveBeenCalled();
-    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(mockGenerateAiGradingDraft).not.toHaveBeenCalled();
+  });
+
+  it("does not call AI for an invalid stored rubric", async () => {
+    const row = {
+      id: 10, assessmentId: 101, enrollmentId: 2, attempt: 1, savedAt: new Date("2026-10-31T00:00:00Z"), gradedAt: null, gradedBy: null,
+      answerText: "submission", fileUrl: null, fileName: null, linkUrl: null, submittedAt: new Date("2026-10-30T00:00:00Z"),
+      status: "pending", score: null, instructions: "", maxScore: 10, passingScore: 50,
+      rubric: JSON.stringify([{ id: "duplicate", points: 5 }, { id: "duplicate", points: 5 }]), type: "assignment", courseId: "c1",
+    };
+    mockSelect.mockReturnValue(createMockQuery([row]));
+    expect(await getAiGradingDraft({ submissionId: 10, viewToken: submissionIdentity(row) })).toMatchObject({ success: false, error: expect.stringContaining("rubric không hợp lệ") });
+    expect(mockGenerateAiGradingDraft).not.toHaveBeenCalled();
+  });
+
+  it("discards a generated draft if the learner resubmits while AI is working", async () => {
+    const original = {
+      id: 10, assessmentId: 101, enrollmentId: 2, attempt: 1, savedAt: new Date("2026-10-31T00:00:00Z"), gradedAt: null, gradedBy: null,
+      answerText: "first version", fileUrl: null, fileName: null, linkUrl: null, submittedAt: new Date("2026-10-30T00:00:00Z"),
+      status: "pending", score: null, instructions: "", maxScore: 10, passingScore: 50, rubric: null, type: "assignment", courseId: "c1",
+    };
+    const resubmitted = { ...original, answerText: "new version", savedAt: new Date("2026-10-31T00:01:00Z") };
+    mockSelect.mockReturnValueOnce(createMockQuery([original])).mockReturnValueOnce(createMockQuery([resubmitted]));
+    mockGenerateAiGradingDraft.mockResolvedValue({ success: true, suggestedScore: 8, feedback: "Draft" });
+
+    const result = await getAiGradingDraft({ submissionId: 10, viewToken: submissionIdentity(original) });
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining("đã thay đổi") });
+    expect(mockGenerateAiGradingDraft).toHaveBeenCalledOnce();
   });
 });

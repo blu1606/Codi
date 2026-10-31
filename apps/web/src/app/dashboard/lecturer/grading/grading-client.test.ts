@@ -33,16 +33,27 @@ async function render(token: string, scores = { logic: 7 }, id = 10) {
   await act(async () => root.render(createElement(GradingQueueClient, { data, snippets: [] })));
 }
 
-it("reopens persisted rubric and saves feedback without regrading; AI is unavailable", async () => {
+it("reopens persisted rubric and saves feedback without regrading", async () => {
   await render("view-a");
   expect(host.querySelector<HTMLInputElement>('input[type="number"]')!.value).toBe("7");
-  expect(host.textContent).toContain("AI chấm bài chưa khả dụng");
+  expect(button("AI gợi ý điểm và nhận xét")).toBeTruthy();
   expect(boundary.ai).not.toHaveBeenCalled();
   await act(async () => button("Cập nhật điểm").click());
   expect(boundary.save).toHaveBeenCalledWith(expect.objectContaining({ viewToken: "view-a", score: 7, rubricScores: { logic: 7 } }));
   expect(boundary.refresh).toHaveBeenCalled();
   await render("view-b", { logic: 8 });
   expect(host.querySelector<HTMLInputElement>('input[type="number"]')!.value).toBe("8");
+});
+
+it("applies AI grading as an editable draft and never saves it automatically", async () => {
+  boundary.ai.mockResolvedValue({ success: true, suggestedScore: 8, rubricScores: { logic: 8 }, feedback: "Gợi ý cần được giảng viên xem lại." });
+  await render("view-a");
+  await act(async () => button("AI gợi ý điểm và nhận xét").click());
+  expect(boundary.ai).toHaveBeenCalledWith({ submissionId: 10, viewToken: "view-a" });
+  expect(host.querySelector<HTMLInputElement>('input[type="number"]')!.value).toBe("8");
+  expect(host.querySelector<HTMLTextAreaElement>("#feedback-input")!.value).toContain("previous\n\nGợi ý cần được giảng viên xem lại.");
+  expect(host.textContent).toContain("Hãy kiểm tra lại điểm và nhận xét trước khi lưu");
+  expect(boundary.save).not.toHaveBeenCalled();
 });
 
 it("preserves dirty same-ID drafts and their viewed identity on server refresh", async () => {
