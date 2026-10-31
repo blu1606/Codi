@@ -6,12 +6,14 @@ import { ENV } from "@/env.server";
 import { trustedBudget } from "./github-profile-budget";
 import { createGithubProfileStore, type GithubProfileRequest } from "./github-profile-store";
 import { parseGithubProfileInput, runGithubProfileRequest } from "./github-profile-service";
+import { generateGithubProfileAnalysis } from "./github-profile-ai";
 
 const payloadSchema = z.object({
   consentVersion: z.literal("public-github-v1"),
-  githubProfileInput: z.string().max(300),
+  githubProfileInput: z.string().max(300).optional(),
   accountId: z.string().min(1).max(300),
   githubUserId: z.string().regex(/^[1-9][0-9]*$/).max(20),
+  summaryOnly: z.boolean().optional(),
 }).strict();
 
 /** One claimed job. This server-only handler never places OAuth tokens in the queue. */
@@ -25,8 +27,7 @@ export async function runGithubProfileJob(job: AiJob): Promise<void> {
   try {
     if (job.type !== "github_profile" || job.resourceId !== job.userId) throw new Error("invalid_job");
     const payload = payloadSchema.parse(job.payload);
-    const input = parseGithubProfileInput({ consentVersion: payload.consentVersion, githubProfileInput: payload.githubProfileInput });
-    if (!budget || ENV.AI_PROVIDER !== "openai" || ENV.AI_MODEL !== "gpt-6-luna" || !ENV.OPENAI_API_KEY || !ENV.GITHUB_CLIENT_ID || !ENV.GITHUB_CLIENT_SECRET) {
+    if (!budget || ENV.AI_PROVIDER !== "openai" || ENV.AI_MODEL !== "gpt-6-luna" || !ENV.OPENAI_API_KEY) {
       failure = "not_ready";
       throw new Error("not_ready");
     }
@@ -34,6 +35,35 @@ export async function runGithubProfileJob(job: AiJob): Promise<void> {
       failure = "unauthorized";
       throw new Error("unauthorized");
     }
+    if (payload.summaryOnly) {
+      const linked = await store.getLinkedAccount(job.userId);
+      const stored = await store.read(job.userId);
+      if (!linked || linked.accountId !== payload.accountId || linked.githubUserId !== payload.githubUserId || !stored ||
+        stored.accountId !== payload.accountId || stored.githubUserId !== payload.githubUserId) {
+        failure = "profile_unavailable";
+        throw new Error("profile_unavailable");
+      }
+      claim = await store.claim({ userId: job.userId, accountId: linked.accountId,
+        githubUserId: linked.githubUserId, consentVersion: payload.consentVersion }, lease);
+      const signal = AbortSignal.timeout(75_000);
+      const generation = await generateGithubProfileAnalysis(stored.snapshot, {
+        apiKey: ENV.OPENAI_API_KEY,
+        abortSignal: signal,
+        timeoutMs: 75_000,
+        excludedRepositoryIds: stored.corrections.excludedRepositoryIds,
+        reserveGeneration: (reservation) => store.reserveGeneration(claim!, reservation, lease),
+      });
+      signal.throwIfAborted();
+      await store.publish(claim, stored.snapshot, generation.analysis, lease);
+      finished = true;
+      return;
+    }
+    if (!ENV.GITHUB_CLIENT_ID || !ENV.GITHUB_CLIENT_SECRET) {
+      failure = "not_ready";
+      throw new Error("not_ready");
+    }
+    if (typeof payload.githubProfileInput !== "string") throw new Error("invalid_job");
+    const input = parseGithubProfileInput({ consentVersion: payload.consentVersion, githubProfileInput: payload.githubProfileInput });
     const signal = AbortSignal.timeout(175_000);
     const result = await runGithubProfileRequest(input, {
       abortSignal: signal,

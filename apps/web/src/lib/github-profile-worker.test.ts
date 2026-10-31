@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   roles: vi.fn(), token: vi.fn(), run: vi.fn(),
-  store: { getLinkedAccount: vi.fn(), claim: vi.fn(), reserveGeneration: vi.fn(), publish: vi.fn(), finishBackground: vi.fn() },
+  generate: vi.fn(),
+  store: { getLinkedAccount: vi.fn(), read: vi.fn(), claim: vi.fn(), reserveGeneration: vi.fn(), publish: vi.fn(), finishBackground: vi.fn() },
 }));
 vi.mock("@codi-1/auth", () => ({ getActiveRoles: mocks.roles, ROLE: { LEARNER: "LEARNER" } }));
 vi.mock("@/services", () => ({ db: {}, auth: { api: { getAccessToken: mocks.token } } }));
@@ -10,6 +11,7 @@ vi.mock("@/env.server", () => ({ ENV: { AI_PROVIDER: "openai", AI_MODEL: "gpt-6-
 vi.mock("./github-profile-budget", () => ({ trustedBudget: () => ({ budgetKey: "fake", slot: "test-local", candidateSha: "a".repeat(40) }) }));
 vi.mock("./github-profile-store", () => ({ createGithubProfileStore: () => mocks.store }));
 vi.mock("./github-profile-service", () => ({ parseGithubProfileInput: (v: unknown) => v, runGithubProfileRequest: mocks.run }));
+vi.mock("./github-profile-ai", () => ({ generateGithubProfileAnalysis: mocks.generate }));
 import { runGithubProfileJob } from "./github-profile-worker";
 import type { AiJob } from "@codi-1/db/ai-jobs";
 
@@ -24,6 +26,8 @@ describe("GitHub profile worker", () => {
     mocks.store.getLinkedAccount.mockResolvedValue({ accountId: "account", githubUserId: "123" });
     mocks.store.claim.mockResolvedValue(claim);
     mocks.store.reserveGeneration.mockResolvedValue(true);
+    mocks.store.read.mockResolvedValue({ accountId: "account", githubUserId: "123", snapshot: { fixture: "retained" }, corrections: { excludedRepositoryIds: [7] } });
+    mocks.generate.mockResolvedValue({ analysis: { fixture: "summary" } });
     mocks.token.mockResolvedValue({ accessToken: "do-not-log" });
   });
   it("binds token to the server-owned user and publishes with the job lease", async () => {
@@ -61,5 +65,14 @@ describe("GitHub profile worker", () => {
     await runGithubProfileJob(job);
     expect(mocks.run).not.toHaveBeenCalled();
     expect(mocks.store.finishBackground).toHaveBeenCalledWith(undefined, lease, "failed", "unauthorized");
+  });
+  it("regenerates excluded-repository summaries from the retained snapshot without GitHub access", async () => {
+    const summaryJob: AiJob = { ...job, payload: { consentVersion: "public-github-v1", accountId: "account", githubUserId: "123", summaryOnly: true } };
+    await runGithubProfileJob(summaryJob);
+    expect(mocks.generate).toHaveBeenCalledWith({ fixture: "retained" }, expect.objectContaining({ excludedRepositoryIds: [7], timeoutMs: 75_000 }));
+    expect(mocks.store.publish).toHaveBeenCalledWith(claim, { fixture: "retained" }, { fixture: "summary" }, lease);
+    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(mocks.store.finishBackground).not.toHaveBeenCalled();
   });
 });

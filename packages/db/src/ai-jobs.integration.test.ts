@@ -62,6 +62,29 @@ suite("durable AI job queue (isolated PostgreSQL)", () => {
     expect(await readAiJob(db, id, "owner")).toMatchObject({ status: "failed", errorCode: "lease_expired" });
     await expect(db.transaction((tx) => lockAiJob(tx, id, job!.leaseToken))).rejects.toBeInstanceOf(AiJobLeaseError);
   });
+  it("serializes GitHub analysis enqueue with profile deletion owner locks", async () => {
+    let release!: () => void;
+    let locked!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const acquired = new Promise<void>((resolve) => { locked = resolve; });
+    const transaction = db.transaction(async (tx) => {
+      await tx.execute(sql`select id from "user" where id = 'owner' for update`);
+      locked();
+      await held;
+    });
+    await acquired;
+    let settled = false;
+    const enqueue = enqueueAiJob(db, { type: "github_profile", userId: "owner", resourceId: "owner" })
+      .finally(() => { settled = true; });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(settled).toBe(false);
+    } finally {
+      release();
+      await transaction;
+    }
+    expect(await enqueue).toBeTruthy();
+  });
   it("rejects payloads with credential-shaped keys", async () => {
     for (const name of ["access_token", "accessToken", "sessionId", "privateKey", "api_key"]) {
       await expect(enqueueAiJob(db, { type: "github_profile", userId: "owner", resourceId: "account", payload: { [name]: "do not persist" } })).rejects.toThrow();

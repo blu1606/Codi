@@ -509,6 +509,58 @@ describe("durable private GitHub profile store", () => {
   it("returns null for missing/unlinked/unpublished owner result", async () => {
     expect(await fixture([[]]).store.read("learner")).toBeNull();
   });
+  it("saves only schema-valid corrections for the authenticated owner profile", async () => {
+    const task = fixture([owner, [["local-github", "123", snapshot(), analysis(), edits]], []]);
+    await expect(task.store.saveCorrections("learner", edits)).resolves.toEqual({ corrections: edits, summaryJobId: null });
+    expect(task.calls[0]!.sql).toBe("begin");
+    expect(task.calls.some((call) => call.sql.includes('from "user"') && call.sql.includes("for update"))).toBe(true);
+    const read = task.calls.find((call) => call.sql.includes('from "github_profiles"'))!;
+    expect(read.sql).toContain('"github_profiles"."published_at" is not null');
+    expect(read.sql).toContain("for update");
+    expect(task.calls.at(-2)!.sql).toContain('update "github_profiles"');
+  });
+  it("queues a summary-only job when exclusions change and the worker is enabled", async () => {
+    const previous = { ...edits, excludedRepositoryIds: [] };
+    const next = { ...edits, excludedRepositoryIds: [2] };
+    const id = "00000000-0000-4000-8000-000000000003";
+    const task = fixture([owner, [["local-github", "123", snapshot(), analysis(), previous]], [], [], [{ id }]]);
+    const prior = process.env.AI_BACKGROUND_WORKER_ENABLED;
+    process.env.AI_BACKGROUND_WORKER_ENABLED = "true";
+    try {
+      await expect(task.store.saveCorrections("learner", next)).resolves.toEqual({ corrections: next, summaryJobId: id });
+    } finally {
+      if (prior === undefined) delete process.env.AI_BACKGROUND_WORKER_ENABLED;
+      else process.env.AI_BACKGROUND_WORKER_ENABLED = prior;
+    }
+    expect(task.calls.some((call) => call.sql.includes("select id from ai_jobs") && call.sql.includes("for update nowait"))).toBe(true);
+    const insert = task.calls.find((call) => call.sql.startsWith("insert into ai_jobs"))!;
+    expect(insert.sql).toContain("'github_profile'");
+    expect(JSON.parse(String(insert.params.at(-1)))).toMatchObject({ summaryOnly: true, githubUserId: "123" });
+    expect(insert.sql).not.toMatch(/access_token|authorization|api_key/);
+  });
+  it("rejects corrections that do not project onto the owner's current evidence", async () => {
+    const task = fixture([owner, [["local-github", "123", snapshot(), analysis(), edits]]]);
+    await expect(task.store.saveCorrections("learner", {
+      ...edits,
+      technologies: [edits.technologies[0]!, edits.technologies[0]!],
+    })).rejects.toMatchObject({ code: "invalid_input" });
+    expect(task.calls.some((call) => call.sql.startsWith('update "github_profiles"'))).toBe(false);
+  });
+  it("deletes only a published profile while retaining its linked account", async () => {
+    const task = fixture([owner, [], [{ userId: "learner" }]]);
+    await expect(task.store.deleteProfile("learner")).resolves.toBe(true);
+    expect(task.calls.some((call) => call.sql.includes('from "user"') && call.sql.includes("for update"))).toBe(true);
+    expect(task.calls.some((call) => call.sql.includes("from ai_jobs") && call.sql.includes("for update nowait"))).toBe(true);
+    const deletion = task.calls.at(-2)!;
+    expect(deletion.sql).toContain('delete from "github_profiles"');
+    expect(deletion.sql).toContain('"github_profiles"."published_at" is not null');
+    expect(deletion.sql).not.toContain('delete from "account"');
+  });
+  it("refuses profile deletion while an AI analysis is queued or running", async () => {
+    const task = fixture([owner, [{ id: "active-job" }]]);
+    await expect(task.store.deleteProfile("learner")).rejects.toMatchObject({ code: "active_request" });
+    expect(task.calls.some((call) => call.sql.startsWith('delete from "github_profiles"'))).toBe(false);
+  });
   it("never exposes old data if the linked numeric identity changed", async () => {
     const task = fixture([
       [

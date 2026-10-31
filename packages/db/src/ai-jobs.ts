@@ -47,6 +47,10 @@ export async function enqueueAiJob(db: TransactionalClient, input: { type: AiJob
   const payload = validatePayload(input.payload);
   try {
     return await db.transaction(async (tx) => {
+      if (type === "github_profile") {
+        // Serialize enqueue with profile-only deletion, which takes the same owner-row lock.
+        await tx.execute(sql`select id from "user" where id = ${userId} for update`);
+      }
       if (type === "knowledge_map" || type === "quiz_generation") {
         const configured = process.env.AI_DAILY_JOB_LIMIT;
         // Invalid operator configuration fails closed; a missing value defaults to five.
