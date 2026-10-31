@@ -72,11 +72,11 @@ export async function PATCH(request: NextRequest) {
     const parsed = bodySchema.safeParse(input);
     if (!parsed.success)
       return failure("invalid_input", "Dữ liệu chỉnh sửa không hợp lệ.", 400);
-    const corrections = await createGithubProfileStore(db).saveCorrections(
+    const saved = await createGithubProfileStore(db).saveCorrections(
       session.user.id,
       parsed.data.corrections,
     );
-    return NextResponse.json({ saved: true, corrections }, { headers });
+    return NextResponse.json({ saved: true, ...saved }, { headers });
   } catch (error) {
     if (error instanceof GithubProfileStoreError) {
       if (error.code === "profile_not_found")
@@ -90,6 +90,12 @@ export async function PATCH(request: NextRequest) {
           "invalid_input",
           "Chỉnh sửa không khớp với hồ sơ hiện tại.",
           400,
+        );
+      if (error.code === "active_request")
+        return failure(
+          "active_request",
+          "Một lượt phân tích đang chạy. Vui lòng thử lại sau khi lượt đó hoàn tất.",
+          409,
         );
     }
     return failure("store_failed", "Chưa lưu được chỉnh sửa hồ sơ.", 503);

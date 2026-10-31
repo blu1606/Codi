@@ -56,7 +56,7 @@ const deleteRequest = (
 beforeEach(() => {
   mocks.session.mockResolvedValue({ user: { id: "owner" } });
   mocks.roles.mockResolvedValue(["LEARNER"]);
-  mocks.save.mockResolvedValue(corrections);
+  mocks.save.mockResolvedValue({ corrections, summaryJobId: null });
   mocks.remove.mockResolvedValue(true);
   mocks.createStore.mockReturnValue({
     saveCorrections: mocks.save,
@@ -69,7 +69,7 @@ describe("learner-owned profile corrections endpoint", () => {
   it("persists the validated correction set under the signed-in learner", async () => {
     const response = await PATCH(patchRequest());
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ saved: true, corrections });
+    expect(await response.json()).toEqual({ saved: true, corrections, summaryJobId: null });
     expect(mocks.save).toHaveBeenCalledWith("owner", corrections);
   });
   it("rejects cross-origin, unauthenticated and malformed mutations before saving", async () => {

@@ -510,8 +510,8 @@ describe("durable private GitHub profile store", () => {
     expect(await fixture([[]]).store.read("learner")).toBeNull();
   });
   it("saves only schema-valid corrections for the authenticated owner profile", async () => {
-    const task = fixture([owner, [[snapshot(), analysis()]], []]);
-    await expect(task.store.saveCorrections("learner", edits)).resolves.toEqual(edits);
+    const task = fixture([owner, [["local-github", "123", snapshot(), analysis(), edits]], []]);
+    await expect(task.store.saveCorrections("learner", edits)).resolves.toEqual({ corrections: edits, summaryJobId: null });
     expect(task.calls[0]!.sql).toBe("begin");
     expect(task.calls.some((call) => call.sql.includes('from "user"') && call.sql.includes("for update"))).toBe(true);
     const read = task.calls.find((call) => call.sql.includes('from "github_profiles"'))!;
@@ -519,8 +519,27 @@ describe("durable private GitHub profile store", () => {
     expect(read.sql).toContain("for update");
     expect(task.calls.at(-2)!.sql).toContain('update "github_profiles"');
   });
+  it("queues a summary-only job when exclusions change and the worker is enabled", async () => {
+    const previous = { ...edits, excludedRepositoryIds: [] };
+    const next = { ...edits, excludedRepositoryIds: [2] };
+    const id = "00000000-0000-4000-8000-000000000003";
+    const task = fixture([owner, [["local-github", "123", snapshot(), analysis(), previous]], [], [], [{ id }]]);
+    const prior = process.env.AI_BACKGROUND_WORKER_ENABLED;
+    process.env.AI_BACKGROUND_WORKER_ENABLED = "true";
+    try {
+      await expect(task.store.saveCorrections("learner", next)).resolves.toEqual({ corrections: next, summaryJobId: id });
+    } finally {
+      if (prior === undefined) delete process.env.AI_BACKGROUND_WORKER_ENABLED;
+      else process.env.AI_BACKGROUND_WORKER_ENABLED = prior;
+    }
+    expect(task.calls.some((call) => call.sql.includes("select id from ai_jobs") && call.sql.includes("for update nowait"))).toBe(true);
+    const insert = task.calls.find((call) => call.sql.startsWith("insert into ai_jobs"))!;
+    expect(insert.sql).toContain("'github_profile'");
+    expect(JSON.parse(String(insert.params.at(-1)))).toMatchObject({ summaryOnly: true, githubUserId: "123" });
+    expect(insert.sql).not.toMatch(/access_token|authorization|api_key/);
+  });
   it("rejects corrections that do not project onto the owner's current evidence", async () => {
-    const task = fixture([owner, [[snapshot(), analysis()]]]);
+    const task = fixture([owner, [["local-github", "123", snapshot(), analysis(), edits]]]);
     await expect(task.store.saveCorrections("learner", {
       ...edits,
       technologies: [edits.technologies[0]!, edits.technologies[0]!],

@@ -442,7 +442,7 @@ export function createGithubProfileStore(
         }
       });
     },
-    async saveCorrections(userId: string, input: unknown): Promise<GithubProfileCorrections> {
+    async saveCorrections(userId: string, input: unknown): Promise<{ corrections: GithubProfileCorrections; summaryJobId: string | null }> {
       parse(id, userId);
       let corrections: GithubProfileCorrections;
       try { corrections = parse(githubProfileCorrectionsSchema, input); }
@@ -450,16 +450,35 @@ export function createGithubProfileStore(
       return safe(() => database.transaction(async (tx) => {
         const [owner] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
         if (!owner) throw new GithubProfileStoreError("account_unavailable");
-        const [stored] = await tx.select({ snapshot: githubProfiles.snapshot, analysis: githubProfiles.analysis })
-          .from(githubProfiles).where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt))).for("update");
+        const [stored] = await tx.select({ accountId: githubProfiles.accountId, githubUserId: account.accountId, snapshot: githubProfiles.snapshot, analysis: githubProfiles.analysis, corrections: githubProfiles.corrections })
+          .from(githubProfiles).innerJoin(account, and(eq(account.id, githubProfiles.accountId), eq(account.userId, userId), eq(account.providerId, "github")))
+          .where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt))).for("update");
         if (!stored) throw new GithubProfileStoreError("profile_not_found");
         try {
           projectGithubProfile(stored.snapshot as GithubCollectionSnapshot, stored.analysis, corrections);
         } catch {
           throw new GithubProfileStoreError("invalid_input");
         }
+        const previous = githubProfileCorrectionsSchema.parse(stored.corrections);
+        const exclusionsChanged = JSON.stringify(previous.excludedRepositoryIds) !== JSON.stringify(corrections.excludedRepositoryIds);
+        let summaryJobId: string | null = null;
+        if (exclusionsChanged && process.env.AI_BACKGROUND_WORKER_ENABLED === "true") {
+          // Follow the same lock ordering as worker publication: the owner row is
+          // locked first, then reject an already-running analysis before queuing a
+          // summary-only job. This job uses the retained snapshot and never calls GitHub.
+          const active = await tx.execute(sql`select id from ai_jobs where type = 'github_profile' and user_id = ${userId}
+            and resource_id = ${userId} and status in ('queued', 'running') for update nowait`);
+          if (active.rows.length) throw new GithubProfileStoreError("active_request");
+        }
         await tx.update(githubProfiles).set({ corrections }).where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt)));
-        return corrections;
+        if (exclusionsChanged && process.env.AI_BACKGROUND_WORKER_ENABLED === "true") {
+          const result = await tx.execute(sql`insert into ai_jobs (type, user_id, resource_id, payload)
+            values ('github_profile', ${userId}, ${userId}, ${JSON.stringify({ consentVersion: "public-github-v1", accountId: stored.accountId,
+              githubUserId: stored.githubUserId, summaryOnly: true })}::jsonb) returning id`);
+          summaryJobId = String(result.rows[0]?.id ?? "");
+          if (!summaryJobId) throw new GithubProfileStoreError("store_failed");
+        }
+        return { corrections, summaryJobId };
       }));
     },
     async deleteProfile(userId: string): Promise<boolean> {
