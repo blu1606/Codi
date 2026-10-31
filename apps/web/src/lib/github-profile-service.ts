@@ -53,6 +53,13 @@ function intentLogin(input: string): string | null {
   return login.toLowerCase();
 }
 
+/** Validate user consent and profile intent before storing a background job. */
+export function parseGithubProfileInput(input: unknown) {
+  const parsed = requestSchema.parse(input);
+  intentLogin(parsed.githubProfileInput);
+  return parsed;
+}
+
 export interface GithubProfileLinkedAccount {
   /** Better Auth LOCAL row ID: only this value goes to the token accessor. */
   accountRowId: string;
@@ -62,6 +69,8 @@ export interface GithubProfileLinkedAccount {
 
 export interface GithubProfileServiceOptions {
   abortSignal: AbortSignal;
+  /** A trusted server runtime selection, never read from request JSON. */
+  background?: boolean;
   /** Trusted, session-bound adapters. Neither is invoked before request validation. */
   getLinkedAccount: (
     signal: AbortSignal,
@@ -225,7 +234,7 @@ export async function runGithubProfileRequest(
     return fail("invalid_input");
   }
   const request = deadline(
-    GITHUB_PROFILE_SERVICE_LIMITS.totalMs,
+    options.background ? 175_000 : GITHUB_PROFILE_SERVICE_LIMITS.totalMs,
     options.abortSignal,
   );
   let phase: "account" | "token" | "collection" | "ai" = "account";
@@ -254,7 +263,7 @@ export async function runGithubProfileRequest(
     if (!token) return fail("connection_expired");
     phase = "collection";
     phaseDeadline = deadline(
-      GITHUB_PROFILE_SERVICE_LIMITS.collectionMs,
+      options.background ? 90_000 : GITHUB_PROFILE_SERVICE_LIMITS.collectionMs,
       request.signal,
     );
     const collectionSignal = phaseDeadline.signal;
@@ -267,7 +276,7 @@ export async function runGithubProfileRequest(
             publicAccess: options.publicAccess,
           },
           {
-            limits: { totalMs: GITHUB_PROFILE_SERVICE_LIMITS.collectionMs },
+            limits: { totalMs: options.background ? 90_000 : GITHUB_PROFILE_SERVICE_LIMITS.collectionMs },
             fetch: scopedFetch(
               options.githubFetch ?? globalThis.fetch,
               collectionSignal,
@@ -309,7 +318,7 @@ export async function runGithubProfileRequest(
     phase = "ai";
     aiStarted = performance.now();
     phaseDeadline = deadline(
-      GITHUB_PROFILE_SERVICE_LIMITS.aiMs,
+      options.background ? 75_000 : GITHUB_PROFILE_SERVICE_LIMITS.aiMs,
       request.signal,
     );
     const aiSignal = phaseDeadline.signal;
@@ -317,6 +326,7 @@ export async function runGithubProfileRequest(
       () =>
         generateGithubProfileAnalysis(snapshot!, {
           ...options.ai,
+          ...(options.background ? { timeoutMs: 75_000 } : {}),
           abortSignal: aiSignal,
           fetch: scopedFetch(options.ai.fetch ?? globalThis.fetch, aiSignal),
         }),

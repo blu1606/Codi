@@ -12,7 +12,10 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@codi-1/db";
+import { finishAiJob, lockAiJob } from "@codi-1/db/ai-jobs";
 import { account, user } from "@codi-1/db/schema/auth";
+import { userRoles } from "@codi-1/db/schema/roles";
+import { ROLE } from "@codi-1/auth";
 import {
   githubProfiles,
   githubGenerationReservations,
@@ -73,6 +76,7 @@ const reservationSchema = z
 
 export type GithubProfileClaimInput = z.infer<typeof claimInput>;
 export type GithubProfileRequest = z.infer<typeof requestSchema>;
+type JobLease = { id: string; leaseToken: string };
 /** Server-owned configuration, never populated from a client request. */
 export type GithubProfileTrustedBudget = z.infer<typeof budgetSchema>;
 export interface GithubLinkedAccount {
@@ -171,6 +175,16 @@ async function lockRequest(store: Store, request: GithubProfileRequest) {
   if (!profile) throw new GithubProfileStoreError("request_fenced");
   return profile;
 }
+async function lockActiveLearner(store: Store, userId: string) {
+  // Hold both rows until the enclosing claim, cost reservation or publication
+  // commits; a concurrent ban or role revocation must serialize with it.
+  const result = await store.execute(sql`select ${user.id} from ${user}
+    join ${userRoles} on ${userRoles.userId} = ${user.id}
+    where ${user.id} = ${userId} and ${user.banned} is not true
+      and ${userRoles.roleId} = ${ROLE.LEARNER} and ${userRoles.revokedAt} is null
+    for share of ${user}, ${userRoles}`);
+  if (result.rows.length !== 1) throw new GithubProfileStoreError("request_fenced");
+}
 function storedIdentity(snapshot: unknown, expectedId: string) {
   return (
     snapshot === null ||
@@ -208,12 +222,14 @@ export function createGithubProfileStore(
         return rows[0]!;
       });
     },
-    async claim(input: GithubProfileClaimInput): Promise<GithubProfileRequest> {
+    async claim(input: GithubProfileClaimInput, job?: JobLease): Promise<GithubProfileRequest> {
       const request = parse(claimInput, input);
       return safe(() =>
         database.transaction(
           async (tx) => {
+            if (job) await lockAiJob(tx, job.id, job.leaseToken);
             await lockAccount(tx, request);
+            if (job) await lockActiveLearner(tx, request.userId);
             await tx
               .insert(githubProfiles)
               .values({
@@ -238,7 +254,9 @@ export function createGithubProfileStore(
               .update(githubProfiles)
               .set({
                 activeRequestId: randomUUID(),
-                activeUntil: sql`${databaseNow} + interval '55 seconds'`,
+                activeUntil: job
+                  ? sql`${databaseNow} + interval '210 seconds'`
+                  : sql`${databaseNow} + interval '55 seconds'`,
                 consentVersion: request.consentVersion,
                 consentedAt: databaseNow,
               })
@@ -285,10 +303,33 @@ export function createGithubProfileStore(
         return rows.length === 1;
       });
     },
+    async finishBackground(
+      input: GithubProfileRequest | undefined,
+      job: JobLease,
+      status: "completed" | "failed",
+      errorCode?: string,
+    ): Promise<void> {
+      const request = input ? parse(requestSchema, input) : undefined;
+      await safe(() => database.transaction(async (tx) => {
+        await lockAiJob(tx, job.id, job.leaseToken);
+        if (request) {
+          // A successful empty result must still be authorized at publication.
+          if (status === "completed") {
+            await lockRequest(tx, request);
+            await lockActiveLearner(tx, request.userId);
+          }
+          await tx.update(githubProfiles)
+            .set({ activeRequestId: null, activeUntil: null })
+            .where(requestWhere(request));
+        }
+        await finishAiJob(tx, job.id, job.leaseToken, status, errorCode);
+      }));
+    },
     async publish(
       input: GithubProfileRequest,
       snapshot: GithubCollectionSnapshot,
       analysis: GithubProfileAnalysis,
+      job?: JobLease,
     ): Promise<void> {
       const request = parse(requestSchema, input);
       let retained: GithubCollectionSnapshot;
@@ -315,7 +356,9 @@ export function createGithubProfileStore(
       await safe(() =>
         database.transaction(
           async (tx) => {
+            if (job) await lockAiJob(tx, job.id, job.leaseToken);
             const current = await lockRequest(tx, request);
+            if (job) await lockActiveLearner(tx, request.userId);
             // Validate current corrections, but never replace them with the generation's old copy.
             try {
               projectGithubProfile(retained, proposed, current.corrections);
@@ -335,6 +378,7 @@ export function createGithubProfileStore(
               .returning({ userId: githubProfiles.userId });
             if (rows.length !== 1)
               throw new GithubProfileStoreError("request_fenced");
+            if (job) await finishAiJob(tx, job.id, job.leaseToken, "completed");
           },
           { isolationLevel: "read committed" },
         ),
@@ -400,6 +444,7 @@ export function createGithubProfileStore(
     async reserveGeneration(
       input: GithubProfileRequest,
       reservationInput: Readonly<GithubProfileGenerationReservation>,
+      job?: JobLease,
     ): Promise<boolean> {
       if (!budget) return false;
       const request = parse(requestSchema, input);
@@ -407,12 +452,14 @@ export function createGithubProfileStore(
       return safe(() =>
         database.transaction(
           async (tx) => {
+            if (job) await lockAiJob(tx, job.id, job.leaseToken);
             // A transaction-scoped, server-derived key serializes count/cost/slot decisions.
             // READ COMMITTED ensures the aggregate sees the preceding lock holder's commit.
             await tx.execute(
               sql`select pg_advisory_xact_lock(hashtextextended(${`github-profile-generation:${budget.budgetKey}`}, 0))`,
             );
             await lockRequest(tx, request);
+            if (job) await lockActiveLearner(tx, request.userId);
             const [usage] = await tx
               .select({
                 attempts: count(),

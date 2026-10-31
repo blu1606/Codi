@@ -11,6 +11,7 @@ export default defineConfig({
       "apps/web/src/**/*.test.ts",
       "apps/web/scripts/**/*.test.ts",
       "packages/auth/src/**/*.test.ts",
+      "packages/db/src/**/*.test.ts",
     ],
     coverage: {
       provider: "v8",

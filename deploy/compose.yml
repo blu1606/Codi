@@ -17,3 +17,23 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+  ai-worker:
+    image: codi-web:${CODI_RELEASE:?CODI_RELEASE required}
+    container_name: codi-ai-worker
+    profiles: [ai-worker]
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - /etc/codi/codi.env
+    environment:
+      NODE_ENV: production
+      AI_BACKGROUND_WORKER_ENABLED: "true"
+    command: ["pnpm", "--filter", "web", "worker:ai"]
+    mem_limit: 768m
+    cpus: 0.75
+    pids_limit: 128
+    stop_grace_period: 210s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

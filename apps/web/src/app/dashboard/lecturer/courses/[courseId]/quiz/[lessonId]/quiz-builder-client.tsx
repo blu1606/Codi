@@ -15,6 +15,7 @@ import {
   Loader2,
   Plus,
   Save,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,8 +32,12 @@ import {
 import { Input } from "@codi-1/ui/components/input";
 import { Textarea } from "@codi-1/ui/components/textarea";
 import { cn } from "@codi-1/ui/lib/utils";
+import { startQuizGeneration, readQuizGeneration } from "../../quiz-ai-actions";
+import { QuizAiDialog, type AiQuizRequest } from "@/components/quiz-builder/quiz-ai-dialog";
+import { DEFAULT_MAX_QUIZ_OPTIONS } from "@/lib/quiz-ai-contract";
 import {
   type QuizQuestionInput,
+  generateAiQuizQuestions,
   saveQuizData,
 } from "../../actions";
 
@@ -88,6 +93,46 @@ export function QuizBuilderClient({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [appliedAiJobIds, setAppliedAiJobIds] = useState<string[]>([]);
+
+  // Thêm câu hỏi từ nhập hàng loạt hoặc AI vào cuối danh sách (chưa lưu)
+  const appendQuestions = (added: QuizQuestionState[]) => {
+    if (added.length === 0) return;
+    setQuestions((prev) => [...prev, ...added]);
+    setIsDirty(true);
+  };
+
+  const resumeAiGeneration = async (signal?: AbortSignal, jobId?: string) => {
+    let result = await readQuizGeneration(courseId, lessonId, jobId);
+    if (result.status === "none") return null;
+    while (result.status === "queued" || result.status === "running") {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (signal?.aborted) return null;
+      result = await readQuizGeneration(courseId, lessonId, result.jobId);
+    }
+    if (result.status === "completed") {
+      if (appliedAiJobIds.includes(result.jobId)) return null;
+      return { success: true as const, questions: result.questions, jobId: result.jobId };
+    }
+    return { success: false as const, code: "unavailable" as const, message: "Tạo câu hỏi chưa hoàn tất. Bạn có thể thử lại.", retryable: true };
+  };
+
+  const handleGenerateAi = async (request: AiQuizRequest, signal?: AbortSignal) => {
+    const source = { sourceText: request.sourceMode === "paste" ? request.sourceText : undefined, focus: request.focus };
+    const job = await startQuizGeneration(courseId, lessonId, request.count, request.difficulty, source);
+    if (job.mode === "sync") return generateAiQuizQuestions(courseId, lessonId, request.count, request.difficulty, source);
+    if (job.mode === "error") return { success: false as const, code: "unavailable" as const, message: job.message, retryable: false };
+    return (await resumeAiGeneration(signal, job.id)) ?? { success: false as const, code: "unavailable" as const,
+      message: "Chưa tìm thấy tác vụ. Vui lòng thử lại.", retryable: true };
+  };
+
+  const handleApplyAiQuestions = (aiQuestions: QuizQuestionInput[], jobId?: string) => {
+    if (jobId && appliedAiJobIds.includes(jobId)) return;
+    if (jobId) setAppliedAiJobIds((ids) => [...ids, jobId]);
+    appendQuestions(aiQuestions);
+    toast.success(`Đã thêm ${aiQuestions.length} câu AI tạo vào danh sách. Nhớ lưu bài trắc nghiệm.`);
+  };
 
   // Thêm một câu hỏi mới rỗng
   const handleAddQuestion = () => {
@@ -272,6 +317,7 @@ export function QuizBuilderClient({
       await saveQuizData(courseId, lessonId, {
         passingScore,
         isEntry,
+        appliedAiJobIds,
         questions: questions.map((q) => ({
           id: q.id,
           text: q.text,
@@ -284,6 +330,7 @@ export function QuizBuilderClient({
       });
 
       setIsDirty(false);
+      setAppliedAiJobIds([]);
       toast.success(
         isEntry
           ? "Đã lưu Bài kiểm tra đầu vào thành công!"
@@ -390,15 +437,21 @@ export function QuizBuilderClient({
               Danh sách câu hỏi ({questions.length} câu)
             </div>
             {!isLocked && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddQuestion}
-                className="gap-1.5 text-xs cursor-pointer"
-              >
-                <Plus className="size-3.5" />
-                Thêm câu hỏi
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setAiOpen(true)} className="gap-1.5 text-xs cursor-pointer">
+                  <Sparkles className="size-3.5" />
+                  Tạo câu hỏi bằng AI
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddQuestion}
+                  className="gap-1.5 text-xs cursor-pointer"
+                >
+                  <Plus className="size-3.5" />
+                  Thêm câu hỏi
+                </Button>
+              </div>
             )}
           </div>
 
@@ -675,6 +728,20 @@ export function QuizBuilderClient({
           </Card>
         </div>
       </div>
+
+      {!isLocked && (
+        <>
+          <QuizAiDialog
+            onResume={resumeAiGeneration}
+            open={aiOpen}
+            onOpenChange={setAiOpen}
+            lessonTitle={isEntry ? "Bài kiểm tra đầu vào" : lesson?.title || "Bài học"}
+            maxOptions={DEFAULT_MAX_QUIZ_OPTIONS}
+            onGenerate={handleGenerateAi}
+            onApply={handleApplyAiQuestions}
+          />
+        </>
+      )}
     </div>
   );
 }

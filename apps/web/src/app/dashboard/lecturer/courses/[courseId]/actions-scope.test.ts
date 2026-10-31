@@ -153,8 +153,10 @@ describe("course-editor child membership", () => {
       await expectMembershipRejection(() => operation(id));
     });
     it(`${name} retains the own-course path`, async () => {
-      await expect(operation("own-lesson")).resolves.toBeDefined();
-      if (name === "read quiz") expect(writes).toEqual([]);
+      const result = await operation("own-lesson");
+      expect(result).toBeDefined();
+      if (name === "prepare quiz draft") expect(result).toMatchObject({ success: false, code: "no_material" });
+      if (name === "read quiz" || name === "prepare quiz draft") expect(writes).toEqual([]);
       else expect(writes.length).toBeGreaterThan(0);
     });
   }
