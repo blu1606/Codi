@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Empty, Icon, Progress } from '../../components/ui/primitives';
-import { currentLessonId, genPending, generatePath, goalLabel, isCourseComplete, rec, save, uid } from './learning-store';
+import { TYPE_ICON, TYPE_LABEL, currentLessonId, genPending, generatePath, goalLabel, isCourseComplete, rec, save, uid } from './learning-store';
 import { CompletionCard, DiagCard, OfferCard, UpdateNotice, courseGuard, openReview, showDiagCard } from './learning-shared';
 import { LessonPath, PathSummary, pathRows } from './path-views';
 import { KnowledgeMap } from './insights-pages';
@@ -63,18 +63,32 @@ export default function PathPage({ params, query }) {
   const retry = () => { generatePath(c.id); save(); };
   const rows = pathRows(c, { ...r, highlight });
 
+  const curRow = curLesson ? rows.find((x) => x.id === curLesson.id) : null;
+
   return (
     <div className="page stack-6">
-      <nav className="small muted" aria-label="Đường dẫn"><Link to="/dashboard">Bàn làm việc</Link> / <span aria-current="page">{c.title}</span></nav>
-      <header className="card"><div className="card-body ln-path-head">
-        <div className="stack-3 od-fill"><h1>{c.title}</h1>
+      <div className="row-between">
+        <nav className="small muted" aria-label="Đường dẫn"><Link to="/dashboard">Bàn làm việc</Link> / <span aria-current="page">{c.title}</span></nav>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openReview(c.id, 0)}><Icon name="star" className="icon-sm" /> {reviewed ? 'Sửa đánh giá' : 'Đánh giá khóa học'}</button>
+      </div>
+      <header className="card"><div className={`card-body ln-hero ${curLesson && !complete ? '' : 'is-solo'}`}>
+        <div className="stack-4">
+          <h1>{c.title}</h1>
           <p className="small muted">Mục tiêu: <strong className="ln-fg">{goalLabel(r.goal)}</strong>{r.goal && r.goal.hours ? ` · ${r.goal.hours} giờ/tuần` : ''} <button type="button" className="btn-link small" onClick={() => editGoal(c.id)}>Chỉnh mục tiêu</button></p>
-          <div className="row" style={{ gap: 12 }}><span className="od-fill"><Progress pct={prog.pct} label="Tiến độ khoá học" /></span><span className="small od-nowrap">{prog.done}/{prog.total} bài · {prog.pct}%</span></div>
+          <div className="stack-2">
+            <p className="row-between small"><span className="strong">Tiến độ khoá học</span><span className="muted">{prog.done}/{prog.total} bài · {prog.pct}%</span></p>
+            <Progress pct={prog.pct} label="Tiến độ khoá học" />
+          </div>
         </div>
-        <div className="stack-2 ln-path-cta">
-          {curLesson && !complete && <><Link className="btn btn-primary btn-lg" to={`/learn/${c.id}/${curLesson.id}`}>Học tiếp</Link><span className="xsmall muted od-truncate">{curLesson.title}</span></>}
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => openReview(c.id, 0)}>{reviewed ? 'Sửa đánh giá' : 'Đánh giá khóa học'}</button>
-        </div>
+        {curLesson && !complete && (
+          <div className="ln-next">
+            <div className="stack-1">
+              <p className="ln-next-title">{curLesson.title}</p>
+              {curRow && <p className="xsmall muted row ln-gap-2"><span>Bài {rows.indexOf(curRow) + 1}</span><span aria-hidden="true">·</span><span className="row ln-gap-1"><Icon name={TYPE_ICON[curRow.kind] || 'file-text'} className="icon-sm" />{TYPE_LABEL[curRow.kind] || TYPE_LABEL.reading}</span><span aria-hidden="true">·</span><span>{Codi.fmt.duration(curRow.durationMin)}</span></p>}
+            </div>
+            <Link className="btn btn-primary btn-lg btn-block" to={`/learn/${c.id}/${curLesson.id}`}>Học tiếp<span className="sr-only">: {curLesson.title}</span></Link>
+          </div>
+        )}
       </div></header>
       {r.pathStatus === 'failed' && (
         <Alert type="warn" title="Lộ trình cá nhân hoá chưa sẵn sàng" body="AI chưa xếp được lộ trình. Bạn vẫn học được ngay theo thứ tự mặc định của khoá học."
@@ -91,9 +105,8 @@ export default function PathPage({ params, query }) {
       {tab === 'map' ? (
         <div role="tabpanel" id="panel-map" aria-labelledby="tab-map"><KnowledgeMap initialCourseId={c.id} embedded /></div>
       ) : (
-        <div role="tabpanel" id="panel-path" aria-labelledby="tab-path" className="stack-6">
-          <PathSummary c={c} r={{ ...r, highlight }} rows={rows} />
-          <LessonPath c={c} r={{ ...r, highlight }} rows={rows} />
+        <div role="tabpanel" id="panel-path" aria-labelledby="tab-path">
+          <LessonPath c={c} r={{ ...r, highlight }} rows={rows} summary={<PathSummary c={c} r={{ ...r, highlight }} rows={rows} />} />
         </div>
       )}
     </div>

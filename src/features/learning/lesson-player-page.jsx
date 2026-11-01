@@ -168,7 +168,7 @@ function LessonContent({ c, r, l }) {
       )}
       {m && <MaterialView key={m.id} c={c} l={l} m={m} />}
       {body ? (
-        <div className="card"><div className="card-body stack-3">
+        <div className="card"><div className="card-body ln-reading-body stack-4">
           <h2 className="ln-h row ln-gap-2"><Icon name="book-open" />{m ? 'Tóm tắt bài học (bài đọc)' : 'Nội dung bài học'}</h2>
           <LessonMarkdown text={body} />
         </div></div>
@@ -243,10 +243,10 @@ export default function LessonPlayerPage({ params }) {
         <nav className="ln-topbar" aria-label="Điều hướng bài học">
           <button type="button" className="btn btn-secondary btn-sm ln-mobile-only" onClick={() => openLessonSheet(c.id, l.id)}><Icon name="list" className="icon-sm" /> Danh sách bài học</button>
           <div className="row" style={{ gap: 4 }}>
-            {prev && <Link className="btn btn-ghost btn-sm" to={`/learn/${c.id}/${prev}`}><Icon name="arrow-left" className="icon-sm" /> Bài trước</Link>}
-            {next && <Link className="btn btn-ghost btn-sm" to={`/learn/${c.id}/${next}`}>Bài sau <Icon name="arrow-right" className="icon-sm" /></Link>}
+            {prev && <Link className="btn btn-ghost btn-sm" to={`/learn/${c.id}/${prev}`}><Icon name="arrow-left" className="icon-sm" /> <span className="ln-hide-sm">Bài trước</span></Link>}
+            {next && <Link className="btn btn-ghost btn-sm" to={`/learn/${c.id}/${next}`}><span className="ln-hide-sm">Bài sau</span> <Icon name="arrow-right" className="icon-sm" /></Link>}
           </div>
-          <div className="row" style={{ gap: 4, marginLeft: 'auto' }}>
+          <div className="row ln-topbar-actions" style={{ gap: 4, marginLeft: 'auto' }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => openPathMap(c.id)}><Icon name="map" className="icon-sm" /> Xem lộ trình</button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => openPanel('ai', c.id, l.id)}><Icon name="sparkles" className="icon-sm" /> AI trợ lý</button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => openPanel('qa', c.id, l.id)}><Icon name="message-circle" className="icon-sm" /> Hỏi đáp</button>
@@ -254,7 +254,7 @@ export default function LessonPlayerPage({ params }) {
         </nav>
         <div className={`ln-content stack-6 ${l.code ? 'is-wide' : ''}`}>
           <div className="ln-mobile-progress"><Progress pct={prog.pct} label="Tiến độ khoá học" /><span className="xsmall muted">{prog.done}/{prog.total} bài · {prog.pct}%</span></div>
-          <header className="stack-1"><span className="small muted">{chapter ? chapter.title : ''} · {TYPE_LABEL[kind] || TYPE_LABEL.reading} · {Codi.fmt.duration(l.durationMin)}</span><h1 className="ln-title" id="lesson-title" tabIndex={-1}>{l.title}</h1>
+          <header className="stack-2"><h1 className="ln-title" id="lesson-title" tabIndex={-1}>{l.title}</h1><span className="small muted">{chapter ? chapter.title : ''} · {TYPE_LABEL[kind] || TYPE_LABEL.reading} · {Codi.fmt.duration(l.durationMin)}</span>
             {l.description && <p className="muted">{l.description}</p>}</header>
           <TaskStepper items={items} />
           {lock && !done && <PrerequisiteAdvice c={c} advice={{ concept: lock.concept, lessonId: lock.lesson.id, lessonTitle: lock.lesson.title }} />}

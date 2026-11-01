@@ -112,22 +112,22 @@ export default function DashboardPage() {
     <div className="page stack-8">
       {head}
       {errorAlert}
-      <section className="card" aria-labelledby="dash-goal"><div className="card-body stack-4">
-        <h2 id="dash-goal" className="dash-h">Mục tiêu & tiến độ</h2>
-        <div className="stack-2"><div className="row-between"><strong className="small">Mục tiêu hàng tuần</strong>
-          <div className="row" style={{ gap: 8 }}>{!goalInfo.hasGoal && <span className="badge badge-neutral">Giả định</span>}{goalInfo.courseId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => editGoal(goalInfo.courseId)}>Chỉnh mục tiêu</button>}</div></div>
-          <Progress pct={Math.min(100, goalPct)} label="Mục tiêu học tuần này" />
-          <span className="small muted">{minutesWeek} phút / {goalInfo.hours * 60} phút · {Math.round(goalPct)}% tuần này</span></div>
-        {streak > 0 && <div className="streak"><span className="streak-number">{streak}</span><span className="streak-label">ngày liên tiếp</span></div>}
-        {badges.length > 0 && (
-          <div className="stack-2"><strong className="small">Kỹ năng thành thạo</strong>
-            <ul className="badge-list ln-skill-list">{badges.slice(0, 5).map((b) => <li key={b.course + b.id}><Link className="ln-skill" to="/progress" title={`${b.name} · ${b.course}`}><span>{b.name}</span><Mastery level={b.level} /></Link></li>)}</ul>
-            {badges.length > 5 && <span className="small muted">+{badges.length - 5} kỹ năng khác</span>}</div>
-        )}
-      </div></section>
       <div className="dash-grid">
         <div className="dash-main stack-8">
           {contCard}
+          <section className="card" aria-labelledby="dash-goal"><div className="card-body stack-4">
+            <h2 id="dash-goal" className="dash-h">Mục tiêu & tiến độ</h2>
+            <div className="stack-2"><div className="row-between"><strong className="small">Mục tiêu hàng tuần</strong>
+              <div className="row" style={{ gap: 8 }}>{!goalInfo.hasGoal && <span className="badge badge-neutral">Giả định</span>}{goalInfo.courseId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => editGoal(goalInfo.courseId)}>Chỉnh mục tiêu</button>}</div></div>
+              <Progress pct={Math.min(100, goalPct)} label="Mục tiêu học tuần này" />
+              <span className="small muted">{minutesWeek} phút / {goalInfo.hours * 60} phút · {Math.round(goalPct)}% tuần này</span></div>
+            {streak > 0 && <div className="streak"><span className="streak-number">{streak}</span><span className="streak-label">ngày liên tiếp</span></div>}
+            {badges.length > 0 && (
+              <div className="stack-2"><strong className="small">Kỹ năng thành thạo</strong>
+                <ul className="badge-list ln-skill-list">{badges.slice(0, 5).map((b) => <li key={b.course + b.id}><Link className="ln-skill" to="/progress" title={`${b.name} · ${b.course}`}><span>{b.name}</span><Mastery level={b.level} /></Link></li>)}</ul>
+                {badges.length > 5 && <span className="small muted">+{badges.length - 5} kỹ năng khác</span>}</div>
+            )}
+          </div></section>
           {cont && showDiagCard(cont.r) && <DiagCard c={cont.c} />}
           {Codi.github && typeof Codi.github.learnerCard === 'function' ? Codi.github.learnerCard() : null}
           <section aria-labelledby="dash-mine">

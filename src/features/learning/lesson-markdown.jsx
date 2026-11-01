@@ -44,7 +44,7 @@ export function lessonMarkdownToHtml(source) {
       const code = [];
       i++;
       while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { code.push(lines[i]); i++; }
-      out.push(`<pre${fence[1] ? ` data-lang="${esc(fence[1])}"` : ''}><code>${esc(code.join('\n'))}</code></pre>`);
+      out.push(`<pre tabindex="0"${fence[1] ? ` data-lang="${esc(fence[1])}"` : ''}><code>${esc(code.join('\n'))}</code></pre>`);
       continue;
     }
     const heading = line.match(/^(#{1,4})\s+(.*)$/);

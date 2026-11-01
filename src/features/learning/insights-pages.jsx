@@ -138,7 +138,7 @@ export function StatsPage() {
 
   if (!studyMinutes && !doneIn(w.start, w.end) && !concepts.some((x) => x.lv > 0)) {
     return (
-      <div className="page stack-5"><div className="page-header"><div><h1>Thống kê học tập</h1></div></div><Toolbar courses={all} />
+      <div className="page stack-4"><div className="page-header"><div><h1>Thống kê học tập</h1></div></div><Toolbar courses={all} />
         <Empty icon="bar-chart" title="Chưa có hoạt động trong khoảng này" body="Học một bài là biểu đồ bắt đầu có số liệu. Thử chọn khoảng thời gian dài hơn." actions={<Link className="btn btn-primary" to="/dashboard">Học bài đầu tiên để xem thống kê</Link>} /></div>
     );
   }
@@ -238,18 +238,18 @@ export function StatsPage() {
 
   const onQuizChange = (el) => { if (el.id === 'li-quiz') setPref({ quiz: el.value }); };
   return (
-    <div className="page stack-5">
+    <div className="page stack-4">
       <div className="page-header"><div><h1>Thống kê học tập</h1><p className="muted">Bạn học đều đặn đến đâu và kỹ năng nào đang lên.</p></div><Link className="btn btn-secondary" to="/insights/knowledge-map"><Icon name="map" className="icon-sm" /> Bản đồ kiến thức</Link></div>
-      <Toolbar courses={all} />
-      <p className="small muted" style={{ margin: 0 }}>{dm(w.start)} – {dm(w.end)} · so với {dm(w.prevStart)} – {dm(w.prevEnd)}{p.course !== 'all' ? ' · Giờ học tính trên mọi khóa (thời gian học chưa tách theo khóa).' : ''}</p>
+      <div className="stack-2"><Toolbar courses={all} />
+      <p className="small muted">{dm(w.start)} – {dm(w.end)} · so với {dm(w.prevStart)} – {dm(w.prevEnd)}{p.course !== 'all' ? ' · Giờ học tính trên mọi khóa (thời gian học chưa tách theo khóa).' : ''}</p></div>
       {activeDays > 0 && activeDays < 3 && <p className="viz-warn"><span aria-hidden="true">▲</span> Mới có {activeDays} ngày học trong khoảng này — biểu đồ sẽ rõ hơn sau vài buổi học nữa.</p>}
-      <Html html={ch.card({ code: 'C1', title: 'Tóm tắt kỳ này', body: c1, wide: true })} style={{ display: 'contents' }} />
-      <Html className="viz-grid-cards" html={ch.card({ code: 'C2', ...c2 }) + ch.card({ code: 'C3', ...c3 }) + ch.card({ code: 'C4', wide: true, ...c4 })} />
+      <Html html={ch.card({ title: 'Tóm tắt kỳ này', body: c1, wide: true })} style={{ display: 'contents' }} />
+      <Html className="viz-grid-cards" html={ch.card({ ...c2 }) + ch.card({ ...c3 }) + ch.card({ wide: true, ...c4 })} />
       <div className="viz-section-head"><h2>Chi tiết thêm</h2>
         <button type="button" className="btn btn-secondary btn-sm" aria-expanded={String(!!p.open)} onClick={() => setPref({ open: !prefs().open })}><Icon name={p.open ? 'chevron-down' : 'chevron-right'} className="icon-sm" /> {p.open ? 'Thu gọn' : 'Xem chi tiết (2 thẻ)'}</button></div>
       {p.open && (
         <div className="viz-grid-cards">
-          <ChartHtml html={ch.card({ code: 'C5', wide: true, ...c5 }) + ch.card({ code: 'C6', wide: true, ...c6 })} onSelectChange={onQuizChange} />
+          <ChartHtml html={ch.card({ wide: true, ...c5 }) + ch.card({ wide: true, ...c6 })} onSelectChange={onQuizChange} />
         </div>
       )}
     </div>
@@ -366,7 +366,7 @@ export function KnowledgeMapPage({ query }) {
   useCodi();
   useEffect(() => { if (query && query.course && prefs().mapCourse !== query.course) setPref({ mapCourse: query.course }); }, [query && query.course]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="page stack-5">
+    <div className="page stack-4">
       <div className="page-header"><div><h1>Bản đồ kiến thức của tôi</h1><p className="muted">Mỗi ô là một khái niệm; mũi tên chỉ khái niệm cần học trước.</p></div><Link className="btn btn-secondary" to="/insights/stats"><Icon name="bar-chart" className="icon-sm" /> Thống kê học tập</Link></div>
       <KnowledgeMap initialCourseId={query && query.course} />
     </div>
@@ -376,11 +376,11 @@ export function KnowledgeMapPage({ query }) {
 // ───────────────────────── /insights hub (mockup-only route, kept) ─────────────────────────
 export function InsightsHubPage() {
   return (
-    <div className="page stack-5">
+    <div className="page stack-4">
       <div className="page-header"><div><h1>Thống kê & bản đồ kiến thức</h1><p className="muted">Xem nhịp học và mức thành thạo của bạn.</p></div></div>
       <div className="viz-grid-cards">
-        <Link className="viz-card li-hub" to="/insights/stats"><span className="li-hub-icon"><Icon name="bar-chart" /></span><strong>Thống kê học tập</strong><span className="small muted">Giờ học, chuỗi ngày, điểm quiz và kỹ năng.</span></Link>
-        <Link className="viz-card li-hub" to="/insights/knowledge-map"><span className="li-hub-icon"><Icon name="map" /></span><strong>Bản đồ kiến thức của tôi</strong><span className="small muted">Khái niệm nào đã vững, khái niệm nào chưa đủ tiên quyết.</span></Link>
+        <Link className="viz-card li-hub" to="/insights/stats"><span className="row ln-gap-2 ln-nowrap"><Icon name="bar-chart" className="text-accent" /><strong>Thống kê học tập</strong></span><span className="small muted">Giờ học, chuỗi ngày, điểm quiz và kỹ năng.</span></Link>
+        <Link className="viz-card li-hub" to="/insights/knowledge-map"><span className="row ln-gap-2 ln-nowrap"><Icon name="map" className="text-accent" /><strong>Bản đồ kiến thức của tôi</strong></span><span className="small muted">Khái niệm nào đã vững, khái niệm nào chưa đủ tiên quyết.</span></Link>
       </div>
       <Link className="btn btn-ghost" style={{ width: 'fit-content' }} to="/progress">Điểm, bài tập và nhận xét: Tiến độ & kết quả</Link>
     </div>

@@ -43,6 +43,8 @@ export function PrerequisiteAdvice({ c, advice }) {
 
 // ───────────────────────── "Vì sao lộ trình này" ─────────────────────────
 export function PathSummary({ c, r, rows }) {
+  // Open beside the list on wide screens; a one-line disclosure on narrow ones so the lessons come first.
+  const [open, setOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const goal = GOALS.find((g) => g[0] === (r.goal && r.goal.goal));
   const skippable = rows.filter((x) => x.status === 'skippable').length;
   const done = rows.filter((x) => x.status === 'done').length;
@@ -55,14 +57,16 @@ export function PathSummary({ c, r, rows }) {
     r.highlight.length && ['Thay đổi gần đây', `${r.highlight.length} bài vừa được xếp lại cho bạn`],
   ].filter(Boolean);
   return (
-    <section className="card"><div className="card-body stack-4">
-      <h2 className="ln-h">Vì sao lộ trình này</h2>
-      <dl className="ln-facts-grid">{facts.map(([k, v]) => <div key={k}><dt className="xsmall muted">{k}</dt><dd className="small strong">{v}</dd></div>)}</dl>
-      {r.pathSource === 'ai' && c.aiRationale && <p className="small"><strong>Nhận xét của Codi: </strong>{c.aiRationale}</p>}
-      <p className="small muted row ln-top"><Icon name="sparkles" className="icon-sm" /><span>{r.pathSource === 'ai'
-        ? 'AI xếp theo kết quả của bạn, luôn tôn trọng bài học tiên quyết. Chọn "Vì sao?" ở mỗi bài để xem lý do.'
-        : 'Đây là thứ tự mặc định của khoá học, chưa được cá nhân hoá theo kết quả của bạn.'}</span></p>
-    </div></section>
+    <details className="card ln-why-card" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary><h2 className="ln-h">Vì sao lộ trình này</h2><Icon name="chevron-down" className="ln-why-chev" /></summary>
+      <div className="ln-why-body stack-4">
+        <dl className="ln-facts-grid">{facts.map(([k, v]) => <div key={k}><dt className="xsmall muted">{k}</dt><dd className="small strong">{v}</dd></div>)}</dl>
+        {r.pathSource === 'ai' && c.aiRationale && <p className="small"><strong>Nhận xét của Codi: </strong>{c.aiRationale}</p>}
+        <p className="small muted ln-note"><Icon name="sparkles" className="icon-sm" /><span>{r.pathSource === 'ai'
+          ? 'AI xếp theo kết quả của bạn, luôn tôn trọng bài học tiên quyết. Chọn "Vì sao?" ở mỗi bài để xem lý do.'
+          : 'Đây là thứ tự mặc định của khoá học, chưa được cá nhân hoá theo kết quả của bạn.'}</span></p>
+      </div>
+    </details>
   );
 }
 
@@ -85,7 +89,7 @@ function StepDetail({ c, row, number }) {
           <ul className="list stack-2">{row.mastery.map((k) => <li key={k.id} className="row-between small"><span>{k.name}</span><Mastery level={k.level} /></li>)}</ul></section>
       )}
       {row.status === 'skippable' && <p className="small muted">Codi đánh dấu bài này có thể bỏ qua. Bạn vẫn có thể mở bài.</p>}
-      <Link className={`btn ${row.status === 'next' || row.status === 'active' ? 'btn-primary' : 'btn-secondary'} ln-block`} to={lessonUrl(c, row.id)}>
+      <Link className={`btn ${row.status === 'next' || row.status === 'active' ? 'btn-primary' : 'btn-secondary'} btn-block`} to={lessonUrl(c, row.id)}>
         {row.status === 'done' ? 'Xem lại bài' : row.status === 'next' || row.status === 'active' ? 'Học tiếp' : 'Mở bài học'}</Link>
     </div>
   );
@@ -101,49 +105,52 @@ function groupByChapter(rows) {
   return groups;
 }
 
-function PathList({ c, rows, currentId, highlight }) {
-  const [picked, setPicked] = useState(null);
-  const [sheet, setSheet] = useState(false);
-  const selected = rows.find((x) => x.id === (picked || currentId)) || rows[0];
-  const choose = (id) => { setPicked(id); if (!window.matchMedia('(min-width: 1024px)').matches) setSheet(true); };
-  const detail = <StepDetail c={c} row={selected} number={rows.indexOf(selected) + 1} />;
+const MARK_ICON = { done: 'check', locked: 'lock', skippable: 'skip-forward' };
+
+function PathList({ c, rows, currentId, highlight, selectedId, onWhy }) {
   return (
-    <div className="ln-path-grid">
-      <section className="stack-6" aria-label="Các bài theo thứ tự lộ trình">{groupByChapter(rows).map((g) => (
-        <div key={g.steps[0].row.id} className="stack-3">
-          <div className="row-between"><h2 className="ln-h">{g.title}</h2><span className="small muted">{g.steps.filter((s) => s.row.status === 'done').length}/{g.steps.length} bài</span></div>
+    <div className="stack-4" role="region" aria-label="Các bài theo thứ tự lộ trình">{groupByChapter(rows).map((g, gi) => {
+      const doneCount = g.steps.filter((s) => s.row.status === 'done').length;
+      const allDone = doneCount === g.steps.length;
+      const headId = `ln-ch-${gi}`;
+      return (
+        <section key={g.steps[0].row.id} className="card ln-chapter" aria-labelledby={headId}>
+          <header className="ln-chapter-head">
+            <h2 id={headId} className="ln-h">{g.title}</h2>
+            <span className={`small row ln-gap-1 od-nowrap ${allDone ? 'text-success' : 'muted'}`}>
+              {allDone && <Icon name="check-circle" className="icon-sm" />}{doneCount}/{g.steps.length} bài</span>
+          </header>
           <ol className="ln-steps">{g.steps.map(({ row, number }) => {
             const isCur = row.id === currentId;
-            const isSel = row.id === selected.id;
+            const isSel = row.id === selectedId;
             const isNew = highlight.includes(row.id);
+            const cls = ['ln-step', `is-${row.status}`, isCur && 'is-current', isSel && 'is-selected', isNew && !isSel && 'is-updated'].filter(Boolean).join(' ');
             return (
-              <li key={row.id} className="ln-step">
-                <span className={`ln-step-mark ${row.status === 'done' ? 'is-done' : isCur ? 'is-current' : ''}`} aria-hidden="true">
-                  {row.status === 'done' ? <Icon name="check-circle" className="icon-sm" /> : row.status === 'locked' ? <Icon name="info" className="icon-sm" /> : number}</span>
-                <article className={`ln-step-card ${isSel ? 'is-selected' : ''} ${isNew && !isSel ? 'is-updated' : ''}`} aria-current={isCur ? 'step' : undefined}>
-                  <div className="row-between ln-top">
-                    <div className="stack-1 od-fill">
-                      <p className="xsmall muted row ln-gap-3"><span className="row ln-gap-1"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span><span>{Codi.fmt.duration(row.durationMin)}</span></p>
-                      <h3 className="ln-step-title"><Link to={lessonUrl(c, row.id)}>{row.title}</Link></h3>
-                    </div>
-                    <div className="row ln-gap-2 ln-wrap">{isCur && <span className="badge badge-accent">Bắt đầu ở đây</span>}<span className={`badge ${STATUS[row.status][1]}`}>{statusLabel(row.status)}</span></div>
+              <li key={row.id} className={cls} aria-current={isCur ? 'step' : undefined}>
+                <span className="ln-step-mark" aria-hidden="true">{MARK_ICON[row.status] ? <Icon name={MARK_ICON[row.status]} className="icon-sm" /> : number}</span>
+                <div className="ln-step-body stack-2">
+                  <div className="stack-1">
+                    <h3 className="ln-step-title"><Link to={lessonUrl(c, row.id)}><span className="sr-only">Bài {number}: </span>{row.title}</Link></h3>
+                    <p className="xsmall muted row ln-gap-3"><span className="row ln-gap-1"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span><span>{Codi.fmt.duration(row.durationMin)}</span></p>
                   </div>
-                  {isNew && <span className="badge badge-info" style={{ justifySelf: 'start' }}>Mới cập nhật</span>}
                   {row.mastery.length > 0 && <ul className="ln-step-mastery">{row.mastery.map((k) => <li key={k.id}><span className="muted">{k.name}</span><Mastery level={k.level} /></li>)}</ul>}
                   {row.lock && row.status !== 'done' && <PrerequisiteAdvice c={c} advice={row.lock} />}
-                  <div className="row ln-gap-2">
-                    {isCur && <Link className="btn btn-primary btn-sm" to={lessonUrl(c, row.id)}>Học tiếp</Link>}
-                    <button type="button" className="btn btn-ghost btn-sm" aria-pressed={isSel} onClick={() => choose(row.id)}>Vì sao?<span className="sr-only">: {row.title}</span></button>
+                  {isCur && <div><Link className="btn btn-primary btn-sm" to={lessonUrl(c, row.id)}>Học tiếp</Link></div>}
+                </div>
+                <div className="ln-step-side">
+                  <div className="ln-step-badges">
+                    {isNew && <span className="badge badge-info">Mới cập nhật</span>}
+                    {isCur && <span className="badge badge-solid">Bắt đầu ở đây</span>}
+                    <span className={`badge ${isCur ? 'badge-outline' : STATUS[row.status][1]}`}>{statusLabel(row.status)}</span>
                   </div>
-                </article>
+                  <button type="button" className="btn btn-ghost btn-sm" aria-pressed={isSel} onClick={() => onWhy(row.id)}>Vì sao?<span className="sr-only">: {row.title}</span></button>
+                </div>
               </li>
             );
           })}</ol>
-        </div>
-      ))}</section>
-      <aside className="ln-path-aside"><div className="card"><div className="card-body">{detail}</div></div></aside>
-      <Sheet open={sheet} onClose={() => setSheet(false)} title="Chi tiết bài học">{detail}</Sheet>
-    </div>
+        </section>
+      );
+    })}</div>
   );
 }
 
@@ -229,7 +236,7 @@ export function PathMap({ c, rows, currentId, animateFrom }) {
             <p className="small muted">{kindLabel(pickedRow)} · {Codi.fmt.duration(pickedRow.durationMin)} · {caption(pickedRow)}</p>
             <section className="stack-1"><h3 className="small strong">Vì sao?</h3><p className="small muted">{pickedRow.reason}</p></section>
             {pickedRow.lock && pickedRow.status !== 'done' && <PrerequisiteAdvice c={c} advice={pickedRow.lock} />}
-            <Link className={`btn ${pickedRow.id === currentId || pickedRow.status === 'done' ? 'btn-primary' : 'btn-secondary'} ln-block`} to={lessonUrl(c, pickedRow.id)} onClick={() => setPicked(null)}>
+            <Link className={`btn ${pickedRow.id === currentId || pickedRow.status === 'done' ? 'btn-primary' : 'btn-secondary'} btn-block`} to={lessonUrl(c, pickedRow.id)} onClick={() => setPicked(null)}>
               {pickedRow.status === 'done' ? 'Xem lại bài' : pickedRow.status === 'active' ? 'Tiếp tục' : 'Học'}</Link>
           </div>
         )}
@@ -238,20 +245,32 @@ export function PathMap({ c, rows, currentId, animateFrom }) {
   );
 }
 
-/** "Danh sách / Bản đồ" toggle around the list and the map (real LessonPath). */
-export function LessonPath({ c, r, rows }) {
+/** "Danh sách / Bản đồ" toggle around the list and the map (real LessonPath), with the path summary and step detail beside it. */
+export function LessonPath({ c, r, rows, summary }) {
   const [view, setView] = useState('list');
+  const [picked, setPicked] = useState(null);
+  const [sheet, setSheet] = useState(false);
   if (!rows.length) return <p className="muted">Khoá học chưa có bài học được xuất bản.</p>;
   const currentId = currentLessonId(c, r);
+  const selected = rows.find((x) => x.id === (picked || currentId)) || rows[0];
+  const onWhy = (id) => { setPicked(id); if (!window.matchMedia('(min-width: 1024px)').matches) setSheet(true); };
+  const detail = <StepDetail c={c} row={selected} number={rows.indexOf(selected) + 1} />;
   return (
-    <div className="stack-4">
-      <div className="ln-view-toggle" role="group" aria-label="Cách xem lộ trình">
-        <div className="segmented">
-          <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}><Icon name="list" className="icon-sm" /> Danh sách</button>
-          <button type="button" aria-pressed={view === 'map'} onClick={() => setView('map')}><Icon name="map" className="icon-sm" /> Bản đồ</button>
+    <div className="ln-path-grid">
+      {summary && <div className="ln-path-summary">{summary}</div>}
+      <div className="ln-path-main stack-4">
+        <div className="row-between">
+          <p className="small muted">{rows.length} bài · {groupByChapter(rows).length} chương</p>
+          <div className="segmented" role="group" aria-label="Cách xem lộ trình">
+            <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}><Icon name="list" className="icon-sm" /> Danh sách</button>
+            <button type="button" aria-pressed={view === 'map'} onClick={() => setView('map')}><Icon name="map" className="icon-sm" /> Bản đồ</button>
+          </div>
         </div>
+        {view === 'map' ? <PathMap c={c} rows={rows} currentId={currentId} />
+          : <PathList c={c} rows={rows} currentId={currentId} highlight={r.highlight} selectedId={selected.id} onWhy={onWhy} />}
       </div>
-      {view === 'map' ? <PathMap c={c} rows={rows} currentId={currentId} /> : <PathList c={c} rows={rows} currentId={currentId} highlight={r.highlight} />}
+      {view === 'list' && <aside className="ln-path-aside" aria-label="Chi tiết bài học"><div className="card"><div className="card-body">{detail}</div></div></aside>}
+      {view === 'list' && <Sheet open={sheet} onClose={() => setSheet(false)} title="Chi tiết bài học">{detail}</Sheet>}
     </div>
   );
 }

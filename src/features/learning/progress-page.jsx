@@ -81,7 +81,7 @@ export default function ProgressPage({ query }) {
                     return (
                       <tr key={id}>
                         <th scope="row" className="ln-cell-lesson"><Link to={`/learn/${c.id}/${id}`}>{l.title}</Link>{lock && <span className="xsmall muted ln-block">Nên học trước: {lock.concept}</span>}</th>
-                        <td>{st === 'done' ? <span className="row text-success small"><Icon name="check" className="icon-sm" />Hoàn thành</span> : <span className="small muted">{st === 'locked' ? 'Chưa đủ tiên quyết' : 'Chưa hoàn thành'}</span>}</td>
+                        <td className="od-nowrap">{st === 'done' ? <span className="row ln-gap-1 ln-nowrap text-success small"><Icon name="check" className="icon-sm" />Hoàn thành</span> : <span className="small muted">{st === 'locked' ? 'Chưa đủ tiên quyết' : 'Chưa hoàn thành'}</span>}</td>
                         <td className="od-nowrap"><QuizCell l={l} q={r.quiz[id]} /></td>
                         <td><WorkCell l={l} /></td>
                       </tr>
