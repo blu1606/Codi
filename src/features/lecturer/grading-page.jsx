@@ -166,7 +166,7 @@ function GradeForm({ sel, nextPending, go }) {
           <fieldset className="stack-2 tc-rubric-grade"><legend className="field-label">Chấm theo thang điểm Rubric <span className="req">*</span></legend>
             {rb.map((k) => (
               <div key={k.id} className={`tc-rg-row ${calc.errors[k.id] && error ? 'is-invalid' : ''}`}><label className="stack-1 od-fill" htmlFor={`g-r-${k.id}`}><span className="small strong">{k.name}</span>{k.desc && <span className="xsmall muted">{k.desc}</span>}</label>
-                <span className="row" style={{ gap: 4 }}><input id={`g-r-${k.id}`} className="mono" type="number" min="0" max={k.points} step="0.5" value={scores[k.id] ?? ''} onChange={(e) => setScores({ ...scores, [k.id]: e.target.value })} /><span className="xsmall muted od-nowrap">/ {k.points}</span></span></div>
+                <span className="row" style={{ gap: 4 }}><input id={`g-r-${k.id}`} className="input mono" type="number" min="0" max={k.points} step="0.5" value={scores[k.id] ?? ''} onChange={(e) => setScores({ ...scores, [k.id]: e.target.value })} /><span className="xsmall muted od-nowrap">/ {k.points}</span></span></div>
             ))}
             <div className="panel row-between small" role="status"><strong>Tổng điểm: <span className="mono text-accent">{decimal(calc.total)}/{sel.maxScore}</span></strong><span className="muted">Ngưỡng đạt: {pct}%</span></div></fieldset>
         ) : (
@@ -174,7 +174,7 @@ function GradeForm({ sel, nextPending, go }) {
             <input id="g-score" name="score" className="mono" type="number" min="0" max={sel.maxScore} step="0.5" placeholder="Ví dụ: 8.5" value={score} onChange={(e) => setScore(e.target.value)} /></div>
         )}
         <AiGradingSlot sel={sel} onApply={applyAI} />
-        <div className="field"><span className="row-between"><label htmlFor="g-fb">Nhận xét cho học viên</label>
+        <div className="field"><span className="row-between"><label className="field-label" htmlFor="g-fb">Nhận xét cho học viên</label>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => openSnippetPicker({ learnerName: u.name, score: Number.isNaN(current) ? '' : current, onInsert: insert })}><Icon name="list" className="icon-sm" /> Mẫu nhận xét</button></span>
           <textarea id="g-fb" name="feedback" rows={6} placeholder="Điểm làm tốt, điểm cần cải thiện, gợi ý bước tiếp theo..." value={feedback} onChange={(e) => setFeedback(e.target.value)} />
           <span className="field-help">Bấm <strong>&quot;Mẫu nhận xét&quot;</strong> để chèn mẫu có sẵn kèm tên và điểm số.</span></div>

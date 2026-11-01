@@ -190,7 +190,7 @@ function BriefTab({ pr }) {
           </select><FieldErr pr={pr} k="language" /></div>
         <div className="field"><label htmlFor="te-file">Tên tệp hiển thị</label><input id="te-file" className="mono" placeholder="ví dụ: main.js" {...bind('fileName')} /></div>
       </div>
-      <fieldset className="stack-3 te-fieldset"><legend className="field-label">Các bước yêu cầu đề bài <span className="req">*</span></legend>
+      <fieldset className="stack-3 te-fieldset lai-fieldset"><legend className="field-label">Các bước yêu cầu đề bài <span className="req">*</span></legend>
         <p className="field-help">Hiện thành danh sách checklist bên cạnh trình soạn code của học viên. Dùng <code>`tên`</code> để đánh dấu code.</p>
         {d.code.instructions.map((s, i) => (
           <div key={i} className="te-row"><label className="sr-only" htmlFor={`te-ins-${i}`}>Bước {i + 1}</label><span className="te-n">{i + 1}</span>
@@ -311,7 +311,7 @@ function StepTestsEditor({ s, si, pr }) {
   const sol = solutionCode(d);
   const pass = chk ? chk.outcomes.filter((o) => o.pass).length : 0;
   return (
-    <fieldset className="te-fieldset stack-3"><legend className="field-label">Test kiểm tra của bước</legend>
+    <fieldset className="te-fieldset stack-3 lai-fieldset"><legend className="field-label">Test kiểm tra của bước</legend>
       <p className="field-help">Không bắt buộc. Có test thì học viên thấy mục "Kiểm tra bước này" và bước được tick khi đạt. Mỗi test là một biểu thức chạy sau code của học viên, so với giá trị mong đợi (JSON, hoặc chữ thường sẽ được lưu thành chuỗi).</p>
       {tests.length ? (
         <ol className="te-tests">{tests.map((t, i) => {

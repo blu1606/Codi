@@ -35,7 +35,7 @@ function ReplyForm({ id, label, placeholder, help, onSend, extra }) {
     <form className="stack-3 tc-reply-form" onSubmit={submit} noValidate>
       <label className="field-label" htmlFor={id}>{label}</label>
       {err && <Alert type="danger" body={err} />}
-      <textarea id={id} name="text" rows={4} value={text} placeholder={placeholder} maxLength={REPLY_MAX + 500} onChange={(e) => { setText(e.target.value); setErr(null); }} aria-invalid={!!err} />
+      <textarea id={id} className="textarea" name="text" rows={4} value={text} placeholder={placeholder} maxLength={REPLY_MAX + 500} onChange={(e) => { setText(e.target.value); setErr(null); }} aria-invalid={!!err} />
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 12 }}>
         {help ? <span className="xsmall muted">{help}</span> : <span />}
         <span className="row" style={{ gap: 8 }}>{extra}<button className="btn btn-primary" type="submit"><Icon name="send" className="icon-sm" /> Gửi trả lời</button></span>

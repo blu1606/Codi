@@ -229,17 +229,21 @@ function ContentTab({ c, query }) {
       )}
       {renaming === l.id ? null : (
         <div className="tc-row-actions">
-          {l.code ? <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/code/${l.id}`}><Icon name="code" className="icon-sm" /> Code</Link>
-            : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id)}><Icon name="file-text" className="icon-sm" /> Chi tiết</button>}
-          <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/quiz/${l.id}`}><Icon name="clipboard-check" className="icon-sm" /> Quiz</Link>
-          {ro ? null : <>
-            {l.code || l.assignment ? null : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id, { withAssignment: true })}>Thêm bài tập</button>}
-            {l.code ? null : <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => aiImport(c.id, l.id)} aria-label={`Tạo nội dung cho ${l.title} bằng AI từ tài liệu`} title="Tạo bằng AI từ tài liệu"><Icon name="sparkles" className="icon-sm" /></button>}
-            <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => startRename(l.id)} aria-label={`Đổi tên ${l.title}`} title="Đổi tên nhanh"><Icon name="pencil" className="icon-sm" /></button>
-            <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'lesson', l.id, -1)} disabled={li === 0} aria-label={`Chuyển ${l.title} lên`} title="Di chuyển lên"><Icon name="arrow-up" className="icon-sm" /></button>
-            <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'lesson', l.id, 1)} disabled={li === ch.lessons.length - 1} aria-label={`Chuyển ${l.title} xuống`} title="Di chuyển xuống"><Icon name="arrow-down" className="icon-sm" /></button>
-            <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => removeLesson(c, l.id)} aria-label={`Xoá ${l.title}`} title="Xoá bài học"><Icon name="trash" className="icon-sm" /></button>
-          </>}
+          <div className="tc-row-links">
+            {l.code ? <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/code/${l.id}`}><Icon name="code" className="icon-sm" /> Code</Link>
+              : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id)}><Icon name="file-text" className="icon-sm" /> Chi tiết</button>}
+            <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/quiz/${l.id}`}><Icon name="clipboard-check" className="icon-sm" /> Quiz</Link>
+            {ro || l.code || l.assignment ? null : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id, { withAssignment: true })}>Thêm bài tập</button>}
+          </div>
+          {ro ? null : (
+            <div className="tc-row-tools">
+              {l.code ? <span aria-hidden="true" /> : <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => aiImport(c.id, l.id)} aria-label={`Tạo nội dung cho ${l.title} bằng AI từ tài liệu`} title="Tạo bằng AI từ tài liệu"><Icon name="sparkles" className="icon-sm" /></button>}
+              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => startRename(l.id)} aria-label={`Đổi tên ${l.title}`} title="Đổi tên nhanh"><Icon name="pencil" className="icon-sm" /></button>
+              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'lesson', l.id, -1)} disabled={li === 0} aria-label={`Chuyển ${l.title} lên`} title="Di chuyển lên"><Icon name="arrow-up" className="icon-sm" /></button>
+              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'lesson', l.id, 1)} disabled={li === ch.lessons.length - 1} aria-label={`Chuyển ${l.title} xuống`} title="Di chuyển xuống"><Icon name="arrow-down" className="icon-sm" /></button>
+              <button type="button" className="btn btn-ghost btn-icon btn-sm tc-del" onClick={() => removeLesson(c, l.id)} aria-label={`Xoá ${l.title}`} title="Xoá bài học"><Icon name="trash" className="icon-sm" /></button>
+            </div>
+          )}
         </div>
       )}
     </li>
@@ -268,12 +272,12 @@ function ContentTab({ c, query }) {
             <div className="row od-fill">{!ro && <span className="tc-grip" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
               {renaming === ch.id ? <RenameForm c={c} id={ch.id} value={ch.title} label="Tên chương" /> : <h2 className="tc-h">Chương {ci + 1}: {ch.title}</h2>}</div>
             {ro || renaming === ch.id ? null : (
-              <div className="tc-row-actions">
+              <div className="tc-row-actions tc-ch-actions">
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => openAddLesson(c, ch.id)}><Icon name="plus" className="icon-sm" /> Bài học</button>
                 <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => startRename(ch.id)} aria-label="Đổi tên chương" title="Đổi tên chương"><Icon name="pencil" className="icon-sm" /></button>
                 <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'chapter', ch.id, -1)} disabled={ci === 0} aria-label="Chuyển chương lên" title="Di chuyển lên"><Icon name="arrow-up" className="icon-sm" /></button>
                 <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'chapter', ch.id, 1)} disabled={ci === c.chapters.length - 1} aria-label="Chuyển chương xuống" title="Di chuyển xuống"><Icon name="arrow-down" className="icon-sm" /></button>
-                <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => removeChapter(c, ch.id)} aria-label="Xoá chương" title="Xoá chương"><Icon name="trash" className="icon-sm" /></button></div>
+                <button type="button" className="btn btn-ghost btn-icon btn-sm tc-del" onClick={() => removeChapter(c, ch.id)} aria-label="Xoá chương" title="Xoá chương"><Icon name="trash" className="icon-sm" /></button></div>
             )}
           </div>
           <ol className="list tc-lessons" data-drop-zone={ch.id}>{ch.lessons.map((l, li) => lessonRow(l, li, ch))}
@@ -332,7 +336,7 @@ function InfoTab({ c }) {
       <div className="card-body stack-4">
         <div className={`field ${e.title ? 'is-invalid' : ''}`}><label htmlFor="in-title">Tên khoá học</label><input id="in-title" name="title" value={d.title} onChange={onInput} disabled={ro} aria-invalid={!!e.title} /><FieldError>{e.title}</FieldError></div>
         <div className={`field ${e.summary ? 'is-invalid' : ''}`}><label htmlFor="in-sum">Mô tả ngắn</label><textarea id="in-sum" name="summary" rows={3} value={d.summary} onChange={onInput} disabled={ro} aria-invalid={!!e.summary} /><FieldError>{e.summary}</FieldError></div>
-        <div className="grid-3">
+        <div className="grid-3" style={{ alignItems: 'start' }}>
           <div className={`field ${e.categoryId ? 'is-invalid' : ''}`}><label htmlFor="in-cat">Danh mục</label><select id="in-cat" name="categoryId" value={d.categoryId} onChange={onInput} disabled={ro}>{categoryOptions(d.originalCategoryId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><FieldError>{e.categoryId}</FieldError></div>
           <div className={`field ${e.level ? 'is-invalid' : ''}`}><label htmlFor="in-level">Trình độ</label><select id="in-level" name="level" value={d.level} onChange={onInput} disabled={ro}>{LEVELS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select><FieldError>{e.level}</FieldError></div>
           <div className={`field ${e.proposedPrice ? 'is-invalid' : ''}`}><label htmlFor="in-price">Giá đề xuất (VND)</label><input id="in-price" name="proposedPrice" type="number" min="0" step="10000" inputMode="numeric" value={d.proposedPrice} onChange={onInput} disabled={ro} aria-invalid={!!e.proposedPrice} />

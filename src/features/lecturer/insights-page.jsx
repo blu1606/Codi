@@ -106,7 +106,7 @@ export function InsightsPage({ query }) {
     <Html html={revenueCard} />
     <section className="card" style={{ marginTop: 24 }} aria-labelledby="ins-courses-h">
       <div className="card-header"><div className="stack-1"><h2 className="tc-h" id="ins-courses-h">Doanh thu theo khoá học</h2><span className="xsmall muted">Khoá nào mang lại doanh thu trong kỳ?</span></div></div>
-      {d.courses.length ? <div className="table-wrap"><table className="table"><caption className="sr-only">Doanh thu theo khoá học</caption>
+      {d.courses.length ? <div className="table-wrap" tabIndex={0} role="region" aria-label="Bảng doanh thu theo khoá học"><table className="table"><caption className="sr-only">Doanh thu theo khoá học</caption>
         <thead><tr><th scope="col">Khoá học</th><th scope="col" className="num">Đơn</th><th scope="col" className="num">Gộp</th><th scope="col" className="num">Ròng</th><th scope="col" className="num">Tỉ lệ</th></tr></thead><tbody>
           {d.courses.map((r) => <tr key={r.courseId}><th scope="row" className="small">{r.title}</th><td className="num">{Codi.fmt.num(r.paidOrders)}</td><td className="num">{vnd(r.gross)}</td><td className="num">{vnd(r.net)}</td><td className="num">{pct(courseTotal ? (r.net / courseTotal) * 100 : 0)}</td></tr>)}
           <tr className="strong"><th scope="row">Tổng cộng</th><td className="num">{Codi.fmt.num(t.paidOrders)}</td><td className="num">{vnd(t.gross)}</td><td className="num">{vnd(courseTotal)}</td><td className="num">100%</td></tr>

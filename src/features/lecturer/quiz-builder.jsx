@@ -238,7 +238,7 @@ export function QuizBuilderPage({ params }) {
                     {courseLessons.map((l) => <option key={l.id} value={l.id}>{l.chapter ? `[${l.chapter}] ` : ''}{l.title}</option>)}</select>
                   <span className="field-help">BKT đọc kỹ năng của bài học này để cập nhật mức độ thành thạo khi học viên làm bài kiểm tra đầu vào.</span></div>
               )}
-              <fieldset className={`stack-2 ${qe.options || qe.correct ? 'is-invalid' : ''}`} style={{ border: 0, padding: 0, margin: 0 }}><legend className="field-label" style={{ marginBottom: 8 }}>Các phương án lựa chọn (Click chọn đáp án đúng) <span className="req">*</span></legend>
+              <fieldset className={`stack-2 tc-opts ${qe.options || qe.correct ? 'is-invalid' : ''}`}><legend className="field-label" style={{ marginBottom: 8 }}>Các phương án lựa chọn (Click chọn đáp án đúng) <span className="req">*</span></legend>
                 {q.options.map((o, k) => (
                   <div key={k} className={`tc-opt ${q.correctIndex === k ? 'is-correct' : ''}`}>
                     <label className="tc-correct" title={q.correctIndex === k ? 'Đáp án đúng' : 'Đánh dấu là đáp án đúng'}><input type="radio" name={`correct-${i}`} checked={q.correctIndex === k} onChange={() => change(() => { q.correctIndex = k; })} disabled={ro} /> {q.correctIndex === k ? 'Đúng' : letter(k)}</label>

@@ -11,7 +11,7 @@ svg circle[data-action] { cursor: pointer; transition: opacity 0.2s; }
 svg circle[data-action]:hover { opacity: 0.8; }
 
 /* ───────── Content tree: review flags, AI items ───────── */
-.tc-lesson.is-target { background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn); }
+.tc-lesson.is-target { background: var(--warn-soft); box-shadow: inset 0 0 0 1px var(--warn); }
 .tc-q-ai { border-color: var(--accent); background: var(--accent-soft); }
 
 /* ───────── Assignment builder + rubric ───────── */
@@ -108,3 +108,13 @@ svg circle[data-action]:hover { opacity: 0.8; }
 .tc-filters .field { min-width: 200px; }
 .tc-grade-actions { padding-top: var(--space-3); border-top: 1px solid var(--border); }
 .tc-rg-row.is-invalid input { border-color: var(--danger); }
+.row.tc-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 960px; }
+.tc-filters .field { min-width: 0; }
+@media (max-width: 640px) { .row.tc-filters { grid-template-columns: minmax(0, 1fr); } }
+.tc-rg-row input.input { width: 80px; text-align: right; }
+.tc-rubric-grade > legend { padding: 0; margin-bottom: var(--space-1); }
+.tc-reply-form > label { display: block; }
+.tc-reply-form > textarea { display: block; width: 100%; }
+.row.tc-prog { gap: var(--space-2); flex-wrap: nowrap; }
+.tc-prog .progress { flex: 1 1 auto; min-width: 64px; }
+.tc-prog .num { min-width: 3.5ch; text-align: right; font-variant-numeric: tabular-nums; }

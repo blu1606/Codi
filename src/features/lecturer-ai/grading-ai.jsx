@@ -36,7 +36,7 @@ function draftFor(sub, a) {
   const suggestedScore = rubric.length ? Math.round(rubric.reduce((t, k) => t + scores[k.id], 0) * 10) / 10 : clamp(half(max * base), max);
   const weakest = rubric.slice().sort((x, y) => scores[x.id] / (Number(x.points) || 1) - scores[y.id] / (Number(y.points) || 1))[0];
   const evidenceNote = evidence ? '' : ' Bài nộp chưa có liên kết, tệp hay ghi chú mô tả, nên mình chưa kiểm tra được hết yêu cầu.';
-  const feedback = `Bài làm đáp ứng phần lớn yêu cầu${sub.note ? ', ghi chú của bạn giúp mình hiểu cách làm' : ''}.${evidenceNote} Điểm cần cải thiện nhất: ${weakest ? `${weakest.name.toLowerCase()} — ${String(weakest.desc || '').toLowerCase()}` : 'trình bày bài nộp'}. Gợi ý: kiểm tra lại các trường hợp biên trước khi nộp lần sau.`;
+  const feedback = `Bài làm đáp ứng phần lớn yêu cầu${sub.note ? ', ghi chú của bạn giúp mình hiểu cách làm' : ''}.${evidenceNote} Điểm cần cải thiện nhất: ${weakest ? `${weakest.name.toLowerCase()} — ${String(weakest.desc || '').toLowerCase().replace(/[.\s]+$/, '')}` : 'trình bày bài nộp'}. Gợi ý: kiểm tra lại các trường hợp biên trước khi nộp lần sau.`;
   return { suggestedScore, scores, feedback, max };
 }
 

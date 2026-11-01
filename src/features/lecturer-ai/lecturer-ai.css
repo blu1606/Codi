@@ -32,3 +32,13 @@
 @media (max-width: 1023px) {
   .lai-preview { grid-template-columns: minmax(0, 1fr); }
 }
+.lai-grade-draft > .row:last-child > .btn { flex: 1 1 auto; }
+/* .te-fieldset resets margin to 0, which cancels the parent stack gap; restore it and the legend inset. */
+.stack-3 > .lai-fieldset:not(:first-child) { margin-top: var(--space-3); }
+.stack-4 > .lai-fieldset:not(:first-child) { margin-top: var(--space-4); }
+.lai-fieldset > legend { padding: 0; margin-bottom: var(--space-2); }
+.lai-fieldset > legend + * { margin-top: 0; }
+/* A <p> empty state holds inline copy; grid would split each text run onto its own line. */
+p.lai-empty-run { display: block; }
+/* Step instructions grow with their text instead of clipping at two rows (browsers without field-sizing keep rows). */
+.lai-fieldset .te-row textarea { field-sizing: content; min-height: 4.5em; max-height: 16em; }

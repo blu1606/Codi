@@ -336,7 +336,7 @@ function QuizAiDialog({ open, onClose, courseId, lessonId, lessonTitle, maxOptio
           <div className="ai-thinking-row" role="status" aria-busy="true"><span className="typing" aria-hidden="true"><i /><i /><i /></span><span>AI đang tạo {count} câu hỏi từ nội dung bài học…</span></div>
         )}
         {!showResults && (
-          <fieldset className="stack-3 te-fieldset" disabled={generating}>
+          <fieldset className="stack-3 te-fieldset lai-fieldset" disabled={generating}>
             <legend className="field-label">Nguồn nội dung</legend>
             <div className="row" style={{ gap: 16 }} role="radiogroup" aria-label="Nguồn nội dung">
               <label className="check"><input type="radio" name="ai-quiz-source" checked={sourceMode === 'lesson'} onChange={() => setSourceMode('lesson')} /> Nội dung bài học</label>

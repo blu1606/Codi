@@ -9,11 +9,32 @@
 .tc-lesson:hover { background: var(--canvas); }
 .tc-grip { cursor: grab; color: var(--faint); display: inline-grid; }
 .tc-type { width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--subtle); display: grid; place-items: center; color: var(--muted); flex: none; }
-.tc-row-actions { display: flex; gap: 2px; flex-wrap: wrap; }
+.tc-row-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+/* Lesson rows keep fixed action slots so every row lines up: text links left, icon tools right. */
+.tc-row-links { display: grid; grid-template-columns: 6.25rem 5rem 7.75rem; align-items: center; }
+.tc-row-links .btn, .tc-ch-actions > .btn:not(.btn-icon) { justify-content: flex-start; color: var(--muted); }
+.tc-row-tools { display: grid; grid-template-columns: repeat(5, 36px); align-items: center; padding-left: var(--space-2); border-left: 1px solid var(--border); }
+.tc-row-tools .btn, .tc-ch-actions .btn-icon { color: var(--muted); }
+.tc-row-links .btn:hover, .tc-row-tools .btn:hover:not(:disabled), .tc-ch-actions .btn:hover:not(:disabled) { color: var(--fg); }
+.tc-row-tools .tc-del:hover, .tc-ch-actions .tc-del:hover { color: var(--danger); background: var(--danger-soft); }
+.tc-ch-actions { gap: 0; }
+@media (max-width: 1100px) {
+  .tc-lesson .tc-row-actions { flex-basis: 100%; justify-content: space-between; padding-left: calc(28px + var(--space-2)); }
+}
+@media (max-width: 640px) {
+  .tc-chapter .card-header { padding: var(--space-3) var(--space-4); }
+  .tc-chapter .card-header > .od-fill { flex-basis: 100%; }
+  .tc-ch-actions { margin-left: auto; }
+  .tc-lesson { padding: var(--space-3) var(--space-2); border-bottom: 1px solid var(--border); border-radius: 0; }
+  .tc-lesson:last-child { border-bottom: 0; }
+  .tc-lesson .tc-row-actions { padding-left: 0; flex-wrap: wrap; row-gap: var(--space-1); }
+  .tc-row-links { grid-template-columns: repeat(3, auto); }
+  .tc-row-tools { border-left: 0; padding-left: 0; margin-left: auto; }
+}
 .tc-empty-drop { padding: var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); text-align: center; }
 .is-dragging { opacity: .5; }
 .is-drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
-.tc-danger { border-color: #fecaca; }
+.tc-danger { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
 .tc-declined { opacity: .6; }
 .tc-order { display: grid; gap: var(--space-1); }
 .tc-qb { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-4); align-items: start; }
@@ -21,10 +42,15 @@
 @media (max-width: 1024px) { .tc-qb { grid-template-columns: minmax(0, 1fr); } .tc-qb-side { position: static; } }
 .tc-opt { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-1); border-radius: var(--radius-sm); }
 .tc-opt.is-correct { background: var(--success-soft); }
-.tc-correct { display: inline-flex; align-items: center; gap: 6px; min-width: 64px; min-height: 44px; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.tc-correct { display: inline-flex; align-items: center; gap: 6px; min-width: 76px; flex: none; min-height: 44px; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
 .tc-correct input { accent-color: var(--success); width: 18px; height: 18px; }
 .tc-probs { padding-left: 18px; }
 .tc-savebar { position: sticky; bottom: 0; background: var(--surface); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
 .tc-grade { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-4); align-items: start; }
 @media (max-width: 1280px) { .tc-grade { grid-template-columns: minmax(0, 1fr); } }
 .tc-reply { margin-left: var(--space-4); padding-left: var(--space-3); border-left: 2px solid var(--border); }
+@media (max-width: 640px) { .tc-chapter .tc-grip, .tc-lesson .tc-grip { display: none; } }
+/* Quiz options: border/padding reset only, so the parent stack still spaces the fieldset. */
+.tc-opts { border: 0; padding: 0; min-width: 0; }
+.tc-opts > legend { padding: 0; }
+.tc-opts > legend + * { margin-top: 0; }
