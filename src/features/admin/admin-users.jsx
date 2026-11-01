@@ -96,14 +96,14 @@ export function UsersPage({ query: q }) {
           </select></div>
         {anyFilter && <div className="field ad-field-end"><Link className="btn btn-secondary btn-sm" to="/admin/users">Xoá bộ lọc</Link></div>}
       </form>
-      <div className="od-cluster" style={{ margin: '12px 0 0' }} role="group" aria-label="Lọc theo trạng thái">
+      <div className="ad-chips" role="group" aria-label="Lọc theo trạng thái">
         {STATUS_CHIPS.map(([k, l]) => (
           <Link key={k} className={`chip chip-btn ${status === k ? 'ad-chip-on' : ''}`} to={link({ status: status === k && k !== 'all' ? 'all' : k })} aria-current={status === k ? 'true' : undefined}>
             {l} ({k === 'all' ? all.length : all.filter((u) => u.status === k).length})
           </Link>
         ))}
       </div>
-      <div className="od-cluster" style={{ margin: '12px 0' }} role="group" aria-label="Lọc theo vai trò">
+      <div className="ad-chips" role="group" aria-label="Lọc theo vai trò">
         {ROLE_CHIPS.map(([k, l]) => {
           const label = `${l} (${k === 'all' ? all.length : all.filter((u) => u.role === k).length})`;
           if (role === k && k !== 'all') {
@@ -116,13 +116,14 @@ export function UsersPage({ query: q }) {
           return <Link key={k} className={`chip chip-btn ${role === k ? 'ad-chip-on' : ''}`} to={link({ role: k })} aria-current={role === k ? 'true' : undefined}>{label}</Link>;
         })}
       </div>
+      {anyFilter && <p className="ad-filter-note small" role="status">{list.length} / {all.length} tài khoản khớp bộ lọc</p>}
       {list.length ? (
-        <div className="table-wrap"><table className="table"><thead><tr><th>Họ và tên</th><th>Email</th><th>Ngày tham gia</th><th>Vai trò</th><th>Trạng thái</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>
+        <div className="table-wrap ad-table-wrap"><table className="table ad-users-table"><thead><tr><th>Họ và tên</th><th>Email</th><th>Ngày tham gia</th><th>Vai trò</th><th>Trạng thái</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>
           {list.map((u) => {
             const isSelf = !!self && u.id === self.id;
             return (
               <tr key={u.id}>
-                <td><div className="row"><Avatar user={u} size="sm" /><strong className="small">{u.name}{isSelf && <span className="xsmall muted"> (bạn)</span>}</strong></div></td>
+                <td><div className="row ad-user-cell"><Avatar user={u} size="sm" /><strong className="small">{u.name}{isSelf && <span className="xsmall muted"> (bạn)</span>}</strong></div></td>
                 <td className="small muted">{u.email}</td>
                 <td className="od-nowrap small">{fmt.date(u.createdAt)}</td>
                 <td><RoleSelect key={`${u.id}-${u.role}`} u={u} disabled={isSelf} /></td>

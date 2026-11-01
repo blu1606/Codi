@@ -257,7 +257,7 @@ export function OrdersPage({ query: q }) {
         <div className="stat-tile"><span className="stat-value text-warn">{list.filter((o) => o.status === 'pending').length}</span><span className="stat-label">Chờ thanh toán</span>{overdueCount > 0 && <span className="stat-meta text-danger"><Icon name="clock" className="icon-sm" /> {overdueCount} quá hạn</span>}</div>
         <div className="stat-tile"><span className="stat-value od-nowrap">{vnd(paid.reduce((s, o) => s + (o.total || 0), 0))}</span><span className="stat-label">Doanh thu</span></div>
       </div>
-      <div className="ad-filters">
+      <div className="ad-filters ad-filters-orders">
         <div className="field"><span className="field-label">Thời gian</span>
           <div className="segmented" role="group" aria-label="Khoảng thời gian">
             {RANGES.map(([k, l]) => <button key={k} type="button" aria-pressed={range === k} onClick={() => goWith({ range: k })}>{l}</button>)}

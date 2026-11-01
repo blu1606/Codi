@@ -401,7 +401,7 @@ function AnalyticsPage({ page }) {
   const grid = (ids) => <Html className={`viz-grid-cards ${refreshing ? 'is-refreshing' : ''}`} html={ids.map((id) => String(renderCard(page, id, d))).join('')} />;
   return (
     <AdminShell active={P2.route}>
-      <div className="page stack-5" onClick={onClick}>
+      <div className="stack-4 ad-analytics" onClick={onClick}>
         <div className="page-header"><div><h1>{P2.title}</h1><p className="muted">{P2.lead}</p></div></div>
         <Toolbar d={d} onPeriod={handlers['aa-period']} />
         {P2.basis && <p className="xsmall muted" style={{ margin: 0 }}>{P2.basis}</p>}
@@ -430,13 +430,13 @@ function AnalyticsDetailPage({ page, id }) {
   const { refreshing, onClick, handlers } = useAnalyticsActions();
   const P2 = PAGES[page]; const fn = P2.cards[id];
   if (!fn) {
-    return <AdminShell active={P2.route}><div className="page"><Empty icon="bar-chart" title="Không tìm thấy thẻ" actions={<Link className="btn btn-primary" to={P2.route}>Về {P2.title}</Link>} /></div></AdminShell>;
+    return <AdminShell active={P2.route}><div><Empty icon="bar-chart" title="Không tìm thấy thẻ" actions={<Link className="btn btn-primary" to={P2.route}>Về {P2.title}</Link>} /></div></AdminShell>;
   }
   const { data: d } = load(page);
   const c = d ? fn(d) : null;
   return (
     <AdminShell active={P2.route}>
-      <div className="page stack-5" onClick={onClick}>
+      <div className="stack-4 ad-analytics" onClick={onClick}>
         <Link className="btn btn-ghost btn-sm" style={{ width: 'fit-content' }} to={P2.route}><Icon name="arrow-left" className="icon-sm" /> {P2.title}</Link>
         {c ? (
           <>

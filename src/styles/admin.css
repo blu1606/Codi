@@ -16,6 +16,7 @@
 }
 
 .ad-role {
+  min-width: 136px;
   min-height: 36px;
   padding: 4px 8px;
   font-size: var(--text-sm);
@@ -310,10 +311,10 @@
 .rv-content { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .rv-tree { position: sticky; top: calc(var(--header-h, 64px) + var(--space-4)); max-height: calc(100vh - var(--header-h, 64px) - 32px); overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); }
 .rv-tree-ch { margin-top: var(--space-3); }
-.rv-tree-ch > span { display: block; padding: 0 var(--space-2) var(--space-1); text-transform: uppercase; letter-spacing: .02em; }
+.rv-tree-ch > span { display: block; padding: 0 var(--space-2) var(--space-1); font-weight: 600; }
 .rv-tree-item { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 44px; padding: var(--space-2); border: 0; border-radius: var(--radius-sm); background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
 .rv-tree-item:hover { background: var(--subtle); }
-.rv-tree-item[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.rv-tree-item[aria-current="true"] { background: var(--accent-soft); color: var(--accent-active); font-weight: 600; }
 .rv-tree-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .rv-preview { min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); }
 
@@ -335,7 +336,6 @@
 .rv-ai.is-done { display: grid; justify-content: stretch; border-style: solid; background: var(--surface); }
 .rv-history { display: grid; gap: var(--space-3); }
 .rv-history li { display: grid; gap: 2px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); }
-.rv-decision { position: sticky; bottom: var(--space-4); }
 .rv-why { padding: var(--space-3); border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--fg); }
 .rv-why ul { margin: var(--space-1) 0 0; padding-left: var(--space-5); }
 
@@ -343,7 +343,6 @@
   .rv-content { grid-template-columns: minmax(0, 1fr); }
   .rv-tree { position: static; max-height: 280px; }
   .rv-crit-row { grid-template-columns: minmax(0, 1fr); }
-  .rv-decision { position: static; }
 }
 
 /* ─────────────────────────── Dashboard (S30) ─────────────────────────── */
@@ -435,4 +434,49 @@ a.stat-tile.ad-entry {
 .viz-data-table a.mono {
   color: var(--accent);
   text-underline-offset: 3px;
+}
+
+/* ─────────────────────────── Users list ─────────────────────────── */
+.ad-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+}
+
+.ad-chips a.chip { text-decoration: none; }
+
+.ad-chips + :not(.ad-chips) { margin-top: var(--space-4); }
+
+.ad-user-cell { flex-wrap: nowrap; }
+.ad-user-cell strong { white-space: nowrap; }
+
+/* sr-only labels inside rows are absolutely positioned; anchor them to the
+   scroller so they cannot widen the page on narrow screens. */
+.ad-table-wrap { position: relative; }
+
+/* ─────────────────────────── Courses list ─────────────────────────── */
+.ad-col-title { min-width: 240px; }
+
+/* ─────────────────────────── Orders filters ─────────────────────────── */
+.ad-filters-orders {
+  grid-template-columns: minmax(300px, max-content) repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.ad-filters-orders .segmented { display: flex; width: 100%; }
+.ad-filters-orders .segmented button { flex: 1; padding-inline: var(--space-2); white-space: nowrap; }
+
+/* ─────────────────────────── Dashboard tiles ─────────────────────────── */
+a.stat-tile.ad-todo { display: flex; flex-direction: column; gap: var(--space-1); }
+a.stat-tile.ad-todo .stat-go { margin-top: auto; padding-top: var(--space-2); }
+.ad-entry-unit { white-space: nowrap; }
+
+/* ─────────────────────────── Analytics rhythm ─────────────────────────── */
+.ad-analytics > .viz-section-head { margin-top: var(--space-8); }
+.ad-analytics .viz-kpis { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.ad-analytics .viz-kpi-value { font-size: clamp(20px, 1.7vw, 24px); }
+
+@media (max-width: 768px) {
+  .ad-filters-orders { grid-template-columns: 1fr; }
+  .ad-analytics > .viz-section-head { margin-top: var(--space-6); }
 }

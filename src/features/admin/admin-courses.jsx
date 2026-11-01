@@ -78,17 +78,17 @@ export function CoursesPage() {
       <div className="table-wrap"><table className="table"><thead><tr><th>Khoá học</th><th>Giảng viên</th><th className="num">Giá</th><th className="num">Học viên</th><th>Đánh giá</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
         {list.map((c) => (
           <tr key={c.id}>
-            <td><Link to={`/courses/${c.slug}`}>{c.title}</Link></td>
-            <td>{(Codi.user(c.lecturerId) || {}).name}</td>
+            <td className="ad-col-title"><Link to={`/courses/${c.slug}`}>{c.title}</Link></td>
+            <td className="od-nowrap">{(Codi.user(c.lecturerId) || {}).name}</td>
             <td className="num">{priceText(c.price)}</td>
             <td className="num">{fmt.num(db().enrolments.filter((e) => e.courseId === c.id).length)}</td>
             <td className="od-nowrap">{c.ratingCount ? <>{c.rating.toFixed(1)} <Icon name="star-filled" className="icon-sm ad-star" /> ({c.ratingCount})</> : '—'}</td>
             <td><CourseStatus status={c.status} />{c.status === 'hidden' && <span className="xsmall muted" style={{ display: 'block', maxWidth: 220 }}>{c.hideReason}</span>}</td>
             <td><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
               {c.status === 'published'
-                ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => hideCourse(c)}>Ẩn khóa học</button>
-                : <button type="button" className="btn btn-ghost btn-sm" onClick={() => unhideCourse(c)}>Hiện lại</button>}
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => changePrice(c)}>Đổi giá</button>
+                ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => hideCourse(c)}>Ẩn khóa học</button>
+                : <button type="button" className="btn btn-secondary btn-sm" onClick={() => unhideCourse(c)}>Hiện lại</button>}
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => changePrice(c)}>Đổi giá</button>
             </div></td>
           </tr>
         ))}
