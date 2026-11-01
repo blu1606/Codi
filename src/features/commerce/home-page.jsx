@@ -1,0 +1,175 @@
+/**
+ * S00 Home '/' (real app/page.tsx + components/{hero,home-features,home-courses,home-mentor,home-footer}.tsx):
+ * hero with CTAs and stats, features, popular courses (sorted by enrolment, 4 items, loading / error / empty),
+ * AI Mentor, footer. The popular-courses load error is simulated with `?error=1`.
+ */
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Codi, useCodi } from '../../lib/codi';
+import { Icon, Thumb } from '../../components/ui/primitives';
+import { published } from './commerce-lib';
+
+const fmt = Codi.fmt;
+let homeCoursesLoaded = false; // first visit shows the loading skeleton once per session
+
+const STATS = [['Lộ trình', 'Theo mục tiêu học tập'], ['Khóa học', 'Khám phá chủ đề lập trình'], ['Trợ lý AI', 'Hỗ trợ học tập']];
+const FEATURES = [
+  { icon: 'route', title: 'Lộ trình cá nhân hóa', text: 'Trực quan hóa kế hoạch học tập độc bản cho riêng trình độ và quỹ thời gian của bạn.', highlighted: true },
+  { icon: 'book-open', title: 'Khóa học chuyên sâu', text: 'Học qua các dự án thực tế được xây dựng bởi đội ngũ chuyên gia công nghệ hàng đầu.' },
+  { icon: 'message-circle', title: 'AI Mentor 24/7', text: 'Hỏi đáp lập trình tức thì mọi lúc mọi nơi, giải thích bug chi tiết từng dòng code.' },
+  { icon: 'terminal', title: 'Thực hành trực tiếp', text: 'Trình biên dịch tích hợp trên trình duyệt giúp bạn viết code và kiểm thử ngay lập tức.' },
+];
+const BENEFITS = [
+  ['Giải thích logic code phức tạp', 'Chỉ cần gửi đoạn code, AI sẽ phân tích và giải nghĩa dễ hiểu nhất.'],
+  ['Phát hiện lỗi logic & gợi ý sửa đổi', 'Cùng tìm lỗi, hiểu nguyên nhân và cải thiện cách viết code của bạn.'],
+];
+const FOOTER_GROUPS = [
+  ['Nền tảng', [['Lộ trình học tập', '/ai'], ['Danh sách khóa học', '/courses'], ['Bàn làm việc', '/dashboard'], ['AI Mentor', '#home-mentor']]],
+  ['Tài nguyên', [['Khám phá công nghệ', '/courses'], ['Tư vấn chọn khóa học', '/ai'], ['Tính năng Codi', '#home-features-title'], ['Hồ sơ học tập', '/profile']]],
+  ['Hỗ trợ', [['Hỏi đáp cùng AI', '/ai'], ['Quản lý tài khoản', '/profile'], ['Đăng nhập', '/login'], ['Khôi phục mật khẩu', '/forgot-password']]],
+];
+const FooterLink = ({ to, children }) => (to.startsWith('#') ? <a href={to}>{children}</a> : <Link to={to}>{children}</Link>);
+
+function HomeCourseCard({ course: c }) {
+  return (
+    <article className="card cm-home-course">
+      <div className="cm-home-cover" aria-hidden="true"><Thumb course={c} /><span className="cm-home-cover-label">{Codi.category(c.categoryId).name}</span></div>
+      <div className="card-body compact stack-2 cm-home-course-body">
+        <div className="row-between small">
+          <span className="badge badge-neutral">{Codi.levelLabel(c.level)}</span>
+          <span className="muted row" style={{ gap: 4 }} title="Số học viên đã đăng ký"><Icon name="users" className="icon-sm" />{fmt.num(c.learnersCount || 0)} học viên</span>
+        </div>
+        <h3 className="cm-card-title" title={c.title}>{c.title}</h3>
+        <p className="small muted row" style={{ gap: 6 }}><Icon name="clock" className="icon-sm" />{fmt.duration(c.durationMin)}</p>
+        <Link className="btn btn-secondary btn-block cm-card-foot" to={`/courses/${c.slug}`} aria-label={`Bắt đầu học: ${c.title}`}>Bắt đầu học</Link>
+      </div>
+    </article>
+  );
+}
+
+function PopularCourses({ error }) {
+  const navigate = useNavigate();
+  const [loaded, setLoaded] = useState(homeCoursesLoaded);
+  useEffect(() => {
+    if (loaded) return undefined;
+    const t = setTimeout(() => { homeCoursesLoaded = true; setLoaded(true); }, 600);
+    return () => clearTimeout(t);
+  }, [loaded]);
+  const courses = published().slice().sort((a, b) => (b.learnersCount || 0) - (a.learnersCount || 0)).slice(0, 4);
+  let body;
+  if (!loaded) {
+    body = (
+      <div role="status" aria-label="Đang tải khóa học"><span className="sr-only">Đang tải khóa học…</span>
+        <div className="grid-4" aria-hidden="true">{[1, 2, 3, 4].map((i) => (
+          <div key={i} className="card card-body stack-3"><div className="skeleton" style={{ aspectRatio: '1.9' }} /><div className="skeleton skeleton-line" style={{ width: '30%' }} /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line" style={{ width: '50%' }} /></div>
+        ))}</div>
+      </div>
+    );
+  } else if (error) {
+    body = (
+      <div className="card card-body cm-home-state">
+        <p role="alert" className="small muted">Không thể tải khóa học. Vui lòng thử lại.</p>
+        <button type="button" className="btn btn-secondary" onClick={() => navigate('/', { replace: true })}>Thử lại</button>
+      </div>
+    );
+  } else if (!courses.length) {
+    body = (
+      <div className="card card-body cm-home-state">
+        <Icon name="book-open" className="icon-lg" />
+        <p role="status" className="small muted">Các khóa học sẽ sớm được cập nhật. Hãy quay lại sau nhé!</p>
+      </div>
+    );
+  } else {
+    body = <div className="grid-4">{courses.map((c) => <HomeCourseCard key={c.id} course={c} />)}</div>;
+  }
+  return (
+    <section className="section cm-home-section" aria-labelledby="home-courses-title">
+      <div className="cm-home-head">
+        <div className="stack-2">
+          <h2 id="home-courses-title">Khóa học phổ biến nhất</h2>
+          <p className="muted">Khám phá các khóa học được nhiều học viên lựa chọn nhất.</p>
+        </div>
+        <Link className="cm-home-link" to="/courses">Xem tất cả khóa học <Icon name="arrow-right" className="icon-sm" /></Link>
+      </div>
+      {body}
+    </section>
+  );
+}
+
+export default function HomePage({ query = {} }) {
+  useCodi();
+  return (
+    <>
+      <div className="page cm-home">
+        <section className="cm-hero" aria-labelledby="home-hero-title">
+          <h1 id="home-hero-title">Học đúng thứ bạn cần, theo thứ tự hợp lý với bạn</h1>
+          <p className="muted cm-lede">Học lập trình thông minh hơn với trợ lý AI, đa dạng các khóa học từ cơ bản đến nâng cao, thực hành code trực tiếp và lộ trình học cá nhân hóa hoàn hảo.</p>
+          <div className="row">
+            <Link className="btn btn-primary btn-lg" to="/dashboard">Bắt đầu học ngay</Link>
+            <Link className="btn btn-secondary btn-lg" to="/courses">Khám phá khóa học</Link>
+          </div>
+          <dl className="cm-hero-stats">
+            {STATS.map(([v, l]) => <div key={v}><dt>{v}</dt><dd>{l}</dd></div>)}
+          </dl>
+        </section>
+
+        <section className="section cm-home-section" aria-labelledby="home-features-title">
+          <div className="stack-2 cm-home-intro">
+            <h2 id="home-features-title">Phương pháp học thông minh &amp; hiệu quả hơn</h2>
+            <p className="muted">Bỏ qua các giáo án lý thuyết dài dòng. AI Learning hướng bạn vào con đường thực hành thực chiến với sự đồng hành của siêu trợ lý AI thông minh.</p>
+          </div>
+          <ul className="cm-features">
+            {FEATURES.map((f) => (
+              <li key={f.title} className={f.highlighted ? 'is-highlighted' : undefined}>
+                <h3 className="cm-feature-title"><Icon name={f.icon} className="cm-feature-icon" />{f.title}</h3>
+                <p className="small muted">{f.text}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <PopularCourses error={query.error === '1'} />
+
+        <section className="section cm-home-section cm-mentor" id="home-mentor" aria-labelledby="home-mentor-title">
+          <div className="stack-4">
+            <h2 id="home-mentor-title">AI Mentor - Trợ lý học tập thông minh luôn kề vai</h2>
+            <p className="muted">Không còn phải mòn mỏi chờ câu trả lời trên các diễn đàn công nghệ. AI Mentor của Codi cùng bạn tìm hiểu bài học, giải thích từng bước và khám phá lời giải với code minh họa trực quan.</p>
+            <ul className="cm-benefits">
+              {BENEFITS.map(([t, d]) => (
+                <li key={t}><Icon name="sparkles" className="icon-sm" /><div><h3>{t}</h3><p className="small muted">{d}</p></div></li>
+              ))}
+            </ul>
+            <Link className="cm-home-link" to="/ai">Trò chuyện với AI Mentor <Icon name="arrow-right" className="icon-sm" /></Link>
+          </div>
+          <figure className="cm-mentor-art" role="img" aria-label="Minh họa hội thoại AI Mentor hướng dẫn loại bỏ các phần tử trùng lặp trong mảng JavaScript bằng Set.">
+            <div className="msg msg-user" aria-hidden="true">Làm sao loại bỏ phần tử trùng lặp trong mảng JavaScript?</div>
+            <div className="msg msg-ai" aria-hidden="true">
+              <p className="small">Dùng <code>Set</code>: Set chỉ giữ mỗi giá trị một lần, rồi trải lại thành mảng.</p>
+              <pre className="cm-mentor-code"><code>{'const unique = [...new Set(arr)];'}</code></pre>
+            </div>
+          </figure>
+        </section>
+      </div>
+
+      <footer className="cm-footer" aria-label="Thông tin và liên kết Codi">
+        <div className="cm-footer-inner">
+          <div className="stack-2">
+            <Link to="/" className="logo" aria-label="Codi - Trang chủ"><span className="logo-mark" aria-hidden="true">C</span> Codi</Link>
+            <p className="xsmall muted">Học lập trình cùng trợ lý AI và lộ trình thiết kế riêng cho mỗi cá nhân. Codi đồng hành từ những dòng code đầu tiên.</p>
+          </div>
+          {FOOTER_GROUPS.map(([title, links]) => (
+            <nav key={title} aria-label={title}>
+              <h2>{title}</h2>
+              <ul>{links.map(([l, to]) => <li key={l}><FooterLink to={to}>{l}</FooterLink></li>)}</ul>
+            </nav>
+          ))}
+          <div>
+            <h2>Liên hệ</h2>
+            <p className="xsmall muted">Bạn cần hỗ trợ học tập? Trao đổi cùng AI Mentor để tìm hướng đi phù hợp.</p>
+            <Link className="cm-home-link" to="/ai">Trò chuyện với Codi <Icon name="external-link" className="icon-sm" /></Link>
+          </div>
+        </div>
+      </footer>
+    </>
+  );
+}

@@ -1,0 +1,322 @@
+/**
+ * /profile — port of the real app's app/profile/page.tsx, profile-view.tsx, profile-tabs.ts and
+ * components/profile/profile-card.tsx, avatar-picker.tsx, student-profile-overview.tsx (incl. ProfileStats).
+ *
+ * Tabs: Tổng quan (activity heatmap with year switch + courses), Khóa học, Giao dịch, Hồ sơ năng lực (learners
+ * only; others fall back to the overview). Stats and activity come from live seed data (see account-store
+ * activitiesOf); the simulated fetch shows the loading and error states (dev-drawer flag profileData).
+ */
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Codi, ROLE_LABEL, useCodi } from '../../lib/codi';
+import { Icon, OrderStatus, Progress } from '../../components/ui/primitives';
+import { ListRowsSkeleton, LoadingRegion, ShellIcon, Skel, scenario } from './shell-ui';
+import AvatarPicker from './avatar-picker';
+import { EmailVerificationCard } from './settings-page';
+import { GithubProfilePanel } from './github-api';
+import { activitiesOf } from './account-store';
+import { useMounted } from './auth';
+
+const PROFILE_TABS = [
+  { id: 'overview', label: 'Tổng quan', learnerOnly: false },
+  { id: 'courses', label: 'Khóa học', learnerOnly: false },
+  { id: 'transactions', label: 'Giao dịch', learnerOnly: false },
+  { id: 'nang-luc', label: 'Hồ sơ năng lực', learnerOnly: true },
+];
+const resolveTab = (value, isLearner) => {
+  if (value === 'nang-luc') return isLearner ? 'nang-luc' : 'overview';
+  return value === 'courses' || value === 'transactions' ? value : 'overview';
+};
+const tabHref = (id) => (id === 'overview' ? '/profile' : `/profile?tab=${id}`);
+const joinDate = (iso) => (iso ? new Date(iso).toLocaleDateString('vi-VN') : '');
+
+// Simulated GET /api/student/profile: resolves after a short delay, fails with the dev-drawer flag.
+const loadedYears = new Map(); // userId → Set(years already fetched)
+function fetchProfile() {
+  return Codi.wait(450).then(() => { if (scenario(Codi.state, 'profileData') === 'error') throw new Error('Không thể tải dữ liệu hồ sơ.'); });
+}
+function useProfileData(userId) {
+  const [status, setStatus] = useState('loading');
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let active = true;
+    setStatus('loading'); setError(null);
+    fetchProfile().then(() => { if (active) setStatus('ready'); }, (e) => { if (active) { setError(e.message); setStatus('error'); } });
+    return () => { active = false; };
+  }, [userId]);
+  return { status, error };
+}
+
+function enrolledCourses(userId) {
+  return Codi.db().enrolments.filter((e) => e.userId === userId).map((e) => Codi.course(e.courseId)).filter(Boolean)
+    .map((c) => { const p = Codi.courseProgress(c.id, userId); return { c, progress: p.pct, done: p.pct >= 100 }; });
+}
+
+// ───────────────────────── stats ─────────────────────────
+function ProfileStats({ userId }) {
+  useCodi();
+  const { status } = useProfileData(userId);
+  const year = new Date().getFullYear();
+  const Stat = ({ icon, label, value }) => (
+    <div className="stat-tile shell-stat"><span className="shell-stat-icon"><ShellIcon name={icon} /></span>
+      <span className="stack-1"><span className="stat-label">{label}</span>{value === undefined ? <Skel w={96} h={18} /> : <span className="strong">{value}</span>}</span></div>
+  );
+  if (status === 'loading') {
+    return <LoadingRegion label="Đang tải thống kê hồ sơ…" className="grid-2 shell-stats"><Stat icon="trending-up" label="Tiến độ trung bình" /><Stat icon="clock" label="Ngày hoạt động" /></LoadingRegion>;
+  }
+  if (status === 'error') return <p className="small text-danger" role="alert">Không thể tải thống kê hồ sơ.</p>;
+  const courses = enrolledCourses(userId);
+  const progress = courses.length ? `${Math.round(courses.reduce((s, x) => s + x.progress, 0) / courses.length)}%` : 'Chưa có dữ liệu';
+  const days = new Set(activitiesOf(userId).filter((a) => a.day.startsWith(String(year))).map((a) => a.day)).size;
+  return (
+    <div className="grid-2 shell-stats">
+      <Stat icon="trending-up" label="Tiến độ trung bình" value={progress} />
+      <Stat icon="clock" label="Ngày hoạt động" value={days ? `${days} ngày` : 'Chưa có dữ liệu'} />
+    </div>
+  );
+}
+
+// ───────────────────────── profile card ─────────────────────────
+function ProfileCard({ u }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(u.name);
+  const [pendingImage, setPendingImage] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const mounted = useMounted();
+  const dirty = draft.trim() !== u.name || pendingImage !== null;
+  const start = () => { setDraft(u.name); setPendingImage(null); setEditing(true); };
+  const cancel = () => { if (saving) return; setDraft(u.name); setPendingImage(null); setEditing(false); };
+  const save = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    const name = draft.trim();
+    if (!name) { Codi.ui.toast('Họ và tên không được để trống', { type: 'danger' }); return; }
+    if (!dirty) return;
+    setSaving(true);
+    await Codi.wait(600); // simulated upload to storage
+    if (!mounted.current) return;
+    const image = pendingImage;
+    Codi.set(() => { const cu = Codi.currentUser(); if (!cu) return; cu.name = name; if (image) cu.image = image; });
+    setSaving(false); setPendingImage(null); setEditing(false);
+    Codi.ui.toast('Cập nhật thông tin hồ sơ thành công!', { type: 'success' });
+  };
+
+  if (editing) {
+    return (
+      <div className="card"><div className="card-body stack-4">
+        <h2 style={{ fontSize: 'var(--text-lg)', margin: 0 }}>Chỉnh sửa hồ sơ</h2>
+        <div className="stack-2"><span className="field-label">Ảnh đại diện (Cloudflare R2)</span>
+          <AvatarPicker current={pendingImage || u.image || null} userName={draft} onSelected={setPendingImage} disabled={saving} /></div>
+        <form className="stack-4 shell-divided" noValidate onSubmit={save}>
+          <div className="field"><label htmlFor="displayName">Họ và tên</label><input id="displayName" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Nhập họ và tên của bạn" disabled={saving} /></div>
+          <div className="field"><label htmlFor="displayEmail">Email đăng ký</label><input id="displayEmail" value={u.email} disabled /><p className="field-help">Email là định danh tài khoản, không thể thay đổi trực tiếp.</p></div>
+          <div className="row">
+            <button type="submit" className="btn btn-primary" disabled={saving || !draft.trim() || !dirty}>{saving ? <Icon name="loader" className="icon-sm shell-spin" /> : <Icon name="check" className="icon-sm" />} Lưu thay đổi</button>
+            <button type="button" className="btn btn-secondary" onClick={cancel} disabled={saving}>Huỷ</button>
+          </div>
+        </form>
+      </div></div>
+    );
+  }
+  return (
+    <div className="stack-4">
+      <div className="shell-profile-photo">{u.image ? <img src={u.image} alt={u.name} /> : <span aria-hidden="true">{(u.name || 'C').trim().split(/\s+/).slice(-2).map((p) => p[0]).join('').toUpperCase()}</span>}</div>
+      <div className="stack-3">
+        <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <h2 style={{ fontSize: 'var(--text-xl)', margin: 0 }}>{u.name}</h2>
+          <span className="badge badge-neutral">{ROLE_LABEL[u.role]}</span>
+          {u.emailVerified !== false
+            ? <span className="badge badge-accent"><ShellIcon name="shield-check" className="icon-sm" />Đã xác thực</span>
+            : <span className="badge badge-neutral"><Icon name="alert-circle" />Chưa xác thực</span>}
+        </div>
+        <div className="stack-1 small muted">
+          <span className="row" style={{ gap: 8 }}><Icon name="mail" className="icon-sm" /><span style={{ overflowWrap: 'anywhere' }}>{u.email}</span></span>
+          {u.createdAt && <span className="row xsmall" style={{ gap: 8 }}><Icon name="calendar" className="icon-sm" /><span>Tham gia: {joinDate(u.createdAt)}</span></span>}
+        </div>
+        <button type="button" className="btn btn-secondary btn-block" onClick={start}><Icon name="pencil" className="icon-sm" /> Chỉnh sửa hồ sơ</button>
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────── activity heatmap ─────────────────────────
+const WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const longDate = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+/** Real heatmap layout: Sunday-first week columns covering the whole year (53–54 columns × 7 rows). */
+function buildWeeks(counts, year) {
+  const DAY = 86400000;
+  const start = Date.UTC(year, 0, 1); const end = Date.UTC(year, 11, 31);
+  const first = start - new Date(start).getUTCDay() * DAY;
+  const weeks = [];
+  for (let cur = first; cur <= end || new Date(cur).getUTCDay() !== 0; cur += 7 * DAY) {
+    const days = [];
+    for (let d = 0; d < 7; d++) {
+      const t = cur + d * DAY; const date = new Date(t); const key = date.toISOString().slice(0, 10);
+      const inYear = date.getUTCFullYear() === year;
+      days.push({ key, date, inYear, count: inYear ? counts.get(key) || 0 : 0 });
+    }
+    weeks.push(days);
+  }
+  return weeks;
+}
+
+function ActivityHeatmap({ userId }) {
+  useCodi();
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const [yearStatus, setYearStatus] = useState('ready'); // ready | loading | error
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    const seen = loadedYears.get(userId) || new Set([currentYear]);
+    loadedYears.set(userId, seen);
+    if (seen.has(year)) { setYearStatus('ready'); return undefined; }
+    let active = true;
+    setYearStatus('loading');
+    fetchProfile().then(() => { if (active) { seen.add(year); setYearStatus('ready'); } }, () => { if (active) setYearStatus('error'); });
+    return () => { active = false; };
+  }, [userId, year, retry, currentYear]);
+
+  const activities = activitiesOf(userId);
+  const counts = useMemo(() => {
+    const m = new Map();
+    activities.forEach((a) => { if (a.day.startsWith(String(year))) m.set(a.day, (m.get(a.day) || 0) + 1); });
+    return m;
+  }, [activities, year]);
+  const weeks = useMemo(() => buildWeeks(counts, year), [counts, year]);
+  const months = useMemo(() => {
+    const labels = new Map(); let last = -1;
+    weeks.forEach((w, i) => { const d = w.find((x) => x.inYear); if (d && d.date.getUTCMonth() !== last) { last = d.date.getUTCMonth(); labels.set(i, `Th${last + 1}`); } });
+    return labels;
+  }, [weeks]);
+  const activeDays = counts.size;
+
+  return (
+    <div className="card"><div className="card-body stack-4">
+      <h2 className="small strong" style={{ margin: 0 }} aria-live="polite">
+        {yearStatus === 'loading' ? <span className="muted" style={{ fontWeight: 400 }}>Đang tải hoạt động {year}…</span>
+          : yearStatus === 'error' ? <span className="row" style={{ gap: 8 }}><span className="text-danger" style={{ fontWeight: 400 }}>Không thể tải dữ liệu heatmap.</span><button type="button" className="btn-link small" onClick={() => setRetry((x) => x + 1)}>Thử lại</button></span>
+            : <span>{activeDays} ngày hoạt động trong {year}</span>}
+      </h2>
+      <div className="shell-heat-layout">
+        <div className="shell-heat-years" role="group" aria-label="Chọn năm">
+          {[currentYear, currentYear - 1, currentYear - 2].map((y) => <button key={y} type="button" aria-pressed={year === y} onClick={() => setYear(y)}>{y}</button>)}
+        </div>
+        <div className="shell-heat-box">
+          <div className="shell-heat-scroll" role="region" aria-label={`Lịch hoạt động năm ${year}`} tabIndex={0}>
+            <div className="shell-heat" style={{ '--weeks': weeks.length, opacity: yearStatus === 'ready' ? 1 : 0.4 }}>
+              <span />
+              <div className="shell-heat-months" aria-hidden="true">{weeks.map((_, i) => <span key={i}>{months.get(i) || ''}</span>)}</div>
+              <div className="shell-heat-days" aria-hidden="true">{WEEKDAYS.map((d, i) => <span key={d}>{i % 2 === 1 ? d : ''}</span>)}</div>
+              <div className="shell-heat-grid">
+                {weeks.flatMap((w, wi) => w.map((c, di) => {
+                  const label = longDate.format(c.date);
+                  const tip = c.count ? `${c.count} hoạt động vào ${label}` : `Không có hoạt động vào ${label}`;
+                  return <span key={`${wi}-${di}`} className={`shell-heat-cell ${c.inYear ? 'lv-' + Math.min(4, c.count) : 'is-out'}`} title={c.inYear ? tip : undefined} />;
+                }))}
+              </div>
+            </div>
+          </div>
+          <div className="shell-heat-legend" aria-hidden="true">Ít {[0, 1, 2, 3, 4].map((l) => <i key={l} className={`shell-heat-cell lv-${l}`} />)} Nhiều</div>
+        </div>
+      </div>
+    </div></div>
+  );
+}
+
+// ───────────────────────── tab bodies ─────────────────────────
+function CoursesCard({ userId }) {
+  const courses = enrolledCourses(userId);
+  return (
+    <div className="card"><div className="card-body stack-4">
+      <h2 className="row" style={{ gap: 8, fontSize: 'var(--text-lg)', margin: 0 }}><Icon name="book-open" className="icon-sm" /> Khóa học của tôi</h2>
+      {!courses.length ? <p className="small muted">Bạn chưa đăng ký khóa học nào.</p> : (
+        <div className="grid-2">
+          {courses.map(({ c, progress, done }) => (
+            <div key={c.id} className="shell-course stack-3">
+              <div className="row-between" style={{ alignItems: 'flex-start' }}><h3 className="small strong" style={{ margin: 0 }}>{c.title}</h3><span className="xsmall muted od-nowrap">{done ? 'Đã hoàn thành' : 'Đang học'}</span></div>
+              <Progress pct={progress} label={`Tiến độ ${c.title}`} />
+              <div className="row-between xsmall muted"><span>{progress}% hoàn thành</span><Link className="small" to={`/learn/${c.id}`}>{done ? 'Xem lại' : 'Tiếp tục học'}</Link></div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div></div>
+  );
+}
+
+function TransactionsCard({ userId }) {
+  const orders = Codi.db().orders.filter((o) => o.userId === userId).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return (
+    <div className="card"><div className="card-body stack-4">
+      <h2 className="row" style={{ gap: 8, fontSize: 'var(--text-lg)', margin: 0 }}><Icon name="wallet" className="icon-sm" /> Lịch sử giao dịch</h2>
+      {!orders.length ? <p className="small muted">Chưa có giao dịch nào.</p> : (
+        <div className="table-wrap"><table className="table"><thead><tr><th>Mã giao dịch</th><th>Khoá học</th><th>Ngày tạo</th><th className="num">Số tiền</th><th>Trạng thái</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>
+          {orders.map((o) => (
+            <tr key={o.id}><td className="mono">{o.code}</td><td>{o.items.map((i) => (Codi.course(i.courseId) || {}).title || i.courseId).join(', ')}</td><td className="od-nowrap">{Codi.fmt.date(o.createdAt)}</td><td className="num">{Codi.fmt.vnd(o.total)}</td><td><OrderStatus status={o.status} /></td>
+              <td>{o.status === 'pending' && <Link className="btn btn-primary btn-sm" to={`/checkout?order=${o.id}`}>Tiếp tục thanh toán</Link>}</td></tr>
+          ))}
+        </tbody></table></div>
+      )}
+    </div></div>
+  );
+}
+
+function OverviewBody({ userId, tab }) {
+  const { status, error } = useProfileData(userId);
+  if (status === 'loading') {
+    return <LoadingRegion label="Đang tải dữ liệu hồ sơ…" className="stack-4"><Skel h={160} style={{ borderRadius: 'var(--radius-md)' }} /><ListRowsSkeleton rows={3} withAvatar={false} /></LoadingRegion>;
+  }
+  if (status === 'error') return <p className="small text-danger" role="alert">{error}</p>;
+  return (
+    <div className="stack-4">
+      {tab === 'overview' && <ActivityHeatmap userId={userId} />}
+      {(tab === 'overview' || tab === 'courses') && <CoursesCard userId={userId} />}
+      {tab === 'transactions' && <TransactionsCard userId={userId} />}
+    </div>
+  );
+}
+
+function CapabilityBody({ query }) {
+  const failed = scenario(Codi.state, 'profileData') === 'error';
+  return (
+    <div className="stack-4" style={{ minWidth: 0 }}>
+      {failed && <p className="small text-danger" role="alert">Chưa tải được hồ sơ đã lưu. Không có lượt phân tích mới nào được bắt đầu.</p>}
+      <GithubProfilePanel linkError={query.error || null} />
+    </div>
+  );
+}
+
+export function ProfilePage({ query }) {
+  useCodi();
+  const u = Codi.currentUser();
+  if (!u) return null; // the role guard in App renders the sign-in page first
+  const isLearner = u.role === 'learner';
+  const tab = resolveTab(query.tab, isLearner);
+  const tabs = PROFILE_TABS.filter((t) => !t.learnerOnly || isLearner);
+  return (
+    <div className="page shell-profile">
+      <div className="row-between" style={{ flexWrap: 'wrap' }}>
+        <Link className="btn btn-ghost btn-sm" to={Codi.homeFor(u.role)}><Icon name="arrow-left" className="icon-sm" /> Quay lại Bàn làm việc (Dashboard)</Link>
+        <span className="xsmall muted row" style={{ gap: 6 }}><ShellIcon name="shield-check" className="icon-sm" /> Tài khoản Codi an toàn</span>
+      </div>
+      <div className="shell-profile-title">
+        <h1 className="row" style={{ gap: 8 }}><Icon name="user" /> Hồ sơ cá nhân & Bảo mật</h1>
+        <p className="small muted">Quản lý thông tin tài khoản, ảnh đại diện lưu trữ trên Cloudflare R2 và mật khẩu đăng nhập.</p>
+      </div>
+      {u.emailVerified === false && <EmailVerificationCard u={u} />}
+      <nav className="tabs shell-profile-tabs" aria-label="Điều hướng hồ sơ">
+        {tabs.map((t) => <Link key={t.id} className="tab" to={tabHref(t.id)} aria-current={t.id === tab ? 'page' : undefined}>{t.label}</Link>)}
+      </nav>
+      <div className="shell-profile-grid">
+        <div className="stack-4" style={{ minWidth: 0 }}>
+          <ProfileCard key={u.id} u={u} />
+          <ProfileStats userId={u.id} />
+        </div>
+        {tab === 'nang-luc' ? <CapabilityBody query={query} /> : <OverviewBody key={u.id} userId={u.id} tab={tab} />}
+      </div>
+    </div>
+  );
+}
+

@@ -1,0 +1,30 @@
+/* Scoped lecturer styles from docs/mockup/js/lecturer.js (the rest lives in src/styles/lecturer.css). */
+.tc-h { font-size: var(--text-lg); }
+.tc-add { position: relative; }
+.tc-add > summary { list-style: none; }
+.tc-add > summary::-webkit-details-marker { display: none; }
+.tc-chapter .card-header { gap: var(--space-2); flex-wrap: wrap; }
+.tc-lessons { padding: var(--space-2); }
+.tc-lesson { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); flex-wrap: wrap; }
+.tc-lesson:hover { background: var(--canvas); }
+.tc-grip { cursor: grab; color: var(--faint); display: inline-grid; }
+.tc-type { width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--subtle); display: grid; place-items: center; color: var(--muted); flex: none; }
+.tc-row-actions { display: flex; gap: 2px; flex-wrap: wrap; }
+.tc-empty-drop { padding: var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); text-align: center; }
+.is-dragging { opacity: .5; }
+.is-drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.tc-danger { border-color: #fecaca; }
+.tc-declined { opacity: .6; }
+.tc-order { display: grid; gap: var(--space-1); }
+.tc-qb { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-4); align-items: start; }
+.tc-qb-side { position: sticky; top: calc(var(--header-h) + var(--space-4)); }
+@media (max-width: 1024px) { .tc-qb { grid-template-columns: minmax(0, 1fr); } .tc-qb-side { position: static; } }
+.tc-opt { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-1); border-radius: var(--radius-sm); }
+.tc-opt.is-correct { background: var(--success-soft); }
+.tc-correct { display: inline-flex; align-items: center; gap: 6px; min-width: 64px; min-height: 44px; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.tc-correct input { accent-color: var(--success); width: 18px; height: 18px; }
+.tc-probs { padding-left: 18px; }
+.tc-savebar { position: sticky; bottom: 0; background: var(--surface); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.tc-grade { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-4); align-items: start; }
+@media (max-width: 1280px) { .tc-grade { grid-template-columns: minmax(0, 1fr); } }
+.tc-reply { margin-left: var(--space-4); padding-left: var(--space-3); border-left: 2px solid var(--border); }
