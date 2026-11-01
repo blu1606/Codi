@@ -2,6 +2,7 @@
  * Shared UI primitives — React ports of Codi.ui.* from the mockup runtime. Markup and class names match the
  * mockup so src/styles/*.css (copied from docs/mockup/css) styles them unchanged.
  */
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ICON_PATHS } from '../../lib/icon-paths';
 import { COURSE_LOGOS } from '../../lib/course-logos';
@@ -184,12 +185,27 @@ const LOGO_STYLE = {
   'Next.js': { bg: '#000000', fg: '#ffffff' },
   Jest: { bg: '#99425b', fg: '#ffffff' },
 };
-/** Course media: the technology's logo on its brand colour; otherwise a neutral code mark on the course hue. */
+/**
+ * Course media. Large: the course cover image (course.coverImageUrl) with the technology logo as a corner badge.
+ * Small, or when the cover is missing or fails to load: the technology's logo on its brand colour; otherwise a
+ * neutral code mark on the course hue.
+ */
 export function Thumb({ course, small }) {
+  const [failed, setFailed] = useState(null);
   const cls = `thumb ${small ? 'thumb-sm' : ''}`.trim();
   const logo = course && COURSE_LOGOS[course.id];
+  const st = logo ? (LOGO_STYLE[logo.name] || { bg: '#111827', fg: '#ffffff' }) : null;
+  const cover = !small && course && course.coverImageUrl;
+  if (cover && failed !== cover) {
+    const sm = cover.replace(/\.webp$/, '-sm.webp');
+    return (
+      <span className={`${cls} thumb-cover`} aria-hidden="true">
+        <img src={cover} srcSet={`${sm} 640w, ${cover} 1280w`} sizes="(max-width: 640px) 100vw, 400px" alt="" loading="lazy" decoding="async" onError={() => setFailed(cover)} />
+        {logo && <span className="thumb-badge" style={{ background: st.bg, color: st.fg }}><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d={logo.d} /></svg></span>}
+      </span>
+    );
+  }
   if (logo) {
-    const st = LOGO_STYLE[logo.name] || { bg: '#111827', fg: '#ffffff' };
     return (
       <span className={cls} style={{ background: st.bg, color: st.fg }} aria-hidden="true">
         <svg className="thumb-logo" viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d={logo.d} /></svg>

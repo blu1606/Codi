@@ -8,3 +8,8 @@ patchSeed((db) => {
     db.enrolments.push({ userId: uid, courseId, enrolledAt: '2026-09-02T08:30:00Z', startMode: 'lesson1', pathStatus: 'ready' });
   }
 });
+
+// Course cover images (generated series in public/images/courses, 1280x720 + -sm 640x360 WebP).
+patchSeed((db) => {
+  db.courses.forEach((c) => { if (!c.coverImageUrl) c.coverImageUrl = `/images/courses/${c.slug}.webp`; });
+});

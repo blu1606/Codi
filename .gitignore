@@ -3,3 +3,4 @@ dist
 .env
 .env.local
 *.log
+.impeccable/hook.cache.json
