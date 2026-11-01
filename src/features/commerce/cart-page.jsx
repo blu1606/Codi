@@ -142,7 +142,7 @@ export default function CartPage() {
 
   if (!courses.length) {
     return (
-      <div className="page page-narrow stack-4">{notices}<h1>Giỏ hàng</h1>
+      <div className="page page-narrow stack-4"><h1>Giỏ hàng</h1>{notices}
         <div className="card">
           <Empty icon="book-open" title="Giỏ hàng của bạn đang trống" body="Thêm khoá học từ danh sách, hoặc nhờ AI Codi gợi ý khoá phù hợp với mục tiêu."
             actions={<><Link className="btn btn-primary" to="/courses">Khám phá khoá học</Link><Link className="btn btn-secondary" to="/ai"><Icon name="sparkles" /> Hỏi AI Codi</Link></>} />
@@ -154,8 +154,8 @@ export default function CartPage() {
   const verr = voucherError || (s.code && s.voucherInvalid);
   return (
     <div className="page stack-4">
-      {notices}
       <h1>Giỏ hàng <span className="muted" style={{ fontWeight: 400 }}>({courses.length})</span></h1>
+      {notices}
       <div className="layout-aside">
         <ul className="list stack-3">{courses.map((c) => (
           <li key={c.id} className="card"><div className="card-body compact row cm-cart-row">

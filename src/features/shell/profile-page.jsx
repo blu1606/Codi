@@ -302,7 +302,7 @@ export function ProfilePage({ query }) {
         <span className="xsmall muted row" style={{ gap: 6 }}><ShellIcon name="shield-check" className="icon-sm" /> Tài khoản Codi an toàn</span>
       </div>
       <div className="shell-profile-title">
-        <h1 className="row" style={{ gap: 8 }}><Icon name="user" /> Hồ sơ cá nhân & Bảo mật</h1>
+        <h1>Hồ sơ cá nhân & Bảo mật</h1>
         <p className="small muted">Quản lý thông tin tài khoản, ảnh đại diện lưu trữ trên Cloudflare R2 và mật khẩu đăng nhập.</p>
       </div>
       {u.emailVerified === false && <EmailVerificationCard u={u} />}

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Icon, Thumb } from '../../components/ui/primitives';
-import { published } from './commerce-lib';
+import { lecturerName, published } from './commerce-lib';
 
 const fmt = Codi.fmt;
 let homeCoursesLoaded = false; // first visit shows the loading skeleton once per session
@@ -32,15 +32,16 @@ const FooterLink = ({ to, children }) => (to.startsWith('#') ? <a href={to}>{chi
 
 function HomeCourseCard({ course: c }) {
   return (
-    <article className="card cm-home-course">
-      <div className="cm-home-cover" aria-hidden="true"><Thumb course={c} /><span className="cm-home-cover-label">{Codi.category(c.categoryId).name}</span></div>
-      <div className="card-body compact stack-2 cm-home-course-body">
-        <div className="row-between small">
-          <span className="badge badge-neutral">{Codi.levelLabel(c.level)}</span>
-          <span className="muted row" style={{ gap: 4 }} title="Số học viên đã đăng ký"><Icon name="users" className="icon-sm" />{fmt.num(c.learnersCount || 0)} học viên</span>
-        </div>
+    <article className="card cm-card cm-home-course">
+      <div className="cm-card-media" aria-hidden="true"><Thumb course={c} /><span className="cm-cover-label">{Codi.category(c.categoryId).name}</span></div>
+      <div className="card-body compact cm-card-body">
         <h3 className="cm-card-title" title={c.title}>{c.title}</h3>
-        <p className="small muted row" style={{ gap: 6 }}><Icon name="clock" className="icon-sm" />{fmt.duration(c.durationMin)}</p>
+        <p className="small muted od-truncate">{lecturerName(c)}</p>
+        <p className="cm-card-meta">
+          <span className="badge badge-neutral">{Codi.levelLabel(c.level)}</span>
+          <span className="od-nowrap" title="Số học viên đã đăng ký"><Icon name="users" className="icon-sm" /> {fmt.num(c.learnersCount || 0)} học viên</span>
+          <span className="od-nowrap"><Icon name="clock" className="icon-sm" /> {fmt.duration(c.durationMin)}</span>
+        </p>
         <Link className="btn btn-secondary btn-block cm-card-foot" to={`/courses/${c.slug}`} aria-label={`Bắt đầu học: ${c.title}`}>Bắt đầu học</Link>
       </div>
     </article>
@@ -61,7 +62,7 @@ function PopularCourses({ error }) {
     body = (
       <div role="status" aria-label="Đang tải khóa học"><span className="sr-only">Đang tải khóa học…</span>
         <div className="grid-4" aria-hidden="true">{[1, 2, 3, 4].map((i) => (
-          <div key={i} className="card card-body stack-3"><div className="skeleton" style={{ aspectRatio: '1.9' }} /><div className="skeleton skeleton-line" style={{ width: '30%' }} /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line" style={{ width: '50%' }} /></div>
+          <div key={i} className="card card-body stack-3"><div className="skeleton" style={{ aspectRatio: '16 / 9' }} /><div className="skeleton skeleton-line" style={{ width: '30%' }} /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line" style={{ width: '50%' }} /></div>
         ))}</div>
       </div>
     );
@@ -102,15 +103,20 @@ export default function HomePage({ query = {} }) {
     <>
       <div className="page cm-home">
         <section className="cm-hero" aria-labelledby="home-hero-title">
-          <h1 id="home-hero-title">Học đúng thứ bạn cần, theo thứ tự hợp lý với bạn</h1>
-          <p className="muted cm-lede">Học lập trình thông minh hơn với trợ lý AI, đa dạng các khóa học từ cơ bản đến nâng cao, thực hành code trực tiếp và lộ trình học cá nhân hóa hoàn hảo.</p>
-          <div className="row">
-            <Link className="btn btn-primary btn-lg" to="/dashboard">Bắt đầu học ngay</Link>
-            <Link className="btn btn-secondary btn-lg" to="/courses">Khám phá khóa học</Link>
+          <div className="cm-hero-copy">
+            <h1 id="home-hero-title">Học đúng thứ bạn cần, theo thứ tự hợp lý với bạn</h1>
+            <p className="muted cm-lede">Học lập trình thông minh hơn với trợ lý AI, đa dạng các khóa học từ cơ bản đến nâng cao, thực hành code trực tiếp và lộ trình học cá nhân hóa hoàn hảo.</p>
+            <div className="cm-hero-actions">
+              <Link className="btn btn-primary btn-lg" to="/dashboard">Bắt đầu học ngay</Link>
+              <Link className="btn btn-secondary btn-lg" to="/courses">Khám phá khóa học</Link>
+            </div>
+            <dl className="cm-hero-stats">
+              {STATS.map(([v, l]) => <div key={v}><dt>{v}</dt><dd>{l}</dd></div>)}
+            </dl>
           </div>
-          <dl className="cm-hero-stats">
-            {STATS.map(([v, l]) => <div key={v}><dt>{v}</dt><dd>{l}</dd></div>)}
-          </dl>
+          <div className="cm-hero-media">
+            <img src="/images/hero-learner.webp" width="1200" height="800" alt="" loading="eager" fetchPriority="high" decoding="async" />
+          </div>
         </section>
 
         <section className="section cm-home-section" aria-labelledby="home-features-title">

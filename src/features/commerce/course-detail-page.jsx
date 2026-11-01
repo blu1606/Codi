@@ -5,7 +5,7 @@
 import { useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
-import { Alert, Avatar, Empty, Icon, Progress, Stars } from '../../components/ui/primitives';
+import { Alert, Avatar, Empty, Icon, Progress, Stars, Thumb } from '../../components/ui/primitives';
 import { TYPE_ICON, TYPE_LABEL, priceLabel } from './commerce-lib';
 import { AddToCartButton, buyNow, enrollFree } from './course-card';
 
@@ -51,7 +51,9 @@ function PurchaseCard({ course: c }) {
     </>);
   }
   return (
-    <div className="card"><div className="card-body stack-4">
+    <div className="card cm-card">
+      <div className="cm-card-media" aria-hidden="true"><Thumb course={c} /></div>
+      <div className="card-body stack-4">
       <h2 className="h-card">Đăng ký khóa học</h2>
       <div className="stack-1"><span className="small muted">Học phí khóa học</span><span className="price cm-price-lg">{priceLabel(c)}</span></div>
       {cta}
@@ -61,7 +63,7 @@ function PurchaseCard({ course: c }) {
         <div><dt>Số bài học</dt><dd>{lessons.length}</dd></div>
         <div><dt>Thời lượng</dt><dd>{fmt.duration(c.durationMin)}</dd></div>
       </dl>
-      <Link className="small" to={`/ai?prompt=${encodeURIComponent('Khoá "' + c.title + '" có phù hợp với tôi không?')}`}><Icon name="sparkles" className="icon-sm" /> Hỏi trợ lý AI Codi</Link>
+      <Link className="small cm-ask" to={`/ai?prompt=${encodeURIComponent('Khoá "' + c.title + '" có phù hợp với tôi không?')}`}><Icon name="sparkles" className="icon-sm" /> Hỏi trợ lý AI Codi</Link>
     </div></div>
   );
 }
@@ -106,9 +108,8 @@ export default function CourseDetailPage({ params, query = {} }) {
     <div className="page">
       <nav className="small muted cm-crumb" aria-label="Breadcrumb"><Link to="/courses">Khoá học</Link> / <span>{Codi.category(c.categoryId).name}</span> / <span aria-current="page">{c.title}</span></nav>
       {c.status === 'hidden' && enrolled && <Alert type="info" title="Khoá học đang tạm ẩn với người mua mới" body="Bạn đã sở hữu khoá học nên vẫn học bình thường." />}
-      <div className="layout-aside" style={{ marginTop: 16 }}>
-        <div className="stack-6">
-          <header className="stack-3">
+      <div className="cm-detail">
+        <header className="stack-3 cm-detail-head">
             <h1>{c.title}</h1>
             <p className="cm-lede muted">{c.summary || 'Giảng viên đang cập nhật mô tả.'}</p>
             <ul className="cm-stats">
@@ -118,7 +119,9 @@ export default function CourseDetailPage({ params, query = {} }) {
               <li><Icon name="users" className="icon-sm" /> {fmt.num(c.learnersCount)} học viên</li>
               <li><Icon name="user" className="icon-sm" /> {lec ? lec.name : ''}</li>
             </ul>
-          </header>
+        </header>
+        <aside className="cm-detail-aside" aria-label="Đăng ký khóa học"><PurchaseCard course={c} /></aside>
+        <div className="stack-6 cm-detail-main">
           <section className="stack-3"><h2>01 · Bạn sẽ học được gì?</h2>
             {outcomes.length
               ? <ul className="cm-outcomes">{outcomes.map((o, i) => <li key={i}><Icon name="check" className="icon-sm text-success" /><span>{o}</span></li>)}</ul>
@@ -190,7 +193,6 @@ export default function CourseDetailPage({ params, query = {} }) {
             )}
           </section>
         </div>
-        <aside aria-label="Đăng ký khóa học"><PurchaseCard course={c} /></aside>
       </div>
     </div>
   );

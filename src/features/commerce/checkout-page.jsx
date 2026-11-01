@@ -256,7 +256,7 @@ function PendingCheckout({ order }) {
         <aside className="stack-4">
           <OrderSummary order={order} />
           <div className="card"><div className="card-body stack-3">
-            <p className="row small muted" role="status"><Icon name="loader" className="icon-sm cm-spin" /> <span>Đang kiểm tra thanh toán… <span className="xsmall" style={{ color: 'var(--fg)' }}>(lần gần nhất {clock(s ? s.checkedAt : Date.now())})</span></span></p>
+            <p className="small muted cm-poll" role="status"><Icon name="loader" className="icon-sm cm-spin" /> <span>Đang kiểm tra thanh toán… <span className="xsmall" style={{ color: 'var(--fg)' }}>(lần gần nhất {clock(s ? s.checkedAt : Date.now())})</span></span></p>
             <p className="xsmall muted">Thường mất vài giây đến vài phút sau khi bạn chuyển. Bạn có thể rời trang — đơn hàng vẫn được lưu trong Giỏ hàng và Hồ sơ › Giao dịch.</p>
             <button type="button" className="btn btn-secondary btn-block" onClick={iPaid} disabled={checking || cooldown > 0} aria-busy={checking ? 'true' : undefined}>
               {checking && <Icon name="loader" className="icon-sm cm-spin" />}

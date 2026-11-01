@@ -69,22 +69,23 @@ export function CourseCard({ course: c }) {
   const own = Codi.isEnrolled(c.id);
   return (
     <article className="card cm-card">
-      <Link className="cm-card-media" to={`/courses/${c.slug}`} aria-label={`Xem chi tiết: ${c.title}`}><Thumb course={c} /></Link>
-      <div className="card-body compact stack-2">
-        <div className="row" style={{ gap: 6 }}>
-          <span className="badge badge-neutral">{Codi.levelLabel(c.level)}</span>
-          {own && <span className="badge badge-success"><Icon name="check" />Đã sở hữu</span>}
-          {!own && Codi.cart().includes(c.id) && <span className="badge badge-accent">Trong giỏ</span>}
-        </div>
+      <Link className="cm-card-media" to={`/courses/${c.slug}`} tabIndex={-1} aria-hidden="true"><Thumb course={c} /></Link>
+      <div className="card-body compact cm-card-body">
         <h3 className="cm-card-title"><Link to={`/courses/${c.slug}`}>{c.title}</Link></h3>
         <p className="small muted od-truncate">{lecturerName(c)}</p>
-        <p className="small muted row" style={{ gap: 12 }}>
-          <span className="od-nowrap"><Icon name="clock" className="icon-sm" /> {fmt.duration(c.durationMin)}</span>
+        <p className="cm-card-meta">
+          <span className="badge badge-neutral">{Codi.levelLabel(c.level)}</span>
           {c.rating > 0
-            ? <span className="od-nowrap"><Icon name="star-filled" className="icon-sm cm-star" /> {c.rating.toFixed(1)} ({fmt.num(c.ratingCount || 0)})</span>
+            ? <span className="od-nowrap"><Icon name="star-filled" className="icon-sm cm-star" /> <span className="strong cm-fg">{c.rating.toFixed(1)}</span> ({fmt.num(c.ratingCount || 0)})</span>
             : <span>Chưa có đánh giá</span>}
+          <span className="od-nowrap"><Icon name="clock" className="icon-sm" /> {fmt.duration(c.durationMin)}</span>
         </p>
-        <div className="row-between cm-card-foot">
+        {(own || Codi.cart().includes(c.id)) && (
+          <div className="row" style={{ gap: 6 }}>
+            {own ? <span className="badge badge-success"><Icon name="check" />Đã sở hữu</span> : <span className="badge badge-accent">Trong giỏ</span>}
+          </div>
+        )}
+        <div className="cm-card-foot cm-card-buy">
           <span className="price">{priceLabel(c)}</span>
           <CourseCta course={c} />
         </div>
