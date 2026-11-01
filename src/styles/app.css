@@ -432,7 +432,7 @@ hr, .divider { border: 0; border-top: 1px solid var(--border); margin: var(--spa
 .split-list-item { display: block; width: 100%; text-align: left; padding: var(--space-3) var(--space-4); border: 0; border-bottom: 1px solid var(--border); background: none; font: inherit; color: var(--fg); cursor: pointer; text-decoration: none; }
 .split-list-item:last-child { border-bottom: 0; }
 .split-list-item:hover { background: var(--subtle); color: var(--fg); }
-.split-list-item[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.split-list-item[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-soft-border); }
 .split-detail { min-width: 0; }
 @media (max-width: 1024px) { .split-view { grid-template-columns: minmax(0, 1fr); } }
 
@@ -609,7 +609,7 @@ a.card:hover, .card-link:hover { border-color: var(--border-strong); color: inhe
 .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--elev-raised); }
 
 /* ---------- Tables ---------- */
-.table-wrap { width: 100%; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.table-wrap { position: relative; width: 100%; overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .table th { text-align: left; font-weight: 600; color: var(--muted); background: var(--canvas); padding: 10px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .table td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
@@ -1015,7 +1015,7 @@ a.stat-tile .stat-go { font-size: var(--text-sm); color: var(--accent); font-wei
 .te-check-sum { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; font-size: var(--text-sm); }
 .te-check-sum.is-pass { color: var(--success); }
 .te-check-sum.is-fail { color: var(--danger); }
-.te-fieldset { border: 0; padding: 0; margin: 0; }
+.te-fieldset { border: 0; padding: 0; margin-inline: 0; margin-bottom: 0; min-inline-size: 0; }
 .te-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: var(--space-2); align-items: start; }
 .te-row textarea { width: 100%; min-height: 64px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font: inherit; resize: vertical; }
 .te-n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--subtle); font-size: var(--text-xs); font-weight: 600; }
@@ -1051,7 +1051,7 @@ a.stat-tile .stat-go { font-size: var(--text-sm); color: var(--accent); font-wei
 .dev-drawer .dev-roles button { min-height: 36px; border: 1px solid #ca8a04; background: #ffffff; border-radius: var(--radius-sm); font: inherit; font-size: var(--text-xs); font-weight: 600; cursor: pointer; color: #422006; }
 .dev-drawer .dev-roles button[aria-pressed="true"] { background: #a16207; color: #ffffff; }
 .dev-note { font-size: var(--text-xs); color: #713f12; }
-@media (max-width: 640px) { .dev-drawer { left: 8px; right: 8px; width: auto; } .dev-toggle { left: 8px; bottom: 8px; } }
+@media (max-width: 640px) { .dev-drawer { left: 8px; right: 8px; width: auto; } .dev-toggle { left: 8px; bottom: 8px; width: 40px; padding: 0; justify-content: center; font-size: 0; gap: 0; opacity: 0.9; } }
 
 /* ───────── GitHub connect & analysis ───────── */
 .gh-consent, .gh-google, .gh-perm, .gh-run, .gh-result-sheet { font-size: var(--text-sm); }
