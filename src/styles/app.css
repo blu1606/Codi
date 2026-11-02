@@ -1420,6 +1420,11 @@ body:has(.ln-split) .app-header-inner.hd, body:has(.workspace) .app-header-inner
   .hd-brand { margin-right: 0; }
   .app-header-inner.hd .hd-actions { margin-left: auto; gap: 0; }
 }
+/* 1025–1439 px with the full five-item nav: the search field would overlap the last links, so it collapses to the icon button (same Ctrl K action, tooltip and aria-label). */
+@media (min-width: 1025px) and (max-width: 1439px) {
+  .app-header-inner.hd:has(.hd-nav > :nth-child(5)) .hd-search-slot { display: none; }
+  .app-header-inner.hd:has(.hd-nav > :nth-child(5)) .hd-search-compact { display: inline-flex; }
+}
 @media (max-width: 640px) { .hd-register { display: none; } }
 @media (max-width: 420px) {
   .hd-theme { display: none; }
