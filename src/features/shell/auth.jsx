@@ -241,7 +241,7 @@ function LoginForm({ view }) {
         <SocialButton provider="google" text="Tiếp tục với Google" />
         <SocialButton provider="github" text="Tiếp tục với GitHub" />
       </div>
-      <p className="small muted" style={{ textAlign: 'center' }}>Chưa có tài khoản? <button type="button" className="btn-link" onClick={() => setMode('register')}>Đăng ký ngay</button></p>
+      <button type="button" className="btn btn-secondary btn-block" onClick={() => setMode('register')}>Chưa có tài khoản? Tạo tài khoản miễn phí</button>
       <div className="demo-accounts">
         <span className="xsmall strong">Tài khoản thử nghiệm · mật khẩu codi123</span>
         {DEMO.map(([e, l]) => <button key={e} type="button" onClick={() => fill(e)}>{l}: {e}</button>)}
