@@ -3,16 +3,15 @@
  * top results with "Khóa học" / "Chủ đề" badges, "Xem tất cả kết quả"), clear-search button, filter row
  * (category, level, price, sort), removable chips + "Xóa bộ lọc", result count, zero results, load error with retry.
  * Filters live in the URL (replaced, not pushed, like the real app's replaceState). `?course=<id>` deep-links to the
- * course detail; an unknown id is dropped from the URL.
+ * course detail; an unknown id is dropped from the URL. Data: GET /api/courses + POST /api/courses/ownership.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Empty, Icon, Thumb } from '../../components/ui/primitives';
-import { catalogEntry, filterCatalog, lecturerName, normaliseSort, priceLabel, published, typeaheadSuggestions } from './commerce-lib';
+import { catalogEntry, filterCatalog, normaliseSort, priceLabel, typeaheadSuggestions } from './commerce-lib';
+import { levelLabel, useCatalog, useOwnership } from './commerce-api';
 import { CourseCta } from './course-card';
-
-let catalogLoaded = false; // first visit shows the loading skeleton once per session
 
 const LEVELS = [['all', 'Tất cả'], ['Beginner', 'Cơ bản'], ['Intermediate', 'Trung cấp'], ['Advanced', 'Nâng cao']];
 const PRICES = [['all', 'Tất cả'], ['free', 'Miễn phí'], ['paid', 'Trả phí']];
@@ -115,7 +114,7 @@ function SearchBox({ value, entries, onSearch, onOpenCourse }) {
                     <button key={top.id} {...optionProps(idx)}>
                       <span className={`badge ${top.type === 'Khóa học' ? 'badge-accent' : 'badge-neutral'}`}>{top.type}</span>
                       <span className="od-fill od-truncate strong">{top.title}</span>
-                      <span className="xsmall muted od-nowrap">{top.entry ? Codi.levelLabel(top.entry.level) : top.category}</span>
+                      <span className="xsmall muted od-nowrap">{top.entry ? levelLabel(top.entry.level) : top.category}</span>
                     </button>
                   ); })}
                 </div>
@@ -156,9 +155,10 @@ function SortHeader({ label, value, sort, onSort }) {
   );
 }
 
-function LedgerRow({ course: c }) {
-  const own = Codi.isEnrolled(c.id);
-  const inCart = !own && Codi.cart().includes(c.id);
+function LedgerRow({ course: c, ownership }) {
+  const state = ownership.of(c.id);
+  const own = state === 'owned';
+  const inCart = state === 'in-cart';
   const rank = LEVEL_RANK[c.level] || 1;
   return (
     <tr>
@@ -167,26 +167,26 @@ function LedgerRow({ course: c }) {
           <Link className="cm-ledger-thumb" to={`/courses/${c.slug}`} tabIndex={-1} aria-hidden="true"><Thumb course={c} small /></Link>
           <div className="cm-ledger-text">
             <Link className="cm-ledger-title" to={`/courses/${c.slug}`}>{c.title}</Link>
-            <span className="small muted od-truncate">{lecturerName(c)}</span>
+            <span className="small muted od-truncate">{c.lecturerName}</span>
             {own && <span className="badge badge-success"><Icon name="check" />Đã sở hữu</span>}
             {inCart && <span className="badge badge-accent">Trong giỏ</span>}
           </div>
         </div>
       </td>
       <td data-label="Trình độ">
-        <span className="cm-level"><span className="cm-level-bar" aria-hidden="true">{[1, 2, 3].map((i) => <i key={i} className={i <= rank ? 'on' : undefined} />)}</span>{Codi.levelLabel(c.level)}</span>
+        <span className="cm-level"><span className="cm-level-bar" aria-hidden="true">{[1, 2, 3].map((i) => <i key={i} className={i <= rank ? 'on' : undefined} />)}</span>{levelLabel(c.level)}</span>
       </td>
       <td data-label="Đánh giá" className="num">{c.rating > 0 ? <><Icon name="star-filled" className="icon-sm cm-star" /> <span className="strong">{c.rating.toFixed(1)}</span> <span className="muted">({fmt.num(c.ratingCount || 0)})</span></> : <span className="muted">Chưa có</span>}</td>
-      <td data-label="Thời lượng" className="num">{fmt.duration(c.durationMin)}</td>
+      <td data-label="Thời lượng" className="num">{c.duration}</td>
       <td data-label="Học viên" className="num">{fmt.num(c.learnersCount || 0)}</td>
       <td data-label="Học phí" className="num"><span className="strong">{priceLabel(c)}</span></td>
-      <td className="cm-ledger-act"><CourseCta course={c} /></td>
+      <td className="cm-ledger-act"><CourseCta course={c} own={state} pendingOrderId={ownership.pendingOrderId(c.id)} /></td>
     </tr>
   );
 }
 
 /** The results as a comparison ledger: one course per row, sortable where the catalogue has a sort value. */
-function CourseLedger({ list, sort, onSort }) {
+function CourseLedger({ list, sort, onSort, ownership }) {
   return (
     <section aria-labelledby="catalog-results-title" className="cm-ledger-wrap">
       <h2 id="catalog-results-title" className="sr-only">Danh sách khoá học</h2>
@@ -203,7 +203,7 @@ function CourseLedger({ list, sort, onSort }) {
             <th scope="col"><span className="sr-only">Thao tác</span></th>
           </tr>
         </thead>
-        <tbody>{list.map((c) => <LedgerRow key={c.id} course={c} />)}</tbody>
+        <tbody>{list.map((c) => <LedgerRow key={c.id} course={c} ownership={ownership} />)}</tbody>
       </table>
     </section>
   );
@@ -212,28 +212,25 @@ function CourseLedger({ list, sort, onSort }) {
 export default function CatalogPage({ query: q }) {
   useCodi();
   const navigate = useNavigate();
-  const [loaded, setLoaded] = useState(catalogLoaded);
-  useEffect(() => {
-    if (loaded) return undefined;
-    const t = setTimeout(() => { catalogLoaded = true; setLoaded(true); }, 600);
-    return () => clearTimeout(t);
-  }, [loaded]);
+  const { courses, loading, error, reload } = useCatalog();
+  const ownership = useOwnership(courses);
+  const loaded = !!courses || (!loading && !!error);
 
   // ?course=<id> deep link: open that course, or drop an unknown id from the URL.
   useEffect(() => {
-    if (!q.course) return;
-    const c = published().find((x) => x.id === q.course);
+    if (!q.course || !courses) return;
+    const c = courses.find((x) => x.id === q.course);
     navigate(c ? `/courses/${c.slug}` : catalogHref(q, { course: '' }), { replace: true });
-  }, [q.course]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q.course, courses]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const db = Codi.db();
   const f = { q: q.q || '', cat: q.cat || 'all', level: q.level || 'all', price: q.price || 'all', sort: normaliseSort(q.sort) };
-  const entries = published().map(catalogEntry);
+  const entries = useMemo(() => (courses || []).map(catalogEntry), [courses]);
+  const categories = useMemo(() => [...new Set(entries.map((e) => e.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [entries]);
   const filtered = filterCatalog(entries, f.q, f);
   const list = filtered.map((e) => e.course);
   const update = (patch) => navigate(catalogHref(q, patch), { replace: true });
   const reset = () => navigate('/courses', { replace: true });
-  const catName = f.cat !== 'all' ? Codi.category(f.cat).name : '';
+  const catName = f.cat !== 'all' ? f.cat : '';
 
   const chips = [];
   if (f.q.trim()) chips.push(['q', `Từ khóa: "${f.q.trim()}"`]);
@@ -241,14 +238,13 @@ export default function CatalogPage({ query: q }) {
   if (f.level !== 'all') chips.push(['level', `Trình độ: ${label(LEVELS, f.level)}`]);
   if (f.price !== 'all') chips.push(['price', `Giá: ${f.price === 'free' ? 'Miễn phí' : 'Trả phí'}`]);
   if (f.sort !== 'popular') chips.push(['sort', `Sắp xếp: ${label(SORTS, f.sort)}`]);
-  const error = q.error === '1';
 
   return (
     <div className="page">
       <div className="page-header"><div><h1>Khoá học</h1><p className="muted">Tìm khoá học phù hợp với mục tiêu của bạn.</p></div></div>
       <form className="cm-filters" role="search" onSubmit={(e) => e.preventDefault()}>
         <SearchBox value={f.q} entries={filtered} onSearch={(v) => update({ q: v })} onOpenCourse={(c) => Codi.go('/courses/' + c.slug)} />
-        <FilterSelect name="cat" label="Danh mục" aria="Lọc theo danh mục" value={f.cat} options={[['all', 'Tất cả']].concat(db.categories.map((c) => [c.id, c.name]))} onChange={(k, v) => update({ [k]: v })} />
+        <FilterSelect name="cat" label="Danh mục" aria="Lọc theo danh mục" value={f.cat} options={[['all', 'Tất cả']].concat(categories.map((c) => [c, c]))} onChange={(k, v) => update({ [k]: v })} />
         <FilterSelect name="level" label="Trình độ" aria="Lọc theo trình độ" value={f.level} options={LEVELS} onChange={(k, v) => update({ [k]: v })} />
         <FilterSelect name="price" label="Giá" aria="Lọc theo học phí" value={f.price} options={PRICES} onChange={(k, v) => update({ [k]: v })} />
         <FilterSelect name="sort" label="Sắp xếp" aria="Sắp xếp danh sách khóa học" value={f.sort} options={SORTS} onChange={(k, v) => update({ [k]: v })} />
@@ -262,14 +258,14 @@ export default function CatalogPage({ query: q }) {
         </div>
       )}
       <p className="small muted cm-count" role="status">{loaded ? `${list.length} khoá học` : 'Đang tải danh sách khoá học…'}</p>
-      {!loaded ? <CatalogSkeleton /> : error ? (
+      {!loaded ? <CatalogSkeleton /> : !courses ? (
         <div className="card">
           <Empty icon="alert-circle" title="Không tải được danh sách khóa học"
             body={<span role="alert">Không thể tải khóa học. Vui lòng thử lại. Kết nối bị gián đoạn. Bộ lọc của bạn vẫn được giữ.</span>}
-            actions={<button type="button" className="btn btn-secondary" onClick={() => update({})}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />
+            actions={<button type="button" className="btn btn-secondary" onClick={() => reload()}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />
         </div>
       ) : list.length ? (
-        <CourseLedger list={list} sort={f.sort} onSort={(v) => update({ sort: v })} />
+        <CourseLedger list={list} sort={f.sort} onSort={(v) => update({ sort: v })} ownership={ownership} />
       ) : (
         <div className="card">
           <Empty icon="search" title="Không tìm thấy khóa học phù hợp" body="Thử bỏ bớt bộ lọc, hoặc mô tả mục tiêu để AI Codi gợi ý khóa học."

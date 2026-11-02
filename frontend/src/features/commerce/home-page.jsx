@@ -1,18 +1,17 @@
 /**
  * S00 Home '/' (real app/page.tsx + components/{hero,home-features,home-courses,home-mentor,home-footer}.tsx):
  * hero with CTAs and stats, a sample product window (learning path, lesson, AI explanation), features, popular
- * courses (sorted by enrolment, 4 items, loading / error / empty), AI Mentor, closing band, footer.
- * The popular-courses load error is simulated with `?error=1`.
+ * courses (GET /api/courses?sort=popular&limit=4: loading / error / empty), AI Mentor, closing band, footer.
+ * The product window shows the first chapter of the most popular course (GET /api/courses/:slug).
  */
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { useApi } from '../../lib/use-api';
 import { Icon, Thumb } from '../../components/ui/primitives';
 import { BrandMark } from '../shell/brand-link';
-import { lecturerName, published } from './commerce-lib';
+import { levelLabel, useCatalog } from './commerce-api';
 
 const fmt = Codi.fmt;
-let homeCoursesLoaded = false; // first visit shows the loading skeleton once per session
 
 const STATS = [['Lộ trình', 'Theo mục tiêu học tập'], ['Khóa học', 'Khám phá chủ đề lập trình'], ['Trợ lý AI', 'Hỗ trợ học tập']];
 const FEATURES = [
@@ -32,18 +31,18 @@ const FOOTER_GROUPS = [
 ];
 const FooterLink = ({ to, children }) => (to.startsWith('#') ? <a href={to}>{children}</a> : <Link to={to}>{children}</Link>);
 
-/** Sample lesson path for the product window: the first chapter of a published course with real lesson titles. */
-function samplePath() {
-  const course = published().find((c) => c.chapters && c.chapters[0] && c.chapters[0].lessons.length >= 3);
-  if (!course) return null;
-  const ch = course.chapters[0];
+/** Sample lesson path for the product window: the first chapter of a course detail, when it has 3+ lessons. */
+function samplePath(detail) {
+  const ch = detail && detail.chapters && detail.chapters[0];
+  if (!ch || ch.lessons.length < 3) return null;
   const lessons = ch.lessons.slice(0, 4).map((l, i) => ({ id: l.id, title: l.title, state: i === 0 ? 'done' : i === 1 ? 'current' : 'next' }));
-  return { course, chapter: ch.title, lessons };
+  return { course: detail.course, chapter: ch.title, lessons };
 }
 
 /** The product, working: path strip, lesson, and AI explanation. Sample data, labelled as such. */
-function ProductWindow() {
-  const path = samplePath();
+function ProductWindow({ slug }) {
+  const { data } = useApi(slug ? `/api/courses/${encodeURIComponent(slug)}` : null);
+  const path = samplePath(data);
   const stateLabel = { done: 'Đã học', current: 'Đang học', next: 'Tiếp theo' };
   return (
     <figure className="cm-window" aria-label="Minh họa giao diện học: lộ trình, bài học và giải thích của trợ lý AI">
@@ -83,14 +82,14 @@ function ProductWindow() {
 function HomeCourseCard({ course: c }) {
   return (
     <article className="card cm-card cm-home-course">
-      <div className="cm-card-media" aria-hidden="true"><Thumb course={c} /><span className="cm-cover-label">{Codi.category(c.categoryId).name}</span></div>
+      <div className="cm-card-media" aria-hidden="true"><Thumb course={c} /><span className="cm-cover-label">{c.category}</span></div>
       <div className="card-body compact cm-card-body">
         <h3 className="cm-card-title" title={c.title}>{c.title}</h3>
-        <p className="small muted od-truncate">{lecturerName(c)}</p>
+        <p className="small muted od-truncate">{c.lecturerName}</p>
         <p className="cm-card-meta">
-          <span className="badge badge-neutral">{Codi.levelLabel(c.level)}</span>
+          <span className="badge badge-neutral">{levelLabel(c.level)}</span>
           <span className="od-nowrap" title="Số học viên đã đăng ký"><Icon name="users" className="icon-sm" /> {fmt.num(c.learnersCount || 0)} học viên</span>
-          <span className="od-nowrap"><Icon name="clock" className="icon-sm" /> {fmt.duration(c.durationMin)}</span>
+          <span className="od-nowrap"><Icon name="clock" className="icon-sm" /> {c.duration}</span>
         </p>
         <Link className="btn btn-secondary btn-block cm-card-foot" to={`/courses/${c.slug}`} aria-label={`Bắt đầu học: ${c.title}`}>Bắt đầu học</Link>
       </div>
@@ -98,17 +97,9 @@ function HomeCourseCard({ course: c }) {
   );
 }
 
-function PopularCourses({ error }) {
-  const navigate = useNavigate();
-  const [loaded, setLoaded] = useState(homeCoursesLoaded);
-  useEffect(() => {
-    if (loaded) return undefined;
-    const t = setTimeout(() => { homeCoursesLoaded = true; setLoaded(true); }, 600);
-    return () => clearTimeout(t);
-  }, [loaded]);
-  const courses = published().slice().sort((a, b) => (b.learnersCount || 0) - (a.learnersCount || 0)).slice(0, 4);
+function PopularCourses({ courses, loading, error, reload }) {
   let body;
-  if (!loaded) {
+  if (!courses && (loading || !error)) {
     body = (
       <div role="status" aria-label="Đang tải khóa học"><span className="sr-only">Đang tải khóa học…</span>
         <div className="grid-4" aria-hidden="true">{[1, 2, 3, 4].map((i) => (
@@ -116,11 +107,11 @@ function PopularCourses({ error }) {
         ))}</div>
       </div>
     );
-  } else if (error) {
+  } else if (!courses) {
     body = (
       <div className="card card-body cm-home-state">
         <p role="alert" className="small muted">Không thể tải khóa học. Vui lòng thử lại.</p>
-        <button type="button" className="btn btn-secondary" onClick={() => navigate('/', { replace: true })}>Thử lại</button>
+        <button type="button" className="btn btn-secondary" onClick={() => reload()}>Thử lại</button>
       </div>
     );
   } else if (!courses.length) {
@@ -147,8 +138,10 @@ function PopularCourses({ error }) {
   );
 }
 
-export default function HomePage({ query = {} }) {
+export default function HomePage() {
   useCodi();
+  const popular = useCatalog('sort=popular&limit=4');
+  const top = popular.courses && popular.courses[0];
   return (
     <>
       <div className="page cm-home">
@@ -164,7 +157,7 @@ export default function HomePage({ query = {} }) {
               {STATS.map(([v, l]) => <div key={v}><dt>{v}</dt><dd>{l}</dd></div>)}
             </dl>
           </div>
-          <div className="cm-hero-media"><ProductWindow /></div>
+          <div className="cm-hero-media"><ProductWindow slug={top ? top.slug : null} /></div>
         </section>
 
         <section className="section cm-home-section" aria-labelledby="home-features-title">
@@ -182,7 +175,7 @@ export default function HomePage({ query = {} }) {
           </ul>
         </section>
 
-        <PopularCourses error={query.error === '1'} />
+        <PopularCourses courses={popular.courses} loading={popular.loading} error={popular.error} reload={popular.reload} />
 
         <section className="section cm-home-section cm-mentor" id="home-mentor" aria-labelledby="home-mentor-title">
           <div className="stack-4">

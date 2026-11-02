@@ -2,12 +2,16 @@
  * S02 Course detail '/courses/:slug' — proof before price: outcomes, what the AI path does for this course, reviews,
  * curriculum accordion with typed lesson rows, requirements, lecturer. A sticky purchase panel carries the one primary
  * action with ownership states.
+ * Data: GET /api/courses/:slug (+ /lesson-kinds for typed rows), POST /api/courses/ownership, and the learner's
+ * progress from GET /api/learner/overview when the course is owned.
  */
-import { useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { useApi } from '../../lib/use-api';
 import { Alert, Avatar, Empty, Icon, Progress, Stars, Thumb } from '../../components/ui/primitives';
 import { TYPE_ICON, TYPE_LABEL, priceLabel } from './commerce-lib';
+import { levelLabel, useOwnership } from './commerce-api';
 import { AddToCartButton, buyNow, enrollFree } from './course-card';
 
 const fmt = Codi.fmt;
@@ -22,24 +26,24 @@ const AI_STEPS = [
 ];
 
 /** Purchase panel: one filled primary per ownership state; "Thêm vào giỏ" stays secondary (decision 42). */
-function PurchaseCard({ course: c }) {
+function PurchaseCard({ course: c, own, pendingOrderId }) {
   const role = Codi.role();
-  const own = Codi.ownership(c.id);
-  const lessons = Codi.lessons(c);
+  const progress = useApi(own === 'owned' && role === 'learner' ? '/api/learner/overview' : null);
   let cta;
   if (role === 'lecturer' || role === 'admin') {
     cta = <p className="small muted">Bạn đang xem với vai trò {ROLE_VIEW[role]}. Chỉ tài khoản học viên mới mua được khoá học.</p>;
+  } else if (!own) {
+    cta = <div className="skeleton" style={{ height: 48 }} aria-hidden="true" />;
   } else if (own === 'owned') {
-    const p = Codi.courseProgress(c.id);
+    const p = progress.data && progress.data.courses.find((x) => x.id === c.id);
     cta = (<>
-      <div className="stack-2"><div className="row-between small"><span>Tiến độ của bạn</span><strong>{p.done}/{p.total} bài</strong></div><Progress pct={p.pct} /></div>
+      {p && <div className="stack-2"><div className="row-between small"><span>Tiến độ của bạn</span><strong>{p.done}/{p.total} bài</strong></div><Progress pct={p.percent} /></div>}
       <Link className="btn btn-primary btn-block btn-lg" to={`/learn/${c.id}`}>Tiếp tục học</Link>
     </>);
   } else if (own === 'pending-payment') {
-    const o = Codi.pendingOrderFor(c.id);
     cta = (<>
-      <Alert type="warn" title="Đơn hàng đang chờ thanh toán." body={`Mã đơn: ${o.code}`} />
-      <Link className="btn btn-primary btn-block btn-lg" to={`/checkout?order=${o.id}`}>Tiếp tục thanh toán</Link>
+      <Alert type="warn" title="Đơn hàng đang chờ thanh toán." body="Hoàn tất chuyển khoản để mở khoá học." />
+      <Link className="btn btn-primary btn-block btn-lg" to={pendingOrderId ? `/checkout?order=${pendingOrderId}` : '/cart'}>Tiếp tục thanh toán</Link>
     </>);
   } else if (own === 'in-cart') {
     cta = (<>
@@ -66,9 +70,9 @@ function PurchaseCard({ course: c }) {
         <div className="stack-1"><span className="small muted">Học phí khóa học</span><span className="price cm-price-lg">{priceLabel(c)}</span></div>
         {cta}
         <dl className="cm-facts">
-          <div><dt>Trình độ</dt><dd>{Codi.levelLabel(c.level)}</dd></div>
-          <div><dt>Số chương</dt><dd>{c.chapters.length}</dd></div>
-          <div><dt>Số bài học</dt><dd>{lessons.length}</dd></div>
+          <div><dt>Trình độ</dt><dd>{levelLabel(c.level)}</dd></div>
+          <div><dt>Số chương</dt><dd>{c.chapterCount}</dd></div>
+          <div><dt>Số bài học</dt><dd>{c.lessonCount}</dd></div>
           <div><dt>Thời lượng</dt><dd>{fmt.duration(c.durationMin)}</dd></div>
         </dl>
         <Link className="small cm-ask" to={`/ai?prompt=${encodeURIComponent('Khoá "' + c.title + '" có phù hợp với tôi không?')}`}><Icon name="sparkles" className="icon-sm" /> Hỏi trợ lý AI Codi</Link>
@@ -77,7 +81,7 @@ function PurchaseCard({ course: c }) {
   );
 }
 
-/** Load failure (real: "Chưa thể tải khoá học" + "Thử lại"; no retry on 404). Simulated with `?error=1`. */
+/** Load failure (real: "Chưa thể tải khoá học" + "Thử lại"; no retry on 404). */
 function DetailError({ notFound, onRetry }) {
   return (
     <div className="page page-narrow"><div className="card">
@@ -91,45 +95,74 @@ function DetailError({ notFound, onRetry }) {
   );
 }
 
-export default function CourseDetailPage({ params, query = {} }) {
+/** GET /api/courses/:slug (+ lesson kinds) → the course shape this page renders. */
+function toDetail(d, kinds) {
+  const k = (kinds && kinds.lessons) || {};
+  const chapters = d.chapters.map((ch) => ({
+    id: ch.id, title: ch.title,
+    lessons: ch.lessons.map((l) => ({
+      id: l.id, title: l.title, durationMin: Math.round((l.durationSeconds || 0) / 60),
+      type: k[l.id] ? k[l.id].kind : null, quiz: !!(k[l.id] && k[l.id].quiz), assignment: !!(k[l.id] && k[l.id].assignment),
+    })),
+  }));
+  return {
+    ...d.course, summary: d.course.description || '', rating: d.rating || 0, ratingCount: d.reviewCount || 0,
+    learnersCount: d.course.enrollmentCount || 0, coverImageUrl: d.coverImageUrl, chapters,
+    chapterCount: d.summary.chapterCount, lessonCount: d.summary.lessonCount, durationMin: Math.round(d.summary.durationSeconds / 60),
+    outcomes: d.learningOutcomes || [], requirements: d.requirements || [], instructor: d.instructor, reviews: d.reviews || [],
+  };
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="page stack-4" aria-busy="true">
+      <div className="skeleton skeleton-line" style={{ width: '30%' }} />
+      <div className="skeleton skeleton-line" style={{ width: '60%', height: 32 }} />
+      <div className="skeleton skeleton-line" style={{ width: '80%' }} />
+      <div className="skeleton" style={{ height: 260 }} />
+      <p className="sr-only" role="status">Đang tải khoá học…</p>
+    </div>
+  );
+}
+
+export default function CourseDetailPage({ params }) {
   useCodi();
-  const navigate = useNavigate();
   const curRef = useRef(null);
-  const c = Codi.course(params.slug);
-  if (!c) return <DetailError notFound />;
-  if (query.error === '1') return <DetailError onRetry={() => navigate(`/courses/${c.slug}`, { replace: true })} />;
-  const enrolled = Codi.isEnrolled(c.id);
-  if (c.status !== 'published' && !enrolled) {
-    return <div className="page page-narrow"><Empty icon="eye-off" title="Khoá học tạm ngừng bán" body="Khoá học này hiện không mở bán cho học viên mới." actions={<Link className="btn btn-primary" to="/courses">Khám phá khoá học khác</Link>} /></div>;
+  const slug = encodeURIComponent(params.slug);
+  const detail = useApi(`/api/courses/${slug}`);
+  const kinds = useApi(detail.data ? `/api/courses/${slug}/lesson-kinds` : null);
+  const c = useMemo(() => (detail.data ? toDetail(detail.data, kinds.data) : null), [detail.data, kinds.data]);
+  const ownership = useOwnership(c ? [c] : null);
+  if (!c) {
+    if (detail.error) return detail.error.status === 404 ? <DetailError notFound /> : <DetailError onRetry={() => detail.reload()} />;
+    return <DetailSkeleton />;
   }
+  const own = ownership.of(c.id);
   // Real lib/course-review-service.ts: visible reviews from enrolled learners, newest first, at most 50.
-  const reviews = Codi.db().reviews
-    .filter((r) => r.courseId === c.id && r.isVisible !== false && Codi.isEnrolled(c.id, r.userId))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 50);
-  const lec = Codi.user(c.lecturerId);
-  const breakdown = c.ratingBreakdown || [0, 0, 0, 0, 0];
+  const reviews = c.reviews;
+  const lec = c.instructor ? { name: c.instructor.name, image: c.instructor.avatar } : null;
+  const breakdown = [5, 4, 3, 2, 1].map((n) => reviews.filter((r) => r.stars === n).length);
   const totalBreak = breakdown.reduce((s, n) => s + n, 0) || 1;
-  const outcomes = c.outcomes || [];
-  const requirements = c.requirements || [];
+  const outcomes = c.outcomes;
+  const requirements = c.requirements;
   const expand = (open) => { if (curRef.current) curRef.current.querySelectorAll('details').forEach((d) => { d.open = open; }); };
 
   return (
     <div className="page">
-      <nav className="small muted cm-crumb" aria-label="Breadcrumb"><Link to="/courses">Khoá học</Link> / <span>{Codi.category(c.categoryId).name}</span> / <span aria-current="page">{c.title}</span></nav>
-      {c.status === 'hidden' && enrolled && <Alert type="info" title="Khoá học đang tạm ẩn với người mua mới" body="Bạn đã sở hữu khoá học nên vẫn học bình thường." />}
+      <nav className="small muted cm-crumb" aria-label="Breadcrumb"><Link to="/courses">Khoá học</Link> / <span>{c.category}</span> / <span aria-current="page">{c.title}</span></nav>
       <div className="cm-detail">
         <header className="stack-3 cm-detail-head">
           <h1>{c.title}</h1>
           <p className="cm-lede muted">{c.summary || 'Giảng viên đang cập nhật mô tả.'}</p>
           <ul className="cm-stats">
-            <li><Icon name="bar-chart" className="icon-sm" /> {Codi.levelLabel(c.level)}</li>
+            <li><Icon name="bar-chart" className="icon-sm" /> {levelLabel(c.level)}</li>
             <li><Icon name="clock" className="icon-sm" /> {fmt.duration(c.durationMin)}</li>
             <li><Icon name="star-filled" className="icon-sm cm-star" /> {c.ratingCount ? `${c.rating.toFixed(1)} (${fmt.num(c.ratingCount)} đánh giá)` : 'Chưa có đánh giá'}</li>
             <li><Icon name="users" className="icon-sm" /> {fmt.num(c.learnersCount)} học viên</li>
             <li><Icon name="user" className="icon-sm" /> {lec ? lec.name : ''}</li>
           </ul>
         </header>
-        <aside className="cm-detail-aside" aria-label="Đăng ký khóa học"><PurchaseCard course={c} /></aside>
+        <aside className="cm-detail-aside" aria-label="Đăng ký khóa học"><PurchaseCard course={c} own={own} pendingOrderId={ownership.pendingOrderId(c.id)} /></aside>
         <div className="stack-6 cm-detail-main">
           <section className="stack-3" aria-labelledby="detail-outcomes-title">
             <h2 id="detail-outcomes-title">Bạn sẽ học được gì?</h2>
@@ -159,9 +192,9 @@ export default function CourseDetailPage({ params, query = {} }) {
               </div></div>
               {reviews.length ? (
                 <ul className="list cm-reviews">{reviews.map((r) => {
-                  const u = Codi.user(r.userId) || { name: 'Học viên' };
+                  const u = { name: r.userName || 'Học viên', image: r.userAvatar };
                   return (
-                    <li key={r.id || r.userId + r.createdAt} className="cm-review"><div className="stack-2">
+                    <li key={r.id} className="cm-review"><div className="stack-2">
                       <div className="row-between"><span className="row"><Avatar user={u} size="sm" /><strong>{u.name}</strong></span><span className="row small" style={{ gap: 4 }}><Icon name="star-filled" className="icon-sm cm-star" />{r.stars}/5 sao</span></div>
                       <time className="xsmall muted" dateTime={r.createdAt}>{fmt.date(r.createdAt)}</time>
                       {r.text && <p className="cm-review-text">{r.text}</p>}
@@ -190,14 +223,14 @@ export default function CourseDetailPage({ params, query = {} }) {
               )}
             </div>
             {c.chapters.length ? (<>
-              <p className="small muted">{c.chapters.length} chương · {Codi.lessons(c).length} bài học · {fmt.duration(c.durationMin)}</p>
+              <p className="small muted">{c.chapterCount} chương · {c.lessonCount} bài học · {fmt.duration(c.durationMin)}</p>
               <div className="cm-curriculum" ref={curRef}>{c.chapters.map((ch, i) => (
                 <details key={ch.id || i} className="cm-chapter" open={i === 0 ? true : undefined}>
                   <summary><span className="strong">Chương {i + 1}: {ch.title}</span><span className="small muted od-nowrap">{ch.lessons.length} bài · {fmt.duration(ch.lessons.reduce((s, l) => s + l.durationMin, 0))}</span></summary>
                   <ul className="list">{ch.lessons.map((l) => (
                     <li key={l.id} className="list-row">
                       <Icon name={TYPE_ICON[l.type] || 'file-text'} className="icon-sm" />
-                      <span className="list-main"><span>{l.title}</span><span className="xsmall muted">{TYPE_LABEL[l.type] || l.type}{l.quiz ? ' · Quiz' : ''}{l.assignment ? ' · Bài tập' : ''}</span></span>
+                      <span className="list-main"><span>{l.title}</span><span className="xsmall muted">{TYPE_LABEL[l.type] || l.type}{l.quiz && l.type !== 'quiz' ? ' · Quiz' : ''}{l.assignment ? ' · Bài tập' : ''}</span></span>
                       <span className="small muted od-nowrap">{fmt.duration(l.durationMin)}</span>
                     </li>
                   ))}</ul>
