@@ -106,7 +106,8 @@ svg circle[data-action]:hover { opacity: 0.8; }
 
 /* ───────── grading ───────── */
 .tc-filters .field { min-width: 200px; }
-.tc-grade-actions { padding-top: var(--space-3); border-top: 1px solid var(--border); }
+/* Save actions stay in view while a long AI draft or rubric is scrolled (desktop: right pane; phone: page). */
+.tc-grade-actions { position: sticky; bottom: 0; z-index: 2; padding: var(--space-3) 0; border-top: 1px solid var(--border); background: var(--surface); }
 .tc-rg-row.is-invalid input { border-color: var(--danger); }
 .row.tc-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 960px; }
 .tc-filters .field { min-width: 0; }
