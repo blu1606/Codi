@@ -461,7 +461,7 @@ function LessonWorkspace({ c, r, l }) {
           <h1 className="ln-bar-h" id="lesson-title" tabIndex={-1}>{l.title}</h1>
         </div>
         {!compact && <TaskChips items={items} onPick={pickChip} readout={readout} />}
-        {ready && !compact && <button type="button" className="btn btn-primary btn-sm" onClick={complete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học</button>}
+        {ready && !compact && <button type="button" className="btn btn-secondary btn-sm" onClick={complete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học</button>}
         <nav className="ln-bar-nav" aria-label="Điều hướng bài học">
           {prev ? <Link className="btn btn-secondary btn-sm ln-bar-btn" to={`/learn/${c.id}/${prev}`}><Icon name="chevron-left" className="icon-sm" /><span className="ln-bar-label">Bài trước</span></Link> : null}
           {next ? <Link className={`btn ${done ? 'btn-primary' : 'btn-secondary'} btn-sm ln-bar-btn`} to={`/learn/${c.id}/${next}`}><span className="ln-bar-label">Bài sau</span><Icon name="chevron-right" className="icon-sm" /></Link> : null}
