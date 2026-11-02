@@ -178,3 +178,7 @@ These belong in `docs/deviations-from-mockup.md`. That file is outside my owners
 19. **Dashboard:** "Doanh thu" is B1 net for the 30-day GMT+7 window, which includes refunded orders paid in the window. The real dashboard sums only `paid` orders over a rolling 30 days. I changed this so the dashboard and Finance agree, as you required. "Học viên mới" counts learner signups in the same window.
 20. **Analytics source and end date:** analytics now read live store rows ending today. The synthetic `db.analytics` series and `analyticsAsOf` are no longer read. The rows are still in the seed for any other reader.
 
+
+## AI grading assist (stage 3)
+
+- The lecturer's "AI gợi ý điểm và nhận xét" is a saved job per submission (`db.aiGradingJobs`): queued, four named stages with progress, per-criterion partial results, then succeeded, failed (with "Thử lại") or cancelled. Leaving the page and returning resumes it. The mockup showed a single loading line. AI still never saves a grade: "Dùng bản nháp này" only fills the form (rule G5).

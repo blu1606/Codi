@@ -24,7 +24,7 @@
  *   openCreate                                                        ./lecturer-ai-create.jsx
  *   quizReview, generateQuizQuestions, validateQuestionDraft          ./quiz-ai-review.jsx
  *   runKnowledgeMapAnalysis, acceptAllPlan, acceptAll, kmapGraph      ./kmap-ai.jsx
- *   getAiGradingDraft, gradingDraft                                   ./grading-ai.jsx
+ *   getAiGradingDraft, gradingDraft, gradingBadge, gradingJobs        ./grading-ai.jsx (jobs: ./grading-jobs.js)
  */
 import { Codi } from '../../lib/codi';
 import { Alert, Icon, Stepper } from '../../components/ui/primitives';

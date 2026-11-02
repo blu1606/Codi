@@ -1,7 +1,8 @@
 // S26 grading queue + split grading view. Port of the real grading-queue-client.tsx / grading/actions.ts:
 // course · assignment · date filters, rubric or single score, pass threshold as a percent of maxScore, score edits
 // that need a reason (≥ 3 chars) and are kept in a history sheet, snippet picker with {{placeholders}}, "save and
-// grade next". The AI grading draft is owned by the lecturer-ai feature (Codi.lecturerAI.gradingDraft).
+// grade next". The AI grading job card and list badge are owned by the lecturer-ai feature
+// (Codi.lecturerAI.gradingDraft / gradingBadge); the AI only fills the form, the lecturer saves (G5).
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
@@ -220,7 +221,8 @@ export function GradingPage({ params, query }) {
     return (
       <Link key={s.id} className="split-list-item" to={`/teach/grading/${s.id}${qs()}`} aria-current={sel && sel.id === s.id ? 'true' : undefined}>
         <span className="row-between"><strong className="small">{u.name}</strong>{s.status === 'graded' ? <span className="badge badge-success">{decimal(s.score)}/{s.maxScore}</span> : <span className="xsmall muted">{fmt.relative(s.submittedAt)}</span>}</span>
-        <span className="xsmall muted od-truncate">{l ? l.title : 'Bài tập'} · {c ? c.title : ''}</span></Link>
+        <span className="xsmall muted od-truncate">{l ? l.title : 'Bài tập'} · {c ? c.title : ''}</span>
+        {Codi.lecturerAI?.gradingBadge?.(s.id)}</Link>
     );
   };
   let detail;
