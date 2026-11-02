@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     port: 5190,
     strictPort: true,
-    proxy: { '/api': 'http://localhost:4100' },
+    // changeOrigin off: the backend's Origin check compares Origin with Host, so Host must stay localhost:5190.
+    proxy: { '/api': { target: 'http://localhost:4100', changeOrigin: false } },
   },
 });
