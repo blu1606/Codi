@@ -1,6 +1,6 @@
 # Stage 2: port the real Codi app's features into codi-rebuild
 
-Status: in progress (port phase)
+Status: done (2026-11-02)
 
 ## Outcome
 
@@ -30,7 +30,8 @@ The scout reports in `plans/reports/` list the gaps, priorities, UI states and r
 | 0. Shared groundwork: seed patches, ownership rules | controller | done |
 | 1. Parallel port, one agent per feature folder | 7 agents | done (reports `port-261101-2318-*.md`) |
 | 2. Integration: reseed, build, Playwright smoke and flows | controller | done: 59 routes clean, purchase, admin cancel, AI drafts, OTP, theme, duplicate-order guard verified; fixed double `loadStore` overwrite and sidebar meta wrap |
-| 3. impeccable critique and polish pass | controller | in progress |
+| 3. impeccable critique and polish pass | controller + 4 agents | done: axe AA clean in both themes, no mobile overflow, path page reorganised (reports `ui-polish-261102-0108-*.md`) |
+| 4. Real content and assets | controller + Codex CLI | done: javascript.info + F8 content for the JS course, favicon, 9 course covers, hero illustration |
 
 ## Ownership (phase 1)
 
