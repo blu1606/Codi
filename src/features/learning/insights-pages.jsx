@@ -153,7 +153,7 @@ export function StatsPage() {
   </div>`;
 
   // C2 — minutes per day (Tuần) or hours per Monday-week (6 weeks), goal dashed
-  const goalNote = goalRec ? null : 'Bạn chưa đặt mục tiêu, Codi tạm dùng 5 giờ/tuần (Giả định).';
+  const goalNote = goalRec ? null : 'Bạn chưa đặt mục tiêu, Codi tạm dùng 5 giờ/tuần (mặc định).';
   let c2;
   const weekday = (d) => ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][new Date(`${d}T00:00:00Z`).getUTCDay()];
   if (w.len === 7) {
@@ -164,7 +164,7 @@ export function StatsPage() {
     const weeks = [];
     for (let i = 5; i >= 0; i--) { const ws = addDays(thisWeek, -7 * i); const we = addDays(ws, 6); weeks.push({ start: ws, minutes: roundMinutes(secondsBetween(ws, we < w.end ? we : w.end)) }); }
     const items = weeks.map((x) => ({ label: 'Tuần ' + dm(x.start), value: Math.round((x.minutes / 60) * 10) / 10 }));
-    c2 = { title: 'Giờ học mỗi tuần', question: 'Bạn có đạt mục tiêu giờ học hằng tuần?', body: ch.bars({ items, goal: goalHours, goalLabel: goalRec ? 'Mục tiêu tuần' : 'Mục tiêu tuần (Giả định)', format: (v) => Codi.fmt.num(v) + ' giờ', capFormat: (v) => Codi.fmt.num(v), ariaLabel: 'Giờ học mỗi tuần' }), table: { headers: ['Tuần', 'Giờ học'], rows: items.map((i) => [i.label, Codi.fmt.num(i.value)]) }, note: [goalNote, 'Tuần gần nhất có thể chưa kết thúc.'].filter(Boolean).join(' ') };
+    c2 = { title: 'Giờ học mỗi tuần', question: 'Bạn có đạt mục tiêu giờ học hằng tuần?', body: ch.bars({ items, goal: goalHours, goalLabel: goalRec ? 'Mục tiêu tuần' : 'Mục tiêu tuần (mặc định)', format: (v) => Codi.fmt.num(v) + ' giờ', capFormat: (v) => Codi.fmt.num(v), ariaLabel: 'Giờ học mỗi tuần' }), table: { headers: ['Tuần', 'Giờ học'], rows: items.map((i) => [i.label, Codi.fmt.num(i.value)]) }, note: [goalNote, 'Tuần gần nhất có thể chưa kết thúc.'].filter(Boolean).join(' ') };
   }
 
   // C3 — calendar: at least 28 days, studied days only

@@ -118,7 +118,7 @@ export default function DashboardPage() {
           <section className="card" aria-labelledby="dash-goal"><div className="card-body stack-4">
             <h2 id="dash-goal" className="dash-h">Mục tiêu & tiến độ</h2>
             <div className="stack-2"><div className="row-between"><strong className="small">Mục tiêu hàng tuần</strong>
-              <div className="row" style={{ gap: 8 }}>{!goalInfo.hasGoal && <span className="badge badge-neutral">Giả định</span>}{goalInfo.courseId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => editGoal(goalInfo.courseId)}>Chỉnh mục tiêu</button>}</div></div>
+              <div className="row" style={{ gap: 8 }}>{!goalInfo.hasGoal && <span className="badge badge-neutral">Mặc định</span>}{goalInfo.courseId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => editGoal(goalInfo.courseId)}>Chỉnh mục tiêu</button>}</div></div>
               <Progress pct={Math.min(100, goalPct)} label="Mục tiêu học tuần này" />
               <span className="small muted">{minutesWeek} phút / {goalInfo.hours * 60} phút · {Math.round(goalPct)}% tuần này</span></div>
             {streak > 0 && <div className="streak"><span className="streak-number">{streak}</span><span className="streak-label">ngày liên tiếp</span></div>}
