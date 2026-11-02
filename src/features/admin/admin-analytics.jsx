@@ -242,7 +242,7 @@ const FIN = {
     const max = rows.reduce((m, r) => Math.max(m, r.net), 0);
     return {
       code: 'B3', title: 'Doanh thu theo khóa học', question: 'Nguồn doanh thu đến từ đâu?', wide: true,
-      body: ch.hbars({ items: rows.map((r) => ({ label: r.title, value: r.net, max: max || 1, text: vnd(r.net) })), sort: false, format: (v) => ch.fmt.compact(v), emptyText: 'Không có khoá học nào có doanh thu trong kỳ này.' }),
+      body: ch.hbars({ items: rows.map((r) => ({ label: r.title, value: r.net, max: max || 1, text: vnd(r.net) })), sort: false, format: (v) => ch.fmt.compact(v), emptyText: 'Không có khóa học nào có doanh thu trong kỳ này.' }),
       note: 'Giảm giá được chia theo tỉ trọng giá của từng khóa trong đơn, nên tổng khóa có thể lệch vài đồng so với tổng.',
       table: { headers: ['Khóa học', 'Đơn', 'Gộp', 'Giảm giá', 'Ròng', 'Hoàn tiền'], rows: rows.map((r) => [r.title, fmt.num(r.paidOrders), vnd(r.gross), vnd(r.discount), vnd(r.net), vnd(r.refunds)]) },
     };
@@ -256,7 +256,7 @@ const FIN = {
         <h4 class="small" style="margin:16px 0 8px">Theo nguồn</h4>
         <div class="table-wrap"><table class="table viz-data-table"><caption class="sr-only">Phễu theo nguồn</caption><thead><tr><th scope="col">Nguồn</th><th scope="col" class="num">Lượt bấm</th><th scope="col" class="num">Tạo đơn</th><th scope="col" class="num">Tỉ lệ tạo đơn</th></tr></thead>
         <tbody>${c.sources.map(([l, a, o]) => html`<tr><th scope="row">${l}</th><td class="num">${fmt.num(a)}</td><td class="num">${fmt.num(o)}</td><td class="num">${a ? P(pct(o, a)) : '—'}</td></tr>`)}</tbody></table></div>`,
-      note: `Tỉ lệ thanh toán sau khi tạo đơn: ${c.created ? P(pct(c.paid, c.created)) : '—'} (kỳ trước ${pc.created ? P(pct(pc.paid, pc.created)) : '—'}). Lượt bấm tính theo từng khoá học được thêm.`,
+      note: `Tỉ lệ thanh toán sau khi tạo đơn: ${c.created ? P(pct(c.paid, c.created)) : '—'} (kỳ trước ${pc.created ? P(pct(pc.paid, pc.created)) : '—'}). Lượt bấm tính theo từng khóa học được thêm.`,
       table: { headers: ['Bước', 'Kỳ này', 'Kỳ trước'], rows: steps.map((s, i) => [s.label, fmt.num(s.value), fmt.num([pc.clicks, pc.created, pc.paid][i])]) },
     };
   },
@@ -297,7 +297,7 @@ const PAGES = {
   },
   finance: {
     title: 'Tài chính', lead: 'Doanh thu, đơn hàng và việc cần đối soát.', route: '/admin/finance',
-    cards: FIN, overview: ['b1', 'b2', 'b4', 'b8'], more: ['b3', 'b5', 'b6', 'b7', 'b9'], load: finance, collapsible: false,
+    cards: FIN, overview: ['b1', 'b2', 'b4', 'b8'], more: ['b3', 'b5', 'b6', 'b7', 'b9'], load: finance, collapsible: true,
     error: 'Không tải được số liệu tài chính.',
     basis: 'Gộp = tổng giá gốc của đơn đã thanh toán, tính theo ngày thanh toán. Ròng = gộp − giảm giá. Hoàn tiền = đơn đã hoàn, tính theo ngày cập nhật gần nhất.',
     quiet: (d) => (d.totals.paidOrders === 0 && d.statusDistribution.every((r) => r.orders === 0) ? 'Không có đơn hàng nào được thanh toán trong kỳ này.' : null),

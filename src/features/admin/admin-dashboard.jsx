@@ -22,7 +22,7 @@ export function DashboardPage() {
     ['Khóa học đang bán', fmt.num(m.publishedCourses), 'Trạng thái Đã xuất bản'],
   ];
   const todo = [
-    ['/admin/publication?tab=pending', m.pendingCourses, 'Khoá học chờ duyệt', 'Xem và duyệt yêu cầu xuất bản'],
+    ['/admin/publication?tab=pending', m.pendingCourses, 'Khóa học chờ duyệt', 'Xem và duyệt yêu cầu xuất bản'],
     ['/admin/orders?status=pending&overdue=1&range=all', m.overdueOrders, 'Đơn chờ thanh toán quá hạn', 'Đơn chờ thanh toán từ 24 giờ trở lên, có thể cần đối soát'],
     ['/admin/vouchers?filter=expiring', m.nearLimitVouchers, 'Voucher sắp hết lượt', 'Đã dùng từ 90% số lượt'],
     ['/admin/users?status=inactive', m.inactiveUsers, 'Tài khoản bị vô hiệu hoá', 'Xem lý do hoặc kích hoạt lại'],

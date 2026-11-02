@@ -132,10 +132,10 @@ function OrderDrawer({ id, handle }) {
         </div>
         {flagged && (
           <Alert type="warn" title="Lưu ý đối soát ngân hàng (D2/D3)"
-            body="Đơn hàng này được gắn cờ đối soát thủ công (có thể do chuyển khoản thừa tiền, thiếu tiền khi hết hạn, hoặc chuyển khoản muộn sau khi đã sở hữu khoá học). Vui lòng kiểm tra sao kê ngân hàng VietQR trước khi xử lý hoàn tiền ngoài hệ thống." />
+            body="Đơn hàng này được gắn cờ đối soát thủ công (có thể do chuyển khoản thừa tiền, thiếu tiền khi hết hạn, hoặc chuyển khoản muộn sau khi đã sở hữu khóa học). Vui lòng kiểm tra sao kê ngân hàng VietQR trước khi xử lý hoàn tiền ngoài hệ thống." />
         )}
         <div className="panel stack-1"><span className="xsmall muted">Người mua</span><strong className="small">{b.name}</strong><span className="small muted">{b.email}</span></div>
-        <div className="stack-2"><span className="xsmall muted">Khoá học đã đặt ({items.length})</span>
+        <div className="stack-2"><span className="xsmall muted">Khóa học đã đặt ({items.length})</span>
           <ul className="list">{items.map((i) => (
             <li key={i.courseId} className="list-row" style={{ paddingInline: 0 }}><span className="list-main small">{(Codi.course(i.courseId) || { title: i.courseTitle || '(đã xoá)' }).title}</span><span className="small od-nowrap muted">{vnd(i.price ?? i.unitPrice)}</span></li>
           ))}</ul>
@@ -168,7 +168,7 @@ export function openOrder(id) {
 }
 
 // ───────────────────────── CSV export ─────────────────────────
-const COLS = [['code', 'Mã giao dịch'], ['buyer', 'Người mua'], ['email', 'Email'], ['courses', 'Khoá học'], ['voucher', 'Voucher'], ['discount', 'Giảm giá'], ['total', 'Tổng tiền'], ['status', 'Trạng thái'], ['createdAt', 'Ngày tạo'], ['paidAt', 'Ngày thanh toán']];
+const COLS = [['code', 'Mã giao dịch'], ['buyer', 'Người mua'], ['email', 'Email'], ['courses', 'Khóa học'], ['voucher', 'Voucher'], ['discount', 'Giảm giá'], ['total', 'Tổng tiền'], ['status', 'Trạng thái'], ['createdAt', 'Ngày tạo'], ['paidAt', 'Ngày thanh toán']];
 const cellOf = {
   code: (o) => o.code, buyer: (o) => buyer(o).name, email: (o) => buyer(o).email, courses: (o) => courseTitles(o), voucher: (o) => o.voucherCode || '',
   discount: (o) => o.discount || 0, total: (o) => o.total, status: (o) => orderStatusLabel(o.status), createdAt: (o) => o.createdAt, paidAt: (o) => o.paidAt || '',
@@ -279,7 +279,7 @@ export function OrdersPage({ query: q }) {
         <button type="button" className="btn btn-secondary btn-sm ad-toggles-end" onClick={exportCsv}><Icon name="download" className="icon-sm" /> Xuất CSV</button>
       </div>
       {list.length ? (
-        <div className="table-wrap" style={{ marginTop: 12 }}><table className="table"><thead><tr><th>Mã giao dịch</th><th>Người mua</th><th>Khoá học</th><th>Ngày tạo</th><th className="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>
+        <div className="table-wrap" style={{ marginTop: 12 }}><table className="table"><thead><tr><th>Mã giao dịch</th><th>Người mua</th><th>Khóa học</th><th>Ngày tạo</th><th className="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>
           {list.map((o) => (
             <tr key={o.id} className="is-clickable" tabIndex={0} onClick={() => openOrder(o.id)} onKeyDown={(e) => { if (e.key === 'Enter') openOrder(o.id); }}>
               <td className="mono">{o.code}</td>

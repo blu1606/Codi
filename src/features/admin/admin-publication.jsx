@@ -114,12 +114,12 @@ async function approve(c) {
   const price = parsePrice(priceDraft[c.id] !== undefined ? priceDraft[c.id] : String(c.proposedPrice != null ? c.proposedPrice : c.price));
   if (price === null || !Number.isSafeInteger(price) || price > MAX_PRICE) { priceDraft.err = 'Giá bán phải là số nguyên không âm (VND), không vượt quá 2.147.483.647.'; rerender(); return; }
   priceDraft.err = null; rerender();
-  const res = await Codi.ui.confirm({ title: `Duyệt và xuất bản "${c.title}"?`, body: `Giá bán: ${price ? fmt.vnd(price) : 'Miễn phí'}.`, consequence: 'Khoá học xuất hiện ngay trong danh mục và học viên mua được với giá này. Giảng viên nhận thông báo.', confirmLabel: 'Duyệt và xuất bản' });
+  const res = await Codi.ui.confirm({ title: `Duyệt và xuất bản "${c.title}"?`, body: `Giá bán: ${price ? fmt.vnd(price) : 'Miễn phí'}.`, consequence: 'Khóa học xuất hiện ngay trong danh mục và học viên mua được với giá này. Giảng viên nhận thông báo.', confirmLabel: 'Duyệt và xuất bản' });
   if (!res.ok) return;
   Object.assign(r, { status: 'approved', decidedAt: new Date().toISOString(), reviewerId: Codi.state.currentUserId });
   Object.assign(c, { status: 'published', price, approvedAt: r.decidedAt, rejectReason: null, reviewOutcome: null });
-  Codi.notify(c.lecturerId, { title: 'Khoá học đã được duyệt', body: `"${c.title}" đã xuất bản với giá ${fmt.vnd(price)}.`, link: lecturerLink(c) });
-  delete priceDraft[c.id]; persist(); Codi.ui.toast('Đã xuất bản khoá học.', { type: 'success' });
+  Codi.notify(c.lecturerId, { title: 'Khóa học đã được duyệt', body: `"${c.title}" đã xuất bản với giá ${fmt.vnd(price)}.`, link: lecturerLink(c) });
+  delete priceDraft[c.id]; persist(); Codi.ui.toast('Đã xuất bản khóa học.', { type: 'success' });
   Codi.go('/admin/publication?tab=approved&id=' + c.id);
 }
 async function requestChanges(c) {
@@ -127,21 +127,21 @@ async function requestChanges(c) {
   const fixes = R().CRITERIA.filter((k) => r.criteria[k.id] && r.criteria[k.id].status === 'fix');
   const open = r.flags.filter((f) => f.status !== 'closed');
   if (!fixes.length && !open.length) { Codi.ui.toast('Chưa có tiêu chí "Cần sửa" hay cờ nào để gửi. Gắn cờ trước khi yêu cầu sửa.', { type: 'warn' }); return; }
-  const res = await confirmImpact({ title: `Yêu cầu sửa "${c.title}"?`, body: <p>{`Gửi ${fixes.length} tiêu chí cần sửa và ${open.length} cờ (${open.filter((f) => f.severity === 'must').length} bắt buộc) cho giảng viên.`}</p>, consequence: 'Khoá học chuyển sang "Bị từ chối" và không được bán. Giảng viên sửa theo từng cờ rồi gửi lại thành vòng duyệt mới.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lời nhắn chung cho giảng viên (ít nhất 5 ký tự).', reasonLabel: 'Lời nhắn chung cho giảng viên', reasonPlaceholder: 'Ví dụ: Nội dung tốt, cần bổ sung tài liệu bài 4 và sửa đáp án quiz.', confirmLabel: 'Gửi yêu cầu sửa' });
+  const res = await confirmImpact({ title: `Yêu cầu sửa "${c.title}"?`, body: <p>{`Gửi ${fixes.length} tiêu chí cần sửa và ${open.length} cờ (${open.filter((f) => f.severity === 'must').length} bắt buộc) cho giảng viên.`}</p>, consequence: 'Khóa học chuyển sang "Bị từ chối" và không được bán. Giảng viên sửa theo từng cờ rồi gửi lại thành vòng duyệt mới.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lời nhắn chung cho giảng viên (ít nhất 5 ký tự).', reasonLabel: 'Lời nhắn chung cho giảng viên', reasonPlaceholder: 'Ví dụ: Nội dung tốt, cần bổ sung tài liệu bài 4 và sửa đáp án quiz.', confirmLabel: 'Gửi yêu cầu sửa' });
   if (!res.ok) return;
   Object.assign(r, { status: 'changes_requested', decidedAt: new Date().toISOString(), reviewerId: Codi.state.currentUserId, note: res.reason });
   Object.assign(c, { status: 'rejected', reviewOutcome: 'changes', rejectReason: res.reason });
-  Codi.notify(c.lecturerId, { title: 'Khoá học cần chỉnh sửa', body: `"${c.title}": ${res.reason}`, link: lecturerLink(c) });
+  Codi.notify(c.lecturerId, { title: 'Khóa học cần chỉnh sửa', body: `"${c.title}": ${res.reason}`, link: lecturerLink(c) });
   persist(); Codi.ui.toast('Đã gửi yêu cầu sửa cho giảng viên.');
   Codi.go('/admin/publication?tab=changes&id=' + c.id);
 }
 async function reject(c) {
   const r = round(c.id);
-  const res = await confirmImpact({ title: `Từ chối "${c.title}"?`, body: <p>Dùng khi khoá học không phù hợp chính sách hoặc chất lượng chung chưa đạt. Nếu chỉ cần sửa vài chỗ, hãy dùng &quot;Yêu cầu sửa&quot;.</p>, consequence: 'Khoá học chuyển sang "Bị từ chối" và không được bán. Giảng viên thấy lý do và vẫn có thể sửa rồi gửi lại.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).', reasonLabel: 'Lý do từ chối', danger: true, confirmLabel: 'Từ chối' });
+  const res = await confirmImpact({ title: `Từ chối "${c.title}"?`, body: <p>Dùng khi khóa học không phù hợp chính sách hoặc chất lượng chung chưa đạt. Nếu chỉ cần sửa vài chỗ, hãy dùng &quot;Yêu cầu sửa&quot;.</p>, consequence: 'Khóa học chuyển sang "Bị từ chối" và không được bán. Giảng viên thấy lý do và vẫn có thể sửa rồi gửi lại.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).', reasonLabel: 'Lý do từ chối', danger: true, confirmLabel: 'Từ chối' });
   if (!res.ok) return;
   Object.assign(r, { status: 'rejected', decidedAt: new Date().toISOString(), reviewerId: Codi.state.currentUserId, note: res.reason });
   Object.assign(c, { status: 'rejected', reviewOutcome: 'rejected', rejectReason: res.reason });
-  Codi.notify(c.lecturerId, { title: 'Khoá học bị từ chối', body: `"${c.title}": ${res.reason}`, link: lecturerLink(c) });
+  Codi.notify(c.lecturerId, { title: 'Khóa học bị từ chối', body: `"${c.title}": ${res.reason}`, link: lecturerLink(c) });
   persist(); Codi.ui.toast('Đã từ chối và gửi lý do cho giảng viên.');
   Codi.go('/admin/publication?tab=changes&id=' + c.id);
 }
@@ -282,7 +282,7 @@ function contentView(c, r, ro) {
   );
   return (
     <div className="rv-content">
-      <nav className="rv-tree" aria-label="Nội dung khoá học"><ul>
+      <nav className="rv-tree" aria-label="Nội dung khóa học"><ul>
         {item('entry', 'Bài kiểm tra đầu vào', `${(c.entryTest || { questions: [] }).questions.length} câu`, countFor(r, (f) => f.target.label === 'Bài kiểm tra đầu vào'), sel === 'entry')}
         {c.chapters.map((ch) => (
           <li key={ch.id || ch.title} className="rv-tree-ch"><span className="xsmall muted">{ch.title}</span><ul>
@@ -371,7 +371,7 @@ function decisionCard(c, r) {
       <h3 className="tc-h">Kết luận vòng {r.round}</h3>
       <div className={`field ${priceDraft.err ? 'is-invalid' : ''}`} style={{ maxWidth: 320 }}><label htmlFor="pub-price">Giá bán (VND) <span className="req">*</span></label>
         <input key={c.id} id="pub-price" inputMode="numeric" defaultValue={price} onChange={(e) => { priceDraft[c.id] = e.target.value; }} />
-        <span className="field-help">Giảng viên đề xuất: {c.proposedPrice == null ? 'chưa đề xuất' : fmt.vnd(c.proposedPrice)}. Nhập 0 cho khoá miễn phí.</span>
+        <span className="field-help">Giảng viên đề xuất: {c.proposedPrice == null ? 'chưa đề xuất' : fmt.vnd(c.proposedPrice)}. Nhập 0 cho khóa miễn phí.</span>
         {priceDraft.err && <p className="field-error"><Icon name="alert-circle" className="icon-sm" /><span>{priceDraft.err}</span></p>}</div>
       {why.length
         ? <div className="rv-why"><strong className="small">Chưa thể duyệt:</strong><ul className="small">{why.map((x) => <li key={x}>{x}</li>)}</ul></div>
@@ -393,7 +393,7 @@ export function PublicationPage({ query: q }) {
   const sel = list.find((c) => c.id === q.id) || list[0];
   let detail;
   if (!sel) {
-    detail = <div className="card"><Empty icon="clipboard-check" title={tab === 'pending' ? 'Không có khoá học chờ duyệt' : 'Không có khoá học'} body={tab === 'pending' ? 'Yêu cầu mới từ giảng viên sẽ xuất hiện ở đây.' : ''} /></div>;
+    detail = <div className="card"><Empty icon="clipboard-check" title={tab === 'pending' ? 'Không có khóa học chờ duyệt' : 'Không có khóa học'} body={tab === 'pending' ? 'Yêu cầu mới từ giảng viên sẽ xuất hiện ở đây.' : ''} /></div>;
   } else {
     const v = forCourse(sel);
     if (q.view && VIEWS.includes(q.view)) v.tab = q.view;
@@ -402,7 +402,7 @@ export function PublicationPage({ query: q }) {
     const lec = Codi.user(sel.lecturerId);
     if (!r) {
       detail = (
-        <section className="card"><div className="card-body stack-3"><h2 className="tc-h">{sel.title}</h2><p className="small muted">Khoá học được duyệt trước khi có quy trình duyệt chi tiết. Giá đang bán: {fmt.vnd(sel.price)}.</p>
+        <section className="card"><div className="card-body stack-3"><h2 className="tc-h">{sel.title}</h2><p className="small muted">Khóa học được duyệt trước khi có quy trình duyệt chi tiết. Giá đang bán: {fmt.vnd(sel.price)}.</p>
           <Link className="btn btn-secondary" style={{ width: 'fit-content' }} to="/admin/courses">Mở Khóa học đã xuất bản</Link></div></section>
       );
     } else {
@@ -442,7 +442,7 @@ export function PublicationPage({ query: q }) {
             <Link key={c.id} className="split-list-item" to={`/admin/publication?tab=${tab}&id=${c.id}`} aria-current={String(!!sel && sel.id === c.id)}>
               <strong className="small od-clamp-2">{c.title}</strong><span className="xsmall muted">{(Codi.user(c.lecturerId) || {}).name || ''}{lr ? ` · vòng ${lr.round}` : ''}{n ? ` · ${n} cờ mở` : ''}</span></Link>
           );
-        }) : <p className="small muted" style={{ padding: 16 }}>Không có khoá học.</p>}</div>
+        }) : <p className="small muted" style={{ padding: 16 }}>Không có khóa học.</p>}</div>
         <div className="split-detail">{detail}</div>
       </div>
     </AdminShell>

@@ -10,19 +10,19 @@ const priceText = (p) => (p ? fmt.vnd(p) : 'Miễn phí');
 
 async function hideCourse(c) {
   const learners = db().enrolments.filter((e) => e.courseId === c.id).length;
-  const r = await Codi.ui.confirm({ title: `Ẩn "${c.title}"?`, consequence: `Học viên mới sẽ không tìm thấy và không mua được khoá học. ${learners} học viên đã mua vẫn tiếp tục học bình thường. Giảng viên nhận thông báo kèm lý do.`, reversible: 'Có thể hiện lại bất cứ lúc nào.', requireReason: true, reasonLabel: 'Lý do ẩn (gửi cho giảng viên)', confirmLabel: 'Ẩn khoá học', danger: true });
+  const r = await Codi.ui.confirm({ title: `Ẩn "${c.title}"?`, consequence: `Học viên mới sẽ không tìm thấy và không mua được khóa học. ${learners} học viên đã mua vẫn tiếp tục học bình thường. Giảng viên nhận thông báo kèm lý do.`, reversible: 'Có thể hiện lại bất cứ lúc nào.', requireReason: true, reasonLabel: 'Lý do ẩn (gửi cho giảng viên)', confirmLabel: 'Ẩn khóa học', danger: true });
   if (!r.ok) return;
   Object.assign(c, { status: 'hidden', hideReason: r.reason });
-  Codi.notify(c.lecturerId, { title: 'Khoá học đã bị ẩn', body: `${c.title}: ${r.reason}`, link: `/teach/courses/${c.id}/publish` });
-  persist(); Codi.ui.toast('Đã ẩn khoá học.');
+  Codi.notify(c.lecturerId, { title: 'Khóa học đã bị ẩn', body: `${c.title}: ${r.reason}`, link: `/teach/courses/${c.id}/publish` });
+  persist(); Codi.ui.toast('Đã ẩn khóa học.');
 }
 
 async function unhideCourse(c) {
-  const r = await Codi.ui.confirm({ title: `Hiện lại "${c.title}"?`, consequence: 'Khoá học xuất hiện lại trong danh sách và mở bán.', reversible: true, confirmLabel: 'Hiện lại' });
+  const r = await Codi.ui.confirm({ title: `Hiện lại "${c.title}"?`, consequence: 'Khóa học xuất hiện lại trong danh sách và mở bán.', reversible: true, confirmLabel: 'Hiện lại' });
   if (!r.ok) return;
   Object.assign(c, { status: 'published', hideReason: null });
-  Codi.notify(c.lecturerId, { title: 'Khoá học đã hiện lại', body: c.title, link: `/teach/courses/${c.id}/publish` });
-  persist(); Codi.ui.toast('Khoá học đã mở bán trở lại.', { type: 'success' });
+  Codi.notify(c.lecturerId, { title: 'Khóa học đã hiện lại', body: c.title, link: `/teach/courses/${c.id}/publish` });
+  persist(); Codi.ui.toast('Khóa học đã mở bán trở lại.', { type: 'success' });
 }
 
 function PriceDialog({ handle, courseId }) {
@@ -42,7 +42,7 @@ function PriceDialog({ handle, courseId }) {
     setBusy(false);
     if (!r.ok) return;
     const old = c.price; c.price = price;
-    Codi.notify(c.lecturerId, { title: 'Giá khoá học đã thay đổi', body: `${c.title}: ${fmt.vnd(old)} → ${fmt.vnd(price)}`, link: `/teach/courses/${c.id}/publish` });
+    Codi.notify(c.lecturerId, { title: 'Giá khóa học đã thay đổi', body: `${c.title}: ${fmt.vnd(old)} → ${fmt.vnd(price)}`, link: `/teach/courses/${c.id}/publish` });
     handle.close(); persist(); Codi.ui.toast('Đã cập nhật giá.', { type: 'success' });
   };
   return (
@@ -74,8 +74,8 @@ export function CoursesPage() {
   const list = db().courses.filter((c) => ['published', 'hidden'].includes(c.status));
   return (
     <AdminShell active="/admin/courses">
-      <div className="page-header"><div><h1>Khóa học đã xuất bản</h1><p className="muted">Ẩn khoá học hoặc đổi giá. Mọi thay đổi đều được thông báo cho giảng viên.</p></div></div>
-      <div className="table-wrap"><table className="table"><thead><tr><th>Khoá học</th><th>Giảng viên</th><th className="num">Giá</th><th className="num">Học viên</th><th>Đánh giá</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
+      <div className="page-header"><div><h1>Khóa học đã xuất bản</h1><p className="muted">Ẩn khóa học hoặc đổi giá. Mọi thay đổi đều được thông báo cho giảng viên.</p></div></div>
+      <div className="table-wrap"><table className="table"><thead><tr><th>Khóa học</th><th>Giảng viên</th><th className="num">Giá</th><th className="num">Học viên</th><th>Đánh giá</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
         {list.map((c) => (
           <tr key={c.id}>
             <td className="ad-col-title"><Link to={`/courses/${c.slug}`}>{c.title}</Link></td>

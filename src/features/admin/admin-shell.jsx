@@ -24,8 +24,8 @@ export function AdminShell({ active, children }) {
   const pending = db().courses.filter((c) => c.status === 'pending').length;
   const items = [
     { section: 'Quản trị', href: '/admin', label: 'Tổng quan', icon: 'layout-dashboard' },
-    { section: 'Khoá học', href: '/admin/publication', label: 'Duyệt xuất bản', icon: 'clipboard-check', count: pending, match: /^\/admin\/publication/ },
-    { section: 'Khoá học', href: '/admin/courses', label: 'Khóa học đã xuất bản', icon: 'book-open' },
+    { section: 'Khóa học', href: '/admin/publication', label: 'Duyệt xuất bản', icon: 'clipboard-check', count: pending, match: /^\/admin\/publication/ },
+    { section: 'Khóa học', href: '/admin/courses', label: 'Khóa học đã xuất bản', icon: 'book-open' },
     { section: 'Vận hành', href: '/admin/users', label: 'Người dùng', icon: 'users' },
     { section: 'Vận hành', href: '/admin/orders', label: 'Đơn hàng & giao dịch', icon: 'receipt' },
     { section: 'Vận hành', href: '/admin/vouchers', label: 'Voucher', icon: 'ticket' },

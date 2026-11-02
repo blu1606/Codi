@@ -72,7 +72,7 @@ function autoCriteria(c) {
   return {
     info: (c.summary || '').trim().length >= 40 && c.proposedPrice != null ? { status: 'pass', why: 'Mô tả và giá đề xuất đã có.' } : { status: 'fix', why: 'Mô tả ngắn hoặc chưa có giá đề xuất.' },
     materials: missing.length ? { status: 'fix', why: `${missing.length} bài chưa có tệp.` } : { status: 'pass', why: 'Mọi bài đều có tài liệu.' },
-    quiz: !quizzes.length ? { status: 'na', why: 'Khoá chưa có quiz bài học.' } : { status: 'pass', why: `${quizzes.length} quiz — cần xem từng câu.` },
+    quiz: !quizzes.length ? { status: 'na', why: 'Khóa chưa có quiz bài học.' } : { status: 'pass', why: `${quizzes.length} quiz — cần xem từng câu.` },
     entry: c.entryTest && c.entryTest.questions.length >= ENTRY_MIN ? { status: 'pass', why: `${c.entryTest.questions.length} câu.` } : { status: 'fix', why: c.entryTest ? `Chỉ có ${c.entryTest.questions.length} câu.` : 'Chưa có.' },
     code: !challenges.length ? { status: 'na', why: 'Không có bài code.' } : challenges.every((l) => l.code.tests.length && l.code.solutionCheck && l.code.solutionCheck.ok) ? { status: 'pass', why: 'Lời giải qua tất cả test.' } : { status: 'fix', why: 'Có bài code thiếu test hoặc lời giải chưa đạt.' },
     assignment: !assigns.length ? { status: 'na', why: 'Không có bài tập.' } : assigns.every((l) => (l.assignment.rubric || []).length) ? { status: 'pass', why: 'Mọi bài tập có thang chấm.' } : { status: 'fix', why: `${assigns.filter((l) => !(l.assignment.rubric || []).length).length} bài tập chưa có thang chấm.` },
@@ -84,7 +84,7 @@ function autoCriteria(c) {
 const words = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}\s"]/gu, ' ').split(/\s+/).filter((w) => w.length >= 4);
 function aiPrecheck(c) {
   const out = []; const add = (target, severity, comment) => out.push({ target, severity, comment });
-  if ((c.summary || '').trim().length < 60) add({ type: 'course', label: 'Mô tả khoá học' }, 'should', 'Mô tả còn ngắn — nên nêu rõ đối tượng học viên và kết quả đạt được.');
+  if ((c.summary || '').trim().length < 60) add({ type: 'course', label: 'Mô tả khóa học' }, 'should', 'Mô tả còn ngắn — nên nêu rõ đối tượng học viên và kết quả đạt được.');
   if (!c.entryTest || c.entryTest.questions.length < ENTRY_MIN) add({ type: 'course', label: 'Bài kiểm tra đầu vào' }, 'must', `Bài kiểm tra đầu vào mới có ${c.entryTest ? c.entryTest.questions.length : 0} câu, cần ít nhất ${ENTRY_MIN} câu để xếp lộ trình.`);
   lessons(c).forEach((l) => {
     const lt = { type: 'lesson', lessonId: l.id, label: 'Bài: ' + l.title };
