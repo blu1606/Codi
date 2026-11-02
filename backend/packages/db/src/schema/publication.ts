@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { courses } from "./courses";
 import { courseLessons } from "./course-content";
@@ -28,6 +28,8 @@ export const coursePublicationRequests = pgTable.withRLS("course_publication_req
   reviewNote: text("review_note"),
   // Price set by the admin when approving (pricing belongs to Admin).
   approvedPrice: integer("approved_price"),
+  // Course content as the admin saw it when deciding; the next round diffs against it ("what changed").
+  reviewedContent: jsonb("reviewed_content"),
   requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
 }, (table) => [
@@ -56,6 +58,8 @@ export const publicationReviewFlags = pgTable.withRLS("publication_review_flags"
   // What the flag points at: course info, a lesson, or an item inside a lesson.
   targetType: text("target_type").notNull(),
   lessonId: uuid("lesson_id").references(() => courseLessons.id, { onDelete: "set null" }),
+  // The exact item inside the target: a course-info field, chapter, material, question or test id.
+  targetItemId: text("target_item_id"),
   targetLabel: text("target_label").notNull(),
   severity: flagSeverity("severity").notNull(),
   comment: text("comment").notNull(),

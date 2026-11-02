@@ -17,7 +17,11 @@ import {
   autoCriteria,
   canApprove,
   CRITERIA,
+  diffReviewContent,
+  toReviewFlagDto,
+  validateReviewTarget,
   type AutoCriterionResult,
+  type ReviewContentChanges,
   type CourseDataForReview,
   type ReviewCriterionId,
   type ReviewCriterionStatus,
@@ -199,6 +203,8 @@ export interface AdminCourseReviewDetailDto {
   }>;
   autoCriteria: Record<ReviewCriterionId, AutoCriterionResult>;
   blockingReasons: string[];
+  // Changes since the content decided in the latest earlier round; null when there is nothing to compare.
+  changes: ReviewContentChanges | null;
 }
 
 /**
@@ -273,28 +279,7 @@ export async function getAdminCourseReview(
       asc(publicationReviewFlags.id)
     );
 
-  const flags: ReviewFlagDto[] = flagsRows.map((f) => ({
-    id: f.id,
-    requestId: f.requestId,
-    targetType: f.targetType,
-    lessonId: f.lessonId,
-    targetLabel: f.targetLabel,
-    target: {
-      type: f.targetType,
-      lessonId: f.lessonId,
-      label: f.targetLabel,
-    },
-    severity: f.severity as any,
-    comment: f.comment,
-    status: f.status as any,
-    lecturerReply: f.lecturerReply,
-    reply: f.lecturerReply,
-    source: f.source as any,
-    carriedFromFlagId: f.carriedFromFlagId,
-    carried: !!f.carriedFromFlagId,
-    createdAt: f.createdAt.toISOString(),
-    updatedAt: f.updatedAt.toISOString(),
-  }));
+  const flags: ReviewFlagDto[] = flagsRows.map(toReviewFlagDto);
 
   const roundDto: ReviewRoundDto = {
     id: activeRequest.id,
@@ -341,6 +326,8 @@ export async function getAdminCourseReview(
 
   const auto = autoCriteria(courseData);
   const blockingReasons = canApprove(roundDto);
+  const base = allRequests.find((r) => r.round < activeRequest.round && r.reviewedContent);
+  const changes = base ? diffReviewContent(base.reviewedContent as CourseDataForReview, courseData, base.round) : null;
 
   return {
     course: courseData,
@@ -354,6 +341,7 @@ export async function getAdminCourseReview(
     roundsHistory,
     autoCriteria: auto,
     blockingReasons,
+    changes,
   };
 }
 
@@ -400,21 +388,22 @@ export async function applyAutoCriteria(requestId: number, courseId: string): Pr
 
 export async function addReviewFlag(
   courseId: string, requestId: number,
-  input: { targetType: string; lessonId?: string | null; targetLabel: string; severity: ReviewFlagSeverity; comment: string; source?: "admin" | "ai" },
+  input: { targetType: string; lessonId?: string | null; itemId?: string | null; targetLabel: string; severity: ReviewFlagSeverity; comment: string; source?: "admin" | "ai" },
 ): Promise<{ success: boolean; flagId: number }> {
   const comment = (input.comment || "").trim();
   if (comment.length < 10) throw new Error("Nhận xét cần ít nhất 10 ký tự để giảng viên biết cần sửa gì.");
   if (!["must", "should"].includes(input.severity) || !["admin", "ai"].includes(input.source || "admin"))
     throw new Error("Mức độ hoặc nguồn góp ý không hợp lệ.");
+  const targetLabel = typeof input.targetLabel === "string" ? input.targetLabel.trim().slice(0, 200) : "";
+  if (!targetLabel) throw new Error("Vị trí góp ý không hợp lệ.");
+  const itemId = input.itemId === undefined || input.itemId === null ? null : String(input.itemId);
   const flagId = await publicationRequestTransaction(requestId, async ({ tx, course }) => {
     if (course.id !== courseId) throw new Error("Yêu cầu duyệt không khớp với khoá học.");
-    if (input.lessonId) {
-      const { courseData } = await fetchCourseDataForReview(courseId, tx);
-      if (!courseData.chapters.some(ch => ch.lessons.some(l => l.id === input.lessonId)))
-        throw new Error("Bài học không thuộc khoá học này.");
-    }
+    const { courseData } = await fetchCourseDataForReview(courseId, tx);
+    const invalid = validateReviewTarget(courseData, { type: input.targetType, lessonId: input.lessonId || null, itemId });
+    if (invalid) throw new Error(invalid);
     const [flag] = await tx.insert(publicationReviewFlags).values({ requestId, targetType: input.targetType,
-      lessonId: input.lessonId || null, targetLabel: input.targetLabel, severity: input.severity, comment,
+      lessonId: input.lessonId || null, targetItemId: itemId, targetLabel, severity: input.severity, comment,
       status: "open", source: input.source || "admin" }).returning({ id: publicationReviewFlags.id });
     return flag.id;
   });
@@ -465,8 +454,9 @@ async function decidePublication(
       throw new Error("Chưa có tiêu chí 'Cần sửa' hay cờ nào để gửi.");
     }
     const now = new Date();
+    const { courseData: reviewedContent } = await fetchCourseDataForReview(courseId, tx);
     requirePublicationClaim(await tx.update(coursePublicationRequests).set({
-      status: decision, reviewedBy: actorId, reviewedAt: now, reviewNote: reason || null,
+      status: decision, reviewedBy: actorId, reviewedAt: now, reviewNote: reason || null, reviewedContent,
       approvedPrice: decision === "approved" ? approvedPrice : null,
     }).where(and(eq(coursePublicationRequests.id, requestId), eq(coursePublicationRequests.courseId, courseId),
       eq(coursePublicationRequests.status, "in_review"))).returning({ id: coursePublicationRequests.id }));

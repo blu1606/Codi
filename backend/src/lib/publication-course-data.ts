@@ -58,7 +58,8 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
     materials = await store
       .select()
       .from(lessonMaterials)
-      .where(inArray(lessonMaterials.lessonId, lessonIds));
+      .where(inArray(lessonMaterials.lessonId, lessonIds))
+      .orderBy(asc(lessonMaterials.position));
   }
 
   // Assessments for course
@@ -200,6 +201,7 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
         return {
           id: l.id,
           title: l.title,
+          description: l.description,
           type: lMaterials.length > 0 ? lMaterials[0].type : "reading",
           durationSeconds: l.durationSeconds,
           body: l.body,
@@ -209,6 +211,7 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
             title: m.title,
             url: m.url,
             fileName: m.title || m.url,
+            durationSeconds: m.durationSeconds,
           })),
           quiz: quizObj,
           code: codeObj,
@@ -233,6 +236,8 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
     knowledgeMapStatus: courseRow.knowledgeMapStatus === "confirmed" && !readConfirmedKnowledgeMap(courseRow, lessonIds)
       ? "ready" : courseRow.knowledgeMapStatus,
     chapters: transformedChapters,
+    learningOutcomes: details?.learningOutcomes || [],
+    requirements: details?.requirements || [],
     entryTest: entryAssessment
       ? {
           questions: entryQuestions.map((q) => {

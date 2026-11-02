@@ -96,6 +96,7 @@ export interface MaterialLike {
   title?: string | null;
   url?: string | null;
   fileName?: string | null;
+  durationSeconds?: number | null;
 }
 
 export interface QuizQuestionLike {
@@ -153,6 +154,7 @@ export interface AssignmentLike {
 export interface LessonLike {
   id: string;
   title: string;
+  description?: string | null;
   type: string;
   durationSeconds?: number;
   body?: string | null;
@@ -183,6 +185,8 @@ export interface CourseDataForReview {
   entryTest?: {
     questions: QuizQuestionLike[];
   } | null;
+  learningOutcomes?: string[];
+  requirements?: string[];
 }
 
 export interface ReadinessItem {
@@ -642,4 +646,129 @@ export function targetHref(courseId: string, target: ReviewFlagTarget): string {
     return `/dashboard/lecturer/courses/${courseId}/content?lesson=${target.lessonId}`;
   }
   return `/dashboard/lecturer/courses/${courseId}/content`;
+}
+
+// ───────────────────────── review anchors ─────────────────────────
+/**
+ * Where a flag points. `itemId` narrows it: a course-info field for "course", a chapter id for "chapter",
+ * a material / question / test id for those types. Lesson-scoped types carry the lesson id.
+ */
+export const REVIEW_TARGET_TYPES = ["course", "entry", "chapter", "lesson", "reading", "material", "quiz", "question", "code", "test", "assignment"] as const;
+export const COURSE_INFO_FIELDS = ["title", "summary", "outcomes", "requirements", "price", "category"] as const;
+const LESSON_TARGETS: readonly string[] = ["lesson", "reading", "material", "quiz", "code", "test", "assignment"];
+
+/** Returns a Vietnamese error when the target does not exist in the course, or null. */
+export function validateReviewTarget(
+  c: CourseDataForReview,
+  t: { type: string; lessonId?: string | null; itemId?: string | null },
+): string | null {
+  if (!(REVIEW_TARGET_TYPES as readonly string[]).includes(t.type)) return "Vị trí góp ý không hợp lệ.";
+  const itemId = t.itemId ?? null;
+  if (itemId !== null && (typeof itemId !== "string" || itemId.length > 100)) return "Vị trí góp ý không hợp lệ.";
+  const lesson = t.lessonId ? extractAllLessons(c).find((l) => l.id === t.lessonId) : undefined;
+  if (t.lessonId && !lesson) return "Bài học không thuộc khoá học này.";
+  if (LESSON_TARGETS.includes(t.type) && !lesson) return "Góp ý này cần gắn với một bài học.";
+  const is = (id: unknown) => id !== undefined && id !== null && String(id) === itemId;
+  switch (t.type) {
+    case "course":
+      return itemId === null || (COURSE_INFO_FIELDS as readonly string[]).includes(itemId) ? null : "Mục thông tin khoá học không hợp lệ.";
+    case "chapter":
+      return c.chapters.some((ch) => is(ch.id)) ? null : "Chương không thuộc khoá học này.";
+    case "material":
+      return (lesson?.materials || []).some((m) => is(m.id)) ? null : "Tài liệu không thuộc bài học này.";
+    case "test":
+      return (lesson?.code?.tests || []).some((x) => is(x.id)) ? null : "Test không thuộc bài học này.";
+    case "question": {
+      const qs = lesson ? lesson.quiz?.questions || [] : c.entryTest?.questions || [];
+      return qs.some((q) => is(q.id)) ? null : "Câu hỏi không thuộc bài kiểm tra này.";
+    }
+    default:
+      return null;
+  }
+}
+
+// ───────────────────────── round-to-round changes ─────────────────────────
+export interface ReviewContentChanges {
+  comparedRound: number;
+  course: string[];
+  entry: boolean;
+  chapters: { added: string[]; renamed: string[]; removed: string[] };
+  lessons: { added: string[]; changed: Record<string, string[]>; removed: string[] };
+}
+
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const questionsKey = (qs?: QuizQuestionLike[]) => (qs || []).map((q) => [q.text, q.options, q.correctIndex, q.explanation || ""]);
+const codeKey = (code?: CodeLike | null) => (code ? [code.instructions, code.starterCode, code.tests.map((t) => [t.name, t.call, t.hidden])] : null);
+
+/** What the lecturer changed since the content the admin decided on in an earlier round. */
+export function diffReviewContent(prev: CourseDataForReview, cur: CourseDataForReview, comparedRound: number): ReviewContentChanges {
+  const course: string[] = [];
+  if (!sameValue(prev.title, cur.title)) course.push("title");
+  if (!sameValue(prev.description, cur.description)) course.push("summary");
+  if (!sameValue(prev.category, cur.category) || !sameValue(prev.level, cur.level)) course.push("category");
+  if (!sameValue(prev.proposedPrice, cur.proposedPrice)) course.push("price");
+  if (!sameValue(prev.learningOutcomes, cur.learningOutcomes)) course.push("outcomes");
+  if (!sameValue(prev.requirements, cur.requirements)) course.push("requirements");
+
+  const prevChapters = new Map(prev.chapters.map((ch) => [ch.id, ch]));
+  const curChapterIds = new Set(cur.chapters.map((ch) => ch.id));
+  const chapters = {
+    added: cur.chapters.filter((ch) => !prevChapters.has(ch.id)).map((ch) => ch.id),
+    renamed: cur.chapters.filter((ch) => prevChapters.get(ch.id) && prevChapters.get(ch.id)?.title !== ch.title).map((ch) => ch.id),
+    removed: prev.chapters.filter((ch) => !curChapterIds.has(ch.id)).map((ch) => ch.title),
+  };
+
+  const prevLessons = new Map(extractAllLessons(prev).map((l) => [l.id, l]));
+  const curLessons = extractAllLessons(cur);
+  const curLessonIds = new Set(curLessons.map((l) => l.id));
+  const changed: Record<string, string[]> = {};
+  const added: string[] = [];
+  for (const l of curLessons) {
+    const p = prevLessons.get(l.id);
+    if (!p) { added.push(l.id); continue; }
+    const keys: string[] = [];
+    if (!sameValue(p.title, l.title)) keys.push("title");
+    if (!sameValue(p.description, l.description) || !sameValue(p.durationSeconds, l.durationSeconds)) keys.push("description");
+    if (!sameValue(p.body, l.body)) keys.push("reading");
+    const mats = (x: LessonLike) => (x.materials || []).map((m) => [m.type, m.title, m.url]);
+    if (!sameValue(mats(p), mats(l))) keys.push("material");
+    const quiz = (x: LessonLike) => (x.quiz ? [x.quiz.passingScore, questionsKey(x.quiz.questions)] : null);
+    if (!sameValue(quiz(p), quiz(l))) keys.push("quiz");
+    if (!sameValue(codeKey(p.code), codeKey(l.code))) keys.push("code");
+    if (!sameValue(p.assignment, l.assignment)) keys.push("assignment");
+    if (keys.length) changed[l.id] = keys;
+  }
+  return {
+    comparedRound,
+    course,
+    entry: !sameValue(questionsKey(prev.entryTest?.questions), questionsKey(cur.entryTest?.questions)),
+    chapters,
+    lessons: { added, changed, removed: [...prevLessons.values()].filter((l) => !curLessonIds.has(l.id)).map((l) => l.title) },
+  };
+}
+
+/** Flag row → the DTO both review screens read. */
+export function toReviewFlagDto(f: {
+  id: number; requestId: number; targetType: string; lessonId: string | null; targetItemId: string | null; targetLabel: string;
+  severity: ReviewFlagSeverity; comment: string; status: ReviewFlagStatus; lecturerReply: string | null; source: ReviewFlagSource;
+  carriedFromFlagId: number | null; createdAt: Date; updatedAt: Date;
+}): ReviewFlagDto {
+  return {
+    id: f.id,
+    requestId: f.requestId,
+    targetType: f.targetType,
+    lessonId: f.lessonId,
+    targetLabel: f.targetLabel,
+    target: { type: f.targetType, lessonId: f.lessonId, itemId: f.targetItemId, label: f.targetLabel },
+    severity: f.severity,
+    comment: f.comment,
+    status: f.status,
+    lecturerReply: f.lecturerReply,
+    reply: f.lecturerReply,
+    source: f.source,
+    carriedFromFlagId: f.carriedFromFlagId,
+    carried: !!f.carriedFromFlagId,
+    createdAt: f.createdAt.toISOString(),
+    updatedAt: f.updatedAt.toISOString(),
+  };
 }

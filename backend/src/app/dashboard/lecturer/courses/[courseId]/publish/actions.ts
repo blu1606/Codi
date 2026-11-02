@@ -15,6 +15,7 @@ import {
 import {
   checkReadiness,
   CRITERIA,
+  toReviewFlagDto,
   type ReadinessResult,
   type ReviewFlagDto,
   type ReviewRoundDto,
@@ -104,28 +105,7 @@ export async function getPublicationData(courseId: string): Promise<PublicationD
       };
     }
 
-    const flags: ReviewFlagDto[] = flagsRows.map((f) => ({
-      id: f.id,
-      requestId: f.requestId,
-      targetType: f.targetType,
-      lessonId: f.lessonId,
-      targetLabel: f.targetLabel,
-      target: {
-        type: f.targetType,
-        lessonId: f.lessonId,
-        label: f.targetLabel,
-      },
-      severity: f.severity as any,
-      comment: f.comment,
-      status: f.status as any,
-      lecturerReply: f.lecturerReply,
-      reply: f.lecturerReply,
-      source: f.source as any,
-      carriedFromFlagId: f.carriedFromFlagId,
-      carried: !!f.carriedFromFlagId,
-      createdAt: f.createdAt.toISOString(),
-      updatedAt: f.updatedAt.toISOString(),
-    }));
+    const flags: ReviewFlagDto[] = flagsRows.map(toReviewFlagDto);
 
     roundDto = {
       id: latestRequest.id,
@@ -237,6 +217,7 @@ export async function submitCourseForPublication(courseId: string): Promise<{ su
             requestId: newRequest.id,
             targetType: f.targetType,
             lessonId: f.lessonId,
+            targetItemId: f.targetItemId,
             targetLabel: f.targetLabel,
             severity: f.severity,
             comment: f.comment,
