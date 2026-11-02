@@ -1405,7 +1405,7 @@ body:has(.ln-split) .app-header-inner.hd, body:has(.workspace) .app-header-inner
 .hd-search-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hd-kbd {
   flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 20px; padding: 0 6px;
-  border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); color: var(--muted);
+  border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--muted);
   font-family: var(--font-mono); font-size: 11px; line-height: 1; white-space: nowrap;
 }
 .hd-search-block { height: 44px; }
