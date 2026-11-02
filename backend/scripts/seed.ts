@@ -71,7 +71,7 @@ async function backup(name: string) {
 }
 
 async function main() {
-  if (ENV.NODE_ENV === "production" && !ENV.DEMO_TOOLS) throw new Error("Không chạy seed dữ liệu mẫu trên môi trường production.");
+  if (ENV.NODE_ENV === "production") throw new Error("Không chạy seed dữ liệu mẫu trên môi trường production.");
   const name = databaseName(ENV.DATABASE_URL);
   const db = createDb({ DATABASE_URL: ENV.DATABASE_URL });
   try {

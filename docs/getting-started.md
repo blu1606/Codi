@@ -88,3 +88,5 @@ and `R2_*` keys, codes are real emails and uploads go to Codi's real R2 buckets.
 
 Porting conventions: [porting-guide.md](porting-guide.md). Behaviour that differs from the mockup:
 [deviations-from-mockup.md](deviations-from-mockup.md).
+
+Production deploy (Docker image, VPS, release and rollback): [deployment.md](deployment.md).
