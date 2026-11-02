@@ -8,17 +8,20 @@
  * Guided intake asks only what is missing (every question skippable); structured answers carry course cards,
  * a comparison table or a suggested order; per-answer 👍/👎 feedback; follow-up chips.
  *
- * Data: GET /api/ai (catalog, current course, saved intake), POST /api/ai (answer; the backend also saves the
- * intake as the learner's goal draft), POST /api/ai/feedback (votes). The thread lives in this tab
- * (sessionStorage), like the real app. scenario.aiAssistant forces the async states without calling the model:
+ * Data: the shared Tutor (Codi develop): POST /api/ai/chat streams the answer (general context; course cards and the
+ * comparison table come from its search_courses / compare_courses tool outputs), GET/PATCH /api/ai/intake holds the
+ * signed-in learner's intake (their goal draft), PATCH /api/ai/chats/:id records votes on stored chats. The catalogue
+ * (/api/courses) and the current course (/api/learner/overview) feed the empty state and deep links. Guests have no
+ * stored chat: their recent turns and intake go along with each question, and they cannot vote. The thread lives in
+ * this tab (sessionStorage). scenario.aiAssistant forces the async states without calling the model:
  * thinking (stays until "Dừng") | ratelimit | error; ok asks the backend (a real 429 / failure shows the same states).
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { api } from '../../lib/api';
-import { useApi } from '../../lib/use-api';
-import { Alert, Icon, Md, Thumb, stream } from '../../components/ui/primitives';
+import { newChatId, streamAiChat } from '../../lib/ai-chat';
+import { Alert, Icon, Md, Thumb } from '../../components/ui/primitives';
 import { addToCart, enrollFree, levelLabel, useOwnership } from './commerce-api';
 
 const fmt = Codi.fmt;
@@ -27,7 +30,7 @@ const STOPPED_TEXT = 'Bạn đã dừng câu trả lời này.';
 
 // ───────────────────────── state & helpers ─────────────────────────
 // Intake + thread for this tab, per signed-in user (or guest). Changes re-render through useAdvisor().
-const blank = () => ({ goal: null, level: null, hoursPerWeek: null, skipped: [], chat: { messages: [], busy: false, pending: null } });
+const blank = () => ({ goal: null, level: null, hoursPerWeek: null, skipped: [], chat: { id: null, messages: [], busy: false, pending: null } });
 const storageKey = () => 'codi-advisor:' + (Codi.session.user ? Codi.session.user.id : 'guest');
 let state = null;
 let stateKey = null;
@@ -48,17 +51,60 @@ function save() {
 }
 const useAdvisor = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => version);
 
-// GET /api/ai context, shared with the action handlers below.
+// Page context (catalogue, current course, saved intake), shared with the action handlers below.
 let ctx = { user: null, currentCourse: null, catalog: [], savedIntake: null };
 
-// Simulated streaming: the answer text is revealed word by word; only the final text is persisted.
-// `revealId` invalidates a running reveal when the learner stops it or starts a new chat.
+// Intake answers are stored as the onboarding goal draft (lib/learner-intake-contract.ts); the chips show its labels.
+const INTAKE_VALUES = {
+  goal: { 'Làm được dự án': 'project', 'Hoàn thành khoá học': 'finish', 'Chuẩn bị phỏng vấn': 'interview' },
+  level: { 'Mới bắt đầu': 'new', 'Có kinh nghiệm cơ bản': 'basic', 'Trung cấp': 'solid' },
+  hours: { '< 5 giờ': 2, '5-10 giờ': 5, '> 10 giờ': 10 },
+};
+const intakeLabel = (key, value) => Object.keys(INTAKE_VALUES[key]).find((label) => INTAKE_VALUES[key][label] === value) || null;
+/** Saves one intake answer for a signed-in learner (null clears it); guests keep it in this tab only. */
+function saveIntake(key, label) {
+  if (!Codi.session.user) return;
+  const value = label == null ? null : INTAKE_VALUES[key][label];
+  if (value === undefined) return;
+  api.patch('/api/ai/intake', { [key]: value }).catch((e) => Codi.ui.toast('Chưa lưu được thông tin của bạn: ' + e.message, { type: 'danger' }));
+}
+
+/** Catalogue, the course the learner is studying and their saved intake. Only the catalogue is required. */
+async function loadContext(signal) {
+  const signedIn = !!Codi.session.user;
+  const optional = (url) => (signedIn ? api.get(url, { signal }).catch((e) => { if (e && e.name === 'AbortError') throw e; return null; }) : Promise.resolve(null));
+  const [list, intake, overview] = await Promise.all([api.get('/api/courses', { signal }), optional('/api/ai/intake'), optional('/api/learner/overview')]);
+  const draft = intake && intake.draft;
+  const cur = overview && overview.courses && overview.courses.find((c) => c.id === overview.continueCourseId);
+  return {
+    user: Codi.session.user || null,
+    catalog: (list && list.courses) || [],
+    currentCourse: cur ? { id: cur.id, slug: cur.slug, title: cur.title, doneLessons: cur.done, totalLessons: cur.total } : null,
+    savedIntake: draft ? { goal: intakeLabel('goal', draft.goal), level: intakeLabel('level', draft.level), hoursPerWeek: intakeLabel('hours', draft.hours) } : null,
+  };
+}
+function usePageContext(userId) {
+  const [st, setSt] = useState({ data: null, error: null });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const c = new AbortController();
+    setSt((s) => ({ ...s, error: null }));
+    loadContext(c.signal)
+      .then((data) => { if (!c.signal.aborted) setSt({ data, error: null }); })
+      .catch((error) => { if (!c.signal.aborted && !(error && error.name === 'AbortError')) setSt((s) => ({ ...s, error })); });
+    return () => c.abort();
+  }, [userId, tick]);
+  return { ...st, reload: () => setTick((t) => t + 1) };
+}
+
+// Streaming: the answer text shows as it arrives (POST /api/ai/chat); only the final text is persisted.
+// `revealId` invalidates a running answer when the learner stops it or starts a new chat.
 let live = null; // { id, text }
 let revealId = 0;
 const liveSubs = new Set();
 const setLive = (v) => { live = v; liveSubs.forEach((f) => f()); };
 const useLive = () => useSyncExternalStore((f) => { liveSubs.add(f); return () => liveSubs.delete(f); }, () => live);
-let inflight = null; // AbortController of the running POST /api/ai
+let inflight = null; // AbortController of the running POST /api/ai/chat
 
 // ───────────────────────── asking ─────────────────────────
 // The question that triggered the intake is kept in chat.pending and answered as soon as the last intake chip
@@ -76,14 +122,29 @@ const EDIT_INTAKE = [
 const intakeValue = (intake, key) => (key === 'goal' ? intake.goal : key === 'level' ? intake.level : intake.hoursPerWeek);
 const missingIntake = (intake) => INTAKE.filter((q) => !intakeValue(intake, q.key) && !(intake.skipped || []).includes(q.key));
 
-/** Recent turns for follow-ups (POST /api/ai history, ≤ 20), without the question being asked now or stopped answers. */
-function historyFor(messages, question) {
-  const turns = messages.filter((m) => (m.role === 'user' || (m.role === 'ai' && !m.streaming && !m.stopped)) && m.text);
+/**
+ * Guests only (signed-in chats are stored on the server): recent turns for follow-ups, without the question being
+ * asked now or stopped answers, led by the intake the guest gave (the server reads a signed-in learner's own).
+ */
+function guestHistory(intake, question) {
+  const turns = intake.chat.messages.filter((m) => (m.role === 'user' || (m.role === 'ai' && !m.streaming && !m.stopped)) && m.text);
   if (turns.length && turns[turns.length - 1].role === 'user' && turns[turns.length - 1].text === question) turns.pop();
-  return turns.slice(-20).map((m) => ({
-    role: m.role, text: String(m.text).slice(0, 4000),
-    ...(m.role === 'ai' && m.courses && m.courses.length ? { courseIds: m.courses.map((c) => c.id).slice(0, 12) } : {}),
-  }));
+  const known = [intake.goal, intake.level, intake.hoursPerWeek && `${intake.hoursPerWeek}/tuần`].filter(Boolean);
+  const out = turns.slice(-11).map((m) => ({ role: m.role === 'ai' ? 'assistant' : 'user', text: String(m.text).slice(0, 4000) }));
+  return known.length ? [{ role: 'user', text: `Hồ sơ học viên: ${known.join(', ')}` }, ...out] : out;
+}
+/** Course cards (search_courses, newest first, no duplicates) and the comparison table (compare_courses) of a turn. */
+function answerBlocks(tools) {
+  const seen = new Set();
+  const courses = [];
+  for (const r of (tools.search_courses || []).slice().reverse()) {
+    for (const c of (r.output && r.output.courses) || []) {
+      if (seen.has(c.id) || courses.length >= 6) continue;
+      seen.add(c.id); courses.push(c);
+    }
+  }
+  const tables = (tools.compare_courses || []).map((r) => r.output).filter((t) => t && Array.isArray(t.headers) && t.rows && t.rows.length);
+  return { courses, table: tables.length ? tables[tables.length - 1] : null };
 }
 
 function finishWith(m, patch) {
@@ -109,7 +170,10 @@ function askAI(prompt) {
   if (!q) { save(); return; }
   const flag = Codi.state.scenario.aiAssistant;
   if (flag === 'ratelimit') { messages.push({ role: 'ratelimit', question: q }); save(); return; }
-  const history = historyFor(messages, q);
+  const signedIn = !!Codi.session.user;
+  const history = signedIn ? undefined : guestHistory(intake, q);
+  if (!intake.chat.id) intake.chat.id = newChatId();
+  const chatId = intake.chat.id;
   intake.chat.busy = true;
   const m = { role: 'ai', text: '', streaming: true, id: `msg-${Date.now()}` };
   messages.push(m);
@@ -121,25 +185,27 @@ function askAI(prompt) {
   }
   const ctrl = new AbortController();
   inflight = ctrl;
-  const body = { prompt: q, intake: { goal: intake.goal, level: intake.level, hoursPerWeek: intake.hoursPerWeek, skipped: intake.skipped || [] }, history };
-  api.post('/api/ai', body, { signal: ctrl.signal }).then((r) => {
-    if (!m.streaming) return; // stopped meanwhile
-    Object.assign(m, {
-      text: r.text, courses: r.courses || [], table: r.table || null, order: r.order || [], followups: r.followups || [],
-      noMatch: !!r.noMatch, logId: r.logId || null, feedbackToken: r.feedbackToken || null, streaming: false, vote: null,
-    });
-    inflight = null;
-    const id = ++revealId;
-    setLive({ id: m.id, text: '' });
-    save(); // persists the full answer; the thread reveals it progressively
-    stream(m.text, (t) => { if (id === revealId) setLive({ id: m.id, text: t }); }).then(() => {
-      if (id !== revealId) return; // stopped or replaced meanwhile
-      setLive(null);
-      store().chat.busy = false;
-      save();
+  const id = ++revealId;
+  const current = () => id === revealId && !ctrl.signal.aborted; // false once stopped or replaced by a new chat
+  const onText = (t) => {
+    if (!current()) return;
+    if (m.streaming) { m.streaming = false; save(); } // thinking → the text as it arrives
+    setLive({ id: m.id, text: t });
+  };
+  const context = { kind: 'general', label: 'Tư vấn khoá học', href: '/ai' };
+  streamAiChat({ chatId, context, text: q, history, signal: ctrl.signal, onText }).then((turn) => {
+    if (!current()) return;
+    setLive(null);
+    if (!turn.text) { finishWith(m, { role: 'error', question: q }); return; }
+    const { courses, table } = answerBlocks(turn.tools);
+    finishWith(m, {
+      text: turn.text, courses, table, order: [], followups: [], noMatch: false,
+      // Votes go to the stored chat message; guests' chats are not stored.
+      logId: signedIn ? turn.messageId : null, chatId, vote: null,
     });
   }).catch((e) => {
-    if (ctrl.signal.aborted || (e && e.name === 'AbortError') || !m.streaming) return;
+    if (!current() || (e && e.name === 'AbortError')) return;
+    setLive(null);
     finishWith(m, { role: e.status === 429 ? 'ratelimit' : 'error', question: q });
   });
 }
@@ -157,6 +223,7 @@ function answerIntake(q, a) {
   else if (q === 'level') intake.level = a;
   else if (q === 'hours') intake.hoursPerWeek = a;
   intake.skipped = (intake.skipped || []).filter((k) => k !== q);
+  saveIntake(q, a);
   // the answered question turns into a normal user reply in the thread
   const i = intake.chat.messages.findIndex((m) => m.role === 'intake-question' && m.key === q);
   if (i >= 0) intake.chat.messages.splice(i, 1, { role: 'user', text: a, at: new Date().toISOString() });
@@ -207,6 +274,7 @@ function clearIntake(field) {
   if (field === 'goal') intake.goal = null;
   else if (field === 'level') intake.level = null;
   else if (field === 'hours') intake.hoursPerWeek = null;
+  saveIntake(field, null);
   save();
 }
 function newChat() {
@@ -215,16 +283,20 @@ function newChat() {
   revealId += 1;
   if (live) setLive(null);
   intake.chat.messages = [];
+  intake.chat.id = null;
   intake.chat.busy = false;
   intake.chat.pending = null;
   save();
 }
 
-/** POST /api/ai/feedback for an answer (signed-in owner by logId, guests by feedbackToken). */
+// 👎 reasons the stored chat accepts (lib/ai-tutor-contract.ts TUTOR_DOWN_REASONS); other reasons stay in this tab.
+const SERVER_REASONS = ['Chưa đúng', 'Khó hiểu', 'Lộ lời giải', 'Không liên quan bài'];
+/** PATCH /api/ai/chats/:id vote for an answer of a stored (signed-in) chat; logId is the answer's message id. */
 async function sendFeedback(m) {
-  if (!m.logId) return true;
+  if (!m.logId || !m.chatId) return true;
   try {
-    await api.post('/api/ai/feedback', { logId: m.logId, feedbackToken: m.feedbackToken || null, vote: m.vote || null, reason: m.reason || null });
+    const reason = m.vote === 'down' && SERVER_REASONS.includes(m.reason) ? { reason: m.reason } : {};
+    await api.patch(`/api/ai/chats/${encodeURIComponent(m.chatId)}`, { type: 'vote', messageId: m.logId, vote: m.vote || null, ...reason });
     return true;
   } catch (e) {
     Codi.ui.toast('Chưa gửi được phản hồi: ' + e.message, { type: 'danger' });
@@ -519,7 +591,7 @@ export default function AiAdvisorPage({ query }) {
   useCodi();
   useAdvisor();
   const navigate = useNavigate();
-  const context = useApi('/api/ai');
+  const context = usePageContext(Codi.session.user ? Codi.session.user.id : null);
   const loaded = !!context.data || !!context.error;
   if (context.data) ctx = context.data;
   const liveMsg = useLive();

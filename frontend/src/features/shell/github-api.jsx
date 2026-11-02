@@ -4,7 +4,8 @@
  *   linked?   GET /api/auth/list-accounts (a "github" account)
  *   profile   GET /api/github-profile → { profile | null }
  *   connect   POST /api/auth/link-social { provider:'github', callbackURL } → the browser goes to GitHub
- *   analyse   POST /api/github-profile { consentVersion:'public-github-v1' } (explicit consent, up to 3 min)
+ *   analyse   POST /api/github-profile { consentVersion:'public-github-v1' } (explicit consent) → { profile }, or 202 { job }
+ *             when the AI worker runs it in the background; then GET /api/github-profile → { job, profile } until done
  *   unlink    DELETE /api/github-profile
  * Linking and analysing stay separate, explicit steps; nothing starts on page load. Every failure shows the server's
  * message. Locally, GitHub linking needs the OAuth app to accept http://localhost:5190/api/auth/callback/github and
@@ -27,7 +28,7 @@ import { PendingChecklist, ProfileReport } from './github-report';
 export const PROFILE_HREF = '/profile?tab=nang-luc';
 export const ONBOARDING_PATH = '/onboarding/github';
 const CONSENT_VERSION = 'public-github-v1';
-const TIMEOUT_MS = 160000;
+const TIMEOUT_MS = 240000; // background job: worker poll + up to 175 s of analysis
 const STALE_MS = 90 * 86400000;
 const USAGE_LABEL = { tried: 'Đã thử', regular: 'Dùng thường xuyên', deep: 'Dùng sâu' };
 
@@ -87,17 +88,44 @@ export async function analyseGithub() {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await api('/api/github-profile', { method: 'POST', body: { consentVersion: CONSENT_VERSION }, signal: ctrl.signal });
+    let res = await api('/api/github-profile', { method: 'POST', body: { consentVersion: CONSENT_VERSION }, signal: ctrl.signal });
+    if (res && res.job && res.job.id) {
+      // The AI worker runs the analysis in the background (202 { job }): poll GET until the job ends.
+      res = await pollProfileJob(res.job.id, ctrl.signal);
+      if (res.job.errorCode === 'no_observations') { set({ linked: true }); return gh.profile; }
+    }
     const latest = (res && res.profile) || null;
     if (!latest || latest.version !== 1) throw new Error('Chưa tạo được hồ sơ năng lực. Không thể đọc phản hồi máy chủ. Bạn có thể thử lại.');
     const keepPrevious = latest.observationAvailability === 'none_observed' && gh.profile && gh.profile.observationAvailability === 'observed';
     set(keepPrevious ? { linked: true } : { linked: true, profile: latest });
     return latest;
   } catch (e) {
-    if (ctrl.signal.aborted) throw new Error('Đã hết thời gian chờ 3 phút. Chưa xác nhận được kết quả; yêu cầu trên máy chủ có thể vẫn đang hoàn tất. Không tự thử lại.');
+    if (ctrl.signal.aborted) throw new Error('Đã hết thời gian chờ 4 phút. Chưa xác nhận được kết quả; yêu cầu trên máy chủ có thể vẫn đang hoàn tất. Không tự thử lại.');
     throw e;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// Background job error codes (lib/github-profile-worker.ts) → the messages the synchronous route uses.
+const JOB_ERRORS = {
+  not_ready: 'Phân tích GitHub chưa sẵn sàng trên máy chủ này.',
+  unauthorized: 'Bạn không có quyền học viên đang hoạt động.',
+  github_not_linked: 'Bạn chưa liên kết GitHub với tài khoản Codi này.',
+  profile_unavailable: 'Không còn hồ sơ đã lưu để cập nhật. Hãy phân tích lại.',
+};
+/** Polls GET /api/github-profile every 3 s until background job `jobId` completes; throws its failure. */
+async function pollProfileJob(jobId, signal) {
+  for (;;) {
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(resolve, 3000);
+      signal.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+    });
+    const body = await api.get('/api/github-profile', { signal });
+    const job = body && body.job;
+    if (!job || job.id !== jobId) throw new Error('Không theo dõi được lượt phân tích. Hãy tải lại trang để xem kết quả.');
+    if (job.status === 'completed') return body;
+    if (job.status === 'failed') throw new Error(JOB_ERRORS[job.errorCode] || 'Chưa tạo được hồ sơ năng lực. Bạn có thể thử lại.');
   }
 }
 

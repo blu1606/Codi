@@ -1,8 +1,10 @@
 /**
- * Codi AI tutor — React port of the real tutor (apps/web components/ai-tutor/*, lib/ai-tutor-contract.ts) on the
- * backend: GET/POST /api/learn/:courseId/lessons/:lessonId/tutor (TutorView; "ask" streams text/plain) and
- * GET /api/learn/:courseId/tutor/threads. The server owns the thread (max 40 messages), the 3-step hint ladder, the
- * 8-per-minute limit, votes, the ≤3-line diff suggestions and the escalation to the lecturer. Installs Codi.tutor and
+ * Codi AI tutor — React port of the real tutor (lib/ai-tutor-contract.ts) on Codi's shared Tutor routes:
+ * GET /api/ai/lesson (lesson meta: hint level, lecturer, private conversation), GET /api/ai/chats and
+ * GET /api/ai/chats/:id (the lesson's one chat), POST /api/ai/chat (a turn, streamed; a hint is a turn with
+ * metadata.hint), PATCH /api/ai/chats/:id (votes, applied/skipped suggestions), DELETE /api/ai/chats/:id (clear) and
+ * POST /api/ai/lesson (escalate to the lecturer). The server owns the thread (newest 40 messages), the 3-step hint
+ * ladder, the 8-per-minute limit, votes and the ≤3-line suggestions (suggest_code_change tool). Installs Codi.tutor and
  * Codi.aiFeedbackRow.
  *
  * PUBLIC API
@@ -26,6 +28,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { messageText, newChatId, streamAiChat } from '../../lib/ai-chat';
 import { Codi } from '../../lib/codi';
 import { Icon, Md, Alert } from '../../components/ui/primitives';
 import { setEditorValue } from './code-api';
@@ -43,7 +46,9 @@ const wide = () => window.matchMedia('(min-width: 1024px)').matches;
 const clip = (v, max) => { const s = String(v == null ? '' : v); return s.length > max ? `${s.slice(0, max - 1)}…` : s; };
 const short = (v) => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s && s.length > 60 ? s.slice(0, 57) + '…' : String(s); };
 const errText = (e, fallback) => (e && typeof e.message === 'string' && e.message) || fallback;
-const tutorUrl = (p) => `/api/learn/${encodeURIComponent(p.courseId)}/lessons/${encodeURIComponent(p.lessonId)}/tutor`;
+const enc = encodeURIComponent;
+const lessonUrl = (p) => `/api/ai/lesson?courseId=${enc(p.courseId)}&lessonId=${enc(p.lessonId)}`;
+const chatUrl = (p) => `/api/ai/chats/${enc(p.chatId)}`;
 
 export const starters = (isCode) => (isCode
   ? ['Vì sao code của mình chưa chạy đúng?', 'Giải thích lại yêu cầu của bài', 'Lỗi hay gặp ở bài này là gì?']
@@ -121,12 +126,48 @@ function contextOf(p) {
 // ───────────────────────── sessions ─────────────────────────
 // A session is one open thread view: the docked panel ('sidebar'), the lesson tab ('embed') or the Tutor page ('page').
 function session(courseId, lessonId, variant) {
-  return { courseId, lessonId, variant, ctx: {}, removed: {}, busy: false, mode: 'simple', failure: null, loaded: false, loadError: null, convOpen: false, view: null, pendingUser: null, streaming: null, abort: null, queued: null, originals: {} };
+  return { courseId, lessonId, variant, ctx: {}, removed: {}, busy: false, mode: 'simple', failure: null, loaded: false, loadError: null, convOpen: false, view: null, chatId: null, pendingUser: null, streaming: null, abort: null, queued: null, originals: {} };
 }
 let panel = null; // the docked sidebar session
+
+/** The viewer's lesson chats (one per lesson), newest first. */
+async function lessonChats() {
+  const r = await api.get('/api/ai/chats');
+  return ((r && r.chats) || []).filter((c) => c.kind === 'lesson' && c.lessonId);
+}
+/** History rows of the Tutor page for one course: { lessonId, lessonTitle, firstQuestion, lastAt }. */
+export async function courseThreads(courseId) {
+  return (await lessonChats()).filter((c) => c.courseId === courseId).map((c) => ({
+    lessonId: c.lessonId, lessonTitle: String(c.contextLabel || '').replace(/^Bài: /, ''), firstQuestion: c.title, lastAt: c.updatedAt,
+  }));
+}
+/** A stored chat message (UIMessage) as the thread row the panel renders. */
+function toRow(m) {
+  const meta = m.metadata || {};
+  if (m.role === 'user') return { id: m.id, role: 'user', text: messageText(m) };
+  const text = messageText(m);
+  let diff = null;
+  for (const part of m.parts || []) {
+    if (part.type === 'tool-suggest_code_change' && part.state === 'output-available' && part.output && part.output.ok) {
+      diff = { ...part.output.diff, toolCallId: part.toolCallId, state: (meta.diffs && meta.diffs[part.toolCallId]) || null };
+    }
+  }
+  if (!text && !diff) return null;
+  const lines = [...new Set([...text.matchAll(/dòng\s+(\d{1,4})/gi)].map((x) => Number(x[1])).filter((n) => n >= 1))].slice(0, 5);
+  return { id: m.id, role: 'ai', text, lines, diff, stopped: !!meta.stopped, vote: meta.vote || null, reason: meta.voteReason || null, hint: meta.hint || null };
+}
+/** Lesson meta + the lesson's chat, as one view: { lessonTitle, isCode, hintLevel, lecturerName, conversation, messages }. */
+async function fetchView(p) {
+  const [meta, chats] = await Promise.all([api.get(lessonUrl(p)), lessonChats()]);
+  const chat = chats.find((c) => c.lessonId === p.lessonId);
+  const messages = chat ? ((await api.get(`/api/ai/chats/${enc(chat.id)}`)).messages || []) : [];
+  // A lesson keeps one chat; before the first question the client picks the id the server will store it under.
+  p.chatId = chat ? chat.id : (p.chatId || newChatId());
+  return { ...meta, messages: messages.map(toRow).filter(Boolean) };
+}
 function load(p) {
   p.loaded = false; p.loadError = null; refresh();
-  api.get(tutorUrl(p))
+  fetchView(p)
     .then((view) => { p.view = view; p.loaded = true; })
     .catch((e) => { p.loadError = errText(e, 'Chưa tải được AI trợ lý.'); })
     .finally(() => {
@@ -134,61 +175,49 @@ function load(p) {
       if (p.loaded && p.queued) { const q = p.queued; p.queued = null; ask(p, q); }
     });
 }
-const reloadView = (p) => api.get(tutorUrl(p)).then((view) => { p.view = view; refresh(); }).catch(() => {});
-/** Applies a JSON reply or error body: a TutorView replaces the thread; an error without a view becomes a failure. */
-function applyBody(p, body, status, retry) {
-  if (body && body.messages) { p.view = body; return; }
-  if (body && body.view) { p.view = body.view; return; }
-  p.failure = { message: (body && body.error) || (status === 429 ? 'Bạn đã hỏi quá nhiều trong thời gian ngắn' : UNAVAILABLE), retry };
-}
+const reloadView = (p) => fetchView(p).then((view) => { p.view = view; refresh(); }).catch(() => {});
 
-/** Runs one "ask" turn: thinking → streaming text → saved answer | stopped | error | rate limited. */
-async function ask(p, text, retryOf) {
+/** Runs one turn: thinking → streaming text → saved answer | stopped | error | rate limited. opts.hint asks the next hint. */
+async function ask(p, text, opts) {
   const q = String(text || '').trim().slice(0, 2000);
+  const hint = !!(opts && opts.hint);
   if (!p || !q) return;
   // Sent once the thread has loaded and no turn is running (real panel queues contextual questions).
-  if (!p.loaded || p.busy) { p.queued = q; return; }
+  if (!p.loaded || p.busy) { if (!hint) p.queued = q; return; }
   const ctrl = new AbortController();
+  const retry = () => ask(p, q, opts);
   p.abort = ctrl; p.failure = null; p.pendingUser = q; p.busy = 'thinking'; p.streaming = null; refresh();
-  const body = { type: 'ask', question: q, mode: p.mode, context: contextOf(p), ...(retryOf ? { retryOf } : {}) };
   try {
-    const res = await fetch(tutorUrl(p), { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'text/plain, application/json' }, body: JSON.stringify(body), signal: ctrl.signal });
-    const type = res.headers.get('content-type') || '';
-    if (!res.ok || type.includes('application/json')) {
-      const data = await res.json().catch(() => null);
-      applyBody(p, data, res.status, () => ask(p, q));
-    } else {
-      p.busy = 'streaming'; p.streaming = { text: '' }; refresh();
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        p.streaming.text += dec.decode(value, { stream: true });
-        refresh();
-      }
-      await reloadView(p);
-    }
+    const turn = await streamAiChat({
+      chatId: p.chatId, context: { kind: 'lesson', courseId: p.courseId, lessonId: p.lessonId }, text: q, hint,
+      lesson: { mode: p.mode, context: contextOf(p) }, signal: ctrl.signal,
+      onText: (t) => { p.busy = 'streaming'; p.streaming = { text: t }; refresh(); },
+    });
+    // A failed turn is not stored; the question stays on screen with a retry.
+    if (turn.failed && !turn.text) p.failure = { message: UNAVAILABLE, retry };
+    await reloadView(p);
   } catch (e) {
     if (e && e.name === 'AbortError') {
       // The server saves the stop ("Bạn đã dừng câu trả lời này."); read the thread once it has.
       setTimeout(() => reloadView(p), 400);
+    } else if (e && e.status === 0) {
+      p.failure = { message: 'Câu hỏi chưa được gửi. Bạn vẫn học tiếp bình thường.', retry };
     } else {
-      p.failure = { message: 'Câu hỏi chưa được gửi. Bạn vẫn học tiếp bình thường.', retry: () => ask(p, q) };
+      p.failure = { message: errText(e, UNAVAILABLE), retry };
     }
   } finally {
     p.busy = false; p.abort = null; p.pendingUser = null; p.streaming = null; refresh();
   }
 }
 function stopAction(p) { if (p && p.abort) p.abort.abort(); }
-/** POST a JSON command; the TutorView reply replaces the thread. */
-async function command(p, body, fallback) {
+/** Runs a request against the lesson's chat, then re-reads the thread. */
+async function command(p, request, fallback) {
   try {
-    p.view = await api.post(tutorUrl(p), body);
+    await request();
+    await reloadView(p);
     return true;
   } catch (e) {
-    if (e && e.body && e.body.view) p.view = e.body.view;
-    else Codi.ui.toast(errText(e, fallback), { type: 'danger' });
+    Codi.ui.toast(errText(e, fallback), { type: 'danger' });
     return false;
   } finally { refresh(); }
 }
@@ -197,28 +226,24 @@ function retryRow(p, i) {
   const log = p.view.messages; const m = log[i];
   if (!m || m.role !== 'error') return;
   const q = m.text || (log[i - 1] && log[i - 1].role === 'user' ? log[i - 1].text : '');
-  if (q) ask(p, q, m.id);
+  if (q) ask(p, q);
 }
-async function hintAction(p) {
+function hintAction(p) {
   if (!p || p.busy || !p.view || !p.view.isCode) return;
   const level = p.view.hintLevel + 1;
   if (level > HINT_MAX) return;
-  p.busy = 'thinking'; p.failure = null; p.pendingUser = `Cho mình gợi ý ${level}/${HINT_MAX}`; refresh();
-  try {
-    p.view = await api.post(tutorUrl(p), { type: 'hint', context: contextOf(p) });
-  } catch (e) {
-    if (e && e.body && e.body.view) p.view = e.body.view;
-    else p.failure = { message: errText(e, UNAVAILABLE), retry: () => hintAction(p) };
-  } finally { p.busy = false; p.pendingUser = null; refresh(); }
+  ask(p, `Cho mình gợi ý ${level}/${HINT_MAX} · ${HINT_NAMES[level - 1]}`, { hint: true });
 }
 async function clearAction(p) {
   if (!p || p.busy) return;
   const r = await Codi.ui.confirm({ title: 'Xoá cuộc trò chuyện của bài này?', consequence: 'Các câu hỏi và câu trả lời của AI trợ lý trong bài học này sẽ bị xoá. Cuộc trò chuyện ở các bài khác giữ nguyên.', reversible: false, confirmLabel: 'Xoá cuộc trò chuyện', danger: true });
   if (!r.ok) return;
   p.failure = null;
-  if (await command(p, { type: 'clear' }, 'Chưa xoá được cuộc trò chuyện.')) Codi.ui.toast('Đã xoá cuộc trò chuyện.');
+  const cleared = await command(p, async () => { await api.del(chatUrl(p)); p.chatId = newChatId(); }, 'Chưa xoá được cuộc trò chuyện.');
+  if (cleared) Codi.ui.toast('Đã xoá cuộc trò chuyện.');
 }
-const voteAction = (p, m) => command(p, { type: 'vote', messageId: m.id, vote: m.vote || null, ...(m.vote === 'down' && m.reason ? { reason: m.reason } : {}) }, 'Chưa lưu được phản hồi.');
+const voteAction = (p, m) => command(p, () => api.patch(chatUrl(p), { type: 'vote', messageId: m.id, vote: m.vote || null, ...(m.vote === 'down' && m.reason ? { reason: m.reason } : {}) }), 'Chưa lưu được phản hồi.');
+const diffState = (p, m, state) => command(p, () => api.patch(chatUrl(p), { type: 'diff', messageId: m.id, toolCallId: m.diff.toolCallId, state }), 'Chưa lưu được lựa chọn.');
 // "Xem dòng N": select the line in the editor (on phones the sheet closes first so the editor is visible).
 function lineAction(p, n) {
   const ta = editorEl(p);
@@ -234,20 +259,20 @@ function lineAction(p, n) {
 async function diffAction(p, m, op) {
   const d = m.diff; if (!d) return;
   const ta = editorEl(p);
-  if (op === 'skip') { await command(p, { type: 'diff', messageId: m.id, state: 'skipped' }, 'Chưa lưu được lựa chọn.'); return; }
+  if (op === 'skip') { await diffState(p, m, 'skipped'); return; }
   if (!ta) { Codi.ui.toast('Mở phần code của bài để áp dụng đề xuất.', { type: 'warn' }); return; }
   if (op === 'apply') {
     p.originals[m.id] = ta.value;
     const lines = ta.value.split('\n'); lines.splice(Math.min(d.at - 1, lines.length), 0, ...d.add);
     setEditorValue(ta, lines.join('\n')); // the editor saves the draft on input
     Codi.ui.toast(`Đã thêm ${d.add.length} dòng vào code. Bấm “Hoàn tác” nếu muốn bỏ.`, { type: 'success' });
-    await command(p, { type: 'diff', messageId: m.id, state: 'applied' }, 'Chưa lưu được lựa chọn.');
+    await diffState(p, m, 'applied');
   } else if (op === 'undo') {
     const original = p.originals[m.id];
     if (original == null) { Codi.ui.toast('Không còn bản code trước khi áp dụng để hoàn tác.'); return; }
     setEditorValue(ta, original); delete p.originals[m.id];
     Codi.ui.toast('Đã hoàn tác, code trở lại như trước.');
-    await command(p, { type: 'diff', messageId: m.id, state: null }, 'Chưa lưu được lựa chọn.');
+    await diffState(p, m, null);
   }
 }
 function rerunAction(p) {
@@ -275,11 +300,16 @@ function EscalateForm({ handle, p, defaultText, lecturerName, code, failing }) {
     if (tooShort || pending) return;
     setPending(true); setError(null);
     try {
-      p.view = await api.post(tutorUrl(p), {
-        type: 'escalate', text: text.trim().slice(0, 4000), withSummary,
-        ...(code && withCode ? { code: clip(code, LIMITS.code) } : {}),
-        ...(failing && withTest ? { failingTest: clip(failing.name, 200) } : {}),
+      // The summary is the learner's last questions in this lesson's chat; the reply is the refreshed lesson meta.
+      const meta = await api.post('/api/ai/lesson', {
+        courseId: p.courseId, lessonId: p.lessonId, chatId: p.chatId || null,
+        escalation: {
+          text: text.trim().slice(0, 4000), withSummary,
+          ...(code && withCode ? { code: clip(code, LIMITS.code) } : {}),
+          ...(failing && withTest ? { failingTest: clip(failing.name, 200) } : {}),
+        },
       });
+      p.view = { ...p.view, ...meta };
       handle.close(); refresh();
       Codi.ui.toast('Đã gửi câu hỏi cho giảng viên. Bạn sẽ nhận thông báo khi có trả lời.', { type: 'success' });
     } catch (err) {

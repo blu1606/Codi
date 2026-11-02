@@ -3,7 +3,7 @@
  * the left, the selected lesson's thread on the right. Threads are per lesson, so "Đoạn chat mới" picks a lesson.
  * The page has no code editor, so answers are about the lesson only ("Mở đúng chỗ" opens the lesson itself).
  * Query: ?lesson=<lessonId> selects a thread; without it the newest thread opens.
- * Data: GET /api/learn/:courseId/tutor/threads (history) and GET /api/learn/:courseId/path (lessons to pick from).
+ * Data: GET /api/ai/chats (history: this course's lesson chats) and GET /api/learn/:courseId/path (lessons to pick from).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,7 +11,7 @@ import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
 import { Icon, Alert, Empty } from '../../components/ui/primitives';
 import { Sheet } from '../../components/ui/overlay-host';
-import { TutorPanel, tutorInternals, useTutorVersion } from './tutor-api';
+import { TutorPanel, courseThreads, tutorInternals, useTutorVersion } from './tutor-api';
 
 const { session, load, pageHref, stopAction } = tutorInternals;
 const TITLE_MAX = 80;
@@ -114,15 +114,15 @@ export default function TutorPage({ params, query }) {
   const [listOpen, setListOpen] = useState(false);
   const sessions = useRef({});
 
-  // History (GET /tutor/threads) and the course's lessons in path order (GET /path).
+  // History (the course's lesson chats) and the course's lessons in path order (GET /path).
   useEffect(() => {
     let live = true;
     setThreads(null); setLoadError(null);
     const base = `/api/learn/${encodeURIComponent(courseId)}`;
-    Promise.all([api.get(`${base}/tutor/threads`), api.get(`${base}/path`).catch(() => null)])
+    Promise.all([courseThreads(courseId), api.get(`${base}/path`).catch(() => null)])
       .then(([t, path]) => {
         if (!live) return;
-        setThreads(t.threads || []);
+        setThreads(t);
         setLessons(path && Array.isArray(path.rows) ? path.rows.map((r) => ({ id: r.lessonId, title: r.title, chapterTitle: r.chapterTitle })) : []);
       })
       .catch((e) => { if (live) setLoadError(e); });
