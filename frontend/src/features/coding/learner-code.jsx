@@ -10,6 +10,7 @@
  *       Chạy / Nộp bài) in two panes over one shared workspace state. onChange() runs after a submit or a tutorial step
  *       so the page reloads its checklist.
  *   bridge(courseId, lessonId) → {task:{label,text}, code, failing, runError, run} | null   what the AI tutor may read
+ *   subscribe(fn) → unsubscribe             fn() after every workspace change (the Tutor's context chips)
  *   runTests(courseId, lessonId)            runs the sample tests (challenge) or the current step (tutorial)
  */
 import { useEffect, useSyncExternalStore } from 'react';
@@ -505,6 +506,8 @@ function bridge(courseId, lessonId, testId) {
 Object.assign(Codi.code, {
   learner,
   bridge,
+  /** Called after every workspace change (load, edit, run, step) so the Tutor re-reads its context chips. */
+  subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
   runTests(courseId, lessonId) {
     const e = findEntry(courseId, lessonId);
     if (e) runAction(e, 'run');

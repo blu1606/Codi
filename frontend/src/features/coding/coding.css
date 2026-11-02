@@ -74,75 +74,6 @@ dl.cp-test-detail { display: grid; gap: var(--space-2); margin: 0; }
 .cp-tut-head .od-nowrap { white-space: nowrap; }
 .cp-gate-pane p { margin: 0; }
 
-/* ───────────── AI tutor: modes, context menu, launcher ───────────── */
-.tutor-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tutor-hintbar { flex-wrap: wrap; }
-.tutor-modes { display: flex; flex-wrap: wrap; gap: var(--space-1); }
-.tutor-modes .ai-chip[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-active); }
-.tutor-form { display: flex; align-items: center; gap: var(--space-2); }
-.tutor-form .input { flex: 1 1 0; min-width: 0; }
-.tutor-add > summary { list-style: none; }
-.tutor-add > summary::-webkit-details-marker { display: none; }
-.tutor-menu-list.is-up { top: auto; bottom: calc(100% + 4px); left: 0; right: auto; min-width: 240px; }
-.tutor-feedback-escalate { margin-left: var(--space-1); }
-.tutor-rules-link { justify-self: start; }
-.tutor-rules { display: grid; gap: var(--space-2); margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); }
-
-.tutor-fab { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: 40; width: 56px; height: 56px; min-width: 56px; padding: 0; border-radius: 50%; box-shadow: var(--elev-pop); }
-.tutor-pop { position: fixed; right: var(--space-4); bottom: calc(var(--space-4) + 64px); z-index: 40; display: flex; flex-direction: column; width: min(360px, calc(100vw - 32px)); max-height: min(576px, calc(100svh - 96px)); overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-pop); }
-.tutor-pop-head { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-4); border-bottom: 1px solid var(--border); }
-.tutor-pop-title { flex: 1 1 0; min-width: 0; display: grid; gap: var(--space-2); justify-items: start; }
-.tutor-pop-title h2 { margin: 0; gap: var(--space-2); font-size: var(--text-base); }
-.tutor-pop-title h2 .icon { color: var(--accent); }
-.tutor-pop-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-4); }
-.tutor-pop-body p { margin: 0; }
-.tutor-pop-foot { padding: var(--space-4); border-top: 1px solid var(--border); }
-
-/* ───────────── Full Tutor page ───────────── */
-.tutor-page { display: flex; height: calc(100svh - var(--header-h)); min-height: 0; }
-.tutor-page-aside { display: flex; flex-direction: column; gap: var(--space-3); width: 288px; flex: none; min-height: 0; padding: var(--space-3); border-right: 1px solid var(--border); background: var(--surface); }
-.tutor-page-aside.is-collapsed { width: 56px; align-items: center; }
-.tutor-page-main { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; }
-.tutor-page-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-6); border-bottom: 1px solid var(--border); }
-.tutor-page-titles { flex: 1 1 0; width: 0; min-width: 0; }
-.tutor-page-titles p { margin: 0; }
-.tutor-page-titles h1 { margin: 0; overflow: hidden; font-size: var(--text-base); text-overflow: ellipsis; white-space: nowrap; }
-.tutor-page-menu { display: none; }
-.tutor-page-alert { padding: var(--space-4) var(--space-6) 0; }
-.tutor-page-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: var(--space-6) var(--space-6) 0; }
-.tutor-page-col { width: 100%; max-width: 768px; margin: 0 auto; }
-.tutor-page-empty { flex: 1 1 0; display: grid; place-items: center; padding: var(--space-6); }
-.ai-panel.tutor.is-page { min-height: 100%; }
-.ai-panel.tutor.is-page .ai-panel-composer { bottom: 0; margin: 0 calc(-1 * var(--space-6)); padding: var(--space-3) var(--space-6) var(--space-4); }
-.tutor-threads { display: flex; flex-direction: column; gap: var(--space-3); flex: 1 1 0; min-height: 0; }
-.tutor-threads-title { margin: 0; font-size: var(--text-lg); }
-.tutor-threads-new { justify-content: flex-start; }
-.tutor-threads-search { position: relative; display: block; }
-.tutor-threads-search > .icon { position: absolute; top: 50%; left: var(--space-3); transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.tutor-threads-search .input { width: 100%; padding-left: calc(var(--space-3) + 24px); }
-.tutor-threads-nav { flex: 1 1 0; min-height: 0; overflow-y: auto; }
-.tutor-threads-nav > p { margin: 0; padding: var(--space-3) var(--space-2); }
-.tutor-threads-group { margin-bottom: var(--space-3); }
-.tutor-threads-group h3 { margin: 0; padding: 0 var(--space-2) var(--space-1); font-weight: 600; }
-.tutor-threads-group ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.tutor-thread { display: grid; gap: 2px; width: 100%; min-height: 44px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
-.tutor-thread.is-active { background: var(--accent-soft); color: var(--accent-active); }
-.tutor-thread:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-@media (hover: hover) { .tutor-thread:not(.is-active):hover { background: var(--subtle); } }
-.tutor-thread-q, .tutor-thread-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tutor-thread-q { font-size: var(--text-sm); }
-.tutor-thread-l { font-size: var(--text-xs); color: var(--muted); }
-.tutor-thread.is-active .tutor-thread-l { color: inherit; }
-.tutor-picker { display: grid; gap: 2px; max-height: 60svh; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
-.tutor-picker-item { display: grid; gap: 2px; width: 100%; min-height: 44px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--fg); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
-.tutor-picker-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-@media (hover: hover) { .tutor-picker-item:hover { background: var(--subtle); } }
-@media (max-width: 767px) {
-  .tutor-page-aside { display: none; }
-  .tutor-page-menu { display: inline-flex; }
-  .tutor-page-head, .tutor-page-scroll { padding-left: var(--space-4); padding-right: var(--space-4); }
-  .ai-panel.tutor.is-page .ai-panel-composer { margin: 0 calc(-1 * var(--space-4)); padding-left: var(--space-4); padding-right: var(--space-4); }
-}
 /* ───────────── Split lesson page: view(c, l, {part}) ───────────── */
 /* brief (left pane): requirements or tutorial guide + test results, flat on the pane */
 .cp-part-brief { display: grid; gap: var(--space-4); }
@@ -154,12 +85,6 @@ dl.cp-test-detail { display: grid; gap: var(--space-2); margin: 0; }
 .cp-part-work .cp-console-lines { max-height: 220px; }
 .cp-dock { position: sticky; bottom: 0; z-index: 2; margin-top: auto; padding: var(--space-3) 0; background: var(--surface); border-top: 1px solid var(--border); }
 .cp-dock .cp-actions { margin-top: 0; padding-top: 0; border-top: 0; }
-
-/* embedded tutor (lesson page tab): the host scroller holds the thread; the composer is pinned to its bottom */
-.ai-panel.tutor.is-embed { --tutor-pad: var(--space-6); padding: var(--space-5) var(--tutor-pad) 0; min-height: 0; }
-.ai-panel.tutor.is-embed .ai-panel-composer { bottom: 0; margin: auto calc(-1 * var(--tutor-pad)) 0; padding: var(--space-3) var(--tutor-pad) var(--space-4); }
-@media (max-width: 1279px) { .ai-panel.tutor.is-embed { --tutor-pad: var(--space-5); } }
-@media (max-width: 1023px) { .ai-panel.tutor.is-embed { --tutor-pad: var(--space-4); } }
 
 @media (prefers-reduced-motion: reduce) {
   .cp-spin { animation: none; }

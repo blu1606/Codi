@@ -1,46 +1,82 @@
 /**
  * Client for Codi's shared Tutor turn, POST /api/ai/chat (lib/ai-chat-contract.ts). The reply is an AI SDK UI message
  * stream (server-sent events, one JSON chunk per `data:` line, ending with `data: [DONE]`); errors before the stream
- * starts are plain JSON ({ error, retryAfter? }) and are thrown as ApiError.
+ * starts are plain JSON ({ error, retryAfter? }) and are thrown as ApiError (status 429 = rate limited).
  *
- *   const turn = await streamAiChat({ chatId, context, text, onText: (soFar) => … , signal });
- *   turn → { messageId, text, tools: { [toolName]: output[] }, failed, stopped }
+ *   const result = await streamAiChat({ body, signal, onMessage: (assistantMessage) => … });
+ *   result → { message, failed, errorText, aborted }
  *
- * chatId is a UUID the client picks for a new chat and keeps for its follow-ups. context is
- * { kind: 'general', label, href } or { kind: 'lesson', courseId, lessonId }. Guests pass `history` (≤ 12 recent
- * turns as { role: 'user'|'assistant', text }); signed-in chats are stored on the server.
+ * `body` is the request the route validates: { id, context, message, history?, lesson?, trigger?, messageId? }.
+ * onMessage receives a fresh UIMessage snapshot ({ id, role:'assistant', parts, metadata }) after every chunk:
+ * text and reasoning parts ({ type, text, state:'streaming'|'done' }), step markers and tool parts
+ * ({ type:'tool-<name>', toolCallId, state:'input-streaming'|'input-available'|'output-available'|'output-error',
+ * input, output, errorText }) — the same shape GET /api/ai/chats/:id returns for stored messages.
+ * An abort (signal) resolves with aborted: true and the partial message instead of throwing.
  */
 import { ApiError } from './api';
 
-const GUEST_TURNS = 12;
-const newId = (prefix) => `${prefix}-${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
-export const newChatId = () => crypto.randomUUID();
+const OFFLINE = 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
+const UNAVAILABLE = 'Tutor đang tạm nghỉ. Câu hỏi của bạn vẫn còn ở đây.';
 
-/** A stored chat message (UIMessage) as plain text. */
-export const messageText = (m) => ((m && m.parts) || []).map((p) => (p.type === 'text' ? p.text : '')).join('').trim();
-
-/** Tool outputs of a stored or streamed message, by tool name (parts typed `tool-<name>` with state output-available). */
-export function toolOutputs(m) {
-  const out = {};
-  for (const p of (m && m.parts) || []) {
-    if (typeof p.type === 'string' && p.type.startsWith('tool-') && p.state === 'output-available') {
-      const name = p.type.slice(5);
-      (out[name] = out[name] || []).push({ toolCallId: p.toolCallId, output: p.output });
+/** Applies one stream chunk to the assistant message being built; returns the next snapshot (or the same one). */
+function applyChunk(state, chunk) {
+  const replace = (index, patch) => {
+    const parts = state.message.parts.slice();
+    parts[index] = { ...parts[index], ...patch };
+    state.message = { ...state.message, parts };
+  };
+  const push = (part) => { state.message = { ...state.message, parts: [...state.message.parts, part] }; return state.message.parts.length - 1; };
+  const merge = (meta) => { if (meta) state.message = { ...state.message, metadata: { ...state.message.metadata, ...meta } }; };
+  switch (chunk.type) {
+    case 'start':
+      if (chunk.messageId) state.message = { ...state.message, id: chunk.messageId };
+      merge(chunk.messageMetadata);
+      break;
+    case 'start-step': push({ type: 'step-start' }); break;
+    case 'text-start': case 'reasoning-start': {
+      const type = chunk.type === 'text-start' ? 'text' : 'reasoning';
+      state.open[`${type}:${chunk.id}`] = push({ type, text: '', state: 'streaming' });
+      break;
     }
+    case 'text-delta': case 'reasoning-delta': {
+      const type = chunk.type === 'text-delta' ? 'text' : 'reasoning';
+      let index = state.open[`${type}:${chunk.id}`];
+      if (index === undefined) index = state.open[`${type}:${chunk.id}`] = push({ type, text: '', state: 'streaming' });
+      replace(index, { text: state.message.parts[index].text + (chunk.delta || '') });
+      break;
+    }
+    case 'text-end': case 'reasoning-end': {
+      const index = state.open[`${chunk.type === 'text-end' ? 'text' : 'reasoning'}:${chunk.id}`];
+      if (index !== undefined) replace(index, { state: 'done' });
+      break;
+    }
+    case 'tool-input-start':
+      state.tools[chunk.toolCallId] = push({ type: `tool-${chunk.toolName}`, toolCallId: chunk.toolCallId, state: 'input-streaming', input: undefined });
+      break;
+    case 'tool-input-available': {
+      const index = state.tools[chunk.toolCallId];
+      if (index === undefined) state.tools[chunk.toolCallId] = push({ type: `tool-${chunk.toolName}`, toolCallId: chunk.toolCallId, state: 'input-available', input: chunk.input });
+      else replace(index, { state: 'input-available', input: chunk.input });
+      break;
+    }
+    case 'tool-input-error': case 'tool-output-error': {
+      const index = state.tools[chunk.toolCallId];
+      if (index !== undefined) replace(index, { state: 'output-error', errorText: chunk.errorText || null });
+      break;
+    }
+    case 'tool-output-available': {
+      const index = state.tools[chunk.toolCallId];
+      if (index !== undefined) replace(index, { state: 'output-available', output: chunk.output });
+      break;
+    }
+    case 'message-metadata': case 'finish': merge(chunk.messageMetadata); break;
+    case 'error': state.failed = true; state.errorText = chunk.errorText || UNAVAILABLE; break;
+    case 'abort': state.aborted = true; break;
+    default: break; // tool-input-delta, finish-step, data parts: nothing to show
   }
-  return out;
 }
 
-export async function streamAiChat({ chatId, context, text, hint = false, history, lesson, signal, onText }) {
-  const body = {
-    id: chatId,
-    context,
-    message: { id: newId('user'), role: 'user', parts: [{ type: 'text', text }], ...(hint ? { metadata: { hint: true } } : {}) },
-    ...(history && history.length
-      ? { history: history.slice(-GUEST_TURNS).map((t) => ({ id: newId('turn'), role: t.role, parts: [{ type: 'text', text: t.text }] })) }
-      : {}),
-    ...(lesson ? { lesson } : {}),
-  };
+export async function streamAiChat({ body, signal, onMessage }) {
   let res;
   try {
     res = await fetch('/api/ai/chat', {
@@ -49,52 +85,45 @@ export async function streamAiChat({ chatId, context, text, hint = false, histor
       body: JSON.stringify(body),
     });
   } catch (e) {
-    if (e && e.name === 'AbortError') throw e;
-    throw new ApiError('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.', 0, null);
+    if (e && e.name === 'AbortError') return { message: null, failed: false, errorText: null, aborted: true };
+    throw new ApiError(OFFLINE, 0, null);
   }
   const type = res.headers.get('content-type') || '';
   if (!res.ok || type.includes('application/json')) {
     const data = await res.json().catch(() => null);
-    throw new ApiError((data && data.error) || 'Tutor đang tạm nghỉ. Câu hỏi của bạn vẫn còn ở đây.', res.status, data);
+    throw new ApiError((data && data.error) || UNAVAILABLE, res.status || 500, data);
   }
 
-  const turn = { messageId: null, text: '', tools: {}, failed: false, stopped: false, errorText: null };
-  const toolNames = {};
+  const state = { message: { id: `local-${crypto.randomUUID()}`, role: 'assistant', parts: [], metadata: {} }, open: {}, tools: {}, failed: false, errorText: null, aborted: false };
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  const handle = (chunk) => {
-    switch (chunk.type) {
-      case 'start': if (chunk.messageId) turn.messageId = chunk.messageId; break;
-      case 'text-delta': turn.text += chunk.delta || ''; if (onText) onText(turn.text); break;
-      case 'tool-input-start':
-      case 'tool-input-available': toolNames[chunk.toolCallId] = chunk.toolName; break;
-      case 'tool-output-available': {
-        const name = toolNames[chunk.toolCallId];
-        if (name) (turn.tools[name] = turn.tools[name] || []).push({ toolCallId: chunk.toolCallId, output: chunk.output });
-        break;
-      }
-      case 'error': turn.failed = true; turn.errorText = chunk.errorText || null; break;
-      case 'abort': turn.stopped = true; break;
-      default: break;
-    }
-  };
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let cut;
-    while ((cut = buffer.indexOf('\n\n')) >= 0) {
-      const event = buffer.slice(0, cut);
-      buffer = buffer.slice(cut + 2);
-      for (const line of event.split('\n')) {
-        if (!line.startsWith('data:')) continue;
-        const payload = line.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        try { handle(JSON.parse(payload)); } catch { /* a malformed chunk is skipped; the saved chat stays authoritative */ }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf('\n\n')) >= 0) {
+        const event = buffer.slice(0, cut);
+        buffer = buffer.slice(cut + 2);
+        let changed = false;
+        for (const line of event.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          let chunk;
+          try { chunk = JSON.parse(payload); } catch { continue; } // a malformed chunk is skipped; the saved chat stays authoritative
+          const before = state.message;
+          applyChunk(state, chunk);
+          if (state.message !== before) changed = true;
+        }
+        if (changed && onMessage) onMessage(state.message);
       }
     }
+  } catch (e) {
+    if (e && e.name === 'AbortError') state.aborted = true;
+    else { state.failed = true; state.errorText = UNAVAILABLE; }
   }
-  turn.text = turn.text.trim();
-  return turn;
+  return { message: state.message, failed: state.failed, errorText: state.errorText, aborted: state.aborted };
 }

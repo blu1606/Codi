@@ -1,6 +1,6 @@
 // Routes for the coding feature. Each entry: { path, element, role?, title?, layout?: 'focus', exit?: { href, label } }
-// Importing code-api and tutor-api installs the shared namespaces Codi.code and Codi.tutor + Codi.aiFeedbackRow.
-// The static /learn/:courseId/tutor segment outranks the lesson player's /learn/:courseId/:lessonId.
+// Importing code-api and tutor-api installs the shared namespaces Codi.code and Codi.tutor (+ the selection toolbar).
+// The static /learn/:courseId/tutor segment outranks the lesson player's /learn/:courseId/:lessonId; it redirects to /ai.
 import './code-api';
 import './learner-code';
 import './tutor-api';

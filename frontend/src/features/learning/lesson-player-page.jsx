@@ -9,8 +9,8 @@
  *   checklist task (icon + text, done / active / todo), "Hoàn thành bài học" once every task is done, Bài trước / Bài sau.
  * - Left pane: the material (video in a navy frame, PDF, reading) or the coding brief, the prerequisite note,
  *   notices, sources and the completion checklist. Scrolls on its own.
- * - Right pane: tabs Quiz · Bài tập · Code (only those the lesson has) · AI trợ lý · Hỏi đáp (n). The default tab is
- *   the lesson's main task. The AI tutor is Codi.tutor.embed (never a floating overlay) and Codi.code.learner renders
+ * - Right pane: tabs Quiz · Bài tập · Code (only those the lesson has) · Tutor · Hỏi đáp (n). The default tab is
+ *   the lesson's main task. The Tutor is Codi.tutor.embed (never a floating overlay) and Codi.code.learner renders
  *   the editor + console here with its brief on the left. Every panel stays mounted, so drafts, quiz position and the
  *   tutor thread survive tab switches.
  * - A draggable divider (pointer + arrow keys, 35–70 %, saved per layout tier) separates the panes.
@@ -346,7 +346,7 @@ function FinishBlock({ courseId, items, missing, done, next, completing, onCompl
 }
 
 // ───────────────────────── workspace (one lesson) ─────────────────────────
-const TAB_LABEL = { lesson: 'Bài học', quiz: 'Quiz', assignment: 'Bài tập', code: 'Code', ai: 'AI trợ lý', qa: 'Hỏi đáp' };
+const TAB_LABEL = { lesson: 'Bài học', quiz: 'Quiz', assignment: 'Bài tập', code: 'Code', ai: 'Tutor', qa: 'Hỏi đáp' };
 
 function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPath }) {
   const compact = useMedia(COMPACT_QUERY);
@@ -455,8 +455,8 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
     assignment: () => <AssignmentSection key={l.id} courseId={courseId} lessonId={l.id} assessmentId={asItem.assessmentId} bare onChange={reload} />,
     code: () => <div className="ln-code-work">{Codi.code && Codi.code.learner ? Codi.code.learner({ ...codeArgs, part: 'work', onContinue: goChecklist }) : null}</div>,
     ai: () => (Codi.tutor && typeof Codi.tutor.embed === 'function'
-      ? Codi.tutor.embed(courseId, l.id, { onActivate: activateAi, title: l.title, isCode, rows })
-      : <div className="ln-task"><Alert type="info" title="AI trợ lý chưa sẵn sàng" body="Bạn vẫn học tiếp bình thường." /></div>),
+      ? Codi.tutor.embed(courseId, l.id, { onActivate: activateAi, onShowCode: codeItem ? () => selectTab('code') : undefined, title: l.title })
+      : <div className="ln-task"><Alert type="info" title="Tutor chưa sẵn sàng" body="Bạn vẫn học tiếp bình thường." /></div>),
     qa: () => <QaPanel courseId={courseId} lessonId={l.id} lessonTitle={l.title} onCount={setQaCount} />,
   };
 
