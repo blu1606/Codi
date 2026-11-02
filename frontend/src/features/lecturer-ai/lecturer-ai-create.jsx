@@ -265,8 +265,8 @@ function CodeReview() {
         <div className="field"><label htmlFor="cr-dur">Thời lượng (phút)</label><input id="cr-dur" type="number" min="1" value={r.durationMin} onChange={(e) => set('durationMin', e.target.value)} /></div>
       </div>
       <section className="la-block"><strong className="small">Đề bài</strong><ol className="small">{cd.instructions.map((s, i) => <li key={i}>{s.replace(/`/g, '')}</li>)}</ol></section>
-      <details className="panel"><summary className="small strong">Code khởi đầu · {cd.fileName}</summary><pre className="la-code"><code>{cd.starter}</code></pre></details>
-      <details className="panel"><summary className="small strong">Lời giải mẫu</summary><pre className="la-code"><code>{cd.solution}</code></pre></details>
+      <details className="panel"><summary className="small strong">Code khởi đầu · {cd.fileName}</summary><pre className="la-code" tabIndex={0}><code>{cd.starter}</code></pre></details>
+      <details className="panel"><summary className="small strong">Lời giải mẫu</summary><pre className="la-code" tabIndex={0}><code>{cd.solution}</code></pre></details>
       <section className="la-block"><strong className="small">{cd.tests.length} test · {cd.tests.filter((t) => t.hidden).length} test ẩn</strong>
         <div className="table-wrap"><table className="table"><caption className="sr-only">Test do AI soạn</caption>
           <thead><tr><th>Test</th><th>Biểu thức</th><th>Mong đợi</th></tr></thead>

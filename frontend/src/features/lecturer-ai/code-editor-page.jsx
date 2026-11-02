@@ -794,7 +794,7 @@ export function CodePreviewPage({ params }) {
         <li key={i} className="card"><div className="card-body stack-3">
           <span className="row" style={{ gap: 8 }}><strong>Bước {i + 1}: {st.title}</strong>{st.isSolution ? <span className="badge badge-neutral">Lời giải (được che)</span> : null}{(st.tests || []).length ? <span className="badge badge-info">{st.tests.length} test</span> : null}</span>
           {st.body ? <Md text={st.body} /> : null}
-          {st.starter ? <pre className="la-code"><code>{st.starter}</code></pre> : null}
+          {st.starter ? <pre className="la-code" tabIndex={0} aria-label={`Code khởi đầu bước ${i + 1}`}><code>{st.starter}</code></pre> : null}
         </div></li>
       ))}</ol>
     </div>
