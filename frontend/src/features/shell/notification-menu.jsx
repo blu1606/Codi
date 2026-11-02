@@ -1,28 +1,24 @@
 /**
  * Notification bell + popover — port of the real app's components/notification-menu.tsx.
- * Loads on mount, on open, every 30 s and on window focus (simulated fetch against the store). States: loading
- * (skeleton rows), error with "Thử lại", empty, list. "Đánh dấu tất cả đã đọc" only when unread exist; clicking an
- * item marks it read and follows its link when it is a safe relative path. Dev-drawer flag `notifications: error`
- * makes the load and mark-read fail.
+ * Loads on mount, on open, every 30 s and on window focus from GET /api/notifications ({ items ≤ 50, unreadCount }).
+ * States: loading (skeleton rows), error with "Thử lại", empty, list. "Đánh dấu tất cả đã đọc" only when unread
+ * exist (PATCH {all:true}); clicking an item marks it read (PATCH {id}) and follows its link when it is a safe
+ * relative path.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
-import { LoadingRegion, ShellIcon, Skel, scenario } from './shell-ui';
+import { LoadingRegion, ShellIcon, Skel } from './shell-ui';
 
 const POLL_MS = 30000;
 const timeFmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 const isSafeLink = (link) => typeof link === 'string' && link.startsWith('/') && !link.startsWith('//') && !/[\\\u0000- ]/.test(link);
 
-function myNotifications(userId) {
-  return Codi.db().notifications.filter((n) => n.userId === userId).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-}
-
 export default function NotificationMenu({ open, onToggle, onClose }) {
   useCodi();
-  const u = Codi.currentUser();
-  const userId = u ? u.id : null;
-  const [loadedFor, setLoadedFor] = useState(null);
+  const userId = Codi.session.user ? Codi.session.user.id : null;
+  const [data, setData] = useState(null); // { userId, items, unreadCount }
   const [failure, setFailure] = useState(null); // { userId, message }
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -33,10 +29,15 @@ export default function NotificationMenu({ open, onToggle, onClose }) {
     let alive = true;
     const load = async () => {
       const rev = ++revision.current;
-      await Codi.wait(350);
-      if (!alive || rev !== revision.current) return;
-      if (scenario(Codi.state, 'notifications') === 'error') setFailure({ userId, message: 'Không thể tải thông báo. Vui lòng thử lại.' });
-      else { setLoadedFor(userId); setFailure(null); }
+      try {
+        const res = await api.get('/api/notifications');
+        if (!alive || rev !== revision.current) return;
+        setData({ userId, items: res.items || [], unreadCount: res.unreadCount || 0 });
+        setFailure(null);
+      } catch (e) {
+        if (!alive || rev !== revision.current) return;
+        setFailure({ userId, message: e.message || 'Không thể tải thông báo. Vui lòng thử lại.' });
+      }
     };
     load();
     const timer = setInterval(load, POLL_MS);
@@ -45,19 +46,23 @@ export default function NotificationMenu({ open, onToggle, onClose }) {
   }, [userId, refresh]);
 
   if (!userId) return null;
-  const loaded = loadedFor === userId;
+  const loaded = !!data && data.userId === userId;
   const error = failure && failure.userId === userId ? failure.message : null;
-  const items = loaded ? myNotifications(userId) : [];
-  const unread = loaded ? items.filter((n) => !n.read).length : 0;
+  const items = loaded ? data.items.map((n) => ({ ...n, read: !!n.readAt })) : [];
+  const unread = loaded ? data.unreadCount : 0;
 
   const markRead = async (item) => {
     if (busy) return;
     revision.current += 1; // a poll that started before this write must not overwrite it
     setBusy(true); setFailure(null);
-    await Codi.wait(250);
+    try {
+      if (!item || !item.read) await api.patch('/api/notifications', item ? { id: item.id } : { all: true });
+    } catch (e) {
+      setBusy(false);
+      setFailure({ userId, message: e.message || 'Không thể đánh dấu đã đọc. Vui lòng thử lại.' });
+      return;
+    }
     setBusy(false);
-    if (scenario(Codi.state, 'notifications') === 'error') { setFailure({ userId, message: 'Không thể đánh dấu đã đọc. Vui lòng thử lại.' }); return; }
-    Codi.set(() => { (item ? [item] : myNotifications(userId)).forEach((n) => { n.read = true; }); });
     setRefresh((x) => x + 1);
     if (item && isSafeLink(item.link)) { onClose(); Codi.go(item.link); }
   };

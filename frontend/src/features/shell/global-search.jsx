@@ -15,11 +15,12 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { Codi, ROLE_LABEL, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
+import { useApi } from '../../lib/use-api';
 import { Icon, courseStatusLabel, orderStatusLabel } from '../../components/ui/primitives';
 import { ShellIcon } from './shell-ui';
 import { normalize, pagesFor } from './nav-config';
 import { endSession } from './account-store';
-import { TYPE_ICON, TYPE_LABEL, byCourse } from '../lecturer/teach-api';
 
 const PER_GROUP = 6;
 const RECENT_MAX = 5;
@@ -106,93 +107,145 @@ function Highlight({ text, tokens }) {
 }
 
 // ───────────────────────── sources ─────────────────────────
-const userName = (id) => (Codi.user(id) || { name: 'Học viên' }).name;
-const conceptNames = (c) => (c.concepts || []).map((x) => (typeof x === 'string' ? x : x && (x.name || x.label || ''))).join(' ');
 
-function courseItems(role) {
-  const db = Codi.db();
-  const me = Codi.currentUser();
-  const published = db.courses.filter((c) => c.status === 'published');
-  const meta = (c) => [Codi.category(c.categoryId).name, Codi.levelLabel(c.level), userName(c.lecturerId)].filter(Boolean).join(' · ');
-  const base = (c) => ({ id: `course-${c.id}`, icon: 'book-open', type: 'Khoá học', title: c.title, subtitle: meta(c), keywords: `${c.summary || ''} ${conceptNames(c)}` });
+const LEVEL_LABEL = { Beginner: 'Cơ bản', Intermediate: 'Trung cấp', Advanced: 'Nâng cao' };
+
+/**
+ * Backend data for the palette, read each time it opens: published courses (GET /api/courses), the learner's
+ * enrolled courses with lesson UUIDs (GET /api/learner/overview) and orders (GET /api/student/profile/summary), the
+ * lecturer's own courses with their lessons, pending submissions and learner questions (lecturer actions). Admin
+ * groups still read the transitional store.
+ */
+async function loadLecturerData() {
+  const mine = await api.action('dashboard/lecturer', 'getLecturerCourses', 'all');
+  const [editors, grading, open, answered] = await Promise.all([
+    Promise.all(mine.map((c) => api.action('dashboard/lecturer/courses/courseId', 'getCourseEditorData', c.id))),
+    api.action('dashboard/lecturer/grading', 'getGradingQueueData', { status: 'pending' }),
+    api.action('dashboard/lecturer/questions', 'getLecturerQuestionsData', { view: 'questions', status: 'unanswered' }),
+    api.action('dashboard/lecturer/questions', 'getLecturerQuestionsData', { view: 'questions', status: 'answered' }),
+  ]);
+  return {
+    mine,
+    lessons: editors.flatMap((ed) => (ed.chapters || []).flatMap((ch) => (ch.lessons || []).map((l) => ({ ...l, courseId: ed.course.id, courseTitle: ed.course.title, chapterTitle: ch.title })))),
+    submissions: grading.submissions || [],
+    questions: [...(open.questions || []), ...(answered.questions || [])],
+  };
+}
+
+async function loadAdminData() {
+  const [orders, queue] = await Promise.all([
+    api.action('dashboard/admin', 'getAdminOrdersExportAction', { range: 'all' }),
+    api.action('dashboard/admin/publication', 'getAdminPublicationQueue', 'pending'),
+  ]);
+  return { adminOrders: orders || [], pendingReviews: (queue && queue.items) || [] };
+}
+
+const ROLE_LOADERS = { lecturer: loadLecturerData, admin: loadAdminData };
+const EMPTY_ROLE_DATA = { mine: [], lessons: [], submissions: [], questions: [], adminOrders: [], pendingReviews: [] };
+
+function useSearchData(role) {
+  const courses = useApi('/api/courses?limit=100');
+  const overview = useApi(role === 'learner' ? '/api/learner/overview' : null);
+  const summary = useApi(role === 'learner' ? '/api/student/profile/summary' : null);
+  const loader = ROLE_LOADERS[role];
+  const [extra, setExtra] = useState({ data: null, error: null, loading: !!loader });
+  useEffect(() => {
+    if (!loader) return undefined;
+    let alive = true;
+    loader()
+      .then((data) => { if (alive) setExtra({ data, error: null, loading: false }); })
+      .catch((error) => { if (alive) setExtra({ data: null, error, loading: false }); });
+    return () => { alive = false; };
+  }, [loader]);
+  return {
+    published: (courses.data && courses.data.courses) || [],
+    enrolled: (overview.data && overview.data.courses) || [],
+    orders: (summary.data && summary.data.orders) || [],
+    ...EMPTY_ROLE_DATA,
+    ...(extra.data || {}),
+    loading: courses.loading || overview.loading || summary.loading || (!!loader && extra.loading),
+    failed: !!(courses.error || overview.error || summary.error || extra.error),
+  };
+}
+
+function courseItems(role, data) {
+  const meta = (c) => [c.category, LEVEL_LABEL[c.level] || c.level, c.instructorName].filter(Boolean).join(' · ');
+  const base = (c) => ({ id: `course-${c.id}`, icon: 'book-open', type: 'Khoá học', title: c.title, subtitle: meta(c), keywords: `${c.description || ''} ${(c.topics || []).join(' ')}` });
+  const published = data.published;
   if (role === 'learner') {
-    const owned = published.filter((c) => Codi.isEnrolled(c.id));
-    const rest = published.filter((c) => !Codi.isEnrolled(c.id));
+    const owned = new Set(data.enrolled.map((c) => c.id));
     return [
-      ...owned.map((c) => ({ ...base(c), href: `/learn/${c.id}`, badge: 'Đang học', rank: -1 })),
-      ...rest.map((c) => ({ ...base(c), href: `/courses/${c.slug}` })),
+      ...published.filter((c) => owned.has(c.id)).map((c) => ({ ...base(c), href: `/learn/${c.id}`, badge: 'Đang học', rank: -1 })),
+      // enrolled but no longer listed (hidden by an admin) still opens from the learner's own list
+      ...data.enrolled.filter((c) => !published.some((p) => p.id === c.id)).map((c) => ({ id: `course-${c.id}`, icon: 'book-open', type: 'Khoá học', title: c.title, subtitle: '', href: `/learn/${c.id}`, badge: 'Đang học', rank: -1 })),
+      ...published.filter((c) => !owned.has(c.id)).map((c) => ({ ...base(c), href: `/courses/${c.slug}` })),
     ];
   }
-  if (role === 'lecturer' && me) {
-    const mine = db.courses.filter((c) => c.lecturerId === me.id);
+  if (role === 'lecturer') {
+    const mine = new Set(data.mine.map((c) => c.id));
     return [
-      ...mine.map((c) => ({ ...base(c), href: `/teach/courses/${c.id}`, badge: courseStatusLabel(c.status), rank: -1 })),
-      ...published.filter((c) => c.lecturerId !== me.id).map((c) => ({ ...base(c), href: `/courses/${c.slug}` })),
+      ...data.mine.map((c) => ({ ...base(c), href: `/teach/courses/${c.id}`, badge: courseStatusLabel(c.status), rank: -1 })),
+      ...published.filter((c) => !mine.has(c.id)).map((c) => ({ ...base(c), href: `/courses/${c.slug}` })),
     ];
   }
   return published.map((c) => ({ ...base(c), href: `/courses/${c.slug}` }));
 }
 
-function lessonItems(role) {
-  const db = Codi.db();
-  const me = Codi.currentUser();
-  let courses = [];
-  if (role === 'learner') courses = db.courses.filter((c) => Codi.isEnrolled(c.id));
-  else if (role === 'lecturer' && me) courses = db.courses.filter((c) => c.lecturerId === me.id);
-  return courses.flatMap((c) => c.chapters.flatMap((ch) => ch.lessons.map((l) => ({
-    id: `lesson-${c.id}-${l.id}`,
-    icon: TYPE_ICON[l.type] || 'file-text',
-    type: TYPE_LABEL[l.type] || 'Bài học',
-    title: l.title,
-    subtitle: `${c.title} · ${ch.title}`,
-    href: role === 'learner' ? `/learn/${c.id}/${l.id}` : (l.code ? `/teach/courses/${c.id}/code/${l.id}` : `/teach/courses/${c.id}/content`),
-  }))));
+function lessonItems(role, data) {
+  if (role === 'learner') {
+    return data.enrolled.flatMap((c) => (c.lessons || []).map((l) => ({
+      id: `lesson-${c.id}-${l.id}`, icon: 'file-text', type: 'Bài học', title: l.title, subtitle: c.title, href: `/learn/${c.id}/${l.id}`,
+    })));
+  }
+  if (role !== 'lecturer') return [];
+  return data.lessons.map((l) => ({
+    id: `lesson-${l.courseId}-${l.id}`, icon: 'file-text', type: 'Bài học', title: l.title,
+    subtitle: `${l.courseTitle} · ${l.chapterTitle}`, href: `/teach/courses/${l.courseId}/content`,
+  }));
 }
 
-function lecturerItems() {
-  const db = Codi.db();
-  const lessonTitle = (x) => { const c = Codi.course(x.courseId); const l = Codi.lesson(c, x.lessonId); return [l && l.title, c && c.title].filter(Boolean).join(' · '); };
-  const grading = byCourse(db.submissions).filter((s) => s.status === 'pending').map((s) => ({
+function lecturerItems(data) {
+  const lessonTitle = (x) => [x.lessonTitle, x.courseTitle].filter(Boolean).join(' · ');
+  const grading = data.submissions.map((s) => ({
     id: `sub-${s.id}`, icon: 'clipboard-check', type: 'Bài nộp', badge: 'Chờ chấm',
-    title: userName(s.userId), subtitle: lessonTitle(s), keywords: 'cham bai bai nop', href: `/teach/grading/${s.id}`,
+    title: s.studentName, subtitle: lessonTitle(s), keywords: 'cham bai bai nop', href: `/teach/grading/${s.id}`,
   }));
-  const questions = byCourse(db.questions).map((q) => ({
+  const questions = data.questions.map((q) => ({
     id: `qa-${q.id}`, icon: 'message-circle', type: 'Câu hỏi', badge: q.status === 'unanswered' ? 'Chưa trả lời' : 'Đã trả lời',
-    title: q.text, subtitle: `${userName(q.userId)} · ${lessonTitle(q)}`, keywords: 'hoi dap cau hoi',
+    title: q.body, subtitle: `${q.authorName} · ${lessonTitle(q)}`, keywords: 'hoi dap cau hoi',
     href: `/teach/questions?status=${q.status === 'unanswered' ? 'unanswered' : 'answered'}&id=${encodeURIComponent(q.id)}`,
   }));
   return [{ id: 'grading', label: 'Bài cần chấm', items: grading }, { id: 'questions', label: 'Câu hỏi của học viên', items: questions }];
 }
 
 /** The learner's own orders (code, courses) → the profile's transactions tab. */
-function learnerItems() {
-  const uid = Codi.state.currentUserId;
-  const titles = (o) => (o.items || []).map((i) => (Codi.course(i.courseId) || { title: '' }).title).filter(Boolean).join(', ');
-  const orders = Codi.db().orders.filter((o) => o.userId === uid).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).map((o) => ({
+function learnerItems(data) {
+  const orders = data.orders.map((o) => ({
     id: `my-order-${o.id}`, icon: 'receipt', type: 'Đơn hàng', badge: orderStatusLabel(o.status),
-    title: o.code || o.id, subtitle: `${titles(o)} · ${Codi.fmt.vnd(o.total)}`, keywords: 'don hang giao dich bien lai', href: '/profile?tab=transactions',
+    title: o.code, subtitle: `${o.items.map((i) => i.title).join(', ')} · ${Codi.fmt.vnd(o.totalAmount)}`, keywords: 'don hang giao dich bien lai', href: '/profile?tab=transactions',
   }));
   return [{ id: 'my-orders', label: 'Đơn hàng của tôi', items: orders }];
 }
 
-function adminItems() {
+// Users and vouchers still come from the transitional store (no list route in the backend contract yet).
+function adminItems(data) {
   const db = Codi.db();
   const users = db.users.map((u) => ({
     id: `user-${u.id}`, icon: 'user', type: ROLE_LABEL[u.role] || 'Người dùng', badge: u.status === 'inactive' ? 'Vô hiệu hoá' : null,
     title: u.name, subtitle: u.email, href: `/admin/users?q=${encodeURIComponent(u.email)}`,
   }));
-  const orders = db.orders.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).map((o) => ({
+  const orders = data.adminOrders.map((o) => ({
     id: `order-${o.id}`, icon: 'receipt', type: 'Đơn hàng', badge: o.needsReconciliation ? 'Cần đối soát' : orderStatusLabel(o.status),
-    title: o.code || o.id, subtitle: `${userName(o.userId)} · ${Codi.fmt.vnd(o.total)}`, keywords: o.content || '',
+    title: o.code, subtitle: `${o.buyerName} · ${Codi.fmt.vnd(o.totalAmount)}`, keywords: `${o.buyerEmail || ''} ${o.coursesText || ''}`,
     href: `/admin/orders?range=all&id=${encodeURIComponent(o.id)}`,
   }));
   const vouchers = db.vouchers.map((v) => ({
     id: `voucher-${v.id}`, icon: 'ticket', type: 'Voucher', badge: v.active ? 'Đang bật' : 'Đã tắt',
     title: v.code, subtitle: v.type === 'percent' ? `Giảm ${v.value}%` : `Giảm ${Codi.fmt.vnd(v.value)}`, keywords: 'voucher ma giam gia', href: '/admin/vouchers',
   }));
-  const pending = db.courses.filter((c) => c.status === 'pending').map((c) => ({
+  const pending = data.pendingReviews.map((c) => ({
     id: `review-${c.id}`, icon: 'clipboard-check', type: 'Chờ duyệt', badge: 'Chờ duyệt',
-    title: c.title, subtitle: userName(c.lecturerId), keywords: 'duyet xuat ban', href: `/admin/publication?tab=pending&id=${encodeURIComponent(c.id)}`,
+    title: c.title, subtitle: c.instructorName, keywords: 'duyet xuat ban', href: `/admin/publication?tab=pending&id=${encodeURIComponent(c.id)}`,
   }));
   return [
     { id: 'review', label: 'Khoá học chờ duyệt', items: pending },
@@ -217,7 +270,7 @@ function actionItems(role, query) {
 }
 
 /** Grouped results for the query. Each group: { id, label, items }. */
-function buildGroups(role, query) {
+function buildGroups(role, query, data) {
   const tokens = tokensOf(query);
   const full = tokens.join(' ');
   const pages = pagesFor(role).map((p) => ({ ...p, id: `page-${p.href}`, type: 'Trang' }));
@@ -231,11 +284,11 @@ function buildGroups(role, query) {
   }
   const { list: actions, ai } = actionItems(role, query);
   const raw = [
-    { id: 'courses', label: 'Khoá học', items: courseItems(role), more: (q, n) => ({ title: `Xem tất cả ${n} khoá học khớp “${q}”`, href: `/courses?q=${encodeURIComponent(q)}` }) },
-    ...(role === 'learner' ? learnerItems() : []),
-    { id: 'lessons', label: 'Bài học', items: lessonItems(role) },
-    ...(role === 'lecturer' ? lecturerItems() : []),
-    ...(role === 'admin' ? adminItems() : []),
+    { id: 'courses', label: 'Khoá học', items: courseItems(role, data), more: (q, n) => ({ title: `Xem tất cả ${n} khoá học khớp “${q}”`, href: `/courses?q=${encodeURIComponent(q)}` }) },
+    ...(role === 'learner' ? learnerItems(data) : []),
+    { id: 'lessons', label: 'Bài học', items: lessonItems(role, data) },
+    ...(role === 'lecturer' ? lecturerItems(data) : []),
+    ...(role === 'admin' ? adminItems(data) : []),
     { id: 'pages', label: 'Trang', items: pages },
     { id: 'actions', label: 'Hành động', items: actions },
   ];
@@ -290,7 +343,8 @@ function SearchDialog({ onClose }) {
   const uid = useId().replace(/:/g, '');
   const ids = { title: `gs-title-${uid}`, input: `gs-input-${uid}`, list: `gs-list-${uid}`, hint: `gs-hint-${uid}` };
 
-  const groups = buildGroups(role, query); // cheap (a few hundred records); recomputed on every store change
+  const data = useSearchData(role);
+  const groups = buildGroups(role, query, data); // cheap (a few hundred records); recomputed on every store change
   const flat = groups.flatMap((g) => g.items);
   const tokens = tokensOf(query);
   const optionId = (i) => `gs-opt-${uid}-${i}`;
@@ -339,7 +393,7 @@ function SearchDialog({ onClose }) {
   const clearRecent = () => { writeRecent([]); setRecentRev((x) => x + 1); inputRef.current && inputRef.current.focus(); };
 
   let index = -1;
-  const status = !tokens.length ? 'Nhập từ khoá để tìm.' : realHits ? `${realHits} kết quả.` : `Không có kết quả cho “${query.trim()}”.`;
+  const status = !tokens.length ? 'Nhập từ khoá để tìm.' : data.loading ? 'Đang tải khoá học…' : realHits ? `${realHits} kết quả.` : `Không có kết quả cho “${query.trim()}”.`;
 
   return (
     <div className="gs-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -357,7 +411,8 @@ function SearchDialog({ onClose }) {
         </div>
         <div className="gs-body" ref={listRef} tabIndex={0} role="region" aria-label="Kết quả tìm kiếm (cuộn)">
           <p className="sr-only" role="status" aria-live="polite">{status}</p>
-          {tokens.length > 0 && realHits === 0 && (
+          {data.failed && <p className="gs-empty-body" role="alert">Không tải được khoá học và bài học từ máy chủ. Đóng rồi mở lại để thử lại.</p>}
+          {tokens.length > 0 && realHits === 0 && !data.loading && (
             <div className="gs-empty">
               <span className="gs-empty-icon" aria-hidden="true"><Icon name="search" /></span>
               <p className="gs-empty-title">Không tìm thấy “{query.trim()}”</p>

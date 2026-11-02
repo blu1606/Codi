@@ -1,8 +1,8 @@
 /**
  * Avatar picker — port of the real app's components/profile/avatar-picker.tsx and lib/avatar-presets.ts.
  * Upload (PNG/JPEG/WebP/SVG, max 5 MB) opens a crop dialog (zoom 1–3, drag, arrow keys, pan buttons, "Căn giữa"),
- * output 512×512 JPEG. Cloudflare R2 is simulated: the result is a data URL that is saved into user.image when the
- * profile form is saved. Presets are the six Codi avatars, drawn inline (no DiceBear request).
+ * output 512×512 JPEG. Cloudflare R2 is not configured locally, so the result is a data URL that the profile form
+ * saves into the backend user.image (Better Auth update-user). Presets are the six Codi avatars, drawn inline.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';

@@ -3,18 +3,24 @@
  * components/profile/profile-card.tsx, avatar-picker.tsx, student-profile-overview.tsx (incl. ProfileStats).
  *
  * Tabs: Tổng quan (activity heatmap with year switch + courses), Khóa học, Giao dịch, Hồ sơ năng lực (learners
- * only; others fall back to the overview). Stats and activity come from live seed data (see account-store
- * activitiesOf); the simulated fetch shows the loading and error states (dev-drawer flag profileData).
+ * only; others fall back to the overview).
+ *
+ * Backend: GET /api/student/profile (enrolments with progress) and GET /api/student/profile/summary?year=
+ * (activity days derived from real learning records + the user's orders). Name and avatar are saved with Better
+ * Auth POST /api/auth/update-user; the avatar is stored as the cropped image / preset itself because Cloudflare R2
+ * (POST /api/user/avatar) is not configured locally.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, ROLE_LABEL, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
+import { useApi } from '../../lib/use-api';
 import { Icon, OrderStatus, Progress } from '../../components/ui/primitives';
-import { ListRowsSkeleton, LoadingRegion, ShellIcon, Skel, scenario } from './shell-ui';
+import { ListRowsSkeleton, LoadingRegion, ShellIcon, Skel } from './shell-ui';
 import AvatarPicker from './avatar-picker';
 import { EmailVerificationCard } from './settings-page';
 import { GithubProfilePanel } from './github-api';
-import { activitiesOf } from './account-store';
+import { accountUser, authMessage, refreshAccount } from './account-store';
 import { useMounted } from './auth';
 
 const PROFILE_TABS = [
@@ -29,45 +35,32 @@ const resolveTab = (value, isLearner) => {
 };
 const tabHref = (id) => (id === 'overview' ? '/profile' : `/profile?tab=${id}`);
 const joinDate = (iso) => (iso ? new Date(iso).toLocaleDateString('vi-VN') : '');
+const LOAD_ERROR = 'Không thể tải dữ liệu hồ sơ.';
 
-// Simulated GET /api/student/profile: resolves after a short delay, fails with the dev-drawer flag.
-const loadedYears = new Map(); // userId → Set(years already fetched)
-function fetchProfile() {
-  return Codi.wait(450).then(() => { if (scenario(Codi.state, 'profileData') === 'error') throw new Error('Không thể tải dữ liệu hồ sơ.'); });
-}
-function useProfileData(userId) {
-  const [status, setStatus] = useState('loading');
-  const [error, setError] = useState(null);
-  useEffect(() => {
-    let active = true;
-    setStatus('loading'); setError(null);
-    fetchProfile().then(() => { if (active) setStatus('ready'); }, (e) => { if (active) { setError(e.message); setStatus('error'); } });
-    return () => { active = false; };
-  }, [userId]);
-  return { status, error };
-}
-
-function enrolledCourses(userId) {
-  return Codi.db().enrolments.filter((e) => e.userId === userId).map((e) => Codi.course(e.courseId)).filter(Boolean)
-    .map((c) => { const p = Codi.courseProgress(c.id, userId); return { c, progress: p.pct, done: p.pct >= 100 }; });
+/** Enrolments + this year's summary, shared by the stats card and the tab bodies. */
+function useProfileData() {
+  const profile = useApi('/api/student/profile');
+  const summary = useApi('/api/student/profile/summary');
+  const status = profile.error || summary.error ? 'error' : profile.data && summary.data ? 'ready' : 'loading';
+  const courses = ((profile.data && profile.data.enrollments) || []).map(({ enrollment, course }) => ({
+    id: course.id, title: course.title, progress: enrollment.progress || 0, done: (enrollment.progress || 0) >= 100,
+  }));
+  return { status, error: status === 'error' ? LOAD_ERROR : null, courses, summary: summary.data };
 }
 
 // ───────────────────────── stats ─────────────────────────
-function ProfileStats({ userId }) {
-  useCodi();
-  const { status } = useProfileData(userId);
-  const year = new Date().getFullYear();
+function ProfileStats({ data }) {
   const Stat = ({ icon, label, value }) => (
     <div className="stat-tile shell-stat"><span className="shell-stat-icon"><ShellIcon name={icon} /></span>
       <span className="stack-1"><span className="stat-label">{label}</span>{value === undefined ? <Skel w={96} h={18} /> : <span className="strong">{value}</span>}</span></div>
   );
-  if (status === 'loading') {
+  if (data.status === 'loading') {
     return <LoadingRegion label="Đang tải thống kê hồ sơ…" className="grid-2 shell-stats"><Stat icon="trending-up" label="Tiến độ trung bình" /><Stat icon="clock" label="Ngày hoạt động" /></LoadingRegion>;
   }
-  if (status === 'error') return <p className="small text-danger" role="alert">Không thể tải thống kê hồ sơ.</p>;
-  const courses = enrolledCourses(userId);
+  if (data.status === 'error') return <p className="small text-danger" role="alert">Không thể tải thống kê hồ sơ.</p>;
+  const { courses } = data;
   const progress = courses.length ? `${Math.round(courses.reduce((s, x) => s + x.progress, 0) / courses.length)}%` : 'Chưa có dữ liệu';
-  const days = new Set(activitiesOf(userId).filter((a) => a.day.startsWith(String(year))).map((a) => a.day)).size;
+  const days = data.summary.days.length;
   return (
     <div className="grid-2 shell-stats">
       <Stat icon="trending-up" label="Tiến độ trung bình" value={progress} />
@@ -93,10 +86,17 @@ function ProfileCard({ u }) {
     if (!name) { Codi.ui.toast('Họ và tên không được để trống', { type: 'danger' }); return; }
     if (!dirty) return;
     setSaving(true);
-    await Codi.wait(600); // simulated upload to storage
+    try {
+      // Name and image are committed together, like the real avatar route.
+      await api.post('/api/auth/update-user', pendingImage ? { name, image: pendingImage } : { name });
+      await refreshAccount();
+    } catch (err) {
+      if (!mounted.current) return;
+      setSaving(false);
+      Codi.ui.toast(authMessage(err, 'Đã xảy ra lỗi khi lưu hồ sơ. Vui lòng thử lại.'), { type: 'danger' });
+      return;
+    }
     if (!mounted.current) return;
-    const image = pendingImage;
-    Codi.set(() => { const cu = Codi.currentUser(); if (!cu) return; cu.name = name; if (image) cu.image = image; });
     setSaving(false); setPendingImage(null); setEditing(false);
     Codi.ui.toast('Cập nhật thông tin hồ sơ thành công!', { type: 'success' });
   };
@@ -105,7 +105,7 @@ function ProfileCard({ u }) {
     return (
       <div className="card"><div className="card-body stack-4">
         <h2 style={{ fontSize: 'var(--text-lg)', margin: 0 }}>Chỉnh sửa hồ sơ</h2>
-        <div className="stack-2"><span className="field-label">Ảnh đại diện (Cloudflare R2)</span>
+        <div className="stack-2"><span className="field-label">Ảnh đại diện</span>
           <AvatarPicker current={pendingImage || u.image || null} userName={draft} onSelected={setPendingImage} disabled={saving} /></div>
         <form className="stack-4 shell-divided" noValidate onSubmit={save}>
           <div className="field"><label htmlFor="displayName">Họ và tên</label><input id="displayName" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Nhập họ và tên của bạn" disabled={saving} /></div>
@@ -161,29 +161,15 @@ function buildWeeks(counts, year) {
   return weeks;
 }
 
-function ActivityHeatmap({ userId }) {
-  useCodi();
+function ActivityHeatmap({ currentDays }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
-  const [yearStatus, setYearStatus] = useState('ready'); // ready | loading | error
-  const [retry, setRetry] = useState(0);
+  // The current year comes with the page data; earlier years are fetched when picked.
+  const other = useApi(year === currentYear ? null : `/api/student/profile/summary?year=${year}`);
+  const yearStatus = year === currentYear ? 'ready' : other.error ? 'error' : other.data && other.data.year === year ? 'ready' : 'loading';
+  const days = year === currentYear ? currentDays : (yearStatus === 'ready' ? other.data.days : []);
 
-  useEffect(() => {
-    const seen = loadedYears.get(userId) || new Set([currentYear]);
-    loadedYears.set(userId, seen);
-    if (seen.has(year)) { setYearStatus('ready'); return undefined; }
-    let active = true;
-    setYearStatus('loading');
-    fetchProfile().then(() => { if (active) { seen.add(year); setYearStatus('ready'); } }, () => { if (active) setYearStatus('error'); });
-    return () => { active = false; };
-  }, [userId, year, retry, currentYear]);
-
-  const activities = activitiesOf(userId);
-  const counts = useMemo(() => {
-    const m = new Map();
-    activities.forEach((a) => { if (a.day.startsWith(String(year))) m.set(a.day, (m.get(a.day) || 0) + 1); });
-    return m;
-  }, [activities, year]);
+  const counts = useMemo(() => new Map(days.map((d) => [d.day, d.count])), [days]);
   const weeks = useMemo(() => buildWeeks(counts, year), [counts, year]);
   const months = useMemo(() => {
     const labels = new Map(); let last = -1;
@@ -196,7 +182,7 @@ function ActivityHeatmap({ userId }) {
     <div className="card"><div className="card-body stack-4">
       <h2 className="small strong" style={{ margin: 0 }} aria-live="polite">
         {yearStatus === 'loading' ? <span className="muted" style={{ fontWeight: 400 }}>Đang tải hoạt động {year}…</span>
-          : yearStatus === 'error' ? <span className="row" style={{ gap: 8 }}><span className="text-danger" style={{ fontWeight: 400 }}>Không thể tải dữ liệu heatmap.</span><button type="button" className="btn-link small" onClick={() => setRetry((x) => x + 1)}>Thử lại</button></span>
+          : yearStatus === 'error' ? <span className="row" style={{ gap: 8 }}><span className="text-danger" style={{ fontWeight: 400 }}>Không thể tải dữ liệu heatmap.</span><button type="button" className="btn-link small" onClick={() => other.reload()}>Thử lại</button></span>
             : <span>{activeDays} ngày hoạt động trong {year}</span>}
       </h2>
       <div className="shell-heat-layout">
@@ -226,18 +212,17 @@ function ActivityHeatmap({ userId }) {
 }
 
 // ───────────────────────── tab bodies ─────────────────────────
-function CoursesCard({ userId }) {
-  const courses = enrolledCourses(userId);
+function CoursesCard({ courses }) {
   return (
     <div className="card"><div className="card-body stack-4">
       <h2 className="row" style={{ gap: 8, fontSize: 'var(--text-lg)', margin: 0 }}><Icon name="book-open" className="icon-sm" /> Khóa học của tôi</h2>
       {!courses.length ? <p className="small muted">Bạn chưa đăng ký khóa học nào.</p> : (
         <div className="grid-2">
-          {courses.map(({ c, progress, done }) => (
+          {courses.map((c) => (
             <div key={c.id} className="shell-course stack-3">
-              <div className="row-between" style={{ alignItems: 'flex-start' }}><h3 className="small strong" style={{ margin: 0 }}>{c.title}</h3><span className="xsmall muted od-nowrap">{done ? 'Đã hoàn thành' : 'Đang học'}</span></div>
-              <Progress pct={progress} label={`Tiến độ ${c.title}`} />
-              <div className="row-between xsmall muted"><span>{progress}% hoàn thành</span><Link className="small" to={`/learn/${c.id}`}>{done ? 'Xem lại' : 'Tiếp tục học'}</Link></div>
+              <div className="row-between" style={{ alignItems: 'flex-start' }}><h3 className="small strong" style={{ margin: 0 }}>{c.title}</h3><span className="xsmall muted od-nowrap">{c.done ? 'Đã hoàn thành' : 'Đang học'}</span></div>
+              <Progress pct={c.progress} label={`Tiến độ ${c.title}`} />
+              <div className="row-between xsmall muted"><span>{c.progress}% hoàn thành</span><Link className="small" to={`/learn/${c.id}`}>{c.done ? 'Xem lại' : 'Tiếp tục học'}</Link></div>
             </div>
           ))}
         </div>
@@ -246,15 +231,14 @@ function CoursesCard({ userId }) {
   );
 }
 
-function TransactionsCard({ userId }) {
-  const orders = Codi.db().orders.filter((o) => o.userId === userId).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+function TransactionsCard({ orders }) {
   return (
     <div className="card"><div className="card-body stack-4">
       <h2 className="row" style={{ gap: 8, fontSize: 'var(--text-lg)', margin: 0 }}><Icon name="wallet" className="icon-sm" /> Lịch sử giao dịch</h2>
       {!orders.length ? <p className="small muted">Chưa có giao dịch nào.</p> : (
         <div className="table-wrap"><table className="table"><thead><tr><th>Mã giao dịch</th><th>Khoá học</th><th>Ngày tạo</th><th className="num">Số tiền</th><th>Trạng thái</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>
           {orders.map((o) => (
-            <tr key={o.id}><td className="mono">{o.code}</td><td>{o.items.map((i) => (Codi.course(i.courseId) || {}).title || i.courseId).join(', ')}</td><td className="od-nowrap">{Codi.fmt.date(o.createdAt)}</td><td className="num">{Codi.fmt.vnd(o.total)}</td><td><OrderStatus status={o.status} /></td>
+            <tr key={o.id}><td className="mono">{o.code}</td><td>{o.items.map((i) => i.title).join(', ')}</td><td className="od-nowrap">{Codi.fmt.date(o.createdAt)}</td><td className="num">{Codi.fmt.vnd(o.totalAmount)}</td><td><OrderStatus status={o.status} /></td>
               <td>{o.status === 'pending' && <Link className="btn btn-primary btn-sm" to={`/checkout?order=${o.id}`}>Tiếp tục thanh toán</Link>}</td></tr>
           ))}
         </tbody></table></div>
@@ -263,35 +247,30 @@ function TransactionsCard({ userId }) {
   );
 }
 
-function OverviewBody({ userId, tab }) {
-  const { status, error } = useProfileData(userId);
-  if (status === 'loading') {
+function OverviewBody({ data, tab }) {
+  if (data.status === 'loading') {
     return <LoadingRegion label="Đang tải dữ liệu hồ sơ…" className="stack-4"><Skel h={160} style={{ borderRadius: 'var(--radius-md)' }} /><ListRowsSkeleton rows={3} withAvatar={false} /></LoadingRegion>;
   }
-  if (status === 'error') return <p className="small text-danger" role="alert">{error}</p>;
+  if (data.status === 'error') return <p className="small text-danger" role="alert">{data.error}</p>;
   return (
     <div className="stack-4">
-      {tab === 'overview' && <ActivityHeatmap userId={userId} />}
-      {(tab === 'overview' || tab === 'courses') && <CoursesCard userId={userId} />}
-      {tab === 'transactions' && <TransactionsCard userId={userId} />}
+      {tab === 'overview' && <ActivityHeatmap currentDays={data.summary.days} />}
+      {(tab === 'overview' || tab === 'courses') && <CoursesCard courses={data.courses} />}
+      {tab === 'transactions' && <TransactionsCard orders={data.summary.orders} />}
     </div>
   );
 }
 
 function CapabilityBody({ query }) {
-  const failed = scenario(Codi.state, 'profileData') === 'error';
   return (
     <div className="stack-4" style={{ minWidth: 0 }}>
-      {failed && <p className="small text-danger" role="alert">Chưa tải được hồ sơ đã lưu. Không có lượt phân tích mới nào được bắt đầu.</p>}
       <GithubProfilePanel linkError={query.error || null} />
     </div>
   );
 }
 
-export function ProfilePage({ query }) {
-  useCodi();
-  const u = Codi.currentUser();
-  if (!u) return null; // the role guard in App renders the sign-in page first
+function ProfileView({ u, query }) {
+  const data = useProfileData();
   const isLearner = u.role === 'learner';
   const tab = resolveTab(query.tab, isLearner);
   const tabs = PROFILE_TABS.filter((t) => !t.learnerOnly || isLearner);
@@ -303,7 +282,7 @@ export function ProfilePage({ query }) {
       </div>
       <div className="shell-profile-title">
         <h1>Hồ sơ cá nhân & Bảo mật</h1>
-        <p className="small muted">Quản lý thông tin tài khoản, ảnh đại diện lưu trữ trên Cloudflare R2 và mật khẩu đăng nhập.</p>
+        <p className="small muted">Quản lý thông tin tài khoản, ảnh đại diện và mật khẩu đăng nhập.</p>
       </div>
       {u.emailVerified === false && <EmailVerificationCard u={u} />}
       <nav className="tabs shell-profile-tabs" aria-label="Điều hướng hồ sơ">
@@ -311,12 +290,18 @@ export function ProfilePage({ query }) {
       </nav>
       <div className="shell-profile-grid">
         <div className="stack-4" style={{ minWidth: 0 }}>
-          <ProfileCard key={u.id} u={u} />
-          <ProfileStats userId={u.id} />
+          <ProfileCard u={u} />
+          <ProfileStats data={data} />
         </div>
-        {tab === 'nang-luc' ? <CapabilityBody query={query} /> : <OverviewBody key={u.id} userId={u.id} tab={tab} />}
+        {tab === 'nang-luc' ? <CapabilityBody query={query} /> : <OverviewBody data={data} tab={tab} />}
       </div>
     </div>
   );
 }
 
+export function ProfilePage({ query }) {
+  useCodi();
+  const u = accountUser();
+  if (!u) return null; // the role guard in App renders the sign-in page first
+  return <ProfileView key={u.id} u={u} query={query} />;
+}
