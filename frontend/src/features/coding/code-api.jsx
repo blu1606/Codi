@@ -881,3 +881,6 @@ function blank(kind) {
 Object.assign(Codi, {
   code: { TYPES, LANG, available, highlight, codeBlock, view, status, score, lastErrorText, runError, failingTest, task, runTests, editor, run, grade, stableJSON, explain, blank, onInput, consoleView, testRow, rememberFocus, restoreFocus },
 });
+
+// Pieces the backend-driven learner workspace (learner-code.jsx) reuses.
+export { editor, codeBlock, consoleView, logLines, FailureAlert, rememberFocus, restoreFocus, onInput, runErrorText, LANG };

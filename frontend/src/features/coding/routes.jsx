@@ -2,6 +2,7 @@
 // Importing code-api and tutor-api installs the shared namespaces Codi.code and Codi.tutor + Codi.aiFeedbackRow.
 // The static /learn/:courseId/tutor segment outranks the lesson player's /learn/:courseId/:lessonId.
 import './code-api';
+import './learner-code';
 import './tutor-api';
 import TutorPage from './tutor-page';
 

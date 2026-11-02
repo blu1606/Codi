@@ -3,16 +3,17 @@
  * the left, the selected lesson's thread on the right. Threads are per lesson, so "Đoạn chat mới" picks a lesson.
  * The page has no code editor, so answers are about the lesson only ("Mở đúng chỗ" opens the lesson itself).
  * Query: ?lesson=<lessonId> selects a thread; without it the newest thread opens.
+ * Data: GET /api/learn/:courseId/tutor/threads (history) and GET /api/learn/:courseId/path (lessons to pick from).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
+import { Codi } from '../../lib/codi';
 import { Icon, Alert, Empty } from '../../components/ui/primitives';
 import { Sheet } from '../../components/ui/overlay-host';
 import { TutorPanel, tutorInternals, useTutorVersion } from './tutor-api';
 
-const { session, load, threadsFor, pageHref } = tutorInternals;
-const HISTORY_LOAD_MS = 300;
+const { session, load, pageHref, stopAction } = tutorInternals;
 const TITLE_MAX = 80;
 const TIME_ZONE = 'Asia/Bangkok';
 const DAY_MS = 86400000;
@@ -81,61 +82,73 @@ function ThreadList({ threads, activeId, onPick, onNew, onCollapse }) {
   );
 }
 
-function LessonPicker({ course, handle, onPick }) {
+function LessonPicker({ lessons, handle, onPick }) {
   return (
     <div className="stack-3">
       <p className="small muted">Mỗi bài có một đoạn chat riêng, giữ nguyên khi bạn quay lại.</p>
-      <ul className="tutor-picker">
-        {course.chapters.flatMap((ch) => ch.lessons.map((l) => (
-          <li key={l.id}>
-            <button type="button" className="tutor-picker-item" onClick={() => { handle.close(); onPick(l.id); }}>
-              <span>{l.title}</span>
-              <span className="xsmall muted">{ch.title}</span>
-            </button>
-          </li>
-        )))}
-      </ul>
+      {lessons.length ? (
+        <ul className="tutor-picker">
+          {lessons.map((l) => (
+            <li key={l.id}>
+              <button type="button" className="tutor-picker-item" onClick={() => { handle.close(); onPick(l.id); }}>
+                <span>{l.title}</span>
+                <span className="xsmall muted">{l.chapterTitle}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="small muted">Chưa tải được danh sách bài học. Vui lòng thử lại.</p>}
     </div>
   );
 }
 
 export default function TutorPage({ params, query }) {
-  useCodi(); useTutorVersion();
+  useTutorVersion();
   const navigate = useNavigate();
-  const c = Codi.course(params.courseId);
-  const [loading, setLoading] = useState(true);
+  const courseId = params.courseId;
+  const [threads, setThreads] = useState(null);
+  const [lessons, setLessons] = useState([]);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const sessions = useRef({});
 
-  // History load (real GET /tutor/threads). Scenario aiAssistant 'loadfail' shows the retry state.
+  // History (GET /tutor/threads) and the course's lessons in path order (GET /path).
   useEffect(() => {
-    setLoading(true); setLoadError(null);
-    const t = setTimeout(() => {
-      if (Codi.state.scenario.aiAssistant === 'loadfail') setLoadError('Không tải được lịch sử Tutor.');
-      setLoading(false);
-    }, HISTORY_LOAD_MS);
-    return () => clearTimeout(t);
-  }, [c && c.id, attempt]);
+    let live = true;
+    setThreads(null); setLoadError(null);
+    const base = `/api/learn/${encodeURIComponent(courseId)}`;
+    Promise.all([api.get(`${base}/tutor/threads`), api.get(`${base}/path`).catch(() => null)])
+      .then(([t, path]) => {
+        if (!live) return;
+        setThreads(t.threads || []);
+        setLessons(path && Array.isArray(path.rows) ? path.rows.map((r) => ({ id: r.lessonId, title: r.title, chapterTitle: r.chapterTitle })) : []);
+      })
+      .catch((e) => { if (live) setLoadError(e); });
+    return () => { live = false; };
+  }, [courseId, attempt]);
   // Leaving the page stops any answer still streaming.
-  useEffect(() => () => { Object.values(sessions.current).forEach((p) => { p.current = null; p.busy = false; }); }, []);
+  useEffect(() => () => { Object.values(sessions.current).forEach((s) => stopAction(s)); }, []);
 
-  const threads = c && !loading && !loadError ? threadsFor(c.id) : null;
-  const chosen = c && query.lesson && Codi.lesson(c, query.lesson) ? query.lesson : null;
+  const loading = threads === null && !loadError;
+  const titleOf = (id) => {
+    const l = lessons.find((x) => x.id === id); if (l) return l.title;
+    const t = (threads || []).find((x) => x.lessonId === id); return t ? t.lessonTitle : null;
+  };
+  const chosen = query.lesson && titleOf(query.lesson) ? query.lesson : null;
   const activeId = chosen || (threads && threads[0] ? threads[0].lessonId : null);
-  const active = activeId ? Codi.lesson(c, activeId) : null;
-  const p = activeId ? (sessions.current[activeId] || (sessions.current[activeId] = session(c.id, activeId, 'page'))) : null;
+  const activeTitle = activeId ? titleOf(activeId) : null;
+  const p = activeId ? (sessions.current[activeId] || (sessions.current[activeId] = session(courseId, activeId, 'page'))) : null;
   useEffect(() => { if (p && !p.loaded && !p.loadError && !p.loadStarted) { p.loadStarted = true; load(p); } }, [p]);
 
-  if (!c) return <div className="page page-narrow"><Alert type="warn" title="Không tìm thấy khoá học" body="Khoá học này không tồn tại hoặc đã bị gỡ." /></div>;
-  if (!Codi.isEnrolled(c.id)) return <div className="page page-narrow"><Alert type="danger" body="Bạn không có quyền học viên đang hoạt động." /></div>;
+  if (loadError && (loadError.status === 403 || loadError.status === 401)) return <div className="page page-narrow"><Alert type="danger" body={loadError.message || 'Bạn không có quyền học viên đang hoạt động.'} /></div>;
+  if (loadError && loadError.status === 404) return <div className="page page-narrow"><Alert type="warn" title="Không tìm thấy khoá học" body="Khoá học này không tồn tại hoặc đã bị gỡ." /></div>;
 
-  const pick = (lessonId) => { setListOpen(false); navigate(pageHref(c.id, lessonId), { replace: true }); };
+  const pick = (lessonId) => { setListOpen(false); navigate(pageHref(courseId, lessonId), { replace: true }); };
   const openPicker = () => {
     setListOpen(false);
-    Codi.ui.modal({ title: 'Chọn bài để hỏi Tutor', body: (handle) => <LessonPicker course={c} handle={handle} onPick={pick} /> });
+    Codi.ui.modal({ title: 'Chọn bài để hỏi Tutor', body: (handle) => <LessonPicker lessons={lessons} handle={handle} onPick={pick} /> });
   };
   const list = (onCollapse) => <ThreadList threads={threads} activeId={activeId} onPick={pick} onNew={openPicker} onCollapse={onCollapse} />;
 
@@ -154,19 +167,19 @@ export default function TutorPage({ params, query }) {
           <button type="button" className="btn btn-ghost btn-icon btn-sm tutor-page-menu" aria-label="Danh sách đoạn chat" onClick={() => setListOpen(true)}><Icon name="menu" className="icon-sm" /></button>
           <div className="tutor-page-titles">
             <p className="xsmall muted">Tutor</p>
-            <h1>{active ? active.title : 'Chọn một bài để bắt đầu'}</h1>
+            <h1>{activeId ? (activeTitle || (p && p.view ? p.view.lessonTitle : '')) : 'Chọn một bài để bắt đầu'}</h1>
           </div>
-          {active ? <Link className="btn btn-secondary btn-sm" to={`/learn/${encodeURIComponent(c.id)}/${encodeURIComponent(active.id)}`}>Mở đúng chỗ</Link> : null}
+          {activeId ? <Link className="btn btn-secondary btn-sm" to={`/learn/${encodeURIComponent(courseId)}/${encodeURIComponent(activeId)}`}>Mở đúng chỗ</Link> : null}
         </header>
         {loadError ? (
           <div className="tutor-page-alert">
-            <Alert type="danger" title="Chưa tải được lịch sử Tutor" body={loadError}
+            <Alert type="danger" title="Chưa tải được lịch sử Tutor" body={loadError.message || 'Không tải được lịch sử Tutor.'}
               actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => setAttempt((n) => n + 1)}><Icon name="rotate-ccw" className="icon-sm" /> Thử lại</button>} />
           </div>
         ) : null}
         {p ? (
           <div className="tutor-page-scroll">
-            <div className="tutor-page-col"><TutorPanel key={activeId} p={p} placeholder="Hỏi tiếp Tutor" onPickLesson={openPicker} /></div>
+            <div className="tutor-page-col"><TutorPanel key={activeId} p={p} title={activeTitle} placeholder="Hỏi tiếp Tutor" onPickLesson={openPicker} /></div>
           </div>
         ) : (
           <div className="tutor-page-empty">
