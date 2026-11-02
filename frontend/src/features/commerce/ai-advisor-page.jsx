@@ -1,37 +1,59 @@
 /**
- * S17 AI course advisor '/ai' (Flow L13) — ported from docs/mockup/js/ai-advisor.js.
+ * S17 AI course advisor '/ai' (Flow L13) — ported from docs/mockup/js/ai-advisor.js, answers from the backend.
  * Two layouts on one route. Empty: heading → large composer → "Codi đang hiểu về bạn" → 4 suggestion cards →
  * guest sign-in line. Conversation: compact header, intake chip row, the thread, composer pinned to the bottom.
  * Guided intake asks only what is missing (every question skippable); structured answers carry course cards,
- * a comparison table or a suggested order; per-message 👍/👎 feedback. scenario.aiAssistant drives the async
- * states: ok | thinking (stays until "Dừng") | ratelimit | error.
+ * a comparison table or a suggested order; per-message 👍/👎 feedback.
  *
- * Intake answers are stored in Codi.ensure('advisorIntake') for reuse by onboarding (Flow L4).
+ * Data: GET /api/ai (catalog, current course, saved intake), POST /api/ai (answer; the backend also saves the
+ * intake as the learner's goal draft), POST /api/ai/feedback (votes). The thread lives in this tab
+ * (sessionStorage), like the real app. scenario.aiAssistant forces the async states without calling the model:
+ * thinking (stays until "Dừng") | ratelimit | error; ok asks the backend (a real 429 / failure shows the same states).
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
+import { useApi } from '../../lib/use-api';
 import { Alert, Icon, Md, Thumb, stream } from '../../components/ui/primitives';
+import { addToCart, enrollFree, levelLabel, useOwnership } from './commerce-api';
 
 const fmt = Codi.fmt;
 
 // ───────────────────────── state & helpers ─────────────────────────
-const uid = () => Codi.state.currentUserId;
-const store = () => Codi.ensure('advisorIntake', () => ({ goal: null, level: null, hoursPerWeek: null, chat: { messages: [], busy: false } }));
-const save = (render) => Codi.set(() => {}, { render: render !== false });
+// Intake + thread for this tab, per signed-in user (or guest). Changes re-render through useAdvisor().
+const blank = () => ({ goal: null, level: null, hoursPerWeek: null, skipped: [], chat: { messages: [], busy: false, pending: null } });
+const storageKey = () => 'codi-advisor:' + (Codi.session.user ? Codi.session.user.id : 'guest');
+let state = null;
+let stateKey = null;
+let version = 0;
+const subs = new Set();
+function store() {
+  const key = storageKey();
+  if (!state || stateKey !== key) {
+    stateKey = key;
+    try { state = { ...blank(), ...(JSON.parse(sessionStorage.getItem(key) || 'null') || {}) }; } catch { state = blank(); }
+  }
+  return state;
+}
+function save() {
+  try { sessionStorage.setItem(stateKey, JSON.stringify(state)); } catch { /* storage blocked: thread lasts for this page */ }
+  version += 1;
+  subs.forEach((f) => f());
+}
+const useAdvisor = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => version);
+
+// GET /api/ai context, shared with the action handlers below.
+let ctx = { user: null, currentCourse: null, catalog: [], savedIntake: null };
 
 // Simulated streaming: the answer text is revealed word by word; only the final text is persisted.
 let live = null; // { id, text }
 const liveSubs = new Set();
 const setLive = (v) => { live = v; liveSubs.forEach((f) => f()); };
 const useLive = () => useSyncExternalStore((f) => { liveSubs.add(f); return () => liveSubs.delete(f); }, () => live);
+let inflight = null; // AbortController of the running POST /api/ai
 
-function ownedCourses() {
-  if (!uid()) return [];
-  return Codi.db().enrolments.filter((e) => e.userId === uid()).map((e) => Codi.course(e.courseId)).filter(Boolean);
-}
-
-// ───────────────────────── asking (simulated) ─────────────────────────
+// ───────────────────────── asking ─────────────────────────
 // The question that triggered the intake is kept in chat.pending and answered as soon as the last intake chip
 // is picked or skipped.
 const INTAKE = [
@@ -46,43 +68,22 @@ const EDIT_INTAKE = [
 ];
 const intakeValue = (intake, key) => (key === 'goal' ? intake.goal : key === 'level' ? intake.level : intake.hoursPerWeek);
 const missingIntake = (intake) => INTAKE.filter((q) => !intakeValue(intake, q.key) && !(intake.skipped || []).includes(q.key));
-const catalog = () => Codi.db().courses.filter((c) => c.status === 'published');
 
-// Builds a structured answer from the real catalog: cards, comparison table or suggested order.
-function respond(prompt) {
-  const intake = store();
-  const owned = new Set(ownedCourses().map((c) => c.id));
-  const beginner = !intake.level || intake.level === 'Mới bắt đầu' || /mới bắt đầu|người mới/i.test(prompt);
-  const rank = { Beginner: 0, Intermediate: 1, Advanced: 2 };
-  const list = catalog().slice().sort((a, b) => (owned.has(a.id) - owned.has(b.id)) || ((rank[a.level] || 0) - (rank[b.level] || 0)) * (beginner ? 1 : -1) || (b.rating || 0) - (a.rating || 0));
-  const pick = list.slice(0, 3);
-  if (!pick.length) return { text: 'Codi chưa có khoá cho mục tiêu này.', followups: [] };
-  const why = (c) => `${Codi.levelLabel(c.level)} · ${c.rating ? c.rating + '★ · ' : ''}${(c.learnersCount || 0).toLocaleString('vi-VN')} học viên`;
-  if (/so sánh/i.test(prompt)) {
-    const cs = pick.slice(0, 3);
-    return {
-      text: 'Đây là bảng so sánh các khoá phù hợp nhất với bạn. Cột cuối là gợi ý của Codi.',
-      table: { headers: ['Khoá học', 'Trình độ', 'Số bài', 'Học phí', 'Phù hợp khi'], rows: cs.map((c) => [c.title, Codi.levelLabel(c.level), String(Codi.lessons(c).length), c.price ? fmt.vnd(c.price) : 'Miễn phí', (rank[c.level] || 0) === 0 ? 'Bạn mới bắt đầu' : 'Bạn đã nắm nền tảng']) },
-      courses: cs.map((c) => c.id), courseReasons: Object.fromEntries(cs.map((c) => [c.id, why(c)])),
-      followups: ['Nên học theo thứ tự nào?', 'Khoá nào hợp với 5 giờ/tuần?'],
-    };
-  }
-  if (/thứ tự|lộ trình|tiếp theo|nên học gì tiếp/i.test(prompt)) {
-    const order = list.filter((c) => !owned.has(c.id)).sort((a, b) => (rank[a.level] || 0) - (rank[b.level] || 0)).slice(0, 3);
-    return {
-      text: `Lộ trình gợi ý${intake.hoursPerWeek ? ` với ${intake.hoursPerWeek}/tuần` : ''}: học lần lượt, khoá sau dựa trên kiến thức khoá trước.`,
-      order: order.map((c) => c.id), orderReasons: Object.fromEntries(order.map((c, i) => [c.id, i === 0 ? ' — nền tảng, học trước' : ' — dựa trên khoá trước'])),
-      followups: ['So sánh các khoá này', 'Mình bị chậm tiến độ, nên làm gì?'],
-    };
-  }
-  if (/chậm tiến độ/i.test(prompt)) {
-    return { text: 'Một vài cách lấy lại nhịp:\n- Đặt mục tiêu tuần nhỏ hơn ở **Bàn làm việc**\n- Học 15 phút mỗi ngày thay vì dồn cuối tuần\n- Dùng **Tìm điểm bắt đầu của tôi** để bỏ qua phần đã biết', followups: ['Nên học gì tiếp?'] };
-  }
-  return {
-    text: `Dựa trên ${[intake.goal, intake.level, intake.hoursPerWeek].filter(Boolean).join(', ') || 'câu hỏi của bạn'}, đây là các khoá phù hợp:`,
-    courses: pick.map((c) => c.id), courseReasons: Object.fromEntries(pick.map((c) => [c.id, why(c)])),
-    followups: ['So sánh các khoá này', 'Nên học theo thứ tự nào?'],
-  };
+/** Recent turns for follow-ups (POST /api/ai history, ≤ 20), without the question being asked now. */
+function historyFor(messages, question) {
+  const turns = messages.filter((m) => (m.role === 'user' || (m.role === 'ai' && !m.streaming)) && m.text);
+  if (turns.length && turns[turns.length - 1].role === 'user' && turns[turns.length - 1].text === question) turns.pop();
+  return turns.slice(-20).map((m) => ({
+    role: m.role, text: String(m.text).slice(0, 4000),
+    ...(m.role === 'ai' && m.courses && m.courses.length ? { courseIds: m.courses.map((c) => c.id).slice(0, 12) } : {}),
+  }));
+}
+
+function finishWith(m, patch) {
+  Object.assign(m, patch, { streaming: false });
+  store().chat.busy = false;
+  inflight = null;
+  save();
 }
 
 function askAI(prompt) {
@@ -101,23 +102,37 @@ function askAI(prompt) {
   if (!q) { save(); return; }
   const flag = Codi.state.scenario.aiAssistant;
   if (flag === 'ratelimit') { messages.push({ role: 'ratelimit', question: q }); save(); return; }
+  const history = historyFor(messages, q);
   intake.chat.busy = true;
   const m = { role: 'ai', text: '', streaming: true, id: `msg-${Date.now()}` };
   messages.push(m);
   save();
   if (flag === 'thinking') return; // stays in the thinking state; "Dừng" ends it
-  setTimeout(() => {
+  if (flag === 'error') {
+    setTimeout(() => { if (m.streaming) finishWith(m, { role: 'error', question: q }); }, 1200);
+    return;
+  }
+  const ctrl = new AbortController();
+  inflight = ctrl;
+  const body = { prompt: q, intake: { goal: intake.goal, level: intake.level, hoursPerWeek: intake.hoursPerWeek, skipped: intake.skipped || [] }, history };
+  api.post('/api/ai', body, { signal: ctrl.signal }).then((r) => {
     if (!m.streaming) return; // stopped meanwhile
-    if (flag === 'error') { m.role = 'error'; m.question = q; m.streaming = false; intake.chat.busy = false; save(); return; }
-    Object.assign(m, respond(q), { streaming: false, vote: null });
+    Object.assign(m, {
+      text: r.text, courses: r.courses || [], table: r.table || null, order: r.order || [], followups: r.followups || [],
+      noMatch: !!r.noMatch, logId: r.logId || null, feedbackToken: r.feedbackToken || null, streaming: false, vote: null,
+    });
+    inflight = null;
     setLive({ id: m.id, text: '' });
     save(); // persists the full answer; the thread reveals it progressively
     stream(m.text, (t) => setLive({ id: m.id, text: t })).then(() => {
       setLive(null);
-      intake.chat.busy = false;
+      store().chat.busy = false;
       save();
     });
-  }, 1200);
+  }).catch((e) => {
+    if (ctrl.signal.aborted || (e && e.name === 'AbortError') || !m.streaming) return;
+    finishWith(m, { role: e.status === 429 ? 'ratelimit' : 'error', question: q });
+  });
 }
 
 // After an intake chip: answer the waiting question once nothing is missing.
@@ -146,6 +161,7 @@ function skipIntake(q) {
 }
 function stopAnswer() {
   const intake = store();
+  if (inflight) { inflight.abort(); inflight = null; }
   const m = intake.chat.messages.find((x) => x.streaming);
   if (m) { m.streaming = false; m.text = 'Bạn đã dừng câu trả lời này.'; m.stopped = true; }
   intake.chat.busy = false;
@@ -170,24 +186,37 @@ function clearIntake(field) {
 }
 function newChat() {
   const intake = store();
+  if (inflight) { inflight.abort(); inflight = null; }
   intake.chat.messages = [];
   intake.chat.busy = false;
   intake.chat.pending = null;
   save();
 }
-function vote(i, v) {
+
+/** POST /api/ai/feedback for an answer (signed-in owner by logId, guests by feedbackToken). */
+async function sendFeedback(m) {
+  if (!m.logId) return true;
+  try {
+    await api.post('/api/ai/feedback', { logId: m.logId, feedbackToken: m.feedbackToken || null, vote: m.vote || null, reason: m.reason || null });
+    return true;
+  } catch (e) {
+    Codi.ui.toast('Chưa gửi được phản hồi: ' + e.message, { type: 'danger' });
+    return false;
+  }
+}
+async function vote(i, v) {
   const m = store().chat.messages[i];
   if (!m) return;
   m.vote = m.vote === v ? null : v; m.reason = null;
   save();
-  if (m.vote === 'up') Codi.ui.toast('Cảm ơn phản hồi của bạn.');
+  if (await sendFeedback(m) && m.vote === 'up') Codi.ui.toast('Cảm ơn phản hồi của bạn.');
 }
-function giveReason(i, reason) {
+async function giveReason(i, reason) {
   const m = store().chat.messages[i];
   if (!m) return;
   m.reason = reason;
   save();
-  Codi.ui.toast('Cảm ơn, góp ý của bạn giúp Codi trả lời tốt hơn.');
+  if (await sendFeedback(m)) Codi.ui.toast('Cảm ơn, góp ý của bạn giúp Codi trả lời tốt hơn.');
 }
 function retry(i) {
   const intake = store();
@@ -197,33 +226,20 @@ function retry(i) {
   if (m.question) askAI(m.question); else save();
 }
 function addCart(c) {
-  Codi.requireAuth(() => {
-    if (Codi.role() !== 'learner') { Codi.ui.toast('Chỉ tài khoản học viên mới mua được khoá học.', { type: 'warn' }); return; }
-    if (Codi.ownership(c.id) !== 'not-owned') { save(); return; } // owned / pending / already in cart → CTA updates on re-render
-    Codi.set(() => { if (!Codi.cart().includes(c.id)) Codi.setCart(Codi.cart().concat(c.id)); });
-    Codi.ui.toast(`Đã thêm “${c.title}” vào giỏ hàng.`, { type: 'success', action: { label: 'Xem giỏ hàng', onClick: () => Codi.go('/cart') } });
-  }, { reason: 'Đăng nhập để thêm khoá học vào giỏ', courseTitle: c.title });
-}
-function enrollFree(c) {
-  Codi.requireAuth(() => {
-    if (Codi.role() !== 'learner') { Codi.ui.toast('Chỉ tài khoản học viên mới đăng ký được khoá học.', { type: 'warn' }); return; }
-    if (!Codi.isEnrolled(c.id)) Codi.set(() => Codi.enroll(c.id));
-    Codi.ui.toast(`Đã đăng ký "${c.title}"`, { type: 'success', action: { label: 'Học ngay', onClick: () => Codi.go(`/learn/${c.id}`) } });
-  }, { reason: 'Đăng nhập để đăng ký khoá học miễn phí', courseTitle: c.title });
+  Codi.requireAuth(() => { addToCart(c); }, { reason: 'Đăng nhập để thêm khoá học vào giỏ', courseTitle: c.title });
 }
 
 // ───────────────────────── view pieces ─────────────────────────
-function CourseCta({ course: c }) {
-  const own = Codi.ownership(c.id);
+function CourseCta({ course: c, own, pendingOrderId }) {
   const role = Codi.role();
+  if (!own) return <span className="skeleton" style={{ display: 'inline-block', width: 120, height: 32 }} aria-hidden="true" />;
   if (own === 'owned') return <Link className="btn btn-primary btn-sm" to={`/learn/${c.id}`}>Tiếp tục học</Link>;
   if (role === 'lecturer' || role === 'admin') return <Link className="btn btn-secondary btn-sm" to={`/courses/${c.slug}`}>Xem chi tiết</Link>;
   if (own === 'in-cart') return <Link className="btn btn-secondary btn-sm" to="/cart">Đã có trong giỏ · Xem giỏ hàng</Link>;
   if (own === 'pending-payment') {
-    const o = Codi.pendingOrderFor(c.id);
-    return <Link className="btn btn-secondary btn-sm" to={o ? `/checkout?order=${o.id}` : '/checkout'}>Tiếp tục thanh toán</Link>;
+    return <Link className="btn btn-secondary btn-sm" to={pendingOrderId ? `/checkout?order=${pendingOrderId}` : '/cart'}>Tiếp tục thanh toán</Link>;
   }
-  if (!c.price) return <button type="button" className="btn btn-primary btn-sm" onClick={() => enrollFree(c)}>Đăng ký miễn phí</button>;
+  if (!c.price) return <button type="button" className="btn btn-primary btn-sm" onClick={() => enrollFree(c, { stay: true })}>Đăng ký miễn phí</button>;
   return <button type="button" className="btn btn-primary btn-sm" onClick={() => addCart(c)}>Thêm vào giỏ</button>;
 }
 
@@ -242,6 +258,27 @@ function FeedbackRow({ m, i }) {
       )}
       {m.reason && <span className="xsmall muted">Đã ghi nhận: {m.reason}</span>}
     </div>
+  );
+}
+
+/** Course cards of one answer, with ownership-aware CTAs. */
+function AnswerCourses({ courses }) {
+  const ownership = useOwnership(courses);
+  return (
+    <ul className="ai-courses">{courses.map((c, k) => (
+      <li key={c.id} className="ai-course">
+        <Thumb course={c} small />
+        <div className="ai-course-main">
+          <Link className="ai-course-title" to={`/courses/${c.slug}`}>{c.title}</Link>
+          <span className="ai-course-meta">{levelLabel(c.level)} · {c.lessonCount} bài · <span className="od-nowrap">{c.price ? fmt.vnd(c.price) : 'Miễn phí'}</span></span>
+          {c.reason && <span className="ai-course-why">{c.reason}</span>}
+        </div>
+        <div className="ai-course-cta">
+          {(c.isBestMatch || (k === 0 && !courses.some((x) => x.isBestMatch))) && courses.length > 1 && <span className="badge badge-accent">Phù hợp nhất</span>}
+          <CourseCta course={c} own={ownership.of(c.id)} pendingOrderId={ownership.pendingOrderId(c.id)} />
+        </div>
+      </li>
+    ))}</ul>
   );
 }
 
@@ -275,7 +312,7 @@ function Message({ m, i, liveText }) {
   }
   if (liveText !== null) return <div className="msg msg-ai msg-md" aria-busy="true">{liveText ? <Md text={liveText} /> : null}</div>;
 
-  const courses = (m.courses || []).map((id) => Codi.course(id)).filter(Boolean);
+  const courses = m.courses || [];
   return (
     <div className="msg msg-ai msg-md">
       {m.text && <Md text={m.text} />}
@@ -285,24 +322,11 @@ function Message({ m, i, liveText }) {
           <tbody>{m.table.rows.map((row, r) => <tr key={r}>{row.map((cell, k) => (k === 0 ? <th key={k} scope="row">{cell}</th> : <td key={k}>{cell}</td>))}</tr>)}</tbody>
         </table></div>
       )}
-      {courses.length > 0 && (
-        <ul className="ai-courses">{courses.map((c, k) => (
-          <li key={c.id} className="ai-course">
-            <Thumb course={c} small />
-            <div className="ai-course-main">
-              <Link className="ai-course-title" to={`/courses/${c.slug}`}>{c.title}</Link>
-              <span className="ai-course-meta">{Codi.levelLabel(c.level)} · {Codi.lessons(c).length} bài · <span className="od-nowrap">{c.price ? fmt.vnd(c.price) : 'Miễn phí'}</span></span>
-              {m.courseReasons && m.courseReasons[c.id] && <span className="ai-course-why">{m.courseReasons[c.id]}</span>}
-            </div>
-            <div className="ai-course-cta">{k === 0 && courses.length > 1 && <span className="badge badge-accent">Phù hợp nhất</span>}<CourseCta course={c} /></div>
-          </li>
-        ))}</ul>
-      )}
-      {m.order && (
-        <ol className="ai-order">{m.order.map((cid) => {
-          const c = Codi.course(cid);
-          return c ? <li key={cid}><Link to={`/courses/${c.slug}`}>{c.title}</Link><span className="ai-course-why">{((m.orderReasons && m.orderReasons[cid]) || '').replace(/^ — /, '')}</span></li> : null;
-        })}</ol>
+      {courses.length > 0 && <AnswerCourses courses={courses} />}
+      {m.order && m.order.length > 0 && (
+        <ol className="ai-order">{m.order.map((o) => (
+          <li key={o.id}><Link to={`/courses/${o.slug}`}>{o.title}</Link><span className="ai-course-why">{o.reason}</span></li>
+        ))}</ol>
       )}
       {!m.stopped && <FeedbackRow m={m} i={i} />}
       {m.followups && m.followups.length > 0 && (
@@ -367,8 +391,7 @@ function suggestions(user, currentCourse) {
   return base;
 }
 
-// First visit shows the loading skeleton once per session (real AiAdvisorSkeleton while /api/ai context loads).
-let advisorLoaded = false;
+// Real AiAdvisorSkeleton while the /api/ai context loads.
 function AdvisorSkeleton() {
   return (
     <div className="page ai-page is-empty" aria-busy="true"><div className="ai-col stack-4">
@@ -384,44 +407,59 @@ function AdvisorSkeleton() {
 // ───────────────────────── page ─────────────────────────
 export default function AiAdvisorPage({ query }) {
   useCodi();
+  useAdvisor();
   const navigate = useNavigate();
-  const [loaded, setLoaded] = useState(advisorLoaded);
-  useEffect(() => {
-    if (loaded) return undefined;
-    const t = setTimeout(() => { advisorLoaded = true; setLoaded(true); }, 500);
-    return () => clearTimeout(t);
-  }, [loaded]);
+  const context = useApi('/api/ai');
+  const loaded = !!context.data || !!context.error;
+  if (context.data) ctx = context.data;
   const liveMsg = useLive();
   const intake = store();
   const user = Codi.currentUser();
-  const owned = ownedCourses();
-  const currentCourse = owned.length ? owned[0] : null;
+  const currentCourse = context.data ? context.data.currentCourse : null;
   const { messages, busy } = intake.chat;
   const [draft, setDraft] = useState(() => (query.topic ? `Mình muốn tìm hiểu về ${query.topic}` : ''));
   const threadRef = useRef(null);
 
   useEffect(() => {
     const chat = store().chat;
-    // A reload during a reveal leaves busy set with nothing in flight; recover so the composer is usable.
-    if (chat.busy && !live && !chat.messages.some((m) => m.streaming)) { chat.busy = false; save(); }
+    // A reload during an answer leaves busy set with nothing in flight; recover so the composer is usable.
+    if (chat.busy && !live && !inflight) {
+      chat.messages = chat.messages.filter((m) => !m.streaming);
+      chat.busy = false;
+      save();
+    }
   }, []);
+
+  // The learner's saved intake (goal draft) seeds an empty intake once.
+  useEffect(() => {
+    const saved = context.data && context.data.savedIntake;
+    const st = store();
+    if (!saved || st.goal || st.level || st.hoursPerWeek) return;
+    st.goal = saved.goal || null; st.level = saved.level || null; st.hoursPerWeek = saved.hoursPerWeek || null;
+    save();
+  }, [context.data]);
+
+  // Context load failure: the advisor still answers (the backend loads its own catalog); say what is missing.
+  useEffect(() => {
+    if (context.error) Codi.ui.toast('Không tải được ngữ cảnh học tập của bạn. Codi vẫn trả lời, nhưng chưa cá nhân hoá.', { type: 'warn' });
+  }, [context.error]);
 
   // Deep links (real app/ai/page.tsx): ?prompt= sends the question; ?action=add-cart|enroll-free&courseId= replays
   // the gated action (after sign-in when needed). Handled params are removed from the URL.
   useEffect(() => {
     const { prompt, action, courseId } = query;
-    if (!prompt && !(action && courseId)) return undefined;
+    if (!loaded || (!prompt && !(action && courseId))) return undefined;
     const t = setTimeout(() => {
       const rest = { ...query }; delete rest.prompt; delete rest.action; delete rest.courseId;
       const qs = new URLSearchParams(rest).toString();
       navigate('/ai' + (qs ? '?' + qs : ''), { replace: true });
       if (prompt) askAI(prompt);
-      const c = courseId ? Codi.course(courseId) : null;
+      const c = courseId ? ctx.catalog.find((x) => x.id === courseId) : null;
       if (c && action === 'add-cart') addCart(c);
-      else if (c && action === 'enroll-free') enrollFree(c);
+      else if (c && action === 'enroll-free') enrollFree(c, { stay: true });
     }, 0);
     return () => clearTimeout(t);
-  }, [query.prompt, query.action, query.courseId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loaded, query.prompt, query.action, query.courseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const last = threadRef.current && threadRef.current.lastElementChild;
@@ -431,9 +469,8 @@ export default function AiAdvisorPage({ query }) {
   if (!loaded) return <AdvisorSkeleton />;
 
   if (!messages.length) {
-    const p = user && currentCourse ? Codi.courseProgress(currentCourse.id) : null;
-    const sub = p
-      ? `Bạn đang học ${currentCourse.title} (${p.done}/${p.total} bài). Hỏi Codi nên học gì tiếp, hoặc so sánh các khoá trước khi mua.`
+    const sub = user && currentCourse
+      ? `Bạn đang học ${currentCourse.title} (${currentCourse.doneLessons}/${currentCourse.totalLessons} bài). Hỏi Codi nên học gì tiếp, hoặc so sánh các khoá trước khi mua.`
       : 'Kể mục tiêu của bạn, Codi gợi ý khoá học phù hợp, so sánh các lựa chọn và thứ tự nên học.';
     return (
       <div className="page ai-page is-empty"><div className="ai-col">
@@ -445,7 +482,7 @@ export default function AiAdvisorPage({ query }) {
         <IntakeRow />
         <section aria-labelledby="ai-suggest-title" className="ai-suggest-wrap">
           <h2 id="ai-suggest-title" className="ai-suggest-title">Thử hỏi</h2>
-          <ul className="ai-suggest">{suggestions(user, currentCourse).map((s) => (
+          <ul className="ai-suggest">{suggestions(user, user ? currentCourse : null).map((s) => (
             <li key={s.title}>
               <button type="button" className="ai-suggest-card" onClick={() => (s.run ? s.run() : askAI(s.prompt))}>
                 <Icon name={s.icon} className="icon-sm" />
