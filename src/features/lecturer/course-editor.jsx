@@ -19,8 +19,60 @@ import { aiImport } from './quiz-builder';
 const { fmt } = Codi;
 const TABS = [['content', 'Nội dung'], ['info', 'Thông tin'], ['kmap', 'Bản đồ kiến thức'], ['publish', 'Xuất bản']];
 
-function EditorHeader({ c, tab }) {
+// Authoring steps in the order a course is prepared (Udemy: plan → create → publish). Each step maps to one tab;
+// every tab stays reachable from the rail, and each step's state comes from the readiness checks.
+const STEPS = [
+  { key: 'info', label: 'Thông tin', hint: 'mô tả khoá học và giá đề xuất', labels: ['Mô tả khoá học', 'Giá đề xuất'] },
+  { key: 'content', label: 'Nội dung', hint: 'chương, bài học, quiz và bài kiểm tra đầu vào', labels: null },
+  { key: 'kmap', label: 'Bản đồ kiến thức', hint: 'phân tích và xác nhận bản đồ', labels: ['Bản đồ kiến thức đã xác nhận'] },
+  { key: 'publish', label: 'Xuất bản', hint: 'gửi yêu cầu khi đủ điều kiện', labels: null },
+];
+/** Per-step missing counts. Content takes every readiness check not owned by Thông tin or Bản đồ kiến thức. */
+function stepMissing(c) {
+  const items = readiness(c);
+  const infoItems = items.filter((x) => STEPS[0].labels.includes(x.label));
+  const kmapItems = items.filter((x) => STEPS[2].labels.includes(x.label));
+  const contentItems = items.filter((x) => !infoItems.includes(x) && !kmapItems.includes(x));
+  const open = (arr) => arr.filter((x) => !x.ok).length;
+  const submitted = ['pending', 'published'].includes(c.status);
+  const before = open(infoItems) + open(contentItems) + open(kmapItems);
+  return {
+    info: open(infoItems), content: open(contentItems), kmap: open(kmapItems),
+    // Xuất bản is open until submitted: it waits on the earlier steps, or is itself one action when they are done
+    publish: submitted ? 0 : (before || 1),
+  };
+}
+function AuthoringRail({ c, tab }) {
+  const missing = stepMissing(c);
   const km = Codi.db().knowledgeMaps[c.id] || {};
+  const next = STEPS.find((s) => missing[s.key] > 0);
+  const nextStep = next && STEPS.findIndex((s) => s.key === next.key) + 1;
+  const readyToSubmit = readiness(c).every((x) => x.ok) && ['draft', 'rejected'].includes(c.status);
+  return (
+    <nav className="authoring-rail" aria-label="Các bước soạn khoá học">
+      <ol className="steps">{STEPS.map((s, i) => {
+        const done = missing[s.key] === 0; const current = tab === s.key;
+        const status = done ? 'Đã đủ'
+          : s.key === 'publish' && readyToSubmit ? (c.status === 'rejected' ? 'Sẵn sàng gửi lại' : 'Sẵn sàng gửi')
+            : s.key === 'publish' ? 'Chờ các bước trên'
+              : `Còn ${missing[s.key]} việc`;
+        return (
+          <li key={s.key} className="step-item">
+            <Link to={`/teach/courses/${c.id}/${s.key}`} className={`step-link ${done ? 'is-done' : ''} ${current ? 'is-current' : ''}`} aria-current={current ? 'step' : undefined}>
+              <span className="step-num" aria-hidden="true">{done ? <Icon name="check" className="icon-sm" /> : i + 1}</span>
+              <span className="step-text"><strong className="small">{s.label}</strong><span className="xsmall muted">{status}</span></span>
+              {s.key === 'kmap' && ['stale', 'failed', 'ready'].includes(km.status) && <span className="count count-accent" aria-label="cần xem lại">!</span>}
+            </Link>
+          </li>
+        );
+      })}</ol>
+      <p className="small rail-next">{next
+        ? <>Bước tiếp theo: <Link className="strong" to={`/teach/courses/${c.id}/${next.key}`}>{nextStep}. {next.label}</Link> — {next.hint}.</>
+        : <>{['pending', 'published'].includes(c.status) ? 'Khoá học đã được gửi xuất bản.' : 'Đủ điều kiện. Bấm “Xuất bản” để gửi yêu cầu.'}</>}</p>
+    </nav>
+  );
+}
+function EditorHeader({ c, tab }) {
   const cat = categoryName(c.categoryId);
   return (
     <div className="stack-3" style={{ marginBottom: 16 }}>
@@ -30,9 +82,7 @@ function EditorHeader({ c, tab }) {
         {c.status === 'published' && <Link className="btn btn-ghost btn-sm" to={`/courses/${c.slug}`}><Icon name="eye" className="icon-sm" /> Xem trang bán</Link>}</div>
       {locked(c) && <Alert type="warn" title="Đang chờ duyệt — nội dung chỉ đọc" body="Khoá học đang được ban quản trị kiểm duyệt. Bạn có thể xem lại nhưng không thể chỉnh sửa cho đến khi có kết quả duyệt." />}
       {c.status === 'published' && <Alert type="info" title="Khoá học đang bán" body="Các thay đổi nội dung sẽ áp dụng trực tiếp cho học viên. Sau khi sửa, bạn hãy cập nhật lại bản đồ kiến thức." />}
-      <div className="tabs" role="tablist" style={{ marginBottom: 0 }}>{TABS.map(([k, l]) => (
-        <Link key={k} className="tab" role="tab" aria-selected={tab === k} to={`/teach/courses/${c.id}/${k}`}>{l}{k === 'kmap' && ['stale', 'failed', 'ready'].includes(km.status) ? <> <span className="count count-accent" aria-label="cần xem lại">!</span></> : null}</Link>
-      ))}</div>
+      <AuthoringRail c={c} tab={tab} />
     </div>
   );
 }

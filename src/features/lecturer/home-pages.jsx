@@ -117,6 +117,11 @@ export function CreateCoursePage() {
   const on = (k) => (ev) => { createVals = { ...createVals, [k]: ev.target.value }; if (createState === 'error') createState = null; rerender(); };
   return shell('/teach/courses', <>
     <div className="page-header"><div><h1>Tạo khóa học</h1><p className="muted">Chỉ cần 4 thông tin. Khoá học được tạo ở trạng thái Bản nháp.</p></div></div>
+    <ol className="steps" aria-label="Các bước sau khi tạo khoá học" style={{ maxWidth: 760, marginBottom: 24 }}>
+      {[['Thông tin', 'Mô tả, giá đề xuất'], ['Nội dung', 'Chương, bài học, quiz'], ['Bản đồ kiến thức', 'Phân tích và xác nhận'], ['Xuất bản', 'Gửi khi đủ điều kiện']].map(([t, h], i) => (
+        <li key={t} className="step-item"><div className="step-link"><span className="step-num" aria-hidden="true">{i + 1}</span><span className="step-text"><strong className="small">{t}</strong><span className="xsmall muted">{h}</span></span></div></li>
+      ))}
+    </ol>
     <form className="card" onSubmit={createCourse} noValidate style={{ maxWidth: 560 }} aria-busy={saving}><div className="card-body stack-4">
       {createState === 'error' && <Alert type="danger" title="Không tạo được khoá học" body="Không thể tạo khoá học lúc này. Vui lòng thử lại." />}
       <div className={`field ${e.title ? 'is-invalid' : ''}`}><label htmlFor="nc-title">Tên khoá học <span className="req">*</span></label><input id="nc-title" name="title" maxLength={120} value={v.title || ''} onChange={on('title')} placeholder="Ví dụ: Vue 3 cho người mới" disabled={saving} aria-invalid={!!e.title} /><FieldError>{e.title}</FieldError></div>
