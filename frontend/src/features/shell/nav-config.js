@@ -1,16 +1,15 @@
 /**
  * Role navigation for the app header, the mobile drawer and the global search.
  *
- *  primaryNav(role)  → header items { href, label, icon, match, count?, countLabel? }. Counts read the same store
- *                      data as the lecturer / admin workspace sidebars (lecturer counts(), pending courses) and the
- *                      admin orders page "Cần đối soát" filter (needsReconciliation).
+ *  primaryNav(role, adminCounts) → header items { href, label, icon, match, count?, countLabel? }. Lecturer counts
+ *                      come from the lecturer workspace cache (counts()); admin counts from useAdminNavCounts()
+ *                      (pending publication requests, orders flagged for reconciliation).
  *  accountLinks(role)→ account menu items { href, label, icon }.
  *  pagesFor(role)    → searchable pages { href, title, subtitle, icon, keywords }.
  *  normalize(text)   → Vietnamese-insensitive form: NFD, combining marks removed, đ→d, lower case.
  */
 import { Codi } from '../../lib/codi';
 import { counts as teachCounts } from '../lecturer/teach-api';
-import { needsReconciliation } from '../admin/admin-metrics';
 
 const MARKS = /[̀-ͯ]/g;
 export function normalize(text) {
@@ -19,9 +18,8 @@ export function normalize(text) {
 
 const exact = (p) => new RegExp(`^${p.replace(/\//g, '\\/')}$`);
 
-/** Header primary navigation per role. `count` is evaluated at render time so badges follow the store. */
-export function primaryNav(role) {
-  const db = Codi.db() || {};
+/** Header primary navigation per role. `count` is evaluated at render time so badges follow the backend data. */
+export function primaryNav(role, adminCounts) {
   if (role === 'learner') {
     return [
       { href: '/dashboard', label: 'Bàn làm việc', icon: 'layout-dashboard', match: /^\/(dashboard|learn)(\/|$)/ },
@@ -42,8 +40,7 @@ export function primaryNav(role) {
     ];
   }
   if (role === 'admin') {
-    const pending = (db.courses || []).filter((c) => c.status === 'pending').length;
-    const recon = (db.orders || []).filter(needsReconciliation).length;
+    const { pending = 0, reconciliation: recon = 0 } = adminCounts || {};
     return [
       { href: '/admin', label: 'Tổng quan', icon: 'layout-dashboard', match: exact('/admin') },
       { href: '/admin/publication', label: 'Duyệt xuất bản', icon: 'clipboard-check', match: /^\/admin\/publication(\/|$)/, count: pending, countLabel: 'khoá học chờ duyệt' },

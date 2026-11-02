@@ -203,6 +203,32 @@ export function AssignmentSection({ courseId, lessonId, assessmentId, bare = fal
   return <AssignmentBody key={a.id} a={a} url={url} bare={bare} setData={setData} onChange={onChange} />;
 }
 
+/** Criteria of a JSON rubric ([{ name, desc, points }], the lecturer builder format), or null for free text. */
+function rubricItems(raw) {
+  try {
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return null;
+    const items = list.filter((x) => x && typeof x === 'object' && (x.name || x.desc));
+    return items.length ? items : null;
+  } catch {
+    return null;
+  }
+}
+
+function RubricList({ raw }) {
+  const items = rubricItems(raw);
+  if (!items) return <p className="small ln-pre">{raw}</p>;
+  return (
+    <ul className="stack-1" style={{ margin: 0, paddingLeft: 18 }}>
+      {items.map((k, i) => (
+        <li key={k.id || i} className="small">
+          <strong>{k.name}</strong>{Number(k.points) ? ` (${k.points} điểm)` : ''}{k.desc ? <span className="muted">: {k.desc}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function AssignmentBody({ a, url, bare, setData, onChange }) {
   const sub = a.submission;
   const format = a.submissionFormat || 'file_or_link';
@@ -390,7 +416,7 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
       <p className="small muted">Thang điểm {maxScore} · điểm đạt {passPct}%{a.dueDays ? ` · hạn nộp ${a.dueDays} ngày sau khi mở bài` : ''}</p>
       {a.rubric && (
         <details className="panel ln-rubric" open={!!graded}><summary className="small strong">Thang chấm</summary>
-          <p className="small ln-pre">{a.rubric}</p></details>
+          <RubricList raw={a.rubric} /></details>
       )}
       {error && !editing && <Alert type="danger" body={error} />}
       {content}

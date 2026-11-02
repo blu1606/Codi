@@ -75,6 +75,19 @@ export function usePendingCount() {
   return data && data.counts ? data.counts.pending : 0;
 }
 
+/**
+ * Header badges for an admin: open publication requests and orders flagged for reconciliation (the orders page
+ * "Cần đối soát" filter). `enabled` false (other roles) makes no request.
+ */
+export function useAdminNavCounts(enabled) {
+  const pub = useAction('dashboard/admin/publication', enabled ? 'getAdminPublicationQueue' : null, ['pending']);
+  const recon = useAction('dashboard/admin', enabled ? 'getAdminOrdersExportAction' : null, [{ range: 'all', reconciliationOnly: true }]);
+  return {
+    pending: pub.data && pub.data.counts ? pub.data.counts.pending : 0,
+    reconciliation: Array.isArray(recon.data) ? recon.data.length : 0,
+  };
+}
+
 export const ROLE_TO_SERVER = { learner: 'LEARNER', lecturer: 'LECTURER', admin: 'ADMIN' };
 export const ROLE_FROM_SERVER = { LEARNER: 'learner', LECTURER: 'lecturer', ADMIN: 'admin' };
 export const LEVEL_LABEL = { Beginner: 'Cơ bản', Intermediate: 'Trung cấp', Advanced: 'Nâng cao' };

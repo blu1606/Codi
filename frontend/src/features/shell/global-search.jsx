@@ -113,8 +113,8 @@ const LEVEL_LABEL = { Beginner: 'Cơ bản', Intermediate: 'Trung cấp', Advanc
 /**
  * Backend data for the palette, read each time it opens: published courses (GET /api/courses), the learner's
  * enrolled courses with lesson UUIDs (GET /api/learner/overview) and orders (GET /api/student/profile/summary), the
- * lecturer's own courses with their lessons, pending submissions and learner questions (lecturer actions). Admin
- * groups still read the transitional store.
+ * lecturer's own courses with their lessons, pending submissions and learner questions (lecturer actions), and the
+ * admin's users, vouchers (GET /api/admin/users, /api/admin/vouchers), orders and pending reviews (admin actions).
  */
 async function loadLecturerData() {
   const mine = await api.action('dashboard/lecturer', 'getLecturerCourses', 'all');
@@ -133,15 +133,20 @@ async function loadLecturerData() {
 }
 
 async function loadAdminData() {
-  const [orders, queue] = await Promise.all([
+  const [orders, queue, users, vouchers] = await Promise.all([
     api.action('dashboard/admin', 'getAdminOrdersExportAction', { range: 'all' }),
     api.action('dashboard/admin/publication', 'getAdminPublicationQueue', 'pending'),
+    api.get('/api/admin/users'),
+    api.get('/api/admin/vouchers'),
   ]);
-  return { adminOrders: orders || [], pendingReviews: (queue && queue.items) || [] };
+  return {
+    adminOrders: orders || [], pendingReviews: (queue && queue.items) || [],
+    adminUsers: (users && users.users) || [], adminVouchers: (vouchers && vouchers.vouchers) || [],
+  };
 }
 
 const ROLE_LOADERS = { lecturer: loadLecturerData, admin: loadAdminData };
-const EMPTY_ROLE_DATA = { mine: [], lessons: [], submissions: [], questions: [], adminOrders: [], pendingReviews: [] };
+const EMPTY_ROLE_DATA = { mine: [], lessons: [], submissions: [], questions: [], adminOrders: [], pendingReviews: [], adminUsers: [], adminVouchers: [] };
 
 function useSearchData(role) {
   const courses = useApi('/api/courses?limit=100');
@@ -227,11 +232,11 @@ function learnerItems(data) {
   return [{ id: 'my-orders', label: 'Đơn hàng của tôi', items: orders }];
 }
 
-// Users and vouchers still come from the transitional store (no list route in the backend contract yet).
+// Users: GET /api/admin/users · vouchers: GET /api/admin/vouchers · orders and pending reviews: admin actions.
+const SERVER_ROLE = { LEARNER: 'learner', LECTURER: 'lecturer', ADMIN: 'admin' };
 function adminItems(data) {
-  const db = Codi.db();
-  const users = db.users.map((u) => ({
-    id: `user-${u.id}`, icon: 'user', type: ROLE_LABEL[u.role] || 'Người dùng', badge: u.status === 'inactive' ? 'Vô hiệu hoá' : null,
+  const users = data.adminUsers.map((u) => ({
+    id: `user-${u.id}`, icon: 'user', type: ROLE_LABEL[SERVER_ROLE[u.roleId]] || 'Người dùng', badge: u.banned ? 'Vô hiệu hoá' : null,
     title: u.name, subtitle: u.email, href: `/admin/users?q=${encodeURIComponent(u.email)}`,
   }));
   const orders = data.adminOrders.map((o) => ({
@@ -239,8 +244,8 @@ function adminItems(data) {
     title: o.code, subtitle: `${o.buyerName} · ${Codi.fmt.vnd(o.totalAmount)}`, keywords: `${o.buyerEmail || ''} ${o.coursesText || ''}`,
     href: `/admin/orders?range=all&id=${encodeURIComponent(o.id)}`,
   }));
-  const vouchers = db.vouchers.map((v) => ({
-    id: `voucher-${v.id}`, icon: 'ticket', type: 'Voucher', badge: v.active ? 'Đang bật' : 'Đã tắt',
+  const vouchers = data.adminVouchers.map((v) => ({
+    id: `voucher-${v.id}`, icon: 'ticket', type: 'Voucher', badge: v.isActive ? 'Đang bật' : 'Đã tắt',
     title: v.code, subtitle: v.type === 'percent' ? `Giảm ${v.value}%` : `Giảm ${Codi.fmt.vnd(v.value)}`, keywords: 'voucher ma giam gia', href: '/admin/vouchers',
   }));
   const pending = data.pendingReviews.map((c) => ({

@@ -24,6 +24,7 @@ import BrandLink from './brand-link';
 import { useCartCount } from '../commerce/commerce-api';
 import { GlobalSearch, SearchTrigger, openSearch } from './global-search';
 import { accountLinks, primaryNav } from './nav-config';
+import { useAdminNavCounts } from '../admin/admin-data';
 import { DevToggle } from './dev-drawer';
 
 const badgeText = (n) => (n > 99 ? '99+' : String(n));
@@ -112,12 +113,12 @@ function CartButton({ role }) {
 }
 
 /** Mobile / narrow-screen drawer: search, the same nav items, cart, account and theme. */
-function NavDrawer({ open, onClose }) {
+function NavDrawer({ open, onClose, adminCounts }) {
   useCodi();
   const u = accountUser();
   const role = Codi.role();
   const path = Codi.path();
-  const items = primaryNav(role);
+  const items = primaryNav(role, adminCounts);
   const [signingOut, signOut] = useSignOut(onClose);
   const cart = useCartCount();
   const cartCount = role === 'learner' ? cart || 0 : 0;
@@ -176,7 +177,8 @@ export default function Header() {
   const u = accountUser();
   const role = Codi.role();
   const path = Codi.path();
-  const items = primaryNav(role);
+  const adminCounts = useAdminNavCounts(role === 'admin');
+  const items = primaryNav(role, adminCounts);
 
   // Navigation closes any open popover or drawer; outside click and Escape close popovers too.
   useEffect(() => { setOpenMenu(null); setDrawer(false); }, [location.pathname, location.search]);
@@ -219,7 +221,7 @@ export default function Header() {
           </>
         )}
       </div>
-      <NavDrawer open={drawer} onClose={() => setDrawer(false)} />
+      <NavDrawer open={drawer} onClose={() => setDrawer(false)} adminCounts={adminCounts} />
       <GlobalSearch />
     </div>
   );

@@ -4,6 +4,7 @@
 //  3. builds scripts/data/mockup-seed.json from the rebuild's seed (export-rebuild-seed.mjs)
 //  4. runs Codi's seed-mockup.ts unchanged (password: SEED_ACCOUNT_PASSWORD, default Codi@12345)
 //  5. applies the rebuild-only fields seed-mockup does not map (avatars, email verification, course covers)
+//  6. converts the seed's markdown assignment rubrics into the JSON criteria Codi's grading needs
 // Pass --no-backup to skip step 1.
 import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync, rmSync, statSync } from "node:fs";
@@ -16,6 +17,7 @@ import { courseDetails } from "@codi-1/db/schema/course-content";
 import { ENV } from "../src/env";
 import { runMigrations } from "./migrate";
 import { exportRebuildSeed } from "./export-rebuild-seed.mjs";
+import { normalizeAssignmentRubrics } from "./normalize-assignment-rubrics";
 
 const backendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const backupDir = path.resolve(backendDir, "../../.codi-gc-preserved/db-backups");
@@ -107,6 +109,9 @@ async function main() {
   } finally {
     await after.$client.end();
   }
+
+  const rubrics = await normalizeAssignmentRubrics(ENV.DATABASE_URL);
+  console.log(`→ Assignment rubrics: ${rubrics.changed}/${rubrics.checked} converted to JSON criteria`);
   console.log(`Xong. Đăng nhập bằng email mẫu và mật khẩu ${ENV.SEED_ACCOUNT_PASSWORD === "Codi@12345" ? "Codi@12345" : "SEED_ACCOUNT_PASSWORD"}.`);
 }
 

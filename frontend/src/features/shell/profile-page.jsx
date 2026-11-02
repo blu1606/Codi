@@ -239,7 +239,7 @@ function TransactionsCard({ orders }) {
         <div className="table-wrap"><table className="table"><thead><tr><th>Mã giao dịch</th><th>Khoá học</th><th>Ngày tạo</th><th className="num">Số tiền</th><th>Trạng thái</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>
           {orders.map((o) => (
             <tr key={o.id}><td className="mono">{o.code}</td><td>{o.items.map((i) => i.title).join(', ')}</td><td className="od-nowrap">{Codi.fmt.date(o.createdAt)}</td><td className="num">{Codi.fmt.vnd(o.totalAmount)}</td><td><OrderStatus status={o.status} /></td>
-              <td>{o.status === 'pending' && <Link className="btn btn-primary btn-sm" to={`/checkout?order=${o.id}`}>Tiếp tục thanh toán</Link>}</td></tr>
+              <td>{o.status === 'pending' && <Link className="btn btn-primary btn-sm" to={`/checkout?order=${encodeURIComponent(o.code)}`}>Tiếp tục thanh toán</Link>}</td></tr>
           ))}
         </tbody></table></div>
       )}
