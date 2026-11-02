@@ -1,64 +1,116 @@
 /**
- * In-browser stand-ins for the real app's Better Auth backend (sessions, passwords, email OTP) and the
- * student activity log that feeds the profile heatmap.
+ * Account helpers shared by the shell screens. Everything here talks to the real backend (Better Auth under
+ * /api/auth/*, Codi routes under /api/*); nothing is simulated in the browser any more.
  *
- *  Passwords      Codi.state.shellAuth.passwords[userId]  (prototype only; default demo password Codi@12345)
- *  Sessions       Codi.db().userSessions  [{ id, userId, userAgent, createdAt }]  — seeded by patches/10-shell.js.
- *                 This browser's session id is kept in localStorage so "Phiên hiện tại" survives reloads.
- *  Activity       Codi.db().studentActivities [{ id, userId, type: 'login', occurredAt }] (seeded + every sign-in),
- *                 merged at read time with enrolments, learnerStudyDays (owned by learning) and submissions.
- *  OTP            Fixed demo codes: 123456 valid, 000000 expired. Codes live 2 minutes (client timer).
+ *  accountUser()       the signed-in user for rendering: the backend session user (name, email, emailVerified,
+ *                      image, createdAt) over the legacy store record (role, status) that unported pages still read.
+ *  syncLegacyUser()    mirrors the session user into the transitional legacy store so pages that still read
+ *                      Codi.currentUser() (header badges, other features) see a newly registered or OAuth user and
+ *                      fresh name/avatar. Goes away with the legacy store.
+ *  authMessage(e, fb)  Vietnamese message for a Better Auth / API error.
+ *  logActivity(type)   POST /api/student/profile activity (sign-ins feed the profile heatmap).
+ *  endSession()        signs out through the backend.
+ *
+ * Email OTP codes are sent by the backend. Without a Resend key they are printed to the backend console
+ * ("[Auth OTP for <email>]: 123456").
  */
 import { Codi } from '../../lib/codi';
+import { api } from '../../lib/api';
 
 export const DEMO_PASSWORD = 'Codi@12345';
-export const OTP_VALID = '123456';
-export const OTP_EXPIRED = '000000';
 export const OTP_TTL_S = 120;
 export const OTP_RESEND_AFTER_S = 30;
-export const OTP_MAX_TRIES = 3;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LOCAL_SESSION_KEY = 'codi-rebuild-device-session';
 
-const authSlice = () => Codi.ensure('shellAuth', () => ({ passwords: {} }));
-const list = (key) => { const db = Codi.db(); if (!Array.isArray(db[key])) db[key] = []; return db[key]; };
+// ───────────────────────── session user ─────────────────────────
+const SESSION_FIELDS = ['name', 'email', 'emailVerified', 'image', 'createdAt'];
 
-// ───────────────────────── passwords ─────────────────────────
-export const passwordOf = (userId) => authSlice().passwords[userId] || DEMO_PASSWORD;
-export const checkPassword = (userId, password) => password === passwordOf(userId);
-export function setPassword(userId, password) {
-  Codi.set(() => { authSlice().passwords[userId] = password; }, { render: false });
+/** Signed-in user for rendering, or null. Backend session fields win over the legacy record. */
+export function accountUser() {
+  const legacy = Codi.currentUser();
+  const su = Codi.session && Codi.session.user;
+  if (!legacy && !su) return null;
+  if (!su) return legacy;
+  const role = Codi.role();
+  return { ...(legacy || {}), id: su.id, role: role === 'guest' ? 'learner' : role, ...Object.fromEntries(SESSION_FIELDS.map((k) => [k, su[k] ?? null])) };
 }
 
-// ───────────────────────── sessions ─────────────────────────
-const readLocalSession = () => { try { return localStorage.getItem(LOCAL_SESSION_KEY); } catch { return null; } };
-const writeLocalSession = (id) => { try { if (id) localStorage.setItem(LOCAL_SESSION_KEY, id); else localStorage.removeItem(LOCAL_SESSION_KEY); } catch { /* storage blocked */ } };
-
-export const sessionsOf = (userId) => list('userSessions').filter((s) => s.userId === userId).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-
-/** This browser's session for the signed-in user; created on demand (e.g. after a dev-drawer role switch). */
-export function currentSessionId(userId) {
-  const id = readLocalSession();
-  const rows = list('userSessions');
-  if (id && rows.some((s) => s.id === id && s.userId === userId)) return id;
-  const row = { id: Codi.uid('ses'), userId, userAgent: navigator.userAgent, createdAt: new Date().toISOString() };
-  Codi.set((s) => { s.db.userSessions = [...list('userSessions'), row]; }, { render: false });
-  writeLocalSession(row.id);
-  return row.id;
+/**
+ * Makes the legacy store agree with the backend session: creates the record for a user the legacy seed never had
+ * (new sign-up, first OAuth sign-in), marks them current, and copies name/email/image/emailVerified.
+ * Returns true when it changed anything.
+ */
+export function syncLegacyUser() {
+  const su = Codi.session && Codi.session.user;
+  const users = Codi.db().users;
+  if (!su || !Array.isArray(users)) return false;
+  const rec = users.find((u) => u.id === su.id);
+  const same = rec && Codi.state.currentUserId === su.id && rec.name === su.name && rec.email === su.email
+    && (rec.image || null) === (su.image || null) && rec.emailVerified === !!su.emailVerified;
+  if (same) return false;
+  Codi.set((s) => {
+    let u = s.db.users.find((x) => x.id === su.id);
+    if (!u) {
+      const now = new Date().toISOString();
+      u = { id: su.id, role: 'learner', status: 'active', createdAt: su.createdAt || now, lastActive: now };
+      s.db.users.push(u);
+    }
+    Object.assign(u, { name: su.name, email: su.email, image: su.image || null, emailVerified: !!su.emailVerified });
+    s.currentUserId = su.id;
+  });
+  return true;
 }
 
-export function revokeSession(sessionId) {
-  Codi.set((s) => { s.db.userSessions = list('userSessions').filter((x) => x.id !== sessionId); });
-}
-export function revokeOtherSessions(userId) {
-  const keep = currentSessionId(userId);
-  Codi.set((s) => { s.db.userSessions = list('userSessions').filter((x) => x.userId !== userId || x.id === keep); });
-}
-export function revokeAllSessions(userId) {
-  Codi.set((s) => { s.db.userSessions = list('userSessions').filter((x) => x.userId !== userId); }, { render: false });
-  writeLocalSession(null);
+/** Re-reads the backend session (after a profile/email change) and mirrors it into the legacy store. */
+export async function refreshAccount() {
+  await Codi.refreshSession();
+  syncLegacyUser();
 }
 
+// ───────────────────────── errors ─────────────────────────
+const AUTH_CODES = {
+  INVALID_EMAIL_OR_PASSWORD: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.',
+  INVALID_PASSWORD: 'Mật khẩu hiện tại không đúng.',
+  USER_ALREADY_EXISTS: 'Email này đã có tài khoản. Hãy đăng nhập hoặc dùng "Quên mật khẩu?".',
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'Email này đã có tài khoản. Hãy đăng nhập hoặc dùng "Quên mật khẩu?".',
+  PASSWORD_TOO_SHORT: 'Mật khẩu phải có ít nhất 8 ký tự',
+  PASSWORD_TOO_LONG: 'Mật khẩu quá dài (tối đa 128 ký tự).',
+  INVALID_OTP: 'Mã OTP không chính xác.',
+  OTP_EXPIRED: 'Mã OTP đã hết hạn. Vui lòng gửi lại mã.',
+  TOO_MANY_ATTEMPTS: 'Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.',
+  EMAIL_UNAVAILABLE: 'Email này đã được liên kết với một tài khoản khác. Vui lòng sử dụng email khác.',
+  INVALID_RESET_GRANT: 'Vui lòng xác thực email trong phần Cài đặt trước khi đặt mật khẩu mới.',
+  INVALID_TOKEN: 'Không thể đặt lại mật khẩu. Token có thể đã hết hạn.',
+  TOKEN_EXPIRED: 'Không thể đặt lại mật khẩu. Token có thể đã hết hạn.',
+  SESSION_EXPIRED: 'Phiên đăng nhập đã lâu. Vui lòng đăng xuất, đăng nhập lại rồi thử lại.',
+  USER_NOT_FOUND: 'Mã OTP không hợp lệ hoặc đã hết hạn 2 phút.',
+  CREDENTIAL_ACCOUNT_NOT_FOUND: 'Tài khoản này chưa có mật khẩu (đăng nhập bằng Google/GitHub). Dùng "Quên mật khẩu hiện tại?" để đặt mật khẩu.',
+};
+
+/** Vietnamese message for an ApiError from Better Auth ({ code, message }) or a Codi route ({ error }). */
+export function authMessage(e, fallback) {
+  if (!e) return fallback;
+  if (e.status === 0) return e.message;
+  if (e.status === 429) return 'Bạn thử quá nhiều lần. Vui lòng đợi một lát rồi thử lại.';
+  const code = e.body && typeof e.body === 'object' ? e.body.code : null;
+  if (code && AUTH_CODES[code]) return AUTH_CODES[code];
+  if (/vô hiệu hoá/i.test(e.message || '')) return e.message;
+  // Codi routes answer in Vietnamese; Better Auth messages are English, so fall back to the screen's copy.
+  return code ? fallback : (e.message || fallback);
+}
+export const authCode = (e) => (e && e.body && typeof e.body === 'object' ? e.body.code || null : null);
+
+// ───────────────────────── activity & sign-out ─────────────────────────
+/** Records an activity for the profile heatmap. Never blocks the caller; a failure is only logged. */
+export function logActivity(type) {
+  api.post('/api/student/profile', { type }).catch((e) => console.warn('[activity]', e.message));
+}
+
+export function endSession() {
+  Codi.signOut();
+}
+
+// ───────────────────────── devices ─────────────────────────
 /** Real describeDevice() from components/settings/session-settings.tsx. */
 export function describeDevice(userAgent) {
   if (!userAgent) return 'Thiết bị không xác định';
@@ -67,61 +119,3 @@ export function describeDevice(userAgent) {
   return `${browser} · ${system}`;
 }
 export const isMobileAgent = (ua) => /Android|iPhone|iPad/.test(ua || '');
-
-// ───────────────────────── sign-in / sign-out ─────────────────────────
-/** Starts a new device session, logs the "login" activity and signs the user in. */
-export function startSession(userId) {
-  const now = new Date().toISOString();
-  const row = { id: Codi.uid('ses'), userId, userAgent: navigator.userAgent, createdAt: now };
-  Codi.set((s) => {
-    s.db.userSessions = [...list('userSessions'), row];
-    s.db.studentActivities = [...list('studentActivities'), { id: Codi.uid('act'), userId, type: 'login', occurredAt: now }];
-    const u = s.db.users.find((x) => x.id === userId);
-    if (u) u.lastActive = now;
-    s.currentUserId = userId;
-  });
-  writeLocalSession(row.id);
-}
-
-/** Ends this device's session (row removed like Better Auth revokeSession), then the runtime sign-out. */
-export function endSession() {
-  const id = readLocalSession();
-  if (id) Codi.set((s) => { s.db.userSessions = list('userSessions').filter((x) => x.id !== id); }, { render: false });
-  writeLocalSession(null);
-  Codi.signOut();
-}
-
-// ───────────────────────── password recovery grant ─────────────────────────
-// "Quên mật khẩu hiện tại?" verifies an email OTP, then /reset-password?source=account may set a new password
-// for 10 minutes. Module memory only, like the server-side grant cookie.
-let resetGrant = null;
-export const grantReset = (userId, email) => { resetGrant = { userId, email, expiresAt: Date.now() + 10 * 60000 }; };
-export const readResetGrant = () => (resetGrant && resetGrant.expiresAt > Date.now() && resetGrant.userId === Codi.state.currentUserId ? resetGrant : null);
-export const clearResetGrant = () => { resetGrant = null; };
-
-// ───────────────────────── OTP check ─────────────────────────
-/** 'ok' | 'expired' | 'wrong'. expiresAt is the client deadline from <OtpInput>. */
-export function checkOtp(code, expiresAt) {
-  if (code === OTP_EXPIRED || (expiresAt && Date.now() > expiresAt)) return 'expired';
-  return code === OTP_VALID ? 'ok' : 'wrong';
-}
-
-// ───────────────────────── activity (profile heatmap) ─────────────────────────
-// Day keys use the Vietnam calendar (Asia/Bangkok = GMT+7), as the real study-day credits do.
-const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' });
-export const dayKey = (iso) => dayFmt.format(new Date(iso));
-
-/**
- * Activity entries for a user: [{ day: 'YYYY-MM-DD', type }]. Real types: login, course_view, lesson_complete,
- * course_enrolled. Derived from live data so other features' writes show up without coupling:
- * sign-ins (studentActivities), enrolments, study days with minutes (course_view) and submissions.
- */
-export function activitiesOf(userId) {
-  const db = Codi.db();
-  const out = [];
-  (db.studentActivities || []).forEach((a) => { if (a.userId === userId && a.occurredAt) out.push({ day: dayKey(a.occurredAt), type: a.type }); });
-  (db.enrolments || []).forEach((e) => { if (e.userId === userId && e.enrolledAt) out.push({ day: dayKey(e.enrolledAt), type: 'course_enrolled' }); });
-  (db.learnerStudyDays || []).forEach((d) => { if (d.userId === userId && (d.minutes || d.seconds) > 0 && d.date) out.push({ day: d.date, type: 'course_view' }); });
-  (db.submissions || []).forEach((s) => { if (s.userId === userId && s.submittedAt) out.push({ day: dayKey(s.submittedAt), type: 'lesson_complete' }); });
-  return out;
-}

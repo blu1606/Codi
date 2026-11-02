@@ -19,7 +19,7 @@ import NotificationMenu from './notification-menu';
 import ThemeToggle from './theme-toggle';
 import { ShellIcon, UserAvatar } from './shell-ui';
 import { THEME_OPTIONS } from './theme';
-import { endSession } from './account-store';
+import { accountUser } from './account-store';
 import BrandLink from './brand-link';
 import { GlobalSearch, SearchTrigger, openSearch } from './global-search';
 import { accountLinks, primaryNav } from './nav-config';
@@ -59,9 +59,8 @@ function useSignOut(onDone) {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      await Codi.wait(250);
       if (onDone) onDone();
-      endSession();
+      await Codi.signOut();
     } catch {
       Codi.ui.toast('Không thể đăng xuất. Vui lòng thử lại.', { type: 'danger' });
     } finally {
@@ -113,7 +112,7 @@ function CartButton({ role }) {
 /** Mobile / narrow-screen drawer: search, the same nav items, cart, account and theme. */
 function NavDrawer({ open, onClose }) {
   useCodi();
-  const u = Codi.currentUser();
+  const u = accountUser();
   const role = Codi.role();
   const path = Codi.path();
   const items = primaryNav(role);
@@ -171,7 +170,7 @@ export default function Header() {
   const location = useLocation();
   const [openMenu, setOpenMenu] = useState(null); // 'user' | 'notif' | null
   const [drawer, setDrawer] = useState(false);
-  const u = Codi.currentUser();
+  const u = accountUser();
   const role = Codi.role();
   const path = Codi.path();
   const items = primaryNav(role);

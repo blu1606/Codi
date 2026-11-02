@@ -11,7 +11,7 @@ import { Codi, useCodi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
 import { THEME_OPTIONS, useThemeSync } from './theme';
 import { api } from '../../lib/api';
-import { DEMO_PASSWORD } from './account-store';
+import { DEMO_PASSWORD, syncLegacyUser } from './account-store';
 
 const SCEN = [
   ['paymentOutcome', 'Kết quả thanh toán', [['success', 'Thành công'], ['slow', 'Chậm (chờ lâu)'], ['expired', 'Mã hết hạn'], ['underpaid', 'Chuyển thiếu tiền'], ['qrfail', 'Không tải được QR'], ['late', 'Chuyển khoản trễ (sau hết hạn)'], ['overpaid', 'Chuyển thừa'], ['unavailable', 'Cổng thanh toán không khả dụng']]],
@@ -20,9 +20,6 @@ const SCEN = [
   ['aiAssistant', 'AI (trợ lý bài học & AI Chat)', [['ok', 'Bình thường'], ['thinking', 'Đang nghĩ'], ['ratelimit', 'Vượt giới hạn (trợ lý)'], ['error', 'Không khả dụng / lỗi'], ['loadfail', 'Không tải được lịch sử Tutor']]],
   ['codeSandbox', 'Sandbox chạy code', [['ok', 'Bình thường'], ['unavailable', 'Sandbox chạy code không khả dụng']]],
   ['kmap', 'Phân tích bản đồ kiến thức', [['ok', 'Thành công'], ['fail', 'Thất bại'], ['cycle', 'Phát hiện vòng lặp']]],
-  ['notifications', 'Thông báo', [['ok', 'Tải được'], ['error', 'Lỗi tải / đánh dấu']]],
-  ['sessions', 'Thiết bị đã đăng nhập', [['ok', 'Tải được'], ['error', 'Lỗi tải']]],
-  ['profileData', 'Dữ liệu hồ sơ (thống kê, hoạt động)', [['ok', 'Tải được'], ['error', 'Lỗi tải']]],
   ['githubAnalysis', 'Phân tích GitHub (Hồ sơ năng lực)', [['ok', 'Thành công'], ['insufficient', 'Chưa đủ dữ liệu'], ['rate-limit', 'GitHub giới hạn lượt đọc'], ['expired', 'Kết nối hết hiệu lực'], ['failed', 'Thất bại'], ['timeout', 'Quá 60 giây']]],
 ];
 const ROLES = [['guest', 'Khách'], ['learner', 'Học viên'], ['lecturer', 'Giảng viên'], ['admin', 'Quản trị viên']];
@@ -66,8 +63,15 @@ function setScenario(key, value) {
   Codi.ui.toast('Đã đổi kịch bản thử nghiệm.');
 }
 
+// Resets only the transitional browser-era store (/api/reset on db codi_rebuild) that unported pages still use.
+// The real database (codi: accounts, courses, orders, progress…) is reseeded with `npm run seed` in backend/, which
+// backs it up first; the drawer deliberately does not trigger that from the browser.
 async function resetData() {
-  const r = await Codi.ui.confirm({ title: 'Đặt lại dữ liệu thử nghiệm?', body: 'Mọi thao tác bạn đã làm trong bản thử nghiệm (giỏ hàng, đơn hàng, tiến độ học, chấm bài…) sẽ bị xoá.', reversible: false, confirmLabel: 'Đặt lại', danger: true });
+  const r = await Codi.ui.confirm({
+    title: 'Đặt lại dữ liệu tạm?',
+    body: 'Chỉ xoá dữ liệu tạm của các trang chưa chuyển sang máy chủ. Dữ liệu trên máy chủ (tài khoản, khoá học, đơn hàng, tiến độ học…) không thay đổi. Muốn đặt lại toàn bộ, chạy "npm run seed" trong thư mục backend (có sao lưu trước).',
+    reversible: false, confirmLabel: 'Đặt lại dữ liệu tạm', danger: true,
+  });
   if (!r.ok) return;
   try {
     await Codi.reset();
@@ -76,12 +80,20 @@ async function resetData() {
     return;
   }
   Codi.go('/');
-  Codi.ui.toast('Đã đặt lại dữ liệu.', { type: 'success' });
+  Codi.ui.toast('Đã đặt lại dữ liệu tạm.', { type: 'success' });
+}
+
+/** Keeps the transitional legacy store in step with the backend session (new accounts, OAuth returns, resets). */
+function useLegacyUserSync() {
+  const su = Codi.session && Codi.session.user;
+  const legacy = Codi.currentUser();
+  useEffect(() => { syncLegacyUser(); }, [su, legacy]);
 }
 
 export default function DevDrawer() {
   useCodi();
   useThemeSync(); // the drawer is mounted in every layout, so it hosts the theme listener
+  useLegacyUserSync(); // same reason
   const open = useDrawerOpen();
   const setOpen = setDrawerOpen;
   const [resetting, setResetting] = useState(false);
@@ -120,7 +132,8 @@ export default function DevDrawer() {
                 ))}
               </fieldset>
             ))}
-            <button type="button" className="btn btn-secondary btn-sm" onClick={onReset} disabled={resetting}><Icon name="rotate-ccw" className="icon-sm" /> Đặt lại dữ liệu</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onReset} disabled={resetting}><Icon name="rotate-ccw" className="icon-sm" /> Đặt lại dữ liệu tạm</button>
+            <p className="dev-note">Chỉ dữ liệu tạm của các trang chưa chuyển sang máy chủ. Dữ liệu máy chủ: chạy <code>npm run seed</code> trong backend.</p>
           </>
         )}
       </div>

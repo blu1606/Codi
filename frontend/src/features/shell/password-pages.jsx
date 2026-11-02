@@ -2,15 +2,22 @@
  * Forgot / reset password — port of the real app's app/forgot-password/page.tsx (6-digit email OTP, two steps in
  * one card), app/reset-password/page.tsx (token link with invalid-link state) and
  * components/settings/account-reset-password-form.tsx (/reset-password?source=account, reached from
- * "Quên mật khẩu hiện tại?" in settings). Email delivery is simulated with the demo OTP codes.
+ * "Quên mật khẩu hiện tại?" in settings).
+ *
+ * Backend (Better Auth): email-otp/send-verification-otp {type:'forget-password'} + email-otp/reset-password;
+ * reset-password {token,newPassword}; account/password/reset-status + account/password/reset (the grant cookie is
+ * set by account/password/verify-reset in settings). Without Resend the codes are printed to the backend console.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { ShellIcon } from './shell-ui';
 import OtpInput from './otp-input';
 import { FieldError, useMounted } from './auth';
-import { EMAIL_RE, checkOtp, clearResetGrant, readResetGrant, revokeAllSessions, setPassword } from './account-store';
+import { EMAIL_RE, authCode, authMessage } from './account-store';
+
+const sendResetCode = (email) => api.post('/api/auth/email-otp/send-verification-otp', { email, type: 'forget-password' });
 
 const Card = ({ children, center }) => (
   <div className="auth-wrap"><div className="auth-card card"><div className="card-body stack-4" style={center ? { textAlign: 'center' } : undefined}>{children}</div></div></div>
@@ -53,7 +60,6 @@ export function ForgotPasswordPage() {
   const [v, setV] = useState({ p1: '', p2: '' });
   const [errors, setErrors] = useState({});
   const [resetting, setResetting] = useState(false);
-  const deadline = useRef(0);
   const mounted = useMounted();
 
   const request = async (e) => {
@@ -62,14 +68,26 @@ export function ForgotPasswordPage() {
     const addr = email.trim();
     if (!EMAIL_RE.test(addr)) { setEmailErr('Vui lòng nhập địa chỉ email hợp lệ'); return; }
     setEmailErr(null); setSending(true);
-    await Codi.wait(600);
+    try {
+      await sendResetCode(addr);
+    } catch (err) {
+      if (!mounted.current) return;
+      setSending(false);
+      Codi.ui.toast(authMessage(err, 'Không thể gửi mã OTP lúc này. Vui lòng thử lại.'), { type: 'danger' });
+      return;
+    }
     if (!mounted.current) return;
     setSending(false);
     setSubmitted(addr); setOtp(''); setOtpErr(null); setV({ p1: '', p2: '' }); setErrors({});
     Codi.ui.toast('Mã OTP gồm 6 chữ số đã được gửi tới email của bạn!', { type: 'success' });
   };
   const resend = async () => {
-    await Codi.wait(500);
+    try {
+      await sendResetCode(submitted);
+    } catch (err) {
+      if (mounted.current) Codi.ui.toast(authMessage(err, 'Không thể gửi lại mã OTP lúc này.'), { type: 'danger' });
+      return false;
+    }
     if (!mounted.current) return false;
     Codi.ui.toast('Đã gửi mã OTP mới! Vui lòng kiểm tra email.', { type: 'success' });
     return true;
@@ -82,15 +100,22 @@ export function ForgotPasswordPage() {
     setErrors(errs || {});
     if (errs) return;
     setOtpErr(null); setResetting(true);
-    await Codi.wait(600);
+    try {
+      // Unknown emails fail like a wrong code, so the page never reveals whether an account exists.
+      await api.post('/api/auth/email-otp/reset-password', { email: submitted, otp, password: v.p1 });
+    } catch (err) {
+      if (!mounted.current) return;
+      setResetting(false);
+      const c = authCode(err);
+      setOtpErr(c === 'TOO_MANY_ATTEMPTS' ? 'Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.'
+        : c === 'OTP_EXPIRED' ? 'Mã OTP đã hết hạn. Vui lòng gửi lại mã.'
+          : c === 'PASSWORD_TOO_SHORT' || c === 'PASSWORD_TOO_LONG' || err.status === 429 ? authMessage(err) : 'Mã OTP không hợp lệ hoặc đã hết hạn 2 phút.');
+      return;
+    }
     if (!mounted.current) return;
     setResetting(false);
-    // Unknown emails fail like a wrong code, so the page never reveals whether an account exists.
-    const u = Codi.db().users.find((x) => x.email.toLowerCase() === submitted.toLowerCase());
-    if (checkOtp(otp, deadline.current) !== 'ok' || !u) { setOtpErr('Mã OTP không hợp lệ hoặc đã hết hạn 2 phút.'); return; }
-    setPassword(u.id, v.p1);
-    revokeAllSessions(u.id);
-    if (Codi.state.currentUserId === u.id) Codi.set((s) => { s.currentUserId = null; });
+    // Every session of that account is revoked; if it was this browser's, the app is now signed out.
+    await Codi.refreshSession().catch(() => {});
     Codi.ui.toast('Đặt lại mật khẩu thành công! Đang chuyển hướng về trang đăng nhập...', { type: 'success' });
     setTimeout(() => Codi.go('/login'), 1200);
   };
@@ -101,8 +126,7 @@ export function ForgotPasswordPage() {
         <Head icon="key" title="Đặt lại mật khẩu">Nhập mã OTP gồm 6 chữ số đã gửi tới <strong>{submitted}</strong> (hiệu lực 2 phút) và tạo mật khẩu mới.</Head>
         <div className="stack-2">
           <span className="field-label" style={{ textAlign: 'center' }}>Mã xác thực OTP</span>
-          <OtpInput key={submitted} value={otp} onChange={(x) => { setOtp(x); setOtpErr(null); }} onResend={resend} disabled={resetting} error={otpErr}
-            onDeadline={(d) => { deadline.current = d; }} />
+          <OtpInput key={submitted} value={otp} onChange={(x) => { setOtp(x); setOtpErr(null); }} onResend={resend} disabled={resetting} error={otpErr} />
         </div>
         <form className="stack-4" noValidate onSubmit={reset}>
           <PasswordFields v={v} setV={setV} errors={errors} disabled={resetting} />
@@ -129,7 +153,7 @@ export function ForgotPasswordPage() {
 }
 
 // ───────────────────────── /reset-password?token= ─────────────────────────
-// Simulated token check: any token works except "expired", which shows the server error state.
+// Token link (Better Auth reset-password). An invalid or expired token shows the server error state.
 function TokenReset({ token }) {
   const [v, setV] = useState({ p1: '', p2: '' });
   const [errors, setErrors] = useState({});
@@ -152,13 +176,16 @@ function TokenReset({ token }) {
     setErrors(errs || {});
     if (errs) return;
     setBusy(true);
-    await Codi.wait(600);
+    try {
+      await api.post('/api/auth/reset-password', { token, newPassword: v.p1 });
+    } catch (err) {
+      if (!mounted.current) return;
+      setBusy(false);
+      const msg = authMessage(err, 'Không thể đặt lại mật khẩu. Token có thể đã hết hạn.');
+      setErrorMsg(msg); Codi.ui.toast(msg, { type: 'danger' }); return;
+    }
     if (!mounted.current) return;
     setBusy(false);
-    if (token === 'expired') {
-      const err = 'Không thể đặt lại mật khẩu. Token có thể đã hết hạn.';
-      setErrorMsg(err); Codi.ui.toast(err, { type: 'danger' }); return;
-    }
     Codi.ui.toast('Đặt lại mật khẩu thành công! Đang chuyển đến trang đăng nhập...', { type: 'success' });
     setTimeout(() => Codi.go('/login'), 1500);
   };
@@ -187,7 +214,11 @@ function AccountReset() {
 
   useEffect(() => {
     let active = true;
-    Codi.wait(400).then(() => { if (active) { setGrant(readResetGrant()); setLoading(false); } });
+    // The grant is an httpOnly cookie set when the settings OTP was verified; the server says whether it is valid.
+    api.get('/api/auth/account/password/reset-status')
+      .then((r) => { if (active) setGrant(r && r.email ? { email: r.email } : null); })
+      .catch(() => { if (active) setGrant(null); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
@@ -198,15 +229,19 @@ function AccountReset() {
     if (p1.length < 8 || p1.length > 128) { setError('Mật khẩu mới phải có từ 8 đến 128 ký tự.'); return; }
     if (p1 !== p2) { setError('Mật khẩu xác nhận không khớp.'); return; }
     setBusy(true);
-    await Codi.wait(600);
+    try {
+      await api.post('/api/auth/account/password/reset', { newPassword: p1 });
+    } catch (err) {
+      if (!mounted.current) return;
+      setBusy(false);
+      if (authCode(err) === 'INVALID_RESET_GRANT') { setGrant(null); setError('Không thể đặt lại mật khẩu. Vui lòng thử lại.'); return; }
+      setError(authMessage(err, 'Không thể đặt lại mật khẩu. Vui lòng thử lại.'));
+      return;
+    }
     if (!mounted.current) return;
     setBusy(false);
-    if (!readResetGrant()) { setError('Không thể đặt lại mật khẩu. Vui lòng thử lại.'); setGrant(null); return; }
-    setPassword(grant.userId, p1);
-    clearResetGrant();
-    // The real endpoint revokes every session, so the learner signs in again with the new password.
-    revokeAllSessions(grant.userId);
-    Codi.set((s) => { s.currentUserId = null; });
+    // The endpoint revokes every session, so the learner signs in again with the new password.
+    await Codi.refreshSession().catch(() => {});
     Codi.ui.toast('Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.', { type: 'success' });
     Codi.go('/login');
   };

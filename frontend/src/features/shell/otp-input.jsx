@@ -84,7 +84,7 @@ export default function OtpInput({ length = 6, value, onChange, onResend, disabl
           </button>
         )}
       </div>
-      <p className="xsmall muted">Mã đúng trong bản thử nghiệm: 123456 · 000000 = mã hết hạn.</p>
+      <p className="xsmall muted">Bản thử nghiệm chưa gửi email thật: mã được in trong cửa sổ chạy máy chủ (backend).</p>
     </div>
   );
 }

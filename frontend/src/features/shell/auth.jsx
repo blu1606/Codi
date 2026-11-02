@@ -1,7 +1,10 @@
 /**
  * Auth UI — port of the real app's sign-in-form.tsx, sign-up-form.tsx, otp-input.tsx, google-button.tsx and
- * github-button.tsx, keeping the rebuild's gated sign-in modal (Codi.openSignIn(intent, opts)) and the simulated
- * OAuth account chooser (now for Google and GitHub).
+ * github-button.tsx, keeping the rebuild's gated sign-in modal (Codi.openSignIn(intent, opts)).
+ *
+ * Backend (Better Auth): POST /api/auth/sign-in/email · sign-up/email (signs in and emails a 6-digit code) ·
+ * email-otp/verify-email · email-otp/send-verification-otp · sign-in/social (redirects to Google / GitHub; the
+ * provider returns to /login?social=ok|<provider>&error=…). Without Resend the codes are printed to the backend console.
  *
  * One view store (authView) drives both the full pages (/login, /register) and the modal. Forms keep their own
  * field state; authView carries only the mode, the email/name between steps, the course context and the intent.
@@ -10,21 +13,21 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
-import { Alert, Avatar, Icon } from '../../components/ui/primitives';
+import { api } from '../../lib/api';
+import { Alert, Icon } from '../../components/ui/primitives';
 import { GithubMark, ShellIcon } from './shell-ui';
 import OtpInput from './otp-input';
-import { DEMO_PASSWORD, EMAIL_RE, OTP_MAX_TRIES, checkOtp, setPassword, startSession } from './account-store';
+import { DEMO_PASSWORD, EMAIL_RE, authCode, authMessage, logActivity, syncLegacyUser } from './account-store';
 import { safeNext } from './github-onboarding-page';
 
 const DEMO = [['minhanh@codi.vn', 'Học viên'], ['quochuy@codi.vn', 'Giảng viên'], ['giabao@codi.vn', 'Quản trị viên'], ['kimoanh@codi.vn', 'Tài khoản bị vô hiệu hoá']];
 const REMEMBER_EMAIL_KEY = 'codi_remember_email';
-const freshView = (extra) => ({ mode: 'login', email: '', name: '', error: null, courseTitle: null, reason: null, rev: 0, social: null, socialFrom: 'login', socialPick: null, ...extra });
+const freshView = (extra) => ({ mode: 'login', email: '', name: '', error: null, courseTitle: null, reason: null, rev: 0, ...extra });
 
 // ───────────────────────── view store ─────────────────────────
 let authView = freshView();
 let authModal = null;
 let authIntent = null;
-let pendingPassword = '';
 let ver = 0;
 const subs = new Set();
 const bump = () => { ver += 1; subs.forEach((f) => f()); };
@@ -38,7 +41,7 @@ const PROVIDERS = {
   google: { label: 'Google', Mark: GoogleMark },
   github: { label: 'GitHub', Mark: ({ className }) => <GithubMark className={className || 'icon'} /> },
 };
-const authTitle = () => ({ register: 'Tạo tài khoản', otp: 'Xác thực tài khoản', social: `Tiếp tục với ${(PROVIDERS[authView.social] || PROVIDERS.google).label}` }[authView.mode] || 'Chào mừng trở lại!');
+const authTitle = () => ({ register: 'Tạo tài khoản', otp: 'Xác thực tài khoản' }[authView.mode] || 'Chào mừng trở lại!');
 const isAuthPagePath = () => /^\/(login|register)$/.test(Codi.path());
 
 /** Re-renders the auth view (modal title included); rev remounts the active form. */
@@ -72,8 +75,9 @@ export function GoogleMark({ className = 'icon google-mark' }) {
  * destination. A pending intent (e.g. "Thêm vào giỏ" from the gated modal) wins: the learner finishes that action and
  * finds the GitHub prompt on the dashboard instead.
  */
-function completeAuth(userId, { delay = 0, isNew = false } = {}) {
-  startSession(userId);
+function completeAuth({ delay = 0, isNew = false } = {}) {
+  syncLegacyUser(); // a brand-new account is not in the transitional legacy store yet
+  logActivity('login');
   const intent = authIntent; authIntent = null;
   const wasModal = !!authModal;
   if (authModal) authModal.close();
@@ -81,10 +85,9 @@ function completeAuth(userId, { delay = 0, isNew = false } = {}) {
   const here = Codi.path() + (window.location.search || '');
   if (wasModal && !isNew) return;
   const go = () => {
-    const u = Codi.currentUser();
-    if (!u) return;
+    if (!Codi.session.user) return;
     const next = wasModal ? here : safeNext(Codi.query().next);
-    if (isNew && u.role === 'learner' && Codi.github && Codi.github.onboardingHref) Codi.go(Codi.github.onboardingHref(next));
+    if (isNew && Codi.role() === 'learner' && Codi.github && Codi.github.onboardingHref) Codi.go(Codi.github.onboardingHref(next));
     else Codi.go(next);
   };
   if (delay) setTimeout(go, delay); else go();
@@ -95,45 +98,34 @@ function setMode(mode) {
   if (isAuthPagePath() && !authModal && mode !== 'otp') { bump(); Codi.go('/' + (mode === 'register' ? 'register' : 'login')); } else refreshAuth();
 }
 
-// Simulated OAuth (no real Google/GitHub connection): choose an account, then consent.
-function startSocial(provider) {
-  if (authView.mode !== 'social') authView.socialFrom = authView.mode === 'register' ? 'register' : 'login';
-  authView.mode = 'social'; authView.social = provider; authView.socialPick = null; authView.error = null; refreshAuth();
+/**
+ * Real OAuth: Better Auth returns the provider URL and the browser leaves the app. The provider comes back to
+ * /login?social=ok&next=… (signed in), the GitHub onboarding step for a new account, or /login?social=<id>&error=….
+ */
+async function startSocial(provider) {
+  const next = authModal ? Codi.path() + (window.location.search || '') : safeNext(Codi.query().next);
+  const back = (q) => `/login?${new URLSearchParams(q).toString()}`;
+  const res = await api.post('/api/auth/sign-in/social', {
+    provider,
+    callbackURL: back({ social: 'ok', next }),
+    errorCallbackURL: back({ social: provider }),
+    newUserCallbackURL: Codi.github && Codi.github.onboardingHref ? Codi.github.onboardingHref(next) : next,
+  });
+  if (!res || typeof res.url !== 'string') throw new Error('Không mở được trang đăng nhập của nhà cung cấp.');
+  window.location.assign(res.url);
 }
-const leaveSocial = (notice) => { authView.mode = authView.socialFrom || 'login'; authView.socialPick = null; authView.error = notice; refreshAuth(); };
-function socialCancel() {
-  const p = PROVIDERS[authView.social].label;
-  leaveSocial({ type: 'info', retry: authView.social, title: `Bạn đã huỷ đăng nhập bằng ${p}`, body: 'Chưa có thay đổi nào. Bạn có thể thử lại hoặc dùng email và mật khẩu.' });
-}
-function socialDeny() {
-  const p = PROVIDERS[authView.social].label;
-  leaveSocial({ type: 'warn', retry: authView.social, title: `Codi chưa được ${p} cấp quyền`, body: `Codi cần tên và email để nhận ra tài khoản của bạn. Hãy thử lại và chọn "Cho phép", hoặc dùng email và mật khẩu.` });
-}
-function socialPick(email, name) { authView.socialPick = { email, name }; authView.error = null; refreshAuth(); }
-function socialBack() { authView.socialPick = null; authView.error = null; refreshAuth(); }
-function socialAllow() {
-  const pick = authView.socialPick;
-  const provider = authView.social;
-  if (!pick) return;
-  let u = Codi.db().users.find((x) => x.email.toLowerCase() === pick.email);
-  if (u && u.status !== 'active') {
-    authView.socialPick = null;
-    authView.error = { title: 'Tài khoản đã bị vô hiệu hoá', body: 'Tài khoản Codi gắn với email này hiện không thể đăng nhập. Liên hệ hotro@codi.vn nếu bạn cho rằng đây là nhầm lẫn.' };
-    refreshAuth(); return;
+
+/** Notice for ?social=<provider>&error=<code> after the provider sent the user back. */
+function socialNotice(provider, error) {
+  const P = PROVIDERS[provider];
+  const label = P ? P.label : 'nhà cung cấp';
+  if (error === 'access_denied') {
+    return { type: 'warn', retry: P ? provider : null, title: `Codi chưa được ${label} cấp quyền`, body: 'Codi cần tên và email để nhận ra tài khoản của bạn. Hãy thử lại và chọn "Cho phép", hoặc dùng email và mật khẩu.' };
   }
-  authView.error = null; authView.socialPick = null;
-  const isNew = !u;
-  if (!u) {
-    const now = new Date().toISOString();
-    u = { id: 'usr-new-' + Date.now().toString(36), name: pick.name, email: pick.email, role: 'learner', status: 'active', authProvider: provider, emailVerified: true, image: null, createdAt: now, lastActive: now };
-    const created = u;
-    Codi.set((s) => { s.db.users.push(created); }, { render: false });
-    Codi.ui.toast(`Đã tạo tài khoản Codi cho ${pick.email}.`, { type: 'success' });
+  if (/banned|vô hiệu/i.test(error)) {
+    return { title: 'Tài khoản đã bị vô hiệu hoá', body: 'Tài khoản Codi gắn với email này hiện không thể đăng nhập. Liên hệ hotro@codi.vn nếu bạn cho rằng đây là nhầm lẫn.' };
   }
-  // Signing in with GitHub links that GitHub account to the Codi account (Better Auth social account).
-  if (provider === 'github' && Codi.github && Codi.github.markLinked) Codi.github.markLinked(u.id, pick);
-  Codi.ui.toast('Đăng nhập thành công!', { type: 'success' });
-  completeAuth(u.id, { isNew });
+  return { type: 'danger', retry: P ? provider : null, title: `Chưa đăng nhập được bằng ${label}`, body: 'Chưa có thay đổi nào. Bạn có thể thử lại hoặc dùng email và mật khẩu.' };
 }
 
 const FieldError = ({ msg, id }) => (msg ? <p className="field-error" id={id}><Icon name="alert-circle" className="icon-sm" /><span>{msg}</span></p> : null);
@@ -147,12 +139,25 @@ function useMounted() {
 }
 
 // ───────────────────────── forms ─────────────────────────
+/** Opens the provider; a failure to even start (provider not configured, network) becomes the form's alert. */
+async function trySocial(provider) {
+  try {
+    await startSocial(provider);
+    return true;
+  } catch (e) {
+    const label = PROVIDERS[provider].label;
+    authView.error = { type: 'danger', title: `Chưa kết nối được ${label}`, body: e.status === 404 ? `Máy chủ chưa cấu hình đăng nhập bằng ${label}. Hãy dùng email và mật khẩu.` : authMessage(e, 'Không mở được trang đăng nhập. Vui lòng thử lại.') };
+    refreshAuth();
+    return false;
+  }
+}
+
 function AuthAlert({ err }) {
   if (!err) return null;
   const P = err.retry ? PROVIDERS[err.retry] : null;
   return (
     <Alert type={err.type || 'danger'} title={err.title} body={err.body}
-      actions={P ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => startSocial(err.retry)}><P.Mark /> Thử lại với {P.label}</button> : null} />
+      actions={P ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => trySocial(err.retry)}><P.Mark /> Thử lại với {P.label}</button> : null} />
   );
 }
 
@@ -164,10 +169,8 @@ function SocialButton({ provider, text }) {
   const onClick = async () => {
     if (busy) return;
     setBusy(true);
-    await Codi.wait(400);
-    if (!mounted.current) return;
-    setBusy(false);
-    startSocial(provider);
+    const leaving = await trySocial(provider);
+    if (!leaving && mounted.current) setBusy(false);
   };
   return (
     <button className="btn btn-secondary btn-block" type="button" onClick={onClick} disabled={busy}>
@@ -198,9 +201,8 @@ function LoginForm({ view }) {
     if (Object.keys(next).length) return;
     setServerError(null);
     setBusy(true);
-    let userId;
     try {
-      userId = await Codi.signIn(addr, password);
+      await Codi.signIn(addr, password);
     } catch (e) {
       if (!mounted.current) return;
       setBusy(false);
@@ -219,7 +221,7 @@ function LoginForm({ view }) {
     writeRemembered(remember, addr);
     authView.email = addr;
     Codi.ui.toast('Đăng nhập thành công!', { type: 'success' });
-    completeAuth(userId);
+    completeAuth();
   };
 
   return (
@@ -276,15 +278,24 @@ function RegisterForm({ view }) {
     if (Object.keys(next).length) return;
     setServerError(null);
     setBusy(true);
-    await Codi.wait(600);
-    if (!mounted.current) return;
-    setBusy(false);
-    if (Codi.db().users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      setServerError({ title: 'Email đã được dùng', body: 'Email này đã có tài khoản. Hãy đăng nhập hoặc dùng "Quên mật khẩu?".' });
+    try {
+      // Better Auth creates the account, signs it in and sends the email-verification code.
+      await api.post('/api/auth/sign-up/email', { name, email, password: v.password });
+    } catch (e) {
+      if (!mounted.current) return;
+      setBusy(false);
+      const code = authCode(e);
+      if (code === 'USER_ALREADY_EXISTS' || code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' || e.status === 422) {
+        setServerError({ title: 'Email đã được dùng', body: 'Email này đã có tài khoản. Hãy đăng nhập hoặc dùng "Quên mật khẩu?".' });
+      } else {
+        setServerError({ body: authMessage(e, 'Đăng ký thất bại. Vui lòng thử lại.') });
+      }
       Codi.ui.toast('Đăng ký thất bại', { type: 'danger' });
       return;
     }
-    authView.name = name; authView.email = email; pendingPassword = v.password;
+    if (!mounted.current) return;
+    setBusy(false);
+    authView.name = name; authView.email = email;
     Codi.ui.toast('Đăng ký thành công! Mã OTP xác thực 6 số đã được gửi.', { type: 'success' });
     setMode('otp');
   };
@@ -316,36 +327,45 @@ function OtpStep({ view }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
-  const tries = useRef(0);
-  const deadline = useRef(0);
   const mounted = useMounted();
 
   const verify = async () => {
     if (busy || locked) return;
     if (code.length !== 6) { setErr('Vui lòng nhập đủ 6 chữ số OTP'); return; }
     setErr(null); setBusy(true);
-    await Codi.wait(500);
-    if (!mounted.current) return;
-    setBusy(false);
-    const r = checkOtp(code, deadline.current);
-    if (r === 'expired') { setErr('Mã OTP đã hết hạn. Vui lòng gửi lại mã.'); return; }
-    if (r === 'wrong') {
-      tries.current += 1;
-      if (tries.current >= OTP_MAX_TRIES) { setLocked(true); setErr('Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.'); } else setErr('Mã OTP không chính xác hoặc đã hết hạn 2 phút.');
+    try {
+      await api.post('/api/auth/email-otp/verify-email', { email: view.email, otp: code });
+      // Sign-up already set the session cookie; read it so the app knows who is signed in.
+      await Codi.refreshSession();
+    } catch (e) {
+      if (!mounted.current) return;
+      setBusy(false);
+      const c = authCode(e);
+      if (c === 'TOO_MANY_ATTEMPTS') { setLocked(true); setErr('Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.'); return; }
+      if (c === 'OTP_EXPIRED') { setErr('Mã OTP đã hết hạn. Vui lòng gửi lại mã.'); return; }
+      setErr(c === 'INVALID_OTP' ? 'Mã OTP không chính xác hoặc đã hết hạn 2 phút.' : authMessage(e, 'Mã OTP không chính xác hoặc đã hết hạn 2 phút.'));
       return;
     }
-    const id = 'usr-new-' + Date.now().toString(36);
-    const now = new Date().toISOString();
-    const user = { id, name: authView.name, email: authView.email, role: 'learner', status: 'active', emailVerified: true, image: null, createdAt: now, lastActive: now };
-    Codi.set((s) => { s.db.users.push(user); }, { render: false });
-    setPassword(id, pendingPassword); pendingPassword = '';
+    if (!mounted.current) return;
+    setBusy(false);
+    if (!Codi.session.user) {
+      // Verified, but this browser has no session (e.g. cookies were cleared): sign in normally.
+      Codi.ui.toast('Xác thực email thành công! Vui lòng đăng nhập.', { type: 'success' });
+      authView.email = view.email; setMode('login');
+      return;
+    }
     Codi.ui.toast('Xác thực email thành công! Đang chuyển hướng vào hệ thống...', { type: 'success' });
-    completeAuth(id, { delay: 1000, isNew: true });
+    completeAuth({ delay: 1000, isNew: true });
   };
   const resend = async () => {
-    await Codi.wait(500);
+    try {
+      await api.post('/api/auth/email-otp/send-verification-otp', { email: view.email, type: 'email-verification' });
+    } catch (e) {
+      if (mounted.current) Codi.ui.toast(authMessage(e, 'Không thể gửi lại mã OTP lúc này.'), { type: 'danger' });
+      return false;
+    }
     if (!mounted.current) return false;
-    tries.current = 0; setLocked(false); setErr(null);
+    setLocked(false); setErr(null);
     Codi.ui.toast('Đã gửi mã OTP mới! Vui lòng kiểm tra email.', { type: 'success' });
     return true;
   };
@@ -356,68 +376,10 @@ function OtpStep({ view }) {
         <span className="shell-icon-bubble" aria-hidden="true"><ShellIcon name="shield-check" /></span>
         <p className="small muted">Mã OTP gồm 6 chữ số đã được gửi tới email <strong>{view.email}</strong>. Mã có hiệu lực trong 2 phút.</p>
       </div>
-      <OtpInput value={code} onChange={(x) => { setCode(x); setErr(null); }} onResend={resend} disabled={busy || locked} error={err} autoFocus
-        onDeadline={(d) => { deadline.current = d; }} />
+      <OtpInput value={code} onChange={(x) => { setCode(x); setErr(null); }} onResend={resend} disabled={busy || locked} error={err} autoFocus />
       <button className="btn btn-primary btn-block" type="submit" disabled={code.length !== 6 || busy || locked}>{busy ? 'Đang xác thực...' : 'Xác thực và hoàn tất'}</button>
       <p className="small muted" style={{ textAlign: 'center' }}>Nhập nhầm email? <button type="button" className="btn-link" onClick={() => setMode('register')}>Đăng ký lại</button></p>
     </form>
-  );
-}
-
-// Simulated provider chooser. An existing Codi email signs straight in; a new email creates a learner account
-// without OTP (the provider already verified it); a deactivated account is refused like the password flow.
-const SOCIAL_ACCOUNTS = {
-  google: [{ email: 'minhanh@codi.vn', name: 'Minh Anh' }, { email: 'nam.tran.dev@gmail.com', name: 'Trần Văn Nam' }, { email: 'kimoanh@codi.vn', name: 'Kim Oanh' }],
-  github: [{ email: 'minhanh@codi.vn', name: 'Minh Anh' }, { email: 'quocanh@codi.vn', name: 'Quốc Anh' }, { email: 'hoang.le.gh@gmail.com', name: 'Lê Minh Hoàng' }],
-};
-function SocialForm({ view }) {
-  useCodi();
-  const provider = view.social || 'google';
-  const P = PROVIDERS[provider];
-  const err = view.error;
-  const pick = view.socialPick;
-  if (pick) {
-    return (
-      <div className="stack-4">
-        <div className="google-head"><P.Mark /><p className="small muted">Codi muốn truy cập Tài khoản {P.label} của bạn</p></div>
-        {err && <Alert type="danger" title={err.title} body={err.body} />}
-        <div className="google-who"><Avatar user={{ name: pick.name }} size="sm" /><span className="google-account-body"><span className="google-account-name">{pick.name}</span><span className="google-account-email od-truncate">{pick.email}</span></span></div>
-        <div className="stack-2"><span className="small strong">Codi sẽ được phép:</span>
-          <ul className="google-scopes">
-            <li><Icon name="user" className="icon-sm" /><span>{provider === 'github' ? 'Xem hồ sơ công khai và ảnh đại diện của bạn' : 'Xem tên và ảnh đại diện của bạn'}</span></li>
-            <li><Icon name="mail" className="icon-sm" /><span>Xem địa chỉ email của bạn</span></li>
-          </ul>
-          <p className="xsmall muted">{provider === 'github' ? 'Codi không đọc repo riêng tư và không ghi gì lên GitHub.' : 'Codi không đọc thư, danh bạ hay tệp trên Google Drive của bạn.'} Bản thử nghiệm không kết nối {P.label} thật.</p></div>
-        <div className="google-consent-actions">
-          <button type="button" className="btn btn-secondary" onClick={socialDeny}>Từ chối</button>
-          <button type="button" className="btn btn-primary" onClick={socialAllow}>Cho phép</button>
-        </div>
-        <button type="button" className="btn btn-ghost btn-block" onClick={socialBack}><Icon name="arrow-left" className="icon-sm" /> Chọn tài khoản khác</button>
-      </div>
-    );
-  }
-  return (
-    <div className="stack-4">
-      <div className="google-head"><P.Mark /><p className="small muted">Chọn tài khoản {P.label} để tiếp tục vào Codi</p></div>
-      {err && <Alert type="danger" title={err.title} body={err.body} />}
-      <ul className="google-accounts">
-        {SOCIAL_ACCOUNTS[provider].map((a) => {
-          const u = Codi.db().users.find((x) => x.email.toLowerCase() === a.email);
-          const name = u ? u.name : a.name;
-          return (
-            <li key={a.email}>
-              <button type="button" className="google-account" onClick={() => socialPick(a.email, name)}>
-                <Avatar user={{ name }} size="sm" />
-                <span className="google-account-body"><span className="google-account-name">{name}</span><span className="google-account-email od-truncate">{a.email}</span></span>
-                <span className="google-account-tag">{u ? 'Đã có tài khoản Codi' : 'Tài khoản mới'}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="xsmall muted">Codi chỉ nhận tên, email và ảnh đại diện từ {P.label}. Bản thử nghiệm không kết nối {P.label} thật.</p>
-      <button type="button" className="btn btn-ghost btn-block" onClick={socialCancel}>Huỷ</button>
-    </div>
   );
 }
 
@@ -426,7 +388,6 @@ function AuthBody() {
   const key = view.mode + ':' + view.rev;
   if (view.mode === 'register') return <RegisterForm key={key} view={view} />;
   if (view.mode === 'otp') return <OtpStep key={key} view={view} />;
-  if (view.mode === 'social') return <SocialForm key={key} view={view} />;
   return <LoginForm key={key} view={view} />;
 }
 
@@ -476,12 +437,30 @@ export function openSignIn(intent, opts) {
 Codi.openSignIn = openSignIn;
 
 // ───────────────────────── pages ─────────────────────────
-function AuthPage({ mode }) {
+function AuthPage({ mode, query = {} }) {
   useCodi();
   const view = useAuthView();
-  if (view.mode !== mode && view.mode !== 'social' && !(mode === 'register' && view.mode === 'otp')) {
+  if (view.mode !== mode && !(mode === 'register' && view.mode === 'otp')) {
     authView = { ...authView, mode, error: null };
   }
+
+  // Back from Google / GitHub: continue when signed in, otherwise explain what happened. The query is then
+  // dropped so a reload does not repeat it.
+  const { social, error, next } = query;
+  useEffect(() => {
+    if (!social) return;
+    if (social === 'ok' && Codi.session.user) {
+      syncLegacyUser();
+      logActivity('login');
+      Codi.ui.toast('Đăng nhập thành công!', { type: 'success' });
+      Codi.go(safeNext(next));
+      return;
+    }
+    authView.error = socialNotice(social, error || 'unknown');
+    refreshAuth();
+    Codi.go('/login');
+  }, [social, error, next]);
+
   const desc = DESCRIPTION[authView.mode];
   return (
     <div className="auth-wrap"><div className="auth-card card"><div className="card-body stack-4">
@@ -494,7 +473,7 @@ function AuthPage({ mode }) {
     </div></div></div>
   );
 }
-export const LoginPage = () => <AuthPage mode="login" />;
-export const RegisterPage = () => <AuthPage mode="register" />;
+export const LoginPage = ({ query }) => <AuthPage mode="login" query={query} />;
+export const RegisterPage = ({ query }) => <AuthPage mode="register" query={query} />;
 
 export { FieldError, formValues, useMounted };

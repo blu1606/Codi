@@ -6,18 +6,29 @@
  * Layout: no app header (focus layout with the "Đóng cài đặt" exit), left card with avatar + "Sửa Hồ Sơ", three
  * tabs, Esc closes to the role home. Dialogs: display name, change email (OTP to the new address), password
  * (with "Quên mật khẩu hiện tại?" recovery). Security tab lists device sessions.
+ *
+ * Backend: PATCH /api/user/profile (name); Better Auth email-otp/request-email-change + change-email,
+ * email-otp/send-verification-otp + verify-email, change-password (revokes the other sessions),
+ * account/password/request-reset + verify-reset (then /reset-password?source=account), list-sessions,
+ * get-session, revoke-session. Without Resend the email codes are printed to the backend console.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { Icon } from '../../components/ui/primitives';
 import { FieldError, useMounted } from './auth';
 import OtpInput from './otp-input';
-import { GithubMark, ListRowsSkeleton, LoadingRegion, ShellIcon, Skel, UserAvatar, scenario } from './shell-ui';
-import {
-  EMAIL_RE, OTP_MAX_TRIES, checkOtp, checkPassword, currentSessionId, describeDevice, endSession, grantReset,
-  isMobileAgent, revokeOtherSessions, revokeSession, sessionsOf, setPassword,
-} from './account-store';
+import { GithubMark, ListRowsSkeleton, LoadingRegion, ShellIcon, Skel, UserAvatar } from './shell-ui';
+import { EMAIL_RE, accountUser, authCode, authMessage, describeDevice, endSession, isMobileAgent, refreshAccount } from './account-store';
+
+const otpError = (e, fallback) => {
+  const c = authCode(e);
+  if (c === 'OTP_EXPIRED') return 'Mã xác thực đã hết hạn. Vui lòng gửi lại mã.';
+  if (c === 'TOO_MANY_ATTEMPTS') return 'Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.';
+  if (c === 'INVALID_OTP') return 'Mã xác thực không đúng. Vui lòng kiểm tra lại.';
+  return authMessage(e, fallback);
+};
 
 export const maskEmail = (e) => { const s = String(e || ''); return '••••••••' + s.slice(s.lastIndexOf('@')); };
 
@@ -35,10 +46,11 @@ function openDialog(title, description, render, onClosed) {
 
 // ───────────────────────── display name ─────────────────────────
 function NameForm({ handle, setBusy }) {
-  const u = Codi.currentUser();
+  const u = accountUser();
   const [draft, setDraft] = useState(u ? u.name : '');
   const [saving, setSaving] = useState(false);
   const ref = useRef(null);
+  const mounted = useMounted();
   useEffect(() => { if (ref.current) ref.current.focus(); }, []);
   if (!u) return null;
   const dirty = draft.trim() !== u.name;
@@ -47,8 +59,15 @@ function NameForm({ handle, setBusy }) {
     const next = draft.trim();
     if (!next || !dirty || saving) return;
     setSaving(true); setBusy(true);
-    await Codi.wait(400);
-    Codi.set(() => { const cu = Codi.currentUser(); if (cu) cu.name = next; });
+    try {
+      await api.patch('/api/user/profile', { name: next });
+      await refreshAccount();
+    } catch (err) {
+      if (!mounted.current) return;
+      setSaving(false); setBusy(false);
+      Codi.ui.toast(authMessage(err, 'Không thể cập nhật tên hiển thị.'), { type: 'danger' });
+      return;
+    }
     setBusy(false);
     handle.close();
     Codi.ui.toast('Đã cập nhật tên hiển thị.', { type: 'success' });
@@ -67,14 +86,12 @@ function NameForm({ handle, setBusy }) {
 
 // ───────────────────────── change email ─────────────────────────
 function ChangeEmailForm({ handle, setBusy }) {
-  const u = Codi.currentUser();
+  const u = accountUser();
   const [draft, setDraft] = useState('');
   const [destination, setDestination] = useState(null);
   const [otp, setOtp] = useState('');
   const [busy, setB] = useState(false);
   const [error, setError] = useState('');
-  const tries = useRef(0);
-  const deadline = useRef(0);
   const ref = useRef(null);
   const mounted = useMounted();
   useEffect(() => { if (!destination && ref.current) ref.current.focus(); }, [destination]);
@@ -87,13 +104,17 @@ function ChangeEmailForm({ handle, setBusy }) {
     if (!EMAIL_RE.test(next)) { setError('Vui lòng nhập địa chỉ email hợp lệ.'); return false; }
     if (next === u.email.toLowerCase()) { setError('Email mới phải khác email hiện tại.'); return false; }
     pending(true); setError('');
-    await Codi.wait(600);
+    try {
+      // The backend refuses an address that already has an account (EMAIL_UNAVAILABLE) before sending anything.
+      await api.post('/api/auth/email-otp/request-email-change', { newEmail: next });
+    } catch (err) {
+      if (!mounted.current) return false;
+      pending(false);
+      setError(authMessage(err, 'Không thể gửi mã xác thực lúc này. Vui lòng thử lại.'));
+      return false;
+    }
     if (!mounted.current) return false;
     pending(false);
-    if (Codi.db().users.some((x) => x.id !== u.id && x.email.toLowerCase() === next)) {
-      setError('Email này đã được liên kết với một tài khoản khác. Vui lòng sử dụng email khác.'); return false;
-    }
-    tries.current = 0;
     setDestination(next); setOtp('');
     return true;
   };
@@ -102,19 +123,18 @@ function ChangeEmailForm({ handle, setBusy }) {
     if (busy) return;
     if (!destination) { await sendCode(); return; }
     if (!/^\d{6}$/.test(otp)) { setError('Vui lòng nhập đủ 6 chữ số xác thực.'); return; }
-    if (tries.current >= OTP_MAX_TRIES) { setError('Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.'); return; }
     pending(true); setError('');
-    await Codi.wait(600);
-    if (!mounted.current) return;
-    pending(false);
-    const r = checkOtp(otp, deadline.current);
-    if (r === 'expired') { setError('Mã xác thực đã hết hạn. Vui lòng gửi lại mã.'); return; }
-    if (r === 'wrong') {
-      tries.current += 1;
-      setError(tries.current >= OTP_MAX_TRIES ? 'Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.' : 'Mã xác thực không đúng. Vui lòng kiểm tra lại.');
+    try {
+      await api.post('/api/auth/email-otp/change-email', { newEmail: destination, otp });
+      await refreshAccount();
+    } catch (err) {
+      if (!mounted.current) return;
+      pending(false);
+      setError(otpError(err, 'Không thể cập nhật email. Vui lòng thử lại.'));
       return;
     }
-    Codi.set(() => { const cu = Codi.currentUser(); if (cu) { cu.email = destination; cu.emailVerified = true; } });
+    if (!mounted.current) return;
+    pending(false);
     handle.close();
     Codi.ui.toast('Đã xác thực và cập nhật email. Bạn có thể dùng email mới để đăng nhập.', { type: 'success' });
   };
@@ -124,7 +144,7 @@ function ChangeEmailForm({ handle, setBusy }) {
       {destination ? (
         <>
           <p className="small muted" style={{ overflowWrap: 'anywhere' }}>Kiểm tra hộp thư <strong>{destination}</strong> và nhập mã xác thực gồm 6 chữ số.</p>
-          <OtpInput value={otp} onChange={setOtp} onResend={sendCode} disabled={busy} autoFocus onDeadline={(d) => { deadline.current = d; }} />
+          <OtpInput value={otp} onChange={setOtp} onResend={sendCode} disabled={busy} autoFocus />
           <div><button type="button" className="btn-link small" disabled={busy} onClick={() => { setDestination(null); setOtp(''); setError(''); }}>Nhập email khác</button></div>
         </>
       ) : (
@@ -149,11 +169,18 @@ function EmailVerificationCard({ u, displayEmail }) {
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const deadline = useRef(0);
+  const mounted = useMounted();
   if (u.emailVerified !== false) return null;
   const send = async () => {
     setSending(true);
-    await Codi.wait(500);
+    try {
+      await api.post('/api/auth/email-otp/send-verification-otp', { email: u.email, type: 'email-verification' });
+    } catch (err) {
+      if (mounted.current) setSending(false);
+      Codi.ui.toast(authMessage(err, 'Không thể gửi mã OTP lúc này.'), { type: 'danger' });
+      return false;
+    }
+    if (!mounted.current) return false;
     setSending(false); setShowOtp(true);
     Codi.ui.toast('Mã OTP gồm 6 chữ số đã được gửi tới email của bạn!', { type: 'success' });
     return true;
@@ -161,10 +188,16 @@ function EmailVerificationCard({ u, displayEmail }) {
   const verify = async () => {
     if (otp.length !== 6) { Codi.ui.toast('Vui lòng nhập đủ 6 chữ số OTP', { type: 'danger' }); return; }
     setVerifying(true);
-    await Codi.wait(500);
+    try {
+      await api.post('/api/auth/email-otp/verify-email', { email: u.email, otp });
+      await refreshAccount();
+    } catch (err) {
+      if (mounted.current) setVerifying(false);
+      Codi.ui.toast(authCode(err) === 'TOO_MANY_ATTEMPTS' ? 'Bạn đã nhập sai quá nhiều lần. Vui lòng gửi lại mã.' : 'Mã OTP không hợp lệ hoặc đã hết hạn.', { type: 'danger' });
+      return;
+    }
+    if (!mounted.current) return;
     setVerifying(false);
-    if (checkOtp(otp, deadline.current) !== 'ok') { Codi.ui.toast('Mã OTP không hợp lệ hoặc đã hết hạn.', { type: 'danger' }); return; }
-    Codi.set(() => { const cu = Codi.currentUser(); if (cu) cu.emailVerified = true; });
     setShowOtp(false);
     Codi.ui.toast('Xác thực email thành công!', { type: 'success' });
   };
@@ -176,7 +209,7 @@ function EmailVerificationCard({ u, displayEmail }) {
         <div><button type="button" className="btn btn-primary btn-sm" onClick={send} disabled={sending}>{sending ? 'Đang gửi mã...' : 'Gửi mã OTP xác thực'}</button></div>
       ) : (
         <div className="stack-3" style={{ maxWidth: 420 }}>
-          <OtpInput value={otp} onChange={setOtp} onResend={send} disabled={verifying} autoFocus onDeadline={(d) => { deadline.current = d; }} />
+          <OtpInput value={otp} onChange={setOtp} onResend={send} disabled={verifying} autoFocus />
           <div className="row">
             <button type="button" className="btn btn-primary btn-sm" onClick={verify} disabled={otp.length !== 6 || verifying}>{verifying ? 'Đang xác thực...' : 'Xác nhận OTP'}</button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowOtp(false)}>Thu gọn</button>
@@ -193,12 +226,18 @@ function PasswordRecoveryForm({ email, onBack, setBusy, handle }) {
   const [otp, setOtp] = useState('');
   const [busy, setB] = useState(false);
   const [error, setError] = useState('');
-  const deadline = useRef(0);
   const mounted = useMounted();
   const pending = (b) => { setB(b); setBusy(b); };
   const resend = async () => {
     pending(true); setError('');
-    await Codi.wait(500);
+    try {
+      await api.post('/api/auth/account/password/request-reset', {});
+    } catch (err) {
+      if (!mounted.current) return false;
+      pending(false);
+      setError(authMessage(err, 'Không thể gửi mã xác thực lúc này. Vui lòng thử lại.'));
+      return false;
+    }
     if (!mounted.current) return false;
     pending(false);
     return true;
@@ -207,12 +246,17 @@ function PasswordRecoveryForm({ email, onBack, setBusy, handle }) {
     e.preventDefault();
     if (busy || !/^\d{6}$/.test(otp)) return;
     pending(true); setError('');
-    await Codi.wait(500);
+    try {
+      // Sets a 10-minute httpOnly grant cookie that /reset-password?source=account checks.
+      await api.post('/api/auth/account/password/verify-reset', { otp });
+    } catch (err) {
+      if (!mounted.current) return;
+      pending(false);
+      setError(otpError(err, 'Mã xác thực không đúng. Vui lòng kiểm tra lại.'));
+      return;
+    }
     if (!mounted.current) return;
     pending(false);
-    const r = checkOtp(otp, deadline.current);
-    if (r !== 'ok') { setError(r === 'expired' ? 'Mã xác thực đã hết hạn. Vui lòng gửi lại mã.' : 'Mã xác thực không đúng. Vui lòng kiểm tra lại.'); return; }
-    grantReset(Codi.state.currentUserId, email);
     handle.close();
     Codi.go('/reset-password?source=account');
   };
@@ -220,7 +264,7 @@ function PasswordRecoveryForm({ email, onBack, setBusy, handle }) {
     <form className="stack-4" noValidate onSubmit={verify}>
       <div className="stack-1"><strong>Xác thực email</strong><p className="small muted">Khôi phục mật khẩu bằng email đang liên kết với tài khoản.</p></div>
       <p className="small muted" style={{ overflowWrap: 'anywhere' }}>Nhập mã 6 số đã gửi đến <strong>{email}</strong> để tiếp tục đặt mật khẩu mới.</p>
-      <OtpInput value={otp} onChange={setOtp} onResend={resend} disabled={busy} autoFocus onDeadline={(d) => { deadline.current = d; }} />
+      <OtpInput value={otp} onChange={setOtp} onResend={resend} disabled={busy} autoFocus />
       {error && <p className="field-error" role="alert"><Icon name="alert-circle" className="icon-sm" /><span>{error}</span></p>}
       <button type="submit" className="btn btn-primary btn-block" disabled={busy || otp.length !== 6}>{busy ? 'Đang xác thực...' : 'Xác thực mã và tiếp tục'}</button>
       <button type="button" className="btn btn-ghost btn-block" disabled={busy} onClick={onBack}>Quay lại đổi mật khẩu</button>
@@ -229,7 +273,7 @@ function PasswordRecoveryForm({ email, onBack, setBusy, handle }) {
 }
 
 function ChangePasswordCard({ handle, setBusy }) {
-  const u = Codi.currentUser();
+  const u = accountUser();
   const [v, setV] = useState({ cur: '', p1: '', p2: '' });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -251,19 +295,32 @@ function ChangePasswordCard({ handle, setBusy }) {
     setErrors(next);
     if (Object.keys(next).length) return;
     setSaving(true); setBusy(true);
-    await Codi.wait(600);
+    try {
+      // Better Auth keeps this device signed in with a fresh session and revokes every other one.
+      await api.post('/api/auth/change-password', { currentPassword: v.cur, newPassword: v.p1, revokeOtherSessions: true });
+    } catch (err) {
+      if (!mounted.current) return;
+      setSaving(false); setBusy(false);
+      const c = authCode(err);
+      Codi.ui.toast(c === 'INVALID_PASSWORD' || !c ? 'Đổi mật khẩu thất bại. Vui lòng kiểm tra mật khẩu hiện tại.' : authMessage(err, 'Đổi mật khẩu thất bại.'), { type: 'danger' });
+      return;
+    }
     if (!mounted.current) return;
     setSaving(false); setBusy(false);
-    if (!checkPassword(u.id, v.cur)) { Codi.ui.toast('Đổi mật khẩu thất bại. Vui lòng kiểm tra mật khẩu hiện tại.', { type: 'danger' }); return; }
-    setPassword(u.id, v.p1);
-    revokeOtherSessions(u.id);
     setV({ cur: '', p1: '', p2: '' });
     Codi.ui.toast('Đổi mật khẩu thành công! Các phiên đăng nhập khác đã được đăng xuất.', { type: 'success' });
   };
   const startRecovery = async () => {
     if (sending || saving) return;
     setSending(true); setBusy(true);
-    await Codi.wait(500);
+    try {
+      await api.post('/api/auth/account/password/request-reset', {});
+    } catch (err) {
+      if (!mounted.current) return;
+      setSending(false); setBusy(false);
+      Codi.ui.toast(authMessage(err, 'Không thể gửi mã xác thực lúc này. Vui lòng thử lại.'), { type: 'danger' });
+      return;
+    }
     if (!mounted.current) return;
     setSending(false); setBusy(false);
     setRecoveryEmail(u.email);
@@ -289,35 +346,46 @@ function ChangePasswordCard({ handle, setBusy }) {
 // ───────────────────────── sessions ─────────────────────────
 function SessionSettings({ revision }) {
   useCodi();
-  const u = Codi.currentUser();
+  const u = accountUser();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [revoking, setRevoking] = useState(null);
   const [currentId, setCurrentId] = useState(null);
+  const [list, setList] = useState([]);
   const userId = u ? u.id : null;
 
   useEffect(() => {
     if (!userId) return undefined;
     let active = true;
     setLoading(true); setError(false); setCurrentId(null);
-    Codi.wait(500).then(() => {
-      if (!active) return;
-      if (scenario(Codi.state, 'sessions') === 'error') setError(true);
-      else setCurrentId(currentSessionId(userId));
-      setLoading(false);
-    });
+    // A password change replaces this device's session, so read the current one together with the list.
+    Promise.all([api.get('/api/auth/list-sessions'), api.get('/api/auth/get-session')])
+      .then(([rows, current]) => {
+        if (!active) return;
+        if (!Array.isArray(rows) || !current || !current.session) throw new Error('Không thể tải phiên đăng nhập.');
+        setList(rows.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
+        setCurrentId(current.session.id);
+      })
+      .catch(() => { if (active) setError(true); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [userId, revision, refresh]);
 
   if (!u) return null;
-  const sessions = !loading && !error ? sessionsOf(u.id) : [];
+  const sessions = !loading && !error ? list : [];
   const revoke = async (s) => {
     if (loading || error || revoking || !currentId || s.id === currentId) return;
     setRevoking(s.id);
-    await Codi.wait(400);
-    revokeSession(s.id);
+    try {
+      await api.post('/api/auth/revoke-session', { token: s.token });
+    } catch (err) {
+      setRevoking(null);
+      Codi.ui.toast(authMessage(err, 'Không thể đăng xuất thiết bị.'), { type: 'danger' });
+      return;
+    }
+    setList((cur) => cur.filter((x) => x.id !== s.id));
     setRevoking(null);
     Codi.ui.toast('Đã đăng xuất thiết bị.', { type: 'success' });
   };
@@ -445,7 +513,7 @@ const TABS = [
 
 export function SettingsPage({ query }) {
   useCodi();
-  const u = Codi.currentUser();
+  const u = accountUser();
   const tab = query.tab === 'security' || query.tab === 'connections' ? query.tab : 'account';
 
   // Esc closes settings (real: router.push('/dashboard')) unless a dialog handled the key first.
