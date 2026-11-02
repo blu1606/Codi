@@ -19,9 +19,9 @@ import {
 } from "./github-profile-ai";
 
 export const GITHUB_PROFILE_SERVICE_LIMITS = Object.freeze({
-  totalMs: 55_000,
-  collectionMs: 25_000,
-  aiMs: 25_000,
+  totalMs: 150_000,
+  collectionMs: 90_000,
+  aiMs: 50_000,
 });
 
 const requestSchema = z.strictObject({

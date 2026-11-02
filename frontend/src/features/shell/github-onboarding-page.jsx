@@ -74,7 +74,7 @@ export default function GithubOnboardingPage() {
         </div>
         {failureEl}
         <ReadsList />
-        <p className="xsmall muted">Yêu cầu này có thể mất đến 60 giây. Trang không tự phân tích hoặc tự thử lại.</p>
+        <p className="xsmall muted">Yêu cầu này có thể mất đến 3 phút. Trang không tự phân tích hoặc tự thử lại.</p>
         <div className="shell-ghob-actions">
           {unlinkBtn}<span className="od-fill" />
           <button type="button" className="btn btn-ghost" onClick={later}>Để sau</button>
@@ -86,7 +86,7 @@ export default function GithubOnboardingPage() {
     body = (
       <section className="stack-6" aria-labelledby="ghob-wait-h">
         <h1 id="ghob-wait-h" tabIndex={-1}>Đang phân tích GitHub…</h1>
-        <p className="muted" role="status"><Icon name="loader" className="icon-sm shell-spin" /> Codi đang đọc repo công khai của bạn. Việc này có thể mất đến 60 giây.</p>
+        <p className="muted" role="status"><Icon name="loader" className="icon-sm shell-spin" /> Codi đang đọc repo công khai của bạn. Việc này có thể mất đến 3 phút.</p>
       </section>
     );
   } else if (phase === 'saved') {

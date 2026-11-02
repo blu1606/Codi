@@ -15,7 +15,7 @@ import { projectGithubProfile } from "@/lib/github-profile-analysis-contract";
 import { githubProfileAiDiagnosticsSchema } from "@/lib/github-profile-ai";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 160;
 const privateHeaders = { "Cache-Control": "private, no-store" };
 const failure = (code: string, error: string, status: number) =>
   NextResponse.json({ code, error }, { status, headers: privateHeaders });
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
   )
     return failure("invalid_origin", "Yêu cầu không hợp lệ.", 403);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 55_000);
+  const timer = setTimeout(() => controller.abort(), 150_000);
   const signal = AbortSignal.any([controller.signal, request.signal]);
   let claim: GithubProfileRequest | undefined;
   let activeConflict = false;

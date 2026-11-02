@@ -566,7 +566,7 @@ export function PendingChecklist({ hasPrevious }) {
           </li>
         ))}
       </ol>
-      <p className="xsmall muted" style={{ margin: 0 }}>Vui lòng giữ trang mở; tối đa 60 giây chờ. Không tự thử lại.{hasPrevious ? ' Kết quả trước vẫn hiển thị bên dưới.' : ''}</p>
+      <p className="xsmall muted" style={{ margin: 0 }}>Vui lòng giữ trang mở; tối đa 3 phút chờ. Không tự thử lại.{hasPrevious ? ' Kết quả trước vẫn hiển thị bên dưới.' : ''}</p>
     </section>
   );
 }

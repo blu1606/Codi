@@ -238,7 +238,7 @@ export function createGithubProfileStore(
               .update(githubProfiles)
               .set({
                 activeRequestId: randomUUID(),
-                activeUntil: sql`${databaseNow} + interval '55 seconds'`,
+                activeUntil: sql`${databaseNow} + interval '150 seconds'`,
                 consentVersion: request.consentVersion,
                 consentedAt: databaseNow,
               })

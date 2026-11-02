@@ -4,7 +4,7 @@
  *   linked?   GET /api/auth/list-accounts (a "github" account)
  *   profile   GET /api/github-profile → { profile | null }
  *   connect   POST /api/auth/link-social { provider:'github', callbackURL } → the browser goes to GitHub
- *   analyse   POST /api/github-profile { consentVersion:'public-github-v1' } (explicit consent, up to 60 s)
+ *   analyse   POST /api/github-profile { consentVersion:'public-github-v1' } (explicit consent, up to 3 min)
  *   unlink    DELETE /api/github-profile
  * Linking and analysing stay separate, explicit steps; nothing starts on page load. Every failure shows the server's
  * message. Locally, GitHub linking needs the OAuth app to accept http://localhost:5190/api/auth/callback/github and
@@ -27,7 +27,7 @@ import { PendingChecklist, ProfileReport } from './github-report';
 export const PROFILE_HREF = '/profile?tab=nang-luc';
 export const ONBOARDING_PATH = '/onboarding/github';
 const CONSENT_VERSION = 'public-github-v1';
-const TIMEOUT_MS = 60000;
+const TIMEOUT_MS = 160000;
 const STALE_MS = 90 * 86400000;
 const USAGE_LABEL = { tried: 'Đã thử', regular: 'Dùng thường xuyên', deep: 'Dùng sâu' };
 
@@ -94,7 +94,7 @@ export async function analyseGithub() {
     set(keepPrevious ? { linked: true } : { linked: true, profile: latest });
     return latest;
   } catch (e) {
-    if (ctrl.signal.aborted) throw new Error('Đã hết thời gian chờ 60 giây. Chưa xác nhận được kết quả; yêu cầu trên máy chủ có thể vẫn đang hoàn tất. Không tự thử lại.');
+    if (ctrl.signal.aborted) throw new Error('Đã hết thời gian chờ 3 phút. Chưa xác nhận được kết quả; yêu cầu trên máy chủ có thể vẫn đang hoàn tất. Không tự thử lại.');
     throw e;
   } finally {
     clearTimeout(timer);
@@ -278,7 +278,7 @@ export function GithubProfilePanel({ linkError }) {
           <h3 className="small strong" style={{ margin: 0 }}>Cho phép Codi phân tích GitHub?</h3>
           <p className="small muted" style={{ margin: 0 }}>Chỉ phân tích tài khoản GitHub được máy chủ xác nhận đã liên kết với tài khoản Codi của bạn.</p>
           <ReadsList />
-          <p className="xsmall muted" style={{ margin: 0 }}>Yêu cầu này có thể mất đến 60 giây. Trang không tự phân tích hoặc tự thử lại.</p>
+          <p className="xsmall muted" style={{ margin: 0 }}>Yêu cầu này có thể mất đến 3 phút. Trang không tự phân tích hoặc tự thử lại.</p>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={analyse}>Tôi đồng ý · Phân tích</button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={later}>Để sau</button>
