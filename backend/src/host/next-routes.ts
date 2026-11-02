@@ -54,8 +54,11 @@ function readParams(c: Context, segments: Segment[]) {
 }
 
 // @hono/node-server passes a lazy Request look-alike that the Request constructor cannot copy, so rebuild it.
+// A body-less request (e.g. a plain DELETE) keeps body null, as in Next.js: some routes reject any request body.
 function toNextRequest(raw: Request) {
-  const hasBody = raw.method !== "GET" && raw.method !== "HEAD";
+  const length = raw.headers.get("content-length");
+  const declaresBody = raw.headers.has("transfer-encoding") || (length !== null && length.trim() !== "0");
+  const hasBody = raw.method !== "GET" && raw.method !== "HEAD" && declaresBody;
   return new NextRequest(raw.url, {
     method: raw.method,
     headers: raw.headers,
