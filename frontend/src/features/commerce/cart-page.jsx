@@ -1,14 +1,18 @@
 /**
  * S05 Cart '/cart' (real components/cart/cart-view.tsx) — line items with remove + 10 s undo (in-page countdown and
- * toast), voucher field ("Đang áp dụng…"), order summary, "Thanh toán". States: empty, items, voucher applied,
- * voucher invalid (blocks checkout with the voucher message), owned item auto-removed notice, pending order banner
- * with "Huỷ đơn này" / "Tiếp tục thanh toán", replace-order modal, checkout error.
+ * toast), voucher field ("Đang áp dụng…"), order summary, "Thanh toán". States: loading, load error, empty, items,
+ * voucher applied, voucher invalid (blocks checkout with the voucher message), owned item auto-removed notice,
+ * pending order banner with "Huỷ đơn này" / "Tiếp tục thanh toán", replace-order modal, checkout error.
+ * Data: GET/POST/DELETE /api/student/cart, POST /api/vouchers/validate, POST /api/orders/checkout, /api/orders/cancel.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
+import { useApi } from '../../lib/use-api';
 import { Alert, Empty, Icon, Thumb } from '../../components/ui/primitives';
-import { cancelOrder, cartSummary, checkVoucher, cm, createOrderFromCart, lecturerName, myPendingOrders, priceLabel, uid } from './commerce-lib';
+import { priceLabel } from './commerce-lib';
+import { cartChanged, checkoutCart, getVoucher, levelLabel, setVoucher } from './commerce-api';
 
 const fmt = Codi.fmt;
 const UNDO_SECONDS = 10;
@@ -24,25 +28,19 @@ function ReplaceButton({ onConfirm }) {
 
 export default function CartPage() {
   useCodi();
+  const [voucher, setVoucherState] = useState(getVoucher);
+  const cart = useApi('/api/student/cart' + (voucher ? '?voucher=' + encodeURIComponent(voucher) : ''));
   const [draft, setDraft] = useState('');
   const [voucherError, setVoucherError] = useState(null);
   const [applying, setApplying] = useState(false);
-  const [ownedNotice, setOwnedNotice] = useState([]);
   const [creating, setCreating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState(null);
   const [removed, setRemoved] = useState(null); // { id, title }
   const [undoLeft, setUndoLeft] = useState(0);
 
-  // Auto-remove courses the learner already owns (e.g. bought elsewhere) and explain why.
-  const ownedInCart = Codi.cart().filter((id) => Codi.isEnrolled(id));
-  const ownedKey = ownedInCart.join(',');
-  useEffect(() => {
-    if (!ownedKey) return;
-    const ids = ownedKey.split(',');
-    setOwnedNotice(ids.map((id) => (Codi.course(id) || { title: id }).title));
-    Codi.set(() => Codi.setCart(Codi.cart().filter((id) => !Codi.isEnrolled(id))));
-  }, [ownedKey]);
+  const s = cart.data;
+  useEffect(() => { if (s) cartChanged(s.count); }, [s]);
 
   // Undo window: counts down from 10 s, then the in-page alert clears.
   useEffect(() => {
@@ -54,87 +52,128 @@ export default function CartPage() {
     return () => clearInterval(t);
   }, [removed]);
 
-  const s = cartSummary();
-  const courses = s.courses.filter((c) => !ownedInCart.includes(c.id));
-  const pending = myPendingOrders()[0];
+  if (!s) {
+    if (cart.error) {
+      return (
+        <div className="page page-narrow stack-4"><h1>Giỏ hàng</h1>
+          <div className="card"><Empty icon="alert-circle" title="Không tải được giỏ hàng" body={<span role="alert">{cart.error.message}</span>}
+            actions={<button type="button" className="btn btn-secondary" onClick={() => cart.reload()}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} /></div>
+        </div>
+      );
+    }
+    return (
+      <div className="page stack-4" aria-busy="true">
+        <h1>Giỏ hàng</h1>
+        <div className="layout-aside">
+          <div className="stack-3">{[1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 76 }} />)}</div>
+          <div className="skeleton" style={{ height: 280 }} />
+        </div>
+        <p className="sr-only" role="status">Đang tải giỏ hàng…</p>
+      </div>
+    );
+  }
 
-  const undo = (id) => {
-    Codi.set(() => { if (!Codi.cart().includes(id)) Codi.setCart(Codi.cart().concat(id)); });
+  const courses = s.items;
+  const pending = s.pendingOrder;
+  const ownedNotice = s.removedOwnedTitles || [];
+
+  const changeVoucher = (code) => { setVoucher(code); setVoucherState(code); };
+  const undo = async (id) => {
     setRemoved((r) => (r && r.id === id ? null : r)); setUndoLeft(0);
+    try { await api.post('/api/student/cart', { courseId: id }); } catch (e) { Codi.ui.toast(e.message, { type: 'danger' }); }
+    cart.reload(); cartChanged();
   };
-  const remove = (c) => {
-    Codi.set(() => Codi.setCart(Codi.cart().filter((x) => x !== c.id)));
+  const remove = async (c) => {
+    try {
+      await api.del('/api/student/cart', { courseId: c.id });
+    } catch (e) {
+      Codi.ui.toast(e.message, { type: 'danger' });
+      return;
+    }
     setRemoved({ id: c.id, title: c.title }); setUndoLeft(UNDO_SECONDS);
+    cart.setData((d) => (d ? { ...d, items: d.items.filter((x) => x.id !== c.id) } : d));
+    cart.reload(); cartChanged();
     Codi.ui.toast(`Đã xoá "${c.title}" khỏi giỏ hàng`, { duration: UNDO_SECONDS * 1000, action: { label: 'Hoàn tác', onClick: () => undo(c.id) } });
   };
-  const applyVoucher = (e) => {
+  const applyVoucher = async (e) => {
     e.preventDefault();
     const code = draft.trim().toUpperCase();
     if (!code) { setVoucherError('Nhập mã giảm giá trước khi bấm Áp dụng.'); return; }
     setApplying(true); setVoucherError(null);
-    setTimeout(() => {
-      setApplying(false);
-      const r = checkVoucher(code, cartSummary().subtotal);
-      if (r.error) { setVoucherError(r.error); return; }
+    try {
+      const r = await api.post('/api/vouchers/validate', { code });
       setDraft('');
-      Codi.set(() => { cm().voucher[uid()] = r.voucher.code; });
-    }, 400);
+      changeVoucher(r.voucher.code);
+    } catch (err) {
+      setVoucherError(err.message);
+    } finally {
+      setApplying(false);
+    }
   };
-  const removeVoucher = () => { setVoucherError(null); Codi.set(() => { cm().voucher[uid()] = null; }); };
-  const cancelPending = (p) => {
+  const removeVoucher = () => { setVoucherError(null); changeVoucher(''); };
+  const cancelPending = async (p) => {
     setCancelling(true); setError(null);
-    setTimeout(() => {
-      let ok = false;
-      Codi.set((st) => { const o = st.db.orders.find((x) => x.id === p.id); ok = cancelOrder(o); });
+    try {
+      await api.post('/api/orders/cancel', { orderId: p.id });
+      Codi.ui.toast('Đã huỷ đơn hàng. Khoá học đã quay lại giỏ hàng.', { type: 'success' });
+    } catch (e) {
+      setError(e.message || 'Đơn hàng không tồn tại, đã hoàn tất thanh toán hoặc đã được huỷ trước đó.');
+    } finally {
       setCancelling(false);
-      if (!ok) setError('Đơn hàng không tồn tại, đã hoàn tất thanh toán hoặc đã được huỷ trước đó.');
-    }, 400);
+      cart.reload(); cartChanged();
+    }
   };
 
-  const runCheckout = (replaceOrderId) => {
+  const runCheckout = async (replaceOrderId) => {
     setCreating(true); setError(null);
-    setTimeout(() => {
-      const r = createOrderFromCart({ replaceOrderId });
-      setCreating(false);
-      if (r.order) { Codi.ui.closeAll(); Codi.go('/checkout?order=' + r.order.id); return; }
-      if (r.code === 'PENDING_ORDER_EXISTS') { openReplaceModal(r.pending); return; }
+    try {
+      const r = await checkoutCart({ total: s.total, replaceOrderId });
       Codi.ui.closeAll();
-      setError(r.error || 'Không thể tạo đơn hàng.');
-      Codi.rerender();
-    }, 500);
+      setVoucherState('');
+      Codi.go((r.totalAmount === 0 ? '/checkout/success?order=' : '/checkout?order=') + encodeURIComponent(r.orderCode));
+    } catch (e) {
+      if (e.body && e.body.code === 'PENDING_ORDER_EXISTS') {
+        const fresh = await cart.reload();
+        if (fresh && fresh.pendingOrder) { openReplaceModal(fresh.pendingOrder); return; }
+      }
+      Codi.ui.closeAll();
+      setError(e.message || 'Không thể tạo đơn hàng.');
+      cart.reload();
+    } finally {
+      setCreating(false);
+    }
   };
   const openReplaceModal = (p) => {
     Codi.ui.modal({
       title: 'Bạn còn một đơn hàng chưa thanh toán',
       body: (<>
-        <p>Đơn <strong>{p.code}</strong> ({fmt.vnd(p.total)}) đang chờ thanh toán. Bạn muốn làm gì?</p>
+        <p>Đơn <strong>{p.code}</strong> ({fmt.vnd(p.totalAmount)}) đang chờ thanh toán. Bạn muốn làm gì?</p>
         <p className="small muted">Tạo đơn mới sẽ huỷ đơn cũ. Nếu bạn đã chuyển khoản cho đơn cũ, hãy chọn tiếp tục đơn cũ.</p>
       </>),
       footer: (<>
         <button type="button" className="btn btn-ghost" data-close>Đóng</button>
-        <Link className="btn btn-secondary" to={`/checkout?order=${p.id}`} data-close>Tiếp tục đơn cũ</Link>
+        <Link className="btn btn-secondary" to={`/checkout?order=${p.code}`} data-close>Tiếp tục đơn cũ</Link>
         <ReplaceButton onConfirm={() => runCheckout(p.id)} />
       </>),
     });
   };
   const checkout = () => {
     setRemoved(null);
-    const p = myPendingOrders()[0];
-    if (p) openReplaceModal(p); else runCheckout(null);
+    if (pending) openReplaceModal(pending); else runCheckout(null);
   };
 
   const notices = (<>
     {error && <Alert type="danger" title="Lỗi" body={error} />}
     {pending && (
       <Alert type="warn" title={`Bạn có đơn hàng ${pending.code} đang chờ thanh toán`}
-        body={`${pending.items.length} khoá học · ${fmt.vnd(pending.total)} · tạo lúc ${fmt.datetime(pending.createdAt)}`}
+        body={`${pending.itemCount} khoá học · ${fmt.vnd(pending.totalAmount)} · tạo lúc ${fmt.datetime(pending.createdAt)}`}
         actions={<>
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => cancelPending(pending)} disabled={cancelling} aria-busy={cancelling ? 'true' : undefined}>{cancelling ? 'Đang huỷ…' : 'Huỷ đơn này'}</button>
-          <Link className="btn btn-primary btn-sm" to={`/checkout?order=${pending.id}`}>Tiếp tục thanh toán</Link>
+          <Link className="btn btn-primary btn-sm" to={`/checkout?order=${pending.code}`}>Tiếp tục thanh toán</Link>
         </>} />
     )}
     {ownedNotice.length > 0 && <Alert type="info" title="Đã bỏ khoá học bạn đã sở hữu khỏi giỏ" body={ownedNotice.join(', ')} />}
-    {removed && !Codi.cart().includes(removed.id) && (
+    {removed && !courses.some((c) => c.id === removed.id) && (
       <Alert type="info" title={`Đã xoá "${removed.title}" khỏi giỏ hàng`}
         actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => undo(removed.id)}><Icon name="rotate-ccw" className="icon-sm" /> Hoàn tác {undoLeft > 0 ? `(${undoLeft}s)` : ''}</button>} />
     )}
@@ -151,7 +190,7 @@ export default function CartPage() {
     );
   }
 
-  const verr = voucherError || (s.code && s.voucherInvalid);
+  const verr = voucherError || (voucher && s.voucherError);
   return (
     <div className="page stack-4">
       <h1>Giỏ hàng <span className="muted" style={{ fontWeight: 400 }}>({courses.length})</span></h1>
@@ -160,7 +199,7 @@ export default function CartPage() {
         <ul className="list stack-3">{courses.map((c) => (
           <li key={c.id} className="card"><div className="card-body compact row cm-cart-row">
             <Thumb course={c} small />
-            <div className="od-fill stack-1"><Link className="strong" to={`/courses/${c.slug}`}>{c.title}</Link><span className="small muted">{lecturerName(c)} · {Codi.levelLabel(c.level)}</span></div>
+            <div className="od-fill stack-1"><Link className="strong" to={`/courses/${c.slug}`}>{c.title}</Link><span className="small muted">{c.lecturerName} · {levelLabel(c.level)}</span></div>
             <span className="price">{priceLabel(c)}</span>
             <button type="button" className="btn btn-ghost btn-icon" onClick={() => remove(c)} aria-label={`Xoá ${c.title} khỏi giỏ`}><Icon name="x" /></button>
           </div></li>
@@ -184,8 +223,8 @@ export default function CartPage() {
               </div>
               {verr
                 ? <p className="field-error" id="voucher-err" role="alert"><Icon name="alert-circle" className="icon-sm" /><span>{verr}</span></p>
-                : <p className="field-help" id="voucher-err"><span className="strong">Chỉ để test:</span> thử WELCOME20 (đơn từ 500.000 ₫) hoặc SUMMER15 (đã hết hạn).</p>}
-              {s.code && s.voucherInvalid && <button type="button" className="btn btn-link small" onClick={removeVoucher}>Bỏ mã giảm giá</button>}
+                : <p className="field-help" id="voucher-err"><span className="strong">Chỉ để test:</span> thử WELCOME20 (đơn từ 500.000 ₫) hoặc SUMMER15 (đã ngừng áp dụng).</p>}
+              {voucher && s.voucherError && <button type="button" className="btn btn-link small" onClick={removeVoucher}>Bỏ mã giảm giá</button>}
             </form>
           )}
           <dl className="cm-sum">

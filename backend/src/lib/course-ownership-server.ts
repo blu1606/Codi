@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { courses, orderItems, orders, studentCart, studentEnrollments, studentTransactions } from "@codi-1/db";
 import { db } from "@/services";
 import { resolveCourseOwnership, type CourseOwnershipDetail } from "./course-ownership";
@@ -85,17 +85,20 @@ export async function getCourseOwnershipMap(
     pendingMap.set(item.courseId, item.orderCode);
   }
 
-  // Check legacy student_transactions for compatibility
+  // Check legacy student_transactions for compatibility. Rows mirrored from an order are skipped: the order
+  // status above is authoritative (an expired order leaves its mirror row pending).
   const legacyTxs = await db
     .select({
       courseId: studentTransactions.courseId,
       txId: studentTransactions.id,
     })
     .from(studentTransactions)
+    .leftJoin(orders, eq(orders.code, studentTransactions.id))
     .where(
       and(
         eq(studentTransactions.userId, userId),
         eq(studentTransactions.status, "pending"),
+        isNull(orders.id),
         inArray(studentTransactions.courseId, validCourseIds)
       )
     );

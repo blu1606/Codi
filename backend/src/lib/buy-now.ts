@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
 import { courses, orders, orderItems, orderEvents } from "@codi-1/db";
 import { studentEnrollments, studentTransactions } from "@codi-1/db/schema/student-profile";
@@ -111,14 +111,17 @@ export async function createBuyNowOrder(
     };
   }
 
-  // Also check legacy studentTransactions for fallback
+  // Also check legacy studentTransactions for fallback; a row mirrored from an order (failed / expired /
+  // cancelled) must not resurrect it, as in add-course-to-cart.
   const [existingTx] = await db
     .select({ id: studentTransactions.id, amount: studentTransactions.amount })
     .from(studentTransactions)
+    .leftJoin(orders, eq(orders.code, studentTransactions.id))
     .where(
       and(
         eq(studentTransactions.userId, userId),
         eq(studentTransactions.status, "pending"),
+        isNull(orders.id),
         eq(studentTransactions.courseId, targetCourse.id)
       )
     )

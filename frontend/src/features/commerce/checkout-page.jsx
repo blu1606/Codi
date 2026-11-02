@@ -1,72 +1,59 @@
 /**
  * S06 Checkout '/checkout?order=…' (real app/checkout/page.tsx, VietQR bank transfer) and S07 success
- * '/checkout/success?order=…' (real app/checkout/success/page.tsx).
+ * '/checkout/success?order=…' (real app/checkout/success/page.tsx). `order` is the order code (or numeric id).
  * States: creating, create error / payments unavailable / order not found (with support line), awaiting payment
  * (QR + countdown + copy rows + tracker + live status line), qr-failed (text fallback), manual check (30 s cooldown,
  * inline result, D5), underpaid, slow notice, expired (incl. late payment honoured afterwards), failed, paid,
  * cancelled, refunded.
  *
- * Payment is simulated in-browser: scenario.paymentOutcome picks the transfer that "arrives" and the pure
- * applyTransfer rules in commerce-lib decide what it does. Outcomes: success | slow | expired | underpaid | qrfail,
- * plus late | overpaid | unavailable when the scenario switcher offers them.
+ * Data: GET /api/orders/:id (polled every 3 s; the server expires overdue orders), POST /api/orders/checkout,
+ * /api/orders/cancel, /api/orders/:id/manual-check, /api/orders/:id/new-code. The bank is simulated: the Alt+K
+ * scenario paymentOutcome asks the backend (POST /api/dev/simulate-payment) to post a SePay transfer to the real
+ * webhook, which marks the order paid and enrols the learner server-side. Outcomes: success | overpaid | underpaid
+ * (transfer after 6 s), expired (deadline moved to now), late (expired, then a transfer 8 s later), slow / qrfail
+ * (no transfer), unavailable (checkout refused before an order is created).
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
+import { useApi } from '../../lib/use-api';
 import { Alert, Empty, Icon, Stepper, Thumb, orderStatusLabel } from '../../components/ui/primitives';
-import {
-  SUPPORT_EMAIL, amountDue, cancelOrder, createOrderFromCart, expireOrder, findMyOrder, isExpiredPending, mmss,
-  newCodeFor, receiveTransfer, timeLeft,
-} from './commerce-lib';
+import { SUPPORT_EMAIL, mmss } from './commerce-lib';
+import { cartChanged, checkoutCart, simulatePayment, toOrder } from './commerce-api';
 
 const fmt = Codi.fmt;
 const clock = (ms) => new Date(ms).toLocaleTimeString('vi-VN');
 const Mail = () => <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>;
+const POLL_MS = 3000;
 const TRANSFER_AFTER_MS = 6000;
 const SLOW_NOTICE_MS = 15000;
 const LATE_TRANSFER_MS = 8000;
-const OVERPAY_EXTRA = 50000;
+
+const amountDue = (o) => Math.max(0, o.total - (o.received || 0));
+const timeLeft = (o) => (o.paymentDeadline ? new Date(o.paymentDeadline).getTime() - Date.now() : 0);
+const orderUrl = (key) => `/api/orders/${encodeURIComponent(key)}`;
 
 // ───────────────────────── payment simulation ─────────────────────────
-// One running simulation for the order on screen: { orderId, start, checkedAt, slowShown, manualCheckCooldown,
-// manualChecking, manualCheckedAt, transferred }. Leaving the page stops it; the order stays pending.
-let sim = null;
+// One simulated transfer per order code and outcome per page session (StrictMode remounts never send twice).
+const simulated = new Set();
+const SIM_OUTCOME = { success: 'paid', overpaid: 'overpaid', underpaid: 'underpaid' };
 
-/** A transfer that "arrives" after expiry (scenario 'late'): the webhook rules decide whether it is honoured. */
-function scheduleLateTransfer(orderId) {
-  setTimeout(() => {
-    const o = Codi.db().orders.find((x) => x.id === orderId);
-    if (!o || o.status !== 'failed') return;
-    receiveTransfer(orderId, amountDue(o), o.code);
-    Codi.set(() => {});
-  }, LATE_TRANSFER_MS);
-}
-
-function settle(o, amount) {
-  const kind = receiveTransfer(o.id, amount, o.code);
-  if (kind === 'paid' || kind === 'late_paid') { sim = null; Codi.go('/checkout/success?order=' + o.id); return; }
-  Codi.set(() => {});
-}
-
-function tickSim(orderId) {
-  const s = sim;
-  if (!s || s.orderId !== orderId) return;
-  const o = Codi.db().orders.find((x) => x.id === orderId);
-  if (!o || o.status !== 'pending') { sim = null; return; }
-  if (timeLeft(o) <= 0) { sim = null; Codi.set(() => expireOrder(o)); return; } // 30 minute expiry
-  if (Date.now() - s.checkedAt >= 3000) s.checkedAt = Date.now(); // auto-check every 3 seconds
-  if (s.manualCheckCooldown > 0) s.manualCheckCooldown -= 1;
-  const elapsed = Date.now() - s.start;
-  if (elapsed >= SLOW_NOTICE_MS) s.slowShown = true;
+function runSimulation(order, onChange) {
   const outcome = Codi.state.scenario.paymentOutcome;
-  // The QR image fails to load right away (real: <img onError>); "Tải lại mã QR" clears it for this visit.
-  if (outcome === 'qrfail' && !s.qrTried) { s.qrTried = true; if (!o.qrFailed) Codi.set(() => { o.qrFailed = true; }); }
-  if (elapsed < TRANSFER_AFTER_MS || s.transferred) return;
-  if (outcome === 'success') { s.transferred = true; settle(o, amountDue(o)); }
-  else if (outcome === 'overpaid') { s.transferred = true; settle(o, amountDue(o) + OVERPAY_EXTRA); }
-  else if (outcome === 'underpaid') { s.transferred = true; if (!o.received) settle(o, Math.round(amountDue(o) * 0.5)); }
-  else if (outcome === 'expired') { sim = null; Codi.set(() => expireOrder(o)); }
-  else if (outcome === 'late') { sim = null; Codi.set(() => expireOrder(o)); scheduleLateTransfer(o.id); }
+  const key = `${order.code}:${outcome}`;
+  if (simulated.has(key)) return;
+  const send = (kind) => simulatePayment(order.code, kind).then(onChange)
+    .catch((e) => Codi.ui.toast('Không mô phỏng được giao dịch ngân hàng: ' + e.message, { type: 'danger' }));
+  if (SIM_OUTCOME[outcome]) {
+    if (outcome === 'underpaid' && order.received > 0) return;
+    simulated.add(key);
+    send(SIM_OUTCOME[outcome]);
+  } else if (outcome === 'expired' || outcome === 'late') {
+    simulated.add(key);
+    // The late transfer arrives after the page has shown the expired state; polling picks up the result.
+    send('expire').then(() => { if (outcome === 'late') setTimeout(() => send('paid'), LATE_TRANSFER_MS); });
+  }
   // 'qrfail', 'slow' and anything else: no transfer arrives; auto-check keeps running until expiry.
 }
 
@@ -103,15 +90,14 @@ function CopyRow({ label, value, copyValue, emphasis }) {
 }
 
 function OrderSummary({ order }) {
-  const subtotal = order.items.reduce((n, i) => n + i.price, 0);
+  const subtotal = order.subtotal;
   return (
     <div className="card"><div className="card-body stack-3">
       <h2 className="h-card">Thông tin đơn hàng</h2>
       <ul className="list">{order.items.map((i) => {
-        const c = Codi.course(i.courseId);
         return (
           <li key={i.courseId} className="list-row" style={{ paddingInline: 0 }}>
-            <span className="list-main"><span>{c ? c.title : i.courseId}</span><span className="xsmall muted">Khóa học</span></span>
+            <span className="list-main"><span>{i.title || i.courseId}</span><span className="xsmall muted">Khóa học</span></span>
             <span className="price od-nowrap">{fmt.vnd(i.price)}</span>
           </li>
         );
@@ -142,7 +128,7 @@ function CheckoutError({ type, message, orderParam }) {
   );
 }
 
-/** Entry without an order: resume the pending order (real 409 PENDING_ORDER_EXISTS path) or create one. */
+/** Entry without an order: create one from the cart, or resume the pending order (409 PENDING_ORDER_EXISTS). */
 function CreatingOrder() {
   const navigate = useNavigate();
   const ran = useRef(false);
@@ -150,17 +136,30 @@ function CreatingOrder() {
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
-    const r = createOrderFromCart();
-    if (r.order) navigate('/checkout?order=' + r.order.id, { replace: true });
-    else if (r.code === 'PENDING_ORDER_EXISTS') navigate('/checkout?order=' + r.pending.id, { replace: true });
-    else setErr({ type: r.code === 'UNAVAILABLE' ? 'unavailable' : 'create', message: r.error });
+    (async () => {
+      try {
+        const cart = await api.get('/api/student/cart');
+        const r = await checkoutCart({ total: cart.total });
+        navigate((r.totalAmount === 0 ? '/checkout/success?order=' : '/checkout?order=') + encodeURIComponent(r.orderCode), { replace: true });
+      } catch (e) {
+        if (e.body && e.body.code === 'PENDING_ORDER_EXISTS') {
+          const cart = await api.get('/api/student/cart').catch(() => null);
+          if (cart && cart.pendingOrder) { navigate('/checkout?order=' + cart.pendingOrder.code, { replace: true }); return; }
+        }
+        setErr({ type: e.status === 503 ? 'unavailable' : 'create', message: e.message });
+      }
+    })();
   }, [navigate]);
   if (err) return <CheckoutError {...err} />;
+  return <CheckoutSkeleton label="Đang tạo đơn hàng…" />;
+}
+
+function CheckoutSkeleton({ label }) {
   return (
     <div className="page page-narrow stack-4" aria-busy="true">
       <div className="skeleton skeleton-line" style={{ width: '40%', height: 28 }} />
       <div className="skeleton" style={{ height: 220 }} />
-      <p className="sr-only" role="status">Đang tạo đơn hàng…</p>
+      <p className="sr-only" role="status">{label}</p>
     </div>
   );
 }
@@ -172,50 +171,55 @@ async function cancelCheckout(order) {
     reversible: 'Bạn có thể tạo đơn mới từ giỏ hàng bất cứ lúc nào.', confirmLabel: 'Huỷ giao dịch', cancelLabel: 'Giữ đơn hàng', danger: true,
   });
   if (!r.ok) return;
-  let ok = false;
-  Codi.set(() => { ok = cancelOrder(order); }, { render: false });
-  if (!ok) { Codi.ui.toast('Đơn hàng không tồn tại, đã hoàn tất thanh toán hoặc đã được huỷ trước đó.', { type: 'danger' }); Codi.set(() => {}); return; }
-  sim = null;
+  try {
+    await api.post('/api/orders/cancel', { orderCode: order.code });
+  } catch (e) {
+    Codi.ui.toast(e.message || 'Đơn hàng không tồn tại, đã hoàn tất thanh toán hoặc đã được huỷ trước đó.', { type: 'danger' });
+    return;
+  }
+  cartChanged();
   Codi.ui.toast('Đã huỷ giao dịch. Khoá học đã quay lại giỏ hàng.', { type: 'success' });
   Codi.go('/cart');
 }
 
 /** Awaiting payment: QR + countdown, copy rows, tracker, live status line, manual check, cancel. */
-function PendingCheckout({ order }) {
+function PendingCheckout({ order, bank, checkedAt, reload }) {
   const [, setTick] = useState(0);
-  const rerender = () => setTick((n) => n + 1);
-  useEffect(() => {
-    if (!sim || sim.orderId !== order.id) {
-      sim = { orderId: order.id, start: Date.now(), checkedAt: Date.now(), slowShown: false, manualCheckCooldown: 0, manualChecking: false, manualCheckedAt: null, transferred: false };
-    }
-    const t = setInterval(() => { tickSim(order.id); rerender(); }, 1000);
-    return () => { clearInterval(t); if (sim && sim.orderId === order.id) sim = null; };
-  }, [order.id]);
+  const [start] = useState(() => Date.now());
+  const [qrFailed, setQrFailed] = useState(() => Codi.state.scenario.paymentOutcome === 'qrfail');
+  const [cooldown, setCooldown] = useState(0);
+  const [checking, setChecking] = useState(false);
+  const [manualCheckedAt, setManualCheckedAt] = useState(null);
 
-  const s = sim && sim.orderId === order.id ? sim : null;
-  const bank = Codi.db().bankInfo || {};
+  // 1 s tick: countdown, cooldown and the slow notice. The simulated transfer "arrives" after 6 s.
+  useEffect(() => {
+    const t = setInterval(() => { setTick((n) => n + 1); setCooldown((c) => (c > 0 ? c - 1 : 0)); }, 1000);
+    const sim = setTimeout(() => runSimulation(order, reload), TRANSFER_AFTER_MS);
+    return () => { clearInterval(t); clearTimeout(sim); };
+  }, [order.code]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const left = timeLeft(order);
-  const slow = !!(s && s.slowShown);
-  const qrFailed = !!order.qrFailed;
+  useEffect(() => { if (left <= 0) reload(); }, [left <= 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  const slow = Date.now() - start >= SLOW_NOTICE_MS;
   const due = amountDue(order);
   const underpaid = order.received > 0 && order.received < order.total;
-  const cooldown = s ? s.manualCheckCooldown : 0;
-  const checking = !!(s && s.manualChecking);
 
-  // "Tôi đã chuyển khoản" (D5): 30 s cooldown, one extra check, result shown inline; auto-check keeps running.
-  const iPaid = () => {
-    const cur = sim;
-    if (!cur || cur.orderId !== order.id || cur.manualCheckCooldown > 0 || cur.manualChecking) return;
-    cur.manualCheckCooldown = 30; cur.manualChecking = true;
-    rerender();
-    setTimeout(() => {
-      if (sim !== cur) return;
-      cur.manualChecking = false; cur.manualCheckedAt = Date.now(); cur.checkedAt = Date.now();
-      rerender();
-    }, 1200);
+  // "Tôi đã chuyển khoản" (D5): 30 s cooldown, one extra server check, result shown inline; auto-check keeps running.
+  const iPaid = async () => {
+    if (cooldown > 0 || checking) return;
+    setCooldown(30); setChecking(true);
+    try {
+      const r = await api.post(`${orderUrl(order.code)}/manual-check`, {});
+      setManualCheckedAt(r.checkedAt ? new Date(r.checkedAt).getTime() : Date.now());
+      if (r.status !== 'pending') reload();
+    } catch (e) {
+      Codi.ui.toast(e.message, { type: 'danger' });
+    } finally {
+      setChecking(false);
+    }
   };
-  const reloadQr = () => Codi.set(() => { order.qrFailed = false; });
-
+  const reloadQr = () => setQrFailed(false);
+  const b = bank || {};
   return (
     <div className="page stack-4">
       <div className="stack-1"><h1>Thanh toán khóa học</h1><p className="muted">Quét mã bằng ứng dụng ngân hàng, hoặc chuyển khoản theo thông tin bên dưới.</p></div>
@@ -239,12 +243,12 @@ function PendingCheckout({ order }) {
                 Hãy chuyển khoản thủ công bằng thông tin bên dưới, nội dung <span className="mono strong">{order.code}</span>. Cần hỗ trợ? Email <Mail />.
               </Alert>
             ) : (
-              <div className="cm-qr-wrap"><QrSvg seedText={order.code} /><span className="xsmall muted">VietQR · {bank.bank} · minh hoạ trong bản thử nghiệm</span></div>
+              <div className="cm-qr-wrap"><QrSvg seedText={order.code} /><span className="xsmall muted">VietQR · {b.bank} · minh hoạ trong bản thử nghiệm</span></div>
             )}
             <div>
-              <CopyRow label="Ngân hàng" value={bank.bank} copyValue={bank.bank} />
-              <CopyRow label="Số tài khoản" value={bank.accountNumber} copyValue={bank.accountNumber} />
-              <CopyRow label="Chủ tài khoản" value={bank.accountName} copyValue={bank.accountName} />
+              <CopyRow label="Ngân hàng" value={b.bank} copyValue={b.bank} />
+              <CopyRow label="Số tài khoản" value={b.accountNumber} copyValue={b.accountNumber} />
+              <CopyRow label="Chủ tài khoản" value={b.accountName} copyValue={b.accountName} />
               <CopyRow label="Số tiền" value={fmt.vnd(due)} copyValue={String(due)} />
               <CopyRow label="Nội dung chuyển khoản" value={order.code} copyValue={order.code} emphasis />
             </div>
@@ -256,14 +260,14 @@ function PendingCheckout({ order }) {
         <aside className="stack-4">
           <OrderSummary order={order} />
           <div className="card"><div className="card-body stack-3">
-            <p className="small muted cm-poll" role="status"><Icon name="loader" className="icon-sm cm-spin" /> <span>Đang kiểm tra thanh toán… <span className="xsmall" style={{ color: 'var(--fg)' }}>(lần gần nhất {clock(s ? s.checkedAt : Date.now())})</span></span></p>
+            <p className="small muted cm-poll" role="status"><Icon name="loader" className="icon-sm cm-spin" /> <span>Đang kiểm tra thanh toán… <span className="xsmall" style={{ color: 'var(--fg)' }}>(lần gần nhất {clock(checkedAt)})</span></span></p>
             <p className="xsmall muted">Thường mất vài giây đến vài phút sau khi bạn chuyển. Bạn có thể rời trang — đơn hàng vẫn được lưu trong Giỏ hàng và Hồ sơ › Giao dịch.</p>
             <button type="button" className="btn btn-secondary btn-block" onClick={iPaid} disabled={checking || cooldown > 0} aria-busy={checking ? 'true' : undefined}>
               {checking && <Icon name="loader" className="icon-sm cm-spin" />}
               {cooldown > 0 ? `Tôi đã chuyển khoản (${cooldown}s)` : 'Tôi đã chuyển khoản'}
             </button>
-            {s && s.manualCheckedAt && !checking && (
-              <Alert type="info" title={`Đã kiểm tra lúc ${clock(s.manualCheckedAt)}: Codi chưa nhận được tiền`}>
+            {manualCheckedAt && !checking && (
+              <Alert type="info" title={`Đã kiểm tra lúc ${clock(manualCheckedAt)}: Codi chưa nhận được tiền`}>
                 <ol className="stack-1 xsmall cm-steps-list">
                   <li>Một số ngân hàng xử lý chậm — Codi vẫn tự kiểm tra tới khi mã hết hạn.</li>
                   <li>Sau đó kế toán đối soát thủ công theo nội dung <span className="mono strong">{order.code}</span>, thường trong 2 giờ làm việc.</li>
@@ -282,14 +286,17 @@ function PendingCheckout({ order }) {
 
 function FailedCheckout({ order, summary }) {
   const [busy, setBusy] = useState(false);
-  const newCode = () => {
+  const newCode = async () => {
     if (busy) return;
     setBusy(true);
-    setTimeout(() => {
-      const o = newCodeFor(order);
-      Codi.ui.toast(`Đã tạo mã thanh toán mới ${o.code}.`, { type: 'success' });
-      Codi.go('/checkout?order=' + o.id);
-    }, 400);
+    try {
+      const r = await api.post(`${orderUrl(order.code)}/new-code`, {});
+      Codi.ui.toast(`Đã tạo mã thanh toán mới ${r.orderCode}.`, { type: 'success' });
+      Codi.go('/checkout?order=' + encodeURIComponent(r.orderCode));
+    } catch (e) {
+      Codi.ui.toast(e.message, { type: 'danger' });
+      setBusy(false);
+    }
   };
   return (
     <div className="page page-narrow stack-4"><h1>Thanh toán khóa học</h1>
@@ -310,19 +317,45 @@ function FailedCheckout({ order, summary }) {
 
 export function CheckoutPage({ query: q }) {
   useCodi();
-  const order = q.order ? findMyOrder(q.order) : null;
-  const lazyExpired = !!order && isExpiredPending(order);
-  // Expiry is lazy, like the real GET /api/orders/[id]: a pending order past its deadline becomes failed on view.
-  useEffect(() => { if (lazyExpired) Codi.set(() => expireOrder(order)); }, [lazyExpired]); // eslint-disable-line react-hooks/exhaustive-deps
+  const navigate = useNavigate();
+  const res = useApi(q.order ? orderUrl(q.order) : null);
+  const [checkedAt, setCheckedAt] = useState(() => Date.now());
+  const order = res.data ? toOrder(res.data.order) : null;
+  const status = order ? order.status : null;
+
+  // Auto-check every 3 s while the order waits for money; a paid order goes to the success page.
+  useEffect(() => {
+    if (status !== 'pending') return undefined;
+    const t = setInterval(() => { setCheckedAt(Date.now()); res.reload(); }, POLL_MS);
+    return () => clearInterval(t);
+  }, [status, res.reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (status === 'pending') wasPending.current = true;
+    if (status === 'paid' && wasPending.current && order) {
+      cartChanged();
+      navigate('/checkout/success?order=' + encodeURIComponent(order.code), { replace: true });
+    }
+  }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!q.order) return <CreatingOrder />;
-  if (!order) return <CheckoutError type="notfound" orderParam={q.order} />;
+  if (!order) {
+    if (!res.error) return <CheckoutSkeleton label="Đang tải thông tin thanh toán…" />;
+    if (res.error.status === 404 || res.error.status === 400) return <CheckoutError type="notfound" orderParam={q.order} />;
+    if (res.error.status === 503) return <CheckoutError type="unavailable" message={res.error.message} orderParam={q.order} />;
+    return (
+      <div className="page page-narrow"><div className="card">
+        <Empty icon="alert-circle" title="Không tải được đơn hàng" body={<span role="alert">{res.error.message}</span>}
+          actions={<button type="button" className="btn btn-primary" onClick={() => res.reload()}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />
+      </div></div>
+    );
+  }
   const summary = <OrderSummary order={order} />;
   if (order.status === 'paid') {
     return (
       <div className="page page-narrow stack-4"><h1>Thanh toán khóa học</h1>
         <Alert type="success" title="Đơn hàng đã được thanh toán" body={`Codi đã nhận đủ tiền lúc ${fmt.datetime(order.paidAt)}.`}
-          actions={<Link className="btn btn-primary btn-sm" to={`/checkout/success?order=${order.id}`}>Xem kết quả và bắt đầu học</Link>} />
+          actions={<Link className="btn btn-primary btn-sm" to={`/checkout/success?order=${order.code}`}>Xem kết quả và bắt đầu học</Link>} />
         {summary}
       </div>
     );
@@ -344,15 +377,25 @@ export function CheckoutPage({ query: q }) {
     return <div className="page page-narrow stack-4"><h1>Thanh toán khóa học</h1><Alert type="info" title={orderStatusLabel(order.status)} />{summary}</div>;
   }
   if (order.status === 'failed') return <FailedCheckout order={order} summary={summary} />;
-  if (lazyExpired) return <div className="page page-narrow" aria-busy="true"><p className="sr-only" role="status">Đang tải thông tin thanh toán…</p></div>;
-  return <PendingCheckout key={order.id} order={order} />;
+  return <PendingCheckout key={order.code} order={order} bank={res.data.bank} checkedAt={checkedAt} reload={res.reload} />;
 }
 
 /** S07 Payment success — primary "Bắt đầu học" → onboarding; no forced redirect (G3). */
 export function CheckoutSuccessPage({ query: q }) {
   useCodi();
-  const order = findMyOrder(q.order);
-  const courses = order ? order.items.map((i) => Codi.course(i.courseId)).filter(Boolean) : [];
+  const res = useApi(q.order ? orderUrl(q.order) : null);
+  useEffect(() => { if (res.data) cartChanged(); }, [res.data]);
+  const order = res.data ? toOrder(res.data.order) : null;
+  if (q.order && !order && !res.error) return <CheckoutSkeleton label="Đang tải kết quả thanh toán…" />;
+  if (res.error && res.error.status !== 404 && res.error.status !== 400) {
+    return (
+      <div className="page page-narrow"><div className="card">
+        <Empty icon="alert-circle" title="Không tải được đơn hàng" body={<span role="alert">{res.error.message}</span>}
+          actions={<button type="button" className="btn btn-primary" onClick={() => res.reload()}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />
+      </div></div>
+    );
+  }
+  const courses = order ? order.items.map((i) => ({ id: i.courseId, slug: i.slug, title: i.title })) : [];
   if (!order || order.status !== 'paid' || !courses.length) {
     return (
       <div className="page page-narrow"><div className="card">
