@@ -531,7 +531,7 @@ function testRow(t, o, ctx) {
         {state === 'fail' ? (
           <div className="cp-test-fail stack-2">
             <p className="xsmall text-danger">Khác kết quả mong đợi.</p>
-            {ctx && Codi.tutor ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => explainTest(ctx.courseId, ctx.lessonId, t.id)}><Icon name="sparkles" className="icon-sm" /> Vì sao test này chưa đạt?</button> : null}
+            {ctx && Codi.tutor ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => explainTest(ctx.courseId, ctx.lessonId, t.id)}><Icon name="sparkles" className="icon-sm" /> Vì sao “{t.name}” chưa đạt?</button> : null}
           </div>
         ) : null}
       </details>
