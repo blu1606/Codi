@@ -152,13 +152,13 @@ export function CourseProgressPage({ params, query }) {
           <Icon name="alert-triangle" className="icon-sm" /> Cần hỗ trợ ({stuckCount})
         </button>
       </div>
-      {shown.length ? <div className="table-wrap"><table className="table"><thead><tr><th scope="col">Học viên</th><th scope="col">Tiến độ</th><th scope="col" className="num">Bài hoàn thành</th><th scope="col" className="num">Quiz TB</th><th scope="col" className="num">Gợi ý dùng</th><th scope="col">Hoạt động gần nhất</th><th scope="col">Tình trạng</th><th scope="col" className="num">Thao tác</th></tr></thead><tbody>
+      {shown.length ? <div className="table-wrap"><table className="table"><thead><tr><th scope="col">Học viên</th><th scope="col">Tiến độ</th><th scope="col" className="num">Bài hoàn thành</th><th scope="col" className="num">Quiz TB</th><th scope="col">Hoạt động gần nhất</th><th scope="col">Tình trạng</th><th scope="col" className="num">Thao tác</th></tr></thead><tbody>
         {shown.map((r) => (
-          <tr key={r.u.id}><td><div className="row"><Avatar user={r.u} size="sm" /><span>{r.u.name}</span></div></td><td style={{ minWidth: 140 }}><div className="row tc-prog"><Progress pct={r.pct} /><span className="small num">{r.pct}%</span></div></td><td className="num">{r.completed.length}/{ls(c).length}</td><td className="num">{r.avg === null ? '—' : r.avg + '%'}</td><td className="num muted"><span title={HINT_USAGE_UNAVAILABLE}>Chưa ghi nhận</span></td><td className="od-nowrap">{r.lastActive ? fmt.date(r.lastActive) : '—'}</td>
+          <tr key={r.u.id}><td><div className="row"><Avatar user={r.u} size="sm" /><span>{r.u.name}</span></div></td><td style={{ minWidth: 140 }}><div className="row tc-prog"><Progress pct={r.pct} /><span className="small num">{r.pct}%</span></div></td><td className="num">{r.completed.length}/{ls(c).length}</td><td className="num">{r.avg === null ? '—' : r.avg + '%'}</td><td className="od-nowrap">{r.lastActive ? fmt.date(r.lastActive) : '—'}</td>
             <td>{r.reasons.length
               ? <span className="stack-1" style={{ gap: 4 }}>{r.reasons.map((x) => <span key={x} className="badge badge-warn">{x}</span>)}</span>
               : <span className="xsmall muted">Ổn định</span>}</td>
-            <td className="num"><span className="row od-nowrap" style={{ gap: 6, justifyContent: 'flex-end' }}>
+            <td className="num" style={{ minWidth: 230 }}><span className="row od-nowrap" style={{ gap: 6, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
               {r.openQs.length ? <Link className="btn btn-secondary btn-sm" to={`/teach/questions?status=unanswered&id=${r.openQs[0].id}`}>Trả lời</Link> : null}
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => openMessage(c, r)}>Nhắn</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLearner(c, r)}>Xem chi tiết</button>
