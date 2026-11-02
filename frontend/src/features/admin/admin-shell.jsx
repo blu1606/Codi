@@ -1,27 +1,30 @@
 /**
- * Shared pieces of the admin console: the workspace shell (left nav), order helpers and a confirm dialog that
+ * Shared pieces of the admin console: the workspace shell (left nav), loading/error states and a confirm dialog that
  * accepts a rich body and an acknowledgement checkbox (the shared Codi.ui.confirm renders body inside <p> and has
  * no consent gate, which the deactivate-user dialog needs — PRODUCT S31 / STATE-MACHINES §21).
  */
 import { useState } from 'react';
 import { Codi } from '../../lib/codi';
-import { Workspace, Alert, Icon } from '../../components/ui/primitives';
-import { isOverdue } from './admin-metrics';
+import { Workspace, Alert, Icon, SpinnerBlock } from '../../components/ui/primitives';
+import { usePendingCount } from './admin-data';
 
 export const DAY = 86400000;
-export const db = () => Codi.db();
-export const me = () => Codi.currentUser();
-/** Re-render (and sync) after an in-place mutation of Codi.db(). */
-export const persist = (render) => Codi.set(() => {}, { render: render !== false });
-
-export { isOverdue };
-export const courseTitles = (o) => (o.items || []).map((i) => (Codi.course(i.courseId) || { title: '(đã xoá)' }).title).join(', ');
-export const buyer = (o) => Codi.user(o.userId) || { name: 'Người dùng đã xoá', email: '' };
+/** Signed-in admin id (backend session). */
+export const meId = () => (Codi.session && Codi.session.user ? Codi.session.user.id : null);
 /** Non-negative integer from "1.290.000", "990000 ₫" … or null. */
 export const parsePrice = (s) => { const t = String(s || '').replace(/[.\s₫,]/g, ''); return /^\d+$/.test(t) ? Number(t) : null; };
 
+/** Loading / error states shared by the admin screens: renders children(data) once loaded. */
+export function Loaded({ res, text, children }) {
+  if (res.error && !res.data) {
+    return <Alert type="danger" title="Không tải được dữ liệu" body={res.error.message} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => res.reload()}>Thử lại</button>} />;
+  }
+  if (!res.data) return <SpinnerBlock text={text} />;
+  return children(res.data);
+}
+
 export function AdminShell({ active, children }) {
-  const pending = db().courses.filter((c) => c.status === 'pending').length;
+  const pending = usePendingCount();
   const items = [
     { section: 'Quản trị', href: '/admin', label: 'Tổng quan', icon: 'layout-dashboard' },
     { section: 'Khóa học', href: '/admin/publication', label: 'Duyệt xuất bản', icon: 'clipboard-check', count: pending, match: /^\/admin\/publication/ },

@@ -4,74 +4,30 @@
  * "Quá 24 giờ (n)" / "Xoá bộ lọc" / "Xuất CSV", transactions table, detail drawer with reconciliation warning,
  * timeline and admin cancel of pending orders.
  *
- * Query: range=7|30|90|all, status, q, overdue=1, reconciliation=1, id=<orderId> (opens the drawer).
+ * Data: getAdminOrdersExportAction(filter) (the list behind Codi's orders page, filtered on the server),
+ * getAdminOrderDetailAction(id | code), cancelAdminOrderAction(id, reason).
+ * Query: range=7|30|90|all, status, q, overdue=1, reconciliation=1, id=<orderId | CODIxxxxx> (opens the drawer).
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Codi, useCodi } from '../../lib/codi';
-import { Icon, Alert, Empty, OrderStatus, orderStatusLabel } from '../../components/ui/primitives';
-import { AdminShell, DAY, db, me, isOverdue, buyer, courseTitles, confirmImpact } from './admin-shell';
-import { needsReconciliation } from './admin-metrics';
+import { Codi } from '../../lib/codi';
+import { Icon, Alert, Empty, OrderStatus, orderStatusLabel, SpinnerBlock } from '../../components/ui/primitives';
+import { AdminShell, Loaded, confirmImpact } from './admin-shell';
+import { useAction, adminAction, attempt } from './admin-data';
 
 const { fmt } = Codi;
 const RANGES = [['7', '7 ngày'], ['30', '30 ngày'], ['90', '90 ngày'], ['all', 'Tất cả']];
 const STATUSES = ['pending', 'paid', 'failed', 'cancelled', 'refunded'];
-
-// ───────────────────────── order helpers ─────────────────────────
 const vnd = (n) => fmt.vnd(Number(n) || 0);
-const itemsOf = (o) => (Array.isArray(o.items) ? o.items : []);
-const received = (o) => Number(o.received ?? o.receivedAmount) || 0;
 
-// Timeline events are { at, type, by, note? } (commerce contract; older rows may carry a label instead).
-// The label comes from the type; unknown types fall back to label, note, then the raw type.
-const EVENT_LABEL = {
-  created: 'Đã tạo đơn',
-  paid: 'Đã nhận tiền',
-  partial_payment: 'Đã nhận một phần tiền',
-  overpaid: 'Đã nhận tiền thừa',
-  late_payment: 'Nhận tiền sau khi đơn hết hạn',
-  expired: 'Đơn hết hạn thanh toán',
-  failed: 'Thanh toán thất bại',
-  cancelled: 'Người mua đã huỷ',
-  replaced: 'Đã thay bằng đơn mới',
-  refunded: 'Đã hoàn tiền',
-};
-export function eventLabel(t) {
-  if (t.type === 'cancelled_by_admin') return `Quản trị viên huỷ đơn (${t.note || ''})`;
-  const base = EVENT_LABEL[t.type];
-  if (!base) return t.label || t.note || t.type || 'Cập nhật đơn hàng';
-  return t.note ? `${base} (${t.note})` : base;
-}
-const timelineOf = (o) => (Array.isArray(o.timeline) ? o.timeline : [])
-  .map((t, i) => ({ key: i, at: t.at || t.createdAt, label: eventLabel(t) }))
-  .filter((t) => t.at)
-  .sort((a, b) => (a.at < b.at ? 1 : -1)); // newest first, like the real drawer
-
-/**
- * Admin cancel of a pending order (real adminCancelOrder): reason required, only pending, sets cancelled +
- * cancelledAt + cancelReason, flags reconciliation when money was already received, writes the timeline event
- * and notifies the learner. Returns an error message or null.
- */
-export function adminCancelOrder(orderId, reason) {
-  const text = String(reason || '').trim();
-  if (!text) return 'Lý do huỷ đơn hàng là bắt buộc.';
-  const o = db().orders.find((x) => x.id === orderId);
-  if (!o) return 'Không tìm thấy đơn hàng.';
-  if (o.status !== 'pending') return `Chỉ có thể huỷ đơn đang chờ thanh toán (trạng thái hiện tại: ${orderStatusLabel(o.status)}).`;
-  const now = new Date().toISOString();
-  const admin = me();
-  Codi.set(() => {
-    o.status = 'cancelled';
-    o.cancelledAt = now;
-    o.cancelReason = text;
-    o.updatedAt = now;
-    if (received(o) > 0) o.needsReconciliation = true; // a partial receipt must be refunded outside the system; never clear a flag
-    if (!Array.isArray(o.timeline)) o.timeline = [];
-    o.timeline.push({ at: now, type: 'cancelled_by_admin', by: admin ? admin.id : null, note: text });
-  });
-  Codi.notify(o.userId, { title: `Đơn hàng ${o.code} đã bị huỷ`, body: `Đơn hàng ${o.code} đã được quản trị viên huỷ. Lý do: ${text}`, link: '/dashboard' });
-  return null;
-}
+/** Page query → AdminOrdersFilter of the backend. */
+const filterOf = (q) => ({
+  range: ['7', '30', '90', 'all'].includes(q.range) ? q.range : '30',
+  status: STATUSES.includes(q.status) ? q.status : 'all',
+  q: (q.q || '').trim(),
+  overdueOnly: q.overdue === '1' || q.overdue === true,
+  reconciliationOnly: q.reconciliation === '1' || q.reconciliation === true,
+});
 
 async function cancelFromDrawer(o, handle) {
   const r = await confirmImpact({
@@ -84,22 +40,8 @@ async function cancelFromDrawer(o, handle) {
     confirmLabel: 'Huỷ đơn hàng',
   });
   if (!r.ok) return;
-  const err = adminCancelOrder(o.id, r.reason);
-  if (err) { Codi.ui.toast(err, { type: 'danger' }); return; }
-  handle.close();
-  Codi.ui.toast(`Đã huỷ đơn hàng ${o.code}.`, { type: 'success' });
-}
-
-/** Range / status / search filter, plus the overdue and reconciliation toggles. */
-export function filteredOrders(q) {
-  const range = q.range || '30'; const status = q.status || 'all'; const term = (q.q || '').trim().toLowerCase();
-  const since = range === 'all' ? 0 : Date.now() - (Number(range) || 30) * DAY;
-  return db().orders.filter((o) => new Date(o.createdAt).getTime() >= since
-    && (status === 'all' || o.status === status)
-    && (!q.overdue || isOverdue(o))
-    && (!q.reconciliation || needsReconciliation(o))
-    && (!term || [o.code, buyer(o).name, buyer(o).email, courseTitles(o)].join(' ').toLowerCase().includes(term)))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const ok = await attempt(() => adminAction('cancelAdminOrderAction', o.id, r.reason), `Đã huỷ đơn hàng ${o.code}.`);
+  if (ok) handle.close();
 }
 
 // ───────────────────────── drawer ─────────────────────────
@@ -114,42 +56,43 @@ function CopyTransfer({ text }) {
 }
 
 function OrderDrawer({ id, handle }) {
-  useCodi();
-  const o = db().orders.find((x) => x.id === id);
+  const res = useAction('dashboard/admin', 'getAdminOrderDetailAction', [id]);
+  const o = res.data;
+  if (res.loading && !o) return <div className="sheet-body"><SpinnerBlock text="Đang tải đơn hàng…" /></div>;
+  if (res.error && !o) return <div className="sheet-body"><Alert type="danger" title="Không tải được đơn hàng" body={res.error.message} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => res.reload()}>Thử lại</button>} /></div>;
   if (!o) return <div className="sheet-body"><p className="small muted">Không tìm thấy đơn hàng.</p></div>;
-  const b = buyer(o);
-  const items = itemsOf(o);
-  const events = timelineOf(o);
-  const flagged = needsReconciliation(o);
+  const items = o.items || [];
+  const events = (o.timeline || []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)); // newest first, like the real drawer
+  const flagged = !!o.needsReconciliation;
   return (
     <>
       <div className="sheet-body stack-4">
-        <p className="small muted" style={{ margin: 0 }}>Chi tiết đơn hàng và lịch sử giao dịch</p>
+        <p className="small muted" style={{ margin: 0 }}>Chi tiết đơn hàng {o.code} và lịch sử giao dịch</p>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <OrderStatus status={o.status} />
-          {isOverdue(o) && <span className="badge badge-danger"><Icon name="clock" />Quá hạn (&gt;24h)</span>}
+          {o.isOverdue && <span className="badge badge-danger"><Icon name="clock" />Quá hạn (&gt;24h)</span>}
           {flagged && <span className="badge badge-warn"><Icon name="alert-triangle" />Cần đối soát</span>}
         </div>
         {flagged && (
           <Alert type="warn" title="Lưu ý đối soát ngân hàng (D2/D3)"
             body="Đơn hàng này được gắn cờ đối soát thủ công (có thể do chuyển khoản thừa tiền, thiếu tiền khi hết hạn, hoặc chuyển khoản muộn sau khi đã sở hữu khóa học). Vui lòng kiểm tra sao kê ngân hàng VietQR trước khi xử lý hoàn tiền ngoài hệ thống." />
         )}
-        <div className="panel stack-1"><span className="xsmall muted">Người mua</span><strong className="small">{b.name}</strong><span className="small muted">{b.email}</span></div>
+        <div className="panel stack-1"><span className="xsmall muted">Người mua</span><strong className="small">{o.buyerName}</strong><span className="small muted">{o.buyerEmail}</span></div>
         <div className="stack-2"><span className="xsmall muted">Khóa học đã đặt ({items.length})</span>
           <ul className="list">{items.map((i) => (
-            <li key={i.courseId} className="list-row" style={{ paddingInline: 0 }}><span className="list-main small">{(Codi.course(i.courseId) || { title: i.courseTitle || '(đã xoá)' }).title}</span><span className="small od-nowrap muted">{vnd(i.price ?? i.unitPrice)}</span></li>
+            <li key={i.id} className="list-row" style={{ paddingInline: 0 }}><span className="list-main small">{i.courseTitle}</span><span className="small od-nowrap muted">{vnd(i.unitPrice)}</span></li>
           ))}</ul>
-          {o.voucherCode && <div className="row-between small"><span className="muted">Voucher {o.voucherCode}</span><span className="text-success">−{vnd(o.discount)}</span></div>}
-          <div className="row-between strong ad-order-total"><span>Tổng tiền</span><span>{vnd(o.total)}</span></div>
-          {received(o) > 0 && o.status === 'pending' && <div className="row-between small text-warn"><span>Đã nhận thực tế</span><span>{vnd(received(o))}</span></div>}
+          {o.voucherCode && <div className="row-between small"><span className="muted">Voucher {o.voucherCode}</span><span className="text-success">−{vnd(o.discountAmount)}</span></div>}
+          <div className="row-between strong ad-order-total"><span>Tổng tiền</span><span>{vnd(o.totalAmount)}</span></div>
+          {o.receivedAmount > 0 && o.status === 'pending' && <div className="row-between small text-warn"><span>Đã nhận thực tế</span><span>{vnd(o.receivedAmount)}</span></div>}
         </div>
         <div className="stack-1"><span className="xsmall muted">Nội dung chuyển khoản (VietQR)</span>
           <div className="copy-row is-emphasis"><div className="copy-main"><span className="copy-value">{o.content || o.code}</span></div><CopyTransfer text={o.content || o.code} /></div></div>
         <div className="stack-1"><span className="xsmall muted">Phương thức</span><span className="small">{o.method || 'Chuyển khoản ngân hàng'}</span></div>
-        {o.status === 'cancelled' && o.cancelReason && <div className="stack-1"><span className="xsmall muted">Lý do huỷ</span><span className="small">{o.cancelReason}</span></div>}
+        {['cancelled', 'failed'].includes(o.status) && o.failReason && <div className="stack-1"><span className="xsmall muted">{o.status === 'cancelled' ? 'Lý do huỷ' : 'Lý do thất bại'}</span><span className="small">{o.failReason}</span></div>}
         <div className="stack-2"><span className="xsmall muted">Lịch sử trạng thái</span>
           {events.length
-            ? <ol className="ad-timeline">{events.map((t) => <li key={t.key}><span className="small">{t.label}</span><span className="xsmall muted">{fmt.datetime(t.at)}</span></li>)}</ol>
+            ? <ol className="ad-timeline">{events.map((t) => <li key={t.id}><span className="small">{t.label}</span><span className="xsmall muted">{fmt.datetime(t.createdAt)}</span></li>)}</ol>
             : <p className="xsmall muted">Chưa có sự kiện nào.</p>}
         </div>
       </div>
@@ -161,30 +104,34 @@ function OrderDrawer({ id, handle }) {
   );
 }
 
-export function openOrder(id) {
-  const o = db().orders.find((x) => x.id === id); if (!o) return;
+/** Opens the order drawer; idOrCode is the numeric id or the CODIxxxxx code. */
+export function openOrder(idOrCode, code) {
+  if (idOrCode === undefined || idOrCode === null || idOrCode === '') return;
+  const label = code || (/^CODI/i.test(String(idOrCode)) ? String(idOrCode).toUpperCase() : null);
   Codi.ui.closeAll();
-  Codi.ui.sheet({ title: 'Đơn ' + o.code, raw: true, body: (h) => <OrderDrawer id={id} handle={h} /> });
+  Codi.ui.sheet({ title: label ? 'Đơn ' + label : 'Chi tiết đơn hàng', raw: true, body: (h) => <OrderDrawer id={/^\d+$/.test(String(idOrCode)) ? Number(idOrCode) : String(idOrCode)} handle={h} /> });
 }
 
 // ───────────────────────── CSV export ─────────────────────────
 const COLS = [['code', 'Mã giao dịch'], ['buyer', 'Người mua'], ['email', 'Email'], ['courses', 'Khóa học'], ['voucher', 'Voucher'], ['discount', 'Giảm giá'], ['total', 'Tổng tiền'], ['status', 'Trạng thái'], ['createdAt', 'Ngày tạo'], ['paidAt', 'Ngày thanh toán']];
 const cellOf = {
-  code: (o) => o.code, buyer: (o) => buyer(o).name, email: (o) => buyer(o).email, courses: (o) => courseTitles(o), voucher: (o) => o.voucherCode || '',
-  discount: (o) => o.discount || 0, total: (o) => o.total, status: (o) => orderStatusLabel(o.status), createdAt: (o) => o.createdAt, paidAt: (o) => o.paidAt || '',
+  code: (o) => o.code, buyer: (o) => o.buyerName, email: (o) => o.buyerEmail, courses: (o) => o.coursesText, voucher: (o) => o.voucherCode || '',
+  discount: (o) => o.discountAmount || 0, total: (o) => o.totalAmount, status: (o) => orderStatusLabel(o.status), createdAt: (o) => o.createdAt, paidAt: (o) => o.paidAt || '',
 };
 
 function ExportDialog({ handle, query }) {
-  const [range, setRange] = useState(query.range || '30');
+  const [range, setRange] = useState(filterOf(query).range);
   const [applyFilter, setApplyFilter] = useState(true);
   const [columns, setColumns] = useState(() => Object.fromEntries(COLS.map(([k]) => [k, true])));
   // Time range always comes from the dialog; status / search / toggles come from the page only when applied.
-  const expQ = applyFilter ? { ...query, range } : { range };
-  const list = filteredOrders(expQ);
+  const expFilter = applyFilter ? { ...filterOf(query), range } : { ...filterOf({}), range };
+  const res = useAction('dashboard/admin', 'getAdminOrdersExportAction', [expFilter]);
+  const list = res.data || [];
   const cols = COLS.filter(([k]) => columns[k]).map(([k]) => k);
-  const status = query.status || 'all';
+  const status = filterOf(query).status;
   const doExport = () => {
     if (!cols.length) { Codi.ui.toast('Chọn ít nhất một cột để xuất.', { type: 'warn' }); return; }
+    if (!res.data) { Codi.ui.toast('Không thể xuất dữ liệu do lỗi truy vấn. Vui lòng thử lại.', { type: 'danger' }); return; }
     try {
       const header = Object.fromEntries(COLS);
       const esc = (v) => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
@@ -216,27 +163,47 @@ function ExportDialog({ handle, query }) {
               {COLS.map(([k, l]) => <label key={k} className="check"><input type="checkbox" checked={!!columns[k]} onChange={(e) => setColumns({ ...columns, [k]: e.target.checked })} /> {l}</label>)}
             </div>
           </div>
-          <div className="ad-export-summary"><span className="small muted">{fmt.num(list.length)} đơn · {fmt.num(cols.length)} cột · {vnd(list.reduce((s, o) => s + (o.total || 0), 0))} tổng tiền</span></div>
+          <div className="ad-export-summary" aria-busy={res.loading}><span className="small muted">{res.error ? res.error.message : res.loading && !res.data ? 'Đang đếm đơn…' : `${fmt.num(list.length)} đơn · ${fmt.num(cols.length)} cột · ${vnd(list.reduce((s, o) => s + (o.totalAmount || 0), 0))} tổng tiền`}</span></div>
         </form>
       </div>
       <div className="dialog-footer">
         <button type="button" className="btn btn-ghost" onClick={() => handle.close()}>Huỷ</button>
-        <button type="button" className="btn btn-primary" onClick={doExport}>Xuất CSV</button>
+        <button type="button" className="btn btn-primary" disabled={res.loading} onClick={doExport}>Xuất CSV</button>
       </div>
     </>
   );
 }
 
 // ───────────────────────── page ─────────────────────────
+function OrdersTable({ list, anyFilter }) {
+  if (!list.length) {
+    return <div className="card"><Empty icon="receipt" title="Không có đơn hàng phù hợp" body="Thử mở rộng khoảng thời gian hoặc bỏ bớt các điều kiện lọc." actions={anyFilter ? <Link className="btn btn-secondary" to="/admin/orders">Xoá bộ lọc</Link> : null} /></div>;
+  }
+  return (
+    <div className="table-wrap"><table className="table"><thead><tr><th>Mã giao dịch</th><th>Người mua</th><th>Khóa học</th><th>Ngày tạo</th><th className="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>
+      {list.map((o) => (
+        <tr key={o.id} className="is-clickable" tabIndex={0} onClick={() => openOrder(o.id, o.code)} onKeyDown={(e) => { if (e.key === 'Enter') openOrder(o.id, o.code); }}>
+          <td className="mono">{o.code}</td>
+          <td><div className="stack-1"><span className="small">{o.buyerName}</span><span className="xsmall muted">{o.buyerEmail}</span></div></td>
+          <td className="small ad-courses-cell" title={o.coursesText}>{o.coursesText}</td>
+          <td className="od-nowrap small">{fmt.datetime(o.createdAt)}</td>
+          <td className="num od-nowrap">{vnd(o.totalAmount)}</td>
+          <td><div className="row" style={{ gap: 4, flexWrap: 'wrap' }}><OrderStatus status={o.status} />{o.isOverdue && <span className="badge badge-danger">Quá hạn</span>}{o.needsReconciliation && <span className="badge badge-warn">Đối soát</span>}</div></td>
+        </tr>
+      ))}
+    </tbody></table></div>
+  );
+}
+
 export function OrdersPage({ query: q }) {
-  useCodi();
-  const range = q.range || '30'; const status = q.status || 'all';
-  const overdue = q.overdue === '1'; const recon = q.reconciliation === '1';
-  const list = filteredOrders({ ...q, overdue, reconciliation: recon });
+  const f = filterOf(q);
+  const res = useAction('dashboard/admin', 'getAdminOrdersExportAction', [f]);
+  const list = res.data || [];
+  const overdue = f.overdueOnly; const recon = f.reconciliationOnly;
   const paid = list.filter((o) => o.status === 'paid');
-  const overdueCount = list.filter((o) => isOverdue(o)).length;
-  const reconCount = list.filter(needsReconciliation).length;
-  const anyFilter = status !== 'all' || range !== '30' || !!q.q || overdue || recon;
+  const overdueCount = list.filter((o) => o.isOverdue).length;
+  const reconCount = list.filter((o) => o.needsReconciliation).length;
+  const anyFilter = f.status !== 'all' || f.range !== '30' || !!f.q || overdue || recon;
   useEffect(() => { if (q.id) openOrder(q.id); }, [q.id]);
 
   const goWith = (patch) => {
@@ -246,24 +213,25 @@ export function OrdersPage({ query: q }) {
     Codi.go('/admin/orders?' + new URLSearchParams(nq).toString());
   };
   const onSearch = (e) => { e.preventDefault(); goWith({ q: String(new FormData(e.currentTarget).get('q') || '').trim() }); };
-  const exportCsv = () => Codi.ui.modal({ size: 'md', title: 'Xuất CSV', raw: true, body: (h) => <ExportDialog handle={h} query={{ ...Codi.query(), overdue, reconciliation: recon }} /> });
+  const exportCsv = () => Codi.ui.modal({ size: 'md', title: 'Xuất CSV', raw: true, body: (h) => <ExportDialog handle={h} query={Codi.query()} /> });
+  const tile = (v) => (res.data ? v : '…');
 
   return (
     <AdminShell active="/admin/orders">
       <div className="page-header"><div><h1>Đơn hàng & giao dịch</h1><p className="muted">Thanh toán chuyển khoản VietQR, xác nhận tự động theo nội dung chuyển khoản.</p></div></div>
-      <div className="grid-4" style={{ marginBottom: 16 }}>
-        <div className="stat-tile"><span className="stat-value">{list.length}</span><span className="stat-label">Đơn trong bộ lọc</span></div>
-        <div className="stat-tile"><span className="stat-value text-success">{paid.length}</span><span className="stat-label">Đã thanh toán</span></div>
-        <div className="stat-tile"><span className="stat-value text-warn">{list.filter((o) => o.status === 'pending').length}</span><span className="stat-label">Chờ thanh toán</span>{overdueCount > 0 && <span className="stat-meta text-danger"><Icon name="clock" className="icon-sm" /> {overdueCount} quá hạn</span>}</div>
-        <div className="stat-tile"><span className="stat-value od-nowrap">{vnd(paid.reduce((s, o) => s + (o.total || 0), 0))}</span><span className="stat-label">Doanh thu</span></div>
+      <div className="grid-4" style={{ marginBottom: 16 }} aria-busy={res.loading}>
+        <div className="stat-tile"><span className="stat-value">{tile(list.length)}</span><span className="stat-label">Đơn trong bộ lọc</span></div>
+        <div className="stat-tile"><span className="stat-value text-success">{tile(paid.length)}</span><span className="stat-label">Đã thanh toán</span></div>
+        <div className="stat-tile"><span className="stat-value text-warn">{tile(list.filter((o) => o.status === 'pending').length)}</span><span className="stat-label">Chờ thanh toán</span>{overdueCount > 0 && <span className="stat-meta text-danger"><Icon name="clock" className="icon-sm" /> {overdueCount} quá hạn</span>}</div>
+        <div className="stat-tile"><span className="stat-value od-nowrap">{tile(vnd(paid.reduce((s, o) => s + (o.totalAmount || 0), 0)))}</span><span className="stat-label">Doanh thu</span></div>
       </div>
       <div className="ad-filters ad-filters-orders">
         <div className="field"><span className="field-label">Thời gian</span>
           <div className="segmented" role="group" aria-label="Khoảng thời gian">
-            {RANGES.map(([k, l]) => <button key={k} type="button" aria-pressed={range === k} onClick={() => goWith({ range: k })}>{l}</button>)}
+            {RANGES.map(([k, l]) => <button key={k} type="button" aria-pressed={f.range === k} onClick={() => goWith({ range: k })}>{l}</button>)}
           </div></div>
         <div className="field"><label htmlFor="o-status">Trạng thái</label>
-          <select id="o-status" value={status} onChange={(e) => goWith({ status: e.target.value })}>
+          <select id="o-status" value={f.status} onChange={(e) => goWith({ status: e.target.value })}>
             <option value="all">Tất cả</option>
             {STATUSES.map((s) => <option key={s} value={s}>{s === 'refunded' ? 'Hoàn tiền' : orderStatusLabel(s)}</option>)}
           </select></div>
@@ -278,23 +246,7 @@ export function OrdersPage({ query: q }) {
         {anyFilter && <Link className="btn btn-ghost btn-sm" to="/admin/orders"><Icon name="x" className="icon-sm" /> Xoá bộ lọc</Link>}
         <button type="button" className="btn btn-secondary btn-sm ad-toggles-end" onClick={exportCsv}><Icon name="download" className="icon-sm" /> Xuất CSV</button>
       </div>
-      {list.length ? (
-        <div className="table-wrap" style={{ marginTop: 12 }}><table className="table"><thead><tr><th>Mã giao dịch</th><th>Người mua</th><th>Khóa học</th><th>Ngày tạo</th><th className="num">Số tiền</th><th>Trạng thái</th></tr></thead><tbody>
-          {list.map((o) => (
-            <tr key={o.id} className="is-clickable" tabIndex={0} onClick={() => openOrder(o.id)} onKeyDown={(e) => { if (e.key === 'Enter') openOrder(o.id); }}>
-              <td className="mono">{o.code}</td>
-              <td><div className="stack-1"><span className="small">{buyer(o).name}</span><span className="xsmall muted">{buyer(o).email}</span></div></td>
-              <td className="small ad-courses-cell" title={courseTitles(o)}>{courseTitles(o)}</td>
-              <td className="od-nowrap small">{fmt.datetime(o.createdAt)}</td>
-              <td className="num od-nowrap">{vnd(o.total)}</td>
-              <td><div className="row" style={{ gap: 4, flexWrap: 'wrap' }}><OrderStatus status={o.status} />{isOverdue(o) && <span className="badge badge-danger">Quá hạn</span>}{needsReconciliation(o) && <span className="badge badge-warn">Đối soát</span>}</div></td>
-            </tr>
-          ))}
-        </tbody></table></div>
-      ) : (
-        <div className="card" style={{ marginTop: 12 }}><Empty icon="receipt" title="Không có đơn hàng phù hợp" body="Thử mở rộng khoảng thời gian hoặc bỏ bớt các điều kiện lọc." actions={anyFilter ? <Link className="btn btn-secondary" to="/admin/orders">Xoá bộ lọc</Link> : null} /></div>
-      )}
+      <div style={{ marginTop: 12 }}><Loaded res={res} text="Đang tải đơn hàng…">{(rows) => <OrdersTable list={rows} anyFilter={anyFilter} />}</Loaded></div>
     </AdminShell>
   );
 }
-
