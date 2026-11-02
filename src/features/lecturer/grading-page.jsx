@@ -169,7 +169,9 @@ function GradeForm({ sel, nextPending, go }) {
               <div key={k.id} className={`tc-rg-row ${calc.errors[k.id] && error ? 'is-invalid' : ''}`}><label className="stack-1 od-fill" htmlFor={`g-r-${k.id}`}><span className="small strong">{k.name}</span>{k.desc && <span className="xsmall muted">{k.desc}</span>}</label>
                 <span className="row" style={{ gap: 4 }}><input id={`g-r-${k.id}`} className="input mono" type="number" min="0" max={k.points} step="0.5" value={scores[k.id] ?? ''} onChange={(e) => setScores({ ...scores, [k.id]: e.target.value })} /><span className="xsmall muted od-nowrap">/ {k.points}</span></span></div>
             ))}
-            <div className="panel row-between small" role="status"><strong>Tổng điểm: <span className="mono text-accent">{decimal(calc.total)}/{sel.maxScore}</span></strong><span className="muted">Ngưỡng đạt: {pct}%</span></div></fieldset>
+            <div className="panel row-between small" role="status"><strong>Tổng điểm: <span className="mono text-accent">{decimal(calc.total)}/{sel.maxScore}</span></strong><span className="muted">Ngưỡng đạt: {pct}%</span></div>
+            {sel.status === 'graded' && !sel.rubricScores && sel.score != null && <Alert type="info" body={`Bài này được chấm trước khi có thang chi tiết: điểm đã lưu là ${decimal(sel.score)}/${sel.maxScore}. Nhập từng tiêu chí rồi cập nhật điểm để thay thế.`} />}
+          </fieldset>
         ) : (
           <div className="field"><span className="row-between"><label htmlFor="g-score">Điểm (0–{sel.maxScore}) <span className="req">*</span></label><span className="xsmall muted">Ngưỡng đạt: {decimal(passAbs)}/{sel.maxScore}</span></span>
             <input id="g-score" name="score" className="mono" type="number" min="0" max={sel.maxScore} step="0.5" placeholder="Ví dụ: 8.5" value={score} onChange={(e) => setScore(e.target.value)} /></div>
