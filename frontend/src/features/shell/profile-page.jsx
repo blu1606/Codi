@@ -6,9 +6,8 @@
  * only; others fall back to the overview).
  *
  * Backend: GET /api/student/profile (enrolments with progress) and GET /api/student/profile/summary?year=
- * (activity days derived from real learning records + the user's orders). Name and avatar are saved with Better
- * Auth POST /api/auth/update-user; the avatar is stored as the cropped image / preset itself because Cloudflare R2
- * (POST /api/user/avatar) is not configured locally.
+ * (activity days derived from real learning records + the user's orders). A name-only change goes to Better Auth
+ * POST /api/auth/update-user; a new avatar goes with the name to POST /api/user/avatar, which stores it in R2.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -70,6 +69,13 @@ function ProfileStats({ data }) {
 }
 
 // ───────────────────────── profile card ─────────────────────────
+/** Cropped JPEG or preset SVG data URL → File for the multipart avatar upload. */
+async function dataUrlToFile(dataUrl) {
+  const blob = await (await fetch(dataUrl)).blob();
+  const ext = blob.type.includes('svg') ? 'svg' : 'jpg';
+  return new File([blob], `avatar.${ext}`, { type: blob.type });
+}
+
 function ProfileCard({ u }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(u.name);
@@ -87,8 +93,15 @@ function ProfileCard({ u }) {
     if (!dirty) return;
     setSaving(true);
     try {
-      // Name and image are committed together, like the real avatar route.
-      await api.post('/api/auth/update-user', pendingImage ? { name, image: pendingImage } : { name });
+      // The avatar route uploads the image to R2 and commits name + image together.
+      if (pendingImage) {
+        const form = new FormData();
+        form.append('name', name);
+        form.append('file', await dataUrlToFile(pendingImage));
+        await api.post('/api/user/avatar', form);
+      } else {
+        await api.post('/api/auth/update-user', { name });
+      }
       await refreshAccount();
     } catch (err) {
       if (!mounted.current) return;
