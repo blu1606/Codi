@@ -372,12 +372,22 @@ const charts = {};
     const layer = {}; const q = nodes.filter((n) => !inDeg[n.id]).map((n) => n.id);
     q.forEach((id) => { layer[id] = 0; });
     const deg = Object.assign({}, inDeg);
-    while (q.length) {
-      const id = q.shift();
-      outs[id].forEach((t) => { layer[t] = Math.max(layer[t] || 0, layer[id] + 1); deg[t] -= 1; if (deg[t] === 0) q.push(t); });
+    const ins = {}; nodes.forEach((n) => { ins[n.id] = []; }); edges.forEach((e) => ins[e.to].push(e.from));
+    const drain = () => {
+      while (q.length) {
+        const id = q.shift();
+        outs[id].forEach((t) => { if (deg[t] <= 0) return; layer[t] = Math.max(layer[t] || 0, layer[id] + 1); deg[t] -= 1; if (deg[t] === 0) q.push(t); });
+      }
+    };
+    drain();
+    // Cycles leave nodes unlayered: break each cycle at the node with the fewest unresolved prerequisites,
+    // place it one row below its laid-out prerequisites, and keep layering from there, so cycle members spread
+    // across rows like any other node instead of stacking one per row.
+    for (let left = nodes.filter((n) => layer[n.id] == null); left.length; left = nodes.filter((n) => layer[n.id] == null)) {
+      const n = left.reduce((a, b) => (deg[b.id] < deg[a.id] ? b : a));
+      const pre = ins[n.id].filter((p) => layer[p] != null).map((p) => layer[p] + 1);
+      layer[n.id] = Math.max(0, ...pre); deg[n.id] = 0; q.push(n.id); drain();
     }
-    let maxL = Math.max(0, ...Object.values(layer));
-    nodes.filter((n) => layer[n.id] == null).forEach((n) => { maxL += 1; layer[n.id] = maxL; }); // cycle members
     const NW = 152; const NH = 60; const GX = 24; const GY = 56; const PAD = 16;
     const byLayer = [];
     nodes.forEach((n) => { (byLayer[layer[n.id]] = byLayer[layer[n.id]] || []).push(n); });
