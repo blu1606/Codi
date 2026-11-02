@@ -3,12 +3,12 @@
 // that need a reason (≥ 3 chars) and are kept in a history sheet, snippet picker with {{placeholders}}, "save and
 // grade next". The AI grading job card and list badge are owned by the lecturer-ai feature
 // (Codi.lecturerAI.gradingDraft / gradingBadge); the AI only fills the form, the lecturer saves (G5).
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRevealOnSelect } from './reveal-on-select';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon } from '../../components/ui/primitives';
-import { shell, myCourses, byCourse, persist, decimal, me, promptReason } from './teach-api';
+import { shell, myCourses, byCourse, persist, decimal, me, promptReason, guard } from './teach-api';
 
 const { fmt } = Codi;
 const DAY = 86400000;
@@ -103,6 +103,17 @@ function GradeForm({ sel, nextPending, go }) {
   const [feedback, setFeedback] = useState(sel.feedback || '');
   const [error, setError] = useState(null);
   const [loadedAt] = useState(sel.gradedAt || null); // stale-view check, like the real view token
+  // Unsaved edits: compare with the values the form loaded (or last saved). A dirty form sets the shared guard, so
+  // switching submissions, leaving the page and closing the tab ask first (see teach-api guard).
+  const snapshot = () => JSON.stringify({ scores, score, feedback });
+  const baseline = useRef(null);
+  if (baseline.current === null) baseline.current = snapshot();
+  const dirty = snapshot() !== baseline.current;
+  useEffect(() => {
+    if (!dirty) return undefined;
+    guard.dirty = { owner: sel.id, label: `Phiếu chấm của ${u.name}`, scope: `/teach/grading/${sel.id}`, reset: () => {} };
+    return () => { if (guard.dirty && guard.dirty.owner === sel.id) guard.dirty = null; };
+  }, [dirty, sel.id, u.name]);
   const calc = rb.length ? rubricTotal(rb, scores) : null;
   const current = rb.length ? calc.total : parseNum(score);
   const pct = passPercent(sel);
@@ -146,9 +157,21 @@ function GradeForm({ sel, nextPending, go }) {
     const l = lessonOf(s);
     Codi.notify(s.userId, { title: wasGraded ? 'Điểm bài tập đã được cập nhật' : 'Bài tập đã được chấm', body: `${l ? l.title : 'Bài tập'} — ${decimal(finalScore)}/${s.maxScore} điểm`, link: '/progress' });
     persist(false);
+    baseline.current = snapshot();
     Codi.ui.toast('Đã lưu điểm và gửi thông báo cho học viên.', { type: 'success' });
     if (action === 'next' && nextPending) go({ status: 'pending', id: nextPending.id });
     else go({ status: 'graded', id: s.id });
+  };
+  // Skipping drops unsaved edits, so it asks first; the confirm states the consequence.
+  const skip = async () => {
+    if (dirty) {
+      const r = await Codi.ui.confirm({
+        title: 'Bỏ thay đổi chưa lưu?', body: `Điểm và nhận xét bạn vừa nhập cho ${u.name} chưa được lưu.`,
+        consequence: 'Chuyển sang bài tiếp theo sẽ bỏ các thay đổi này.', reversible: 'Bạn phải nhập lại nếu muốn giữ chúng.', confirmLabel: 'Bỏ thay đổi, sang bài tiếp theo',
+      });
+      if (!r.ok) return;
+    }
+    go({ status: 'pending', id: nextPending.id });
   };
   const insert = (text, title) => { setFeedback((cur) => (cur.trim() ? `${cur.trim()}\n\n${text}` : text)); Codi.ui.toast(`Đã chèn mẫu "${title}"`, { type: 'success' }); };
   const applyAI = (d) => {
@@ -186,7 +209,7 @@ function GradeForm({ sel, nextPending, go }) {
           <button className="btn btn-primary btn-block" type="submit">{sel.status === 'graded' ? 'Cập nhật điểm' : 'Lưu điểm'}</button>
           {nextPending ? <>
             <button type="button" className="btn btn-secondary btn-block" onClick={() => save('next')}>Lưu và chấm bài tiếp theo <Icon name="arrow-right" className="icon-sm" /></button>
-            <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={() => go({ status: 'pending', id: nextPending.id })}>Bỏ qua, sang bài tiếp theo →</button>
+            <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={skip}>Bỏ qua, sang bài tiếp theo →</button>
           </> : <p className="xsmall muted" style={{ textAlign: 'center' }}>Đây là bài chờ chấm cuối cùng.</p>}
           {sel.status === 'graded' && <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={() => openHistory(Codi.db().submissions.find((x) => x.id === sel.id) || sel)}><Icon name="clock" className="icon-sm" /> Xem lịch sử điểm ({(sel.history || []).length} lần sửa)</button>}
         </div>
