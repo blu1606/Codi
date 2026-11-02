@@ -162,7 +162,13 @@ export function StatsPage() {
   } else {
     const thisWeek = weekStartOf(w.end);
     const weeks = [];
-    for (let i = 5; i >= 0; i--) { const ws = addDays(thisWeek, -7 * i); const we = addDays(ws, 6); weeks.push({ start: ws, minutes: roundMinutes(secondsBetween(ws, we < w.end ? we : w.end)) }); }
+    // Each bar counts only the days inside the selected window, so the bars add up to the "Giờ học trong kỳ" KPI.
+    for (let i = 5; i >= 0; i--) {
+      const ws = addDays(thisWeek, -7 * i); const we = addDays(ws, 6);
+      if (we < w.start || ws > w.end) continue;
+      const from = ws < w.start ? w.start : ws; const to = we < w.end ? we : w.end;
+      weeks.push({ start: from, minutes: roundMinutes(secondsBetween(from, to)) });
+    }
     const items = weeks.map((x) => ({ label: 'Tuần ' + dm(x.start), value: Math.round((x.minutes / 60) * 10) / 10 }));
     c2 = { title: 'Giờ học mỗi tuần', question: 'Bạn có đạt mục tiêu giờ học hằng tuần?', body: ch.bars({ items, goal: goalHours, goalLabel: goalRec ? 'Mục tiêu tuần' : 'Mục tiêu tuần (mặc định)', format: (v) => Codi.fmt.num(v) + ' giờ', capFormat: (v) => Codi.fmt.num(v), ariaLabel: 'Giờ học mỗi tuần' }), table: { headers: ['Tuần', 'Giờ học'], rows: items.map((i) => [i.label, Codi.fmt.num(i.value)]) }, note: [goalNote, 'Tuần gần nhất có thể chưa kết thúc.'].filter(Boolean).join(' ') };
   }
