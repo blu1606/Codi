@@ -44,7 +44,8 @@ The "Học tiếp" target and the next departures come from the path page's own 
 - `vite build` to the scratchpad outDir: passes (the build was briefly blocked by another agent's in-progress `lecturer/course-editor.jsx` syntax error, which I did not touch; it cleared on retry).
 - Browser check (learner, 1440, 1024, 390, dark): no horizontal scroll; no page errors. "Học tiếp" href and the first three departures match the path page exactly (`course-js-001`, `lesson-js-002`, then p01 and p02).
 - Text size: board course and meta lines and the goal line are 16px. Remaining 14px items are captions and buttons (the brief's 16px floor applies to body text).
-- `node smoke.js` and `node axe.js`: pending at the time of writing; results to be recorded here before the final commit.
+- `node smoke.js`: 59 routes reported `ok`, no `FAIL` lines.
+- `node axe.js`: "no violations".
 
 ## Commits
 
