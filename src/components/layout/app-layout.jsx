@@ -4,8 +4,9 @@ import { allRoutes } from '../../features';
 import { Icon } from '../ui/primitives';
 import { OverlayHost } from '../ui/overlay-host';
 import Header from '../../features/shell/header';
-import DevDrawer from '../../features/shell/dev-drawer';
+import DevDrawer, { DevToggle } from '../../features/shell/dev-drawer';
 import ThemeToggle from '../../features/shell/theme-toggle';
+import BrandLink from '../../features/shell/brand-link';
 
 /** The route definition matching the current URL (static segments outrank params, like the mockup router). */
 export function useCurrentRoute() {
@@ -18,11 +19,12 @@ export function useCurrentRoute() {
 function FocusHeader({ route }) {
   const exit = (route && route.exit) || { href: Codi.homeFor(Codi.role()), label: 'Thoát' };
   return (
-    <div className="app-header-inner">
-      <Link className="logo" to="/"><span className="logo-mark">C</span>Codi</Link>
+    <div className="app-header-inner hd hd-focus">
+      <BrandLink to={Codi.homeFor(Codi.role())} />
       <div className="header-actions">
+        <DevToggle />
         <ThemeToggle />
-        <Link className="btn btn-ghost" to={typeof exit.href === 'function' ? exit.href() : exit.href}><Icon name="x" /> {exit.label}</Link>
+        <Link className="btn btn-ghost hd-exit" to={typeof exit.href === 'function' ? exit.href() : exit.href}><Icon name="x" /> {exit.label}</Link>
       </div>
     </div>
   );

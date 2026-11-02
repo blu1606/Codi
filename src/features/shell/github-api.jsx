@@ -18,6 +18,7 @@ import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Icon, Thumb } from '../../components/ui/primitives';
 import { GITHUB_PROFILES, GITHUB_ACCOUNTS, fallbackProfile } from './github-profiles';
+import { BrandMark } from './brand-link';
 import { GithubMark, scenario } from './shell-ui';
 
 const PROFILE_HREF = '/profile?tab=nang-luc';
@@ -273,7 +274,7 @@ function PendingChecklist({ highlight }) {
 function ConsentForm({ kind, input }) {
   return (
     <form id="github-consent-form" className="stack-4 gh-consent" onSubmit={confirm}>
-      <div className="gh-brandline"><span className="gh-brand"><Icon name="book-open" className="icon-sm" /> Codi</span><span className="gh-brand-arrow"><Icon name="arrow-right" className="icon-sm" /></span><span className="gh-brand"><GithubMark className="icon icon-sm" /> GitHub</span></div>
+      <div className="gh-brandline"><span className="gh-brand"><BrandMark size={16} /> Codi</span><span className="gh-brand-arrow"><Icon name="arrow-right" className="icon-sm" /></span><span className="gh-brand"><GithubMark className="icon icon-sm" /> GitHub</span></div>
       <h3 style={{ margin: 0 }}>{kind === 'link' ? 'Kết nối GitHub' : 'Cho phép Codi phân tích GitHub?'}</h3>
       <p className="small">Chỉ phân tích tài khoản GitHub được máy chủ xác nhận đã liên kết với tài khoản Codi của bạn.</p>
       <div className="stack-2">

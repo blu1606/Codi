@@ -1,8 +1,12 @@
 /**
  * Prototype-only "Kịch bản thử nghiệm" drawer (mockup core.js renderDrawer + #dev-toggle, Alt+K): role switch,
  * forced scenario states and server data reset. Not product UI.
+ *
+ * <DevToggle /> is a 40 px icon button rendered in the header actions (both layouts), so it never floats over page
+ * content or bottom action bars; <DevDrawer /> (mounted once by AppLayout) owns Alt+K and the panel. They share the
+ * open state below.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Codi, useCodi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
 import { THEME_OPTIONS, useThemeSync } from './theme';
@@ -22,6 +26,22 @@ const SCEN = [
 const ROLES = [['guest', 'Khách'], ['learner', 'Học viên'], ['lecturer', 'Giảng viên'], ['admin', 'Quản trị viên']];
 // Seeded user signed in for each role.
 const ROLE_USER = { guest: null, learner: 'usr-learner-001', lecturer: 'usr-lecturer-001', admin: 'usr-admin-001' };
+
+// shared open state between the header toggle and the drawer
+let drawerOpen = false;
+const drawerSubs = new Set();
+const setDrawerOpen = (v) => { const next = typeof v === 'function' ? v(drawerOpen) : v; if (next === drawerOpen) return; drawerOpen = next; drawerSubs.forEach((f) => f()); };
+const useDrawerOpen = () => useSyncExternalStore((f) => { drawerSubs.add(f); return () => drawerSubs.delete(f); }, () => drawerOpen);
+
+export function DevToggle() {
+  const open = useDrawerOpen();
+  return (
+    <button id="dev-toggle" className="dev-toggle" type="button" aria-controls="dev-drawer" aria-expanded={open} title="Kịch bản thử nghiệm (Alt+K)" aria-keyshortcuts="Alt+K" onClick={() => setDrawerOpen((o) => !o)}>
+      <svg className="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></svg>
+      <span className="sr-only">Kịch bản thử nghiệm</span>
+    </button>
+  );
+}
 
 function switchRole(role) {
   Codi.ui.closeAll();
@@ -50,7 +70,8 @@ async function resetData() {
 export default function DevDrawer() {
   useCodi();
   useThemeSync(); // the drawer is mounted in every layout, so it hosts the theme listener
-  const [open, setOpen] = useState(false);
+  const open = useDrawerOpen();
+  const setOpen = setDrawerOpen;
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
@@ -67,10 +88,6 @@ export default function DevDrawer() {
 
   return (
     <>
-      <button id="dev-toggle" className="dev-toggle" type="button" aria-controls="dev-drawer" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <svg className="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></svg>
-        Kịch bản thử nghiệm
-      </button>
       <div id="dev-drawer" className="dev-drawer" role="region" aria-label="Kịch bản thử nghiệm" hidden={!open}>
         {open && (
           <>
