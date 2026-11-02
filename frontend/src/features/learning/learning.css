@@ -227,7 +227,9 @@ ul.ln-mastery-grid { list-style: none; padding: 0; }
    pane scrolls on its own; below that the panes become top-level tabs and the document scrolls. */
 .ln-shell { display: grid; grid-template-rows: auto minmax(0, 1fr); height: calc(100svh - var(--header-h)); background: var(--subtle); }
 .ln-split { display: grid; grid-template-columns: minmax(0, var(--ln-left, 58%)) 12px minmax(0, 1fr); min-height: 0; }
-.ln-pane { min-width: 0; min-height: 0; background: var(--surface); }
+/* Scroll containers are also the containing block, so absolutely positioned descendants (.sr-only labels) are
+   clipped by the pane instead of anchoring to the page and stretching the document past the fixed-height shell. */
+.ln-pane { position: relative; min-width: 0; min-height: 0; background: var(--surface); }
 .ln-pane-lesson { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .ln-pane-task { display: flex; flex-direction: column; }
 .ln-lesson-col { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-content: start; padding: var(--space-6) var(--space-8) var(--space-12); }
@@ -267,7 +269,7 @@ html[data-theme="dark"] .ln-chip.is-active { color: var(--fg); }
 .ln-tab-count { font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* tab panels: each scrolls on its own; the task's primary action is pinned to the bottom */
-.ln-tabpanel { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.ln-tabpanel { position: relative; display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .ln-tabpanel > * { flex: 1 0 auto; }
 .ln-task { --ln-pad: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; padding: var(--space-6) var(--ln-pad) 0; }
 .ln-task > :last-child:not(.ln-dock):not(.ln-task-fill) { margin-bottom: var(--space-6); }
