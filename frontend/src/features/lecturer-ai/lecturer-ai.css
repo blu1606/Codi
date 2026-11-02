@@ -85,8 +85,14 @@ p.lai-empty-run { display: block; }
 .lai-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .lai-job-actions { flex-wrap: wrap; gap: var(--space-2); }
 .lai-list-badge { margin-top: var(--space-1); width: fit-content; }
+/* Per-item decision on an AI grading suggestion: accept, edit or ignore. */
+.lai-crit-actions { flex-wrap: wrap; gap: var(--space-2); }
+.lai-decision button { min-height: 32px; padding: 4px 10px; }
+.lai-score-input { width: 5.5rem; }
+.lai-crit.is-ignored .lai-crit-head, .lai-ignored-text { opacity: 0.6; text-decoration: line-through; }
+.lai-spin { animation: lai-spin 1s linear infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .lai-stage.is-running .lai-stage-icon, .lai-crit:not(.is-waiting) { animation: none; }
+  .lai-stage.is-running .lai-stage-icon, .lai-crit:not(.is-waiting), .lai-spin { animation: none; }
   .lai-meter .progress > span { transition: none; }
 }

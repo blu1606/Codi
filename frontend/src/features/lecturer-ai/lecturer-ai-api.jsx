@@ -16,14 +16,13 @@
  *                        with the solution in the backend sandbox). Each test:
  *                        { id, name, call, expected, expectedText, step: 0, hidden: true, isSample: false, ok: true }
  *                        Throws when the solution is empty.
- *   gradeSuggestion(submission, assignment) → { scores: { [criterionId]: points }, feedback }   (legacy sync helper)
  *   task({ onStart, onDone, onError, onLimit }, produce, ms?) → { stop() }   scenario-aware async runner
  *   factsFor(course, title) → fact[] topic facts ({ q, a, w[], e }) reused by the draft generator
  * Installed by sibling modules (imported below):
  *   openCreate                                                        ./lecturer-ai-create.jsx
  *   quizReview, generateQuizQuestions, validateQuestionDraft          ./quiz-ai-review.jsx
  *   runKnowledgeMapAnalysis, acceptAllPlan, acceptAll, kmapGraph      ./kmap-ai.jsx
- *   getAiGradingDraft, gradingDraft, gradingBadge, gradingJobs        ./grading-ai.jsx (jobs: ./grading-jobs.js)
+ *   getAiGradingDraft, gradingDraft, gradingBadge                     ./grading-ai.jsx (real getAiGradingDraft action)
  */
 import { Codi } from '../../lib/codi';
 import { Alert, Icon, Stepper } from '../../components/ui/primitives';
@@ -93,18 +92,9 @@ async function suggestTests(code, courseId, lessonId) {
   const stamp = Date.now().toString(36);
   return ((r && r.tests) || []).map((t, i) => ({ id: `ai-test-${stamp}-${i}`, name: t.name, call: t.call, expected: t.expected, expectedText: t.expectedText, step: 0, hidden: true, isSample: false, ok: true }));
 }
-function gradeSuggestion(sub, a) {
-  const strong = (sub.link ? 1 : 0) + (sub.fileName ? 1 : 0) + ((sub.note || '').length > 20 ? 1 : 0);
-  const scores = {};
-  (a.rubric || []).forEach((k, i) => { const ratio = [0.9, 0.75, 0.8, 0.6][i % 4] - (strong ? 0 : 0.2); scores[k.id] = Math.max(0, Math.round(k.points * ratio * 2) / 2); });
-  const weakest = (a.rubric || []).slice().sort((x, y) => scores[x.id] / x.points - scores[y.id] / y.points)[0];
-  const feedback = `Bài làm đáp ứng phần lớn yêu cầu${sub.note ? ', ghi chú của bạn giúp mình hiểu cách làm' : ''}. Điểm cần cải thiện nhất: ${weakest ? weakest.name.toLowerCase() + ' — ' + weakest.desc.toLowerCase() : 'trình bày bài nộp'}. Gợi ý: kiểm tra lại các trường hợp biên trước khi nộp lần sau.`;
-  return { scores, feedback };
-}
-
 // ───────────────────────── import sheet ─────────────────────────
 let imp = null; let handle = null; let job = null;
-// Concept suggestions are not offered: Codi has no action that adds knowledge-map concepts outside its (disabled) analysis.
+// Concept suggestions are not offered: Codi adds knowledge-map concepts only through its course analysis job.
 const OUT = { summary: 'Tóm tắt bài đọc', quiz: 'Câu hỏi quiz' };
 // The sheet body/footer read the module state; update({}) re-evaluates them.
 const refresh = () => { if (handle) handle.update({}); };
@@ -303,5 +293,5 @@ function openImport(courseId, lessonId, opts) {
 const factsFor = (c, title) => { const b = pickBank(c, { title }); return b ? b.facts : []; };
 
 Object.assign(Codi, {
-  lecturerAI: { ...(Codi.lecturerAI || {}), openImport, generateQuestions, suggestRubric, suggestTests, gradeSuggestion, task, factsFor },
+  lecturerAI: { ...(Codi.lecturerAI || {}), openImport, generateQuestions, suggestRubric, suggestTests, task, factsFor },
 });

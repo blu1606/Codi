@@ -1,8 +1,9 @@
 // S26 grading queue + split grading view on Codi's grading actions (getGradingQueueData / gradeSubmission):
 // course · assignment · date filters, rubric or single score, pass threshold as a percent of maxScore, score edits
 // that need a reason (≥ 3 chars) and are kept in a history sheet, snippet picker with {{placeholders}}, "save and
-// grade next", stale-view protection through the server's view token. The AI grading job card and list badge are
-// owned by the lecturer-ai feature (Codi.lecturerAI.gradingDraft / gradingBadge); the AI only fills the form (G5).
+// grade next", stale-view protection through the server's view token. The AI grading suggestion card and list badge
+// are owned by the lecturer-ai feature (Codi.lecturerAI.gradingDraft / gradingBadge, on Codi's getAiGradingDraft
+// action); the lecturer accepts, edits or ignores each suggested item and the AI only fills the form (G5).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRevealOnSelect } from './reveal-on-select';
@@ -71,9 +72,9 @@ function openHistory(sel) {
   });
 }
 
-/** Submission + assignment in the shape the lecturer-ai grading card reads. */
-const aiSubmission = (sel) => ({ id: sel.id, maxScore: sel.maxScore, link: sel.linkUrl || '', fileName: sel.fileName || '', note: sel.answerText || '', courseId: sel.courseId, lessonId: sel.lessonId });
-const aiAssignment = (sel, rb) => ({ rubric: rb, instructions: sel.instructions || '', requiresFile: false, requiresLink: false });
+/** Submission + assignment in the shape the lecturer-ai grading card reads (the view token pins the suggestion). */
+const aiSubmission = (sel) => ({ id: sel.id, viewToken: sel.viewToken, maxScore: sel.maxScore });
+const aiAssignment = (sel, rb) => ({ rubric: rb });
 
 /** Stable call site for Codi.lecturerAI.gradingDraft; without it, the real disabled "Sắp có" state. */
 function AiGradingSlot({ sel, rb, onApply }) {
