@@ -291,6 +291,7 @@ const PAGES = {
   insights: {
     title: 'Quan sát hệ thống', lead: 'Người dùng, nội dung, vận hành và AI — cùng một khoảng thời gian cho mọi thẻ.', route: '/admin/insights',
     cards: INSIGHTS, overview: ['a1', 'a2', 'a3', 'a7', 'a8'], more: ['a5', 'a4', 'a6', 'a9'], load: insights, collapsible: true,
+    basis: 'Nguồn: tài khoản, ghi danh, tiến độ học, nhật ký học, sự kiện mua hàng, câu hỏi, đánh giá và bài nộp trong hệ thống. Ngày tính theo GMT+7, gồm cả hôm nay; "Kỳ trước" là khoảng có cùng độ dài ngay trước kỳ này.',
     error: 'Không tải được thống kê.',
     quiet: (d) => (sum(d.daily, (x) => x.signups + x.newEnrolments + x.lessonsCompleted + x.activeLearners) === 0 ? 'Không có hoạt động nào được ghi nhận trong kỳ này.' : null),
   },
