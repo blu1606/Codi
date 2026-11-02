@@ -3,72 +3,42 @@
  * Route: /admin/publication?tab=pending|changes|approved&id=<courseId>&view=criteria|content|flags|history
  *
  * Queue on the left (getAdminPublicationQueue, counted tabs); on the right the course (getAdminCourseReview) with
- * four views — Tiêu chí (saveCriterionVerdict, applyAutoCriteria), Nội dung (preview + flag any lesson / question /
- * test / assignment: addReviewFlag), Cờ (updateFlagStatus, deleteReviewFlag, AI pre-check run on the payload as in
- * Codi), Lịch sử (rounds). Decisions: approvePublication (blocked by the server's blockingReasons),
- * requestChanges, rejectPublication — all with consequence dialogs; the backend notifies the lecturer.
- * S32b: "Xem trước như học viên" modal with a persistent preview bar.
+ * four views — Tiêu chí (saveCriterionVerdict, applyAutoCriteria), Xem trước (publication-preview.jsx: the course as
+ * the learner or the lecturer sees it, with flags anchored in place: addReviewFlag), Cờ (updateFlagStatus,
+ * deleteReviewFlag, AI pre-check run on the payload as in Codi), Lịch sử (rounds). Decisions: approvePublication
+ * (blocked by the server's blockingReasons), requestChanges, rejectPublication — all with consequence dialogs; the
+ * backend notifies the lecturer. S32b: "Xem trước như học viên" opens the preview in learner view.
  */
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
-import { Icon, Alert, Empty, Thumb, SpinnerBlock } from '../../components/ui/primitives';
+import { Icon, Alert, Empty, SpinnerBlock } from '../../components/ui/primitives';
 import { AdminShell, parsePrice, confirmImpact } from './admin-shell';
 import { useAction, pubAction, attempt, LEVEL_LABEL } from './admin-data';
-import { CRITERIA, ENTRY_MIN, SEVERITY, FLAG_STATUS, ROUND_STATUS as ROUND, aiPrecheck, materialOk, lessonsOf } from './publication-rules';
+import { CRITERIA, ROUND_STATUS as ROUND, aiPrecheck, lessonsOf, anchorOf } from './publication-rules';
+import { SevBadge, FlagCard, addFlag } from './review-flags';
+import { PreviewView } from './publication-preview';
 
 const { fmt } = Codi;
-const TYPE = { video: 'Video', pdf: 'Slide/PDF', slide: 'Slide/PDF', reading: 'Bài đọc', tutorial: 'Hướng dẫn code', code: 'Bài code' };
 const VIEWS = ['criteria', 'content', 'flags', 'history'];
-const ENTRY_LABEL = 'Bài kiểm tra đầu vào';
 
 // View state survives navigation between queue items of the same course (mockup module state).
-let view = { courseId: null, tab: 'criteria', lessonId: null, ai: null }; // ai: {state:'running'|'done'|'error'|'limit', items, token}
+// node: 'info' | 'entry' | lessonId shown in the preview; mode: 'learner' | 'author'; focus: flag id to scroll to.
+let view = { courseId: null, tab: 'criteria', node: 'info', mode: 'learner', focus: null, ai: null }; // ai: {state:'running'|'done'|'error'|'limit', items, token}
 const priceDraft = {};
-let lastDeleted = null;
 const rerender = () => Codi.rerender();
-const forCourse = (id) => { if (view.courseId !== id) view = { courseId: id, tab: 'criteria', lessonId: null, ai: null }; return view; };
-const countFor = (r, pred) => (r ? r.flags.filter((f) => f.status !== 'closed' && pred(f)).length : 0);
-const minutes = (l) => Math.round((l.durationSeconds || 0) / 60);
+const forCourse = (id) => { if (view.courseId !== id) view = { courseId: id, tab: 'criteria', node: 'info', mode: 'learner', focus: null, ai: null }; return view; };
 const MAX_PRICE = 2147483647; // real approve bound (int4 column)
-
-// ───────────────────────── small pieces ─────────────────────────
-const SevBadge = ({ s }) => <span className={`badge ${s === 'must' ? 'badge-danger' : 'badge-warn'}`}><Icon name={s === 'must' ? 'alert-circle' : 'alert-triangle'} />{SEVERITY[s]}</span>;
-const StatusBadge = ({ f }) => <span className={`badge ${f.status === 'closed' ? 'badge-success' : f.status === 'fixed' ? 'badge-accent' : ''}`}>{FLAG_STATUS[f.status]}</span>;
-
-const addFlag = (ctx, target, severity, comment, source) => pubAction('addReviewFlag', ctx.courseId, ctx.requestId, {
-  targetType: target.type, lessonId: target.lessonId || null, targetLabel: target.label, severity, comment, source,
-});
-
-function FlagDialog({ handle, ctx, t }) {
-  const [severity, setSeverity] = useState('must');
-  const [comment, setComment] = useState('');
-  const [err, setErr] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault();
-    const text = comment.trim();
-    if (text.length < 10) { setErr(true); return; }
-    setBusy(true);
-    const ok = await attempt(() => addFlag(ctx, t, severity, text, 'admin'), 'Đã gắn cờ.');
-    setBusy(false);
-    if (ok) handle.close();
-  };
-  return (
-    <form className="stack-3" onSubmit={submit} noValidate>
-      <p className="small"><span className="muted">Vị trí:</span> <strong>{t.label}</strong></p>
-      <fieldset className="stack-1"><legend className="small"><strong>Mức độ</strong></legend>
-        <label className="check"><input type="radio" name="severity" value="must" checked={severity === 'must'} onChange={() => setSeverity('must')} /> Bắt buộc sửa — chặn việc xuất bản</label>
-        <label className="check"><input type="radio" name="severity" value="should" checked={severity === 'should'} onChange={() => setSeverity('should')} /> Nên sửa — góp ý, không chặn</label></fieldset>
-      <div className={`field ${err ? 'is-invalid' : ''}`}><label htmlFor="rv-fc">Nhận xét cho giảng viên <span className="req">*</span></label>
-        <textarea id="rv-fc" name="comment" rows={3} placeholder="Mô tả vấn đề và cách sửa mong muốn" value={comment} onChange={(e) => { setComment(e.target.value); setErr(false); }} />
-        <span className={`field-help ${err ? 'field-error' : ''}`}>{err ? 'Nhận xét cần ít nhất 10 ký tự để giảng viên biết cần sửa gì.' : 'Ít nhất 10 ký tự.'}</span></div>
-      <div className="row" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn btn-ghost" onClick={() => handle.close()}>Huỷ</button><button type="submit" className="btn btn-primary" disabled={busy}><Icon name="flag" className="icon-sm" /> Gắn cờ</button></div>
-    </form>
-  );
+const nodeOf = (f) => { const a = anchorOf(f); return a.type === 'course' || a.type === 'chapter' ? 'info' : a.type === 'entry' || a.entry ? 'entry' : a.lessonId || 'info'; };
+/** Opens the preview at a flag's place and scrolls to it. */
+function gotoFlag(tab, f) {
+  view.node = nodeOf(f); view.focus = f.id;
+  Codi.go(`/admin/publication?tab=${tab}&id=${view.courseId}&view=content`);
 }
-const openFlag = (ctx, t) => Codi.ui.modal({ title: 'Gắn cờ', body: (h) => <FlagDialog handle={h} ctx={ctx} t={t} /> });
-const FlagBtn = ({ ctx, t }) => <button type="button" className="btn btn-ghost btn-sm" onClick={() => openFlag(ctx, t)}><Icon name="flag" className="icon-sm" /> Gắn cờ</button>;
+function openLearnerPreview(tab) {
+  view.mode = 'learner'; view.node = 'info';
+  Codi.go(`/admin/publication?tab=${tab}&id=${view.courseId}&view=content`);
+}
 
 // ───────────────────────── actions ─────────────────────────
 function setCrit(ctx, r, id, v) {
@@ -86,21 +56,6 @@ async function critAuto(ctx) {
   const res = await attempt(() => pubAction('applyAutoCriteria', ctx.requestId, ctx.courseId));
   if (res) Codi.ui.toast(res.appliedCount ? `Đã điền ${res.appliedCount} tiêu chí theo gợi ý. Kiểm tra lại trước khi kết luận.` : 'Không còn tiêu chí nào để điền tự động.');
 }
-function gotoTarget(tab, lessonId) { view.tab = 'content'; view.lessonId = lessonId || null; Codi.go(`/admin/publication?tab=${tab}&id=${view.courseId}&view=content`); }
-const setFlagState = (id, v) => attempt(() => pubAction('updateFlagStatus', id, v));
-async function deleteFlag(ctx, f) {
-  const ok = await Codi.ui.confirm({ title: 'Xoá cờ?', body: 'Bạn có chắc chắn muốn xoá cờ này?', confirmLabel: 'Xoá cờ', danger: true });
-  if (!ok.ok) return;
-  if (!(await attempt(() => pubAction('deleteReviewFlag', f.id)))) return;
-  lastDeleted = { ctx, flag: f };
-  Codi.ui.toast('Đã xoá cờ.', { action: { label: 'Hoàn tác', onClick: undoDelete } });
-}
-function undoDelete() {
-  if (!lastDeleted) return;
-  const { ctx, flag: f } = lastDeleted; lastDeleted = null;
-  attempt(() => addFlag(ctx, f.target, f.severity, f.comment, f.source || 'admin'));
-}
-
 // AI pre-check (deterministic, on the review payload; obeys the aiAssistant scenario flag)
 function runAi(course, r) {
   const token = {};
@@ -157,28 +112,6 @@ async function reject(ctx, c) {
   Codi.go('/admin/publication?tab=changes&id=' + c.id);
 }
 
-// S32b preview as learner (persistent bar + exit)
-function openPreview(d, item) {
-  const c = d.course;
-  Codi.ui.modal({
-    size: 'lg', dismissible: false, body: (
-      <div className="ad-preview-container">
-        <div className="ad-preview-bar"><div><strong>Bạn đang xem trước như học viên</strong> · {c.title}</div>
-          <button type="button" className="btn btn-secondary btn-sm" data-close><Icon name="x" className="icon-sm" /> Thoát xem trước</button></div>
-        <div className="ad-preview-content stack-4">
-          <div><Thumb course={{ id: c.id, title: c.title }} /><h1 style={{ margin: '12px 0 0' }}>{c.title}</h1><p className="small muted">{d.instructor ? d.instructor.name : item.instructorName} · {c.category} · {LEVEL_LABEL[c.level] || c.level} · {c.proposedPrice != null ? fmt.vnd(c.proposedPrice) + ' (giá đề xuất)' : 'Chưa có giá'}</p></div>
-          <p>{c.summary}</p>
-          {d.details.learningOutcomes.length > 0 && <div className="stack-2"><h3>Bạn sẽ học được gì</h3><ul className="small">{d.details.learningOutcomes.map((o, i) => <li key={i}>{o}</li>)}</ul></div>}
-          <div className="stack-2"><h3>Nội dung khóa học</h3>{c.chapters.map((ch) => (
-            <div key={ch.id} className="stack-1"><strong>{ch.title}</strong><ul className="small">{ch.lessons.map((l) => <li key={l.id}>{l.title} <span className="muted">· {TYPE[l.type] || l.type} · {fmt.duration(minutes(l))}</span></li>)}</ul></div>
-          ))}</div>
-          <div className="stack-2"><h3>Yêu cầu trước khi học</h3><ul className="small">{(d.details.requirements.length ? d.details.requirements : ['Không có yêu cầu đặc biệt.']).map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-        </div>
-      </div>
-    ),
-  });
-}
-
 // ───────────────────────── views ─────────────────────────
 function criteriaView({ d, r, ro, ctx }) {
   const auto = d.autoCriteria;
@@ -203,104 +136,6 @@ function criteriaView({ d, r, ro, ctx }) {
           </li>
         );
       })}</ul>
-    </div>
-  );
-}
-
-function questionList(ctx, l, qs, r, ro) {
-  if (!qs.length) return <p className="small muted">Chưa có câu hỏi.</p>;
-  return (
-    <ol className="rv-questions">{qs.map((q, i) => {
-      const label = `Câu ${i + 1}: ${q.text}`;
-      const n = countFor(r, (f) => f.targetType === 'question' && f.targetLabel === label && (f.lessonId || null) === (l ? l.id : null));
-      return (
-        <li key={q.id || i} className="rv-q">
-          <div className="row-between"><strong className="small">Câu {i + 1}. {q.text}</strong>
-            <span className="row" style={{ gap: 4 }}>{n ? <span className="badge badge-warn">{n} cờ</span> : null}{q.aiGenerated && <span className="badge badge-accent">AI tạo</span>}{!ro && <FlagBtn ctx={ctx} t={{ type: 'question', lessonId: l ? l.id : null, label }} />}</span></div>
-          <ul className="rv-opts">{q.options.map((o, k) => (
-            <li key={k} className={k === q.correctIndex ? 'is-correct' : ''}>
-              {k === q.correctIndex ? <><Icon name="check-circle" className="icon-sm" /><span className="sr-only">Đáp án đúng: </span></> : <span className="rv-opt-dot" aria-hidden="true" />}
-              <span>{o}</span>{k === q.correctIndex && <span className="xsmall">Đáp án đúng</span>}
-            </li>
-          ))}</ul>
-          {q.explanation ? <p className="xsmall muted">Giải thích: {q.explanation}</p> : <p className="xsmall text-warn">Chưa có giải thích.</p>}
-        </li>
-      );
-    })}</ol>
-  );
-}
-
-function codePreview(ctx, l, ro) {
-  const cd = l.code; const chk = cd.solutionCheck; const tests = cd.tests || [];
-  return (
-    <div className="stack-2">
-      <div className="row-between"><strong className="small">Bài code · {tests.length} test ({tests.filter((t) => t.hidden).length} ẩn)</strong>
-        {chk && chk.ok ? <span className="badge badge-success"><Icon name="check" />Lời giải đạt {chk.passed}/{chk.total}</span> : <span className="badge badge-danger"><Icon name="alert-circle" />Lời giải chưa chạy đạt</span>}</div>
-      <ol className="small">{(cd.instructions || []).map((s, i) => <li key={i}>{String(s).replace(/[`*]/g, '')}</li>)}</ol>
-      <div className="table-wrap"><table className="table"><caption className="sr-only">Test của bài code</caption><thead><tr><th>Test</th><th>Biểu thức</th><th /></tr></thead><tbody>
-        {tests.map((t, i) => (
-          <tr key={t.id || i}><th scope="row"><span className="small">{t.name}</span>{t.hidden && <> <span className="badge">Ẩn</span></>}</th><td className="mono xsmall">{t.call}</td>
-            <td>{!ro && <FlagBtn ctx={ctx} t={{ type: 'test', lessonId: l.id, label: `Test “${t.name}” · ${l.title}` }} />}</td></tr>
-        ))}
-      </tbody></table></div>
-    </div>
-  );
-}
-
-function lessonPreview(ctx, c, l, r, ro) {
-  if (!l) return null;
-  if (l === 'entry') {
-    const qs = (c.entryTest && c.entryTest.questions) || [];
-    return (
-      <div className="stack-3"><div className="row-between"><h3 className="tc-h">{ENTRY_LABEL}</h3>{!ro && <FlagBtn ctx={ctx} t={{ type: 'course', label: ENTRY_LABEL }} />}</div>
-        <p className={`small ${qs.length < ENTRY_MIN ? 'text-danger' : 'muted'}`}>{qs.length} câu · cần ít nhất {ENTRY_MIN} câu.</p>
-        {questionList(ctx, null, qs, r, ro)}</div>
-    );
-  }
-  const mat = (l.materials || []).map((m) => m.fileName).find(Boolean);
-  const a = l.assignment;
-  return (
-    <div className="stack-4">
-      <div className="row-between"><div className="stack-1"><h3 className="tc-h">{l.title}</h3><span className="xsmall muted">{TYPE[l.type] || l.type} · {fmt.duration(minutes(l))}</span></div>{!ro && <FlagBtn ctx={ctx} t={{ type: 'lesson', lessonId: l.id, label: 'Bài: ' + l.title }} />}</div>
-      {['video', 'pdf', 'slide'].includes(l.type) && (mat
-        ? <p className="small"><Icon name="file-text" className="icon-sm" /> <span className="mono">{mat}</span></p>
-        : <Alert type="danger" title="Chưa có tệp" body={`Bài ${TYPE[l.type].toLowerCase()} này chưa có tệp — học viên sẽ thấy bài trống.`} />)}
-      {l.body && <details className="panel"><summary className="small strong">Bài đọc / tóm tắt</summary><p className="small" style={{ marginTop: 8 }}>{String(l.body).replace(/[#*`>]/g, '').slice(0, 600)}{l.body.length > 600 ? '…' : ''}</p></details>}
-      {l.quiz && <div className="stack-2"><strong className="small">Quiz · {l.quiz.questions.length} câu · điểm đạt {l.quiz.passingScore}%</strong>{questionList(ctx, l, l.quiz.questions, r, ro)}</div>}
-      {l.code && codePreview(ctx, l, ro)}
-      {a && (
-        <div className="stack-2"><div className="row-between"><strong className="small">Bài tập</strong>{!ro && <FlagBtn ctx={ctx} t={{ type: 'assignment', lessonId: l.id, label: 'Bài tập: ' + l.title }} />}</div>
-          <p className="small">{a.instructions}</p>
-          {(a.rubric || []).length
-            ? <div className="table-wrap"><table className="table"><caption className="sr-only">Thang chấm</caption><thead><tr><th>Tiêu chí</th><th className="num">Điểm</th></tr></thead><tbody>{a.rubric.map((k, i) => <tr key={i}><th scope="row"><span className="small strong">{k.name}</span><br /><span className="xsmall muted">{k.desc}</span></th><td className="num">{k.points}</td></tr>)}</tbody></table></div>
-            : <Alert type="warn" title="Chưa có thang chấm" body="Học viên không biết bài được chấm theo tiêu chí nào." />}
-        </div>
-      )}
-      {!l.quiz && !l.code && !a && !l.body && materialOk(l) && <p className="small muted">Bài chỉ có {TYPE[l.type] ? TYPE[l.type].toLowerCase() : 'nội dung'}, không có quiz hay bài tập.</p>}
-    </div>
-  );
-}
-
-function contentView({ d, r, ro, ctx }) {
-  const c = d.course;
-  const ls = lessonsOf(c);
-  const sel = view.lessonId === 'entry' ? 'entry' : ls.find((l) => l.id === view.lessonId) || ls[0];
-  const entryCount = (c.entryTest && c.entryTest.questions ? c.entryTest.questions.length : 0);
-  const item = (id, title, sub, n, cur) => (
-    <li key={id}><button type="button" className="rv-tree-item" aria-current={String(cur)} onClick={() => { view.lessonId = id; rerender(); }}>
-      <span className="od-fill stack-1"><span className="small">{title}</span><span className="xsmall muted">{sub}</span></span>{n ? <span className="badge badge-warn">{n}</span> : null}</button></li>
-  );
-  return (
-    <div className="rv-content">
-      <nav className="rv-tree" aria-label="Nội dung khóa học"><ul>
-        {item('entry', ENTRY_LABEL, `${entryCount} câu`, countFor(r, (f) => f.targetLabel === ENTRY_LABEL), sel === 'entry')}
-        {c.chapters.map((ch) => (
-          <li key={ch.id} className="rv-tree-ch"><span className="xsmall muted">{ch.title}</span><ul>
-            {ch.lessons.map((l) => item(l.id, l.title, [TYPE[l.type] || l.type, l.quiz ? `quiz ${l.quiz.questions.length} câu` : '', l.code ? `${(l.code.tests || []).length} test` : '', l.assignment ? 'bài tập' : '', !materialOk(l) ? 'thiếu tệp' : ''].filter(Boolean).join(' · '), countFor(r, (f) => f.lessonId === l.id), sel === l))}
-          </ul></li>
-        ))}
-      </ul></nav>
-      <div className="rv-preview">{lessonPreview(ctx, c, sel, r, ro)}</div>
     </div>
   );
 }
@@ -342,22 +177,9 @@ function flagsView({ d, r, ro, ctx, tab }) {
   return (
     <div className="stack-4">
       {!ro && aiPanel(d, r, ctx, view.ai)}
-      {!live.length ? <div className="viz-empty">Chưa có cờ nào. Gắn cờ từ thẻ "Nội dung" hoặc chạy "Rà soát bằng AI".</div> : (
+      {!live.length ? <div className="viz-empty">Chưa có cờ nào. Gắn cờ ngay tại chỗ trong thẻ "Xem trước" hoặc chạy "Rà soát bằng AI".</div> : (
         <ul className="rv-flags">{live.map((f) => (
-          <li key={f.id} className={`rv-flag ${f.status === 'closed' ? 'is-closed' : ''}`}>
-            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}><SevBadge s={f.severity} /><StatusBadge f={f} />{f.source === 'ai' && <span className="badge badge-accent"><Icon name="sparkles" />AI đề xuất</span>}{f.carried && <span className="badge">Từ vòng trước</span>}</div>
-            <button type="button" className="btn-link rv-flag-target" onClick={() => gotoTarget(tab, f.lessonId || (f.targetLabel === ENTRY_LABEL ? 'entry' : ''))}>{f.targetLabel}</button>
-            <p className="small">{f.comment}</p>
-            {f.reply && <p className="small rv-reply"><Icon name="message-circle" className="icon-sm" /> Giảng viên: {f.reply}</p>}
-            {!ro && (
-              <div className="row" style={{ gap: 8 }}>
-                {f.status !== 'closed'
-                  ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => setFlagState(f.id, 'closed')}><Icon name="check" className="icon-sm" /> Đóng cờ</button>
-                  : <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFlagState(f.id, 'open')}>Mở lại</button>}
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => deleteFlag(ctx, f)}><Icon name="trash" className="icon-sm" /> Xoá</button>
-              </div>
-            )}
-          </li>
+          <FlagCard key={f.id} f={f} ctx={ctx} ro={ro} target={<button type="button" className="btn-link rv-flag-target" onClick={() => gotoFlag(tab, f)}><Icon name="map" className="icon-sm" /> {f.targetLabel}</button>} />
         ))}</ul>
       )}
     </div>
@@ -401,6 +223,16 @@ function decisionCard(d, item, ctx) {
 function Detail({ tab, item, q }) {
   const res = useAction('dashboard/admin/publication', 'getAdminCourseReview', [item.id]);
   const d = res.data;
+  // After "jump to place" from the Cờ list: scroll the flag into view once the preview has rendered it.
+  useEffect(() => {
+    if (!d || view.courseId !== item.id || view.tab !== 'content' || !view.focus) return;
+    const el = document.getElementById(`rv-flag-${view.focus}`);
+    if (!el) return;
+    view.focus = null;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('is-focus');
+    setTimeout(() => el.classList.remove('is-focus'), 1600);
+  });
   if (!d) {
     if (res.loading) return <SpinnerBlock text="Đang tải khóa học…" />;
     if (item.status !== 'pending') {
@@ -419,17 +251,19 @@ function Detail({ tab, item, q }) {
   const ctx = { courseId: c.id, requestId: r.id };
   const nFlags = r.flags.filter((f) => f.status !== 'closed').length;
   const fixedCarried = r.flags.filter((f) => f.carried && f.status === 'fixed').length;
-  const body = { criteria: criteriaView, content: contentView, flags: flagsView, history: historyView }[v.tab]({ d, r, ro, ctx, tab });
+  const preview = () => <PreviewView d={d} r={r} ro={ro} ctx={ctx} tab={tab} node={v.node} mode={v.mode}
+    onNode={(n) => { v.node = n; v.focus = null; rerender(); }} onMode={(m) => { v.mode = m; rerender(); }} />;
+  const body = { criteria: criteriaView, content: preview, flags: flagsView, history: historyView }[v.tab]({ d, r, ro, ctx, tab });
   return (
     <div className="stack-4" aria-busy={res.loading}><section className="card"><div className="card-body stack-4">
       <div className="row-between" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}><div className="stack-1"><h2 style={{ fontSize: 'var(--text-xl)', margin: 0 }}>{c.title}</h2>
         <span className="small muted">{d.instructor ? d.instructor.name : item.instructorName} · {c.category} · {LEVEL_LABEL[c.level] || c.level} · Vòng {r.round} · gửi {fmt.relative(r.requestedAt)}</span></div>
-        <div className="row" style={{ gap: 8 }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => openPreview(d, item)}><Icon name="eye" className="icon-sm" /> Xem trước như học viên</button></div></div>
+        <div className="row" style={{ gap: 8 }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => openLearnerPreview(tab)}><Icon name="eye" className="icon-sm" /> Xem trước như học viên</button></div></div>
       {r.status !== 'in_review' && <Alert type={r.status === 'approved' ? 'success' : r.status === 'rejected' ? 'danger' : 'warn'} title={`Vòng ${r.round}: ${ROUND[r.status]}`} body={r.reviewNote || ''} />}
-      {!ro && fixedCarried > 0 && <Alert type="info" title={`Giảng viên đã sửa ${fixedCarried} cờ của vòng trước`} body={'Kiểm tra lại nội dung rồi đóng cờ ở thẻ "Cờ".'} />}
+      {!ro && fixedCarried > 0 && <Alert type="info" title={`Giảng viên đã sửa ${fixedCarried} cờ của vòng trước`} body={'Mở "Xem trước" để thấy phần đã sửa ngay tại chỗ, rồi đóng cờ.'} actions={v.tab !== 'content' ? <Link className="btn btn-secondary btn-sm" to={`/admin/publication?tab=${tab}&id=${item.id}&view=content`}>Xem phần đã sửa</Link> : null} />}
     </div></section>{!ro && decisionCard(d, item, ctx)}<section className="card"><div className="card-body stack-4">
       <div className="tabs" role="tablist" style={{ margin: 0 }}>
-        {[['criteria', 'Tiêu chí'], ['content', 'Nội dung'], ['flags', `Cờ${nFlags ? ' (' + nFlags + ')' : ''}`], ['history', 'Lịch sử']].map(([k, l]) => (
+        {[['criteria', 'Tiêu chí'], ['content', 'Xem trước'], ['flags', `Cờ${nFlags ? ' (' + nFlags + ')' : ''}`], ['history', 'Lịch sử']].map(([k, l]) => (
           <Link key={k} className="tab" role="tab" aria-selected={String(v.tab === k)} to={`/admin/publication?tab=${tab}&id=${item.id}&view=${k}`}>{l}</Link>
         ))}
       </div>

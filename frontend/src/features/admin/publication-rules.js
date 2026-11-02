@@ -29,19 +29,68 @@ export function materialOk(l) {
   return true;
 }
 
+// ───────────────────────── where a flag points (shared with the lecturer editor) ─────────────────────────
+export const ENTRY_LABEL = 'Bài kiểm tra đầu vào';
+/** Course-info fields a flag can point at (target.itemId of a "course" flag). */
+export const INFO_FIELDS = {
+  title: 'Tên khoá học', summary: 'Mô tả khoá học', category: 'Danh mục và trình độ', price: 'Giá đề xuất',
+  outcomes: 'Học viên sẽ học được gì', requirements: 'Yêu cầu trước khi học',
+};
+/** Lesson-change keys from getAdminCourseReview.changes → readable text. */
+export const CHANGE_LABEL = {
+  title: 'tên bài', description: 'mô tả, thời lượng', reading: 'bài đọc', material: 'tài liệu', quiz: 'quiz', code: 'bài code', assignment: 'bài tập',
+};
+const LESSON_TYPES = new Set(['lesson', 'reading', 'material', 'quiz', 'question', 'code', 'test', 'assignment']);
+const PARENT = { material: 'lesson', test: 'code', question: 'quiz', chapter: 'course' };
+
+/** { type, lessonId, itemId } of a flag. Flags saved before anchors existed are read by their label. */
+export function anchorOf(f) {
+  const t = f.target || {};
+  const type = t.type || f.targetType;
+  const label = t.label || f.targetLabel || '';
+  const lessonId = t.lessonId || f.lessonId || null;
+  const itemId = t.itemId == null ? null : String(t.itemId);
+  if (type === 'course' && label === ENTRY_LABEL) return { type: 'entry', lessonId: null, itemId: null };
+  if (type === 'course' && !itemId && label === 'Mô tả khoá học') return { type: 'course', lessonId: null, itemId: 'summary' };
+  if (type === 'question' && !lessonId) return { type: 'question', lessonId: null, itemId, entry: true };
+  return { type, lessonId, itemId };
+}
+
+/**
+ * Anchor of a flag in the content on screen. An item that no longer exists (a quiz saved as a new revision, a
+ * deleted material) falls back to the question at the same "Câu N" position, then to its parent block.
+ * known: Set of item ids on screen (omit to keep anchors as saved); questionIds(lessonId|null) → ids in order.
+ */
+export function placeAnchor(f, known, questionIds) {
+  const a = anchorOf(f);
+  if (LESSON_TYPES.has(a.type) && !a.lessonId && !a.entry) return { type: 'course', lessonId: null, itemId: null, moved: true };
+  if (!a.itemId || a.type === 'course' || !known || known.has(a.itemId)) return a;
+  if (a.type === 'question' && questionIds) {
+    const m = /^Câu (\d+)/.exec((f.target && f.target.label) || f.targetLabel || '');
+    const id = m ? (questionIds(a.lessonId) || [])[Number(m[1]) - 1] : null;
+    if (id != null) return { ...a, itemId: String(id), moved: true };
+  }
+  const parent = a.type === 'question' && a.entry ? 'entry' : PARENT[a.type] || a.type;
+  return { type: parent, lessonId: parent === 'course' || parent === 'entry' ? null : a.lessonId, itemId: null, moved: true };
+}
+
+/** True when anchor a is exactly (type, lessonId, itemId). */
+export const isAt = (a, type, lessonId = null, itemId = null) => a.type === type && (a.lessonId || null) === (lessonId || null)
+  && (a.itemId || null) === (itemId == null ? null : String(itemId));
+
 /** Deterministic pre-check: suggested flags { target, severity, comment }. */
 export function aiPrecheck(c) {
   const out = [];
   const add = (target, severity, comment) => out.push({ target, severity, comment });
   const desc = (c.description || c.summary || '').trim();
-  if (desc.length < 60) add({ type: 'course', label: 'Mô tả khoá học' }, 'should', 'Mô tả còn ngắn — nên nêu rõ đối tượng học viên và kết quả đạt được.');
+  if (desc.length < 60) add({ type: 'course', itemId: 'summary', label: 'Mô tả khoá học' }, 'should', 'Mô tả còn ngắn — nên nêu rõ đối tượng học viên và kết quả đạt được.');
   const entryQuestions = (c.entryTest && c.entryTest.questions ? c.entryTest.questions.length : 0);
-  if (entryQuestions < ENTRY_MIN) add({ type: 'course', label: 'Bài kiểm tra đầu vào' }, 'must', `Bài kiểm tra đầu vào mới có ${entryQuestions} câu, cần ít nhất ${ENTRY_MIN} câu để xếp lộ trình.`);
+  if (entryQuestions < ENTRY_MIN) add({ type: 'entry', label: ENTRY_LABEL }, 'must', `Bài kiểm tra đầu vào mới có ${entryQuestions} câu, cần ít nhất ${ENTRY_MIN} câu để xếp lộ trình.`);
   for (const l of lessonsOf(c)) {
     const lt = { type: 'lesson', lessonId: l.id, label: `Bài: ${l.title}` };
     if (!materialOk(l)) add(lt, 'must', `Chưa có tệp ${l.type === 'video' ? 'video' : 'slide/PDF'} — học viên sẽ thấy bài trống.`);
     if (l.quiz && l.quiz.questions) {
-      if (l.quiz.questions.length < 3) add(lt, 'should', `Quiz chỉ có ${l.quiz.questions.length} câu, nên có ít nhất 3 câu.`);
+      if (l.quiz.questions.length < 3) add({ type: 'quiz', lessonId: l.id, label: 'Quiz · ' + l.title }, 'should', `Quiz chỉ có ${l.quiz.questions.length} câu, nên có ít nhất 3 câu.`);
       l.quiz.questions.forEach((q, i) => {
         const qt = { type: 'question', lessonId: l.id, itemId: q.id, label: `Câu ${i + 1}: ${q.text.slice(0, 40)}` };
         if (q.options.length <= 2) add(qt, 'should', 'Câu chỉ có 2 lựa chọn nên dễ đoán — nên thêm lựa chọn sai hợp lý.');
@@ -49,8 +98,9 @@ export function aiPrecheck(c) {
       });
     }
     if (l.code && l.code.kind === 'challenge') {
-      if (!l.code.solutionCheck || !l.code.solutionCheck.ok) add(lt, 'must', 'Lời giải mẫu chưa chạy đạt tất cả test.');
-      if (!l.code.tests || l.code.tests.length < 3 || !l.code.tests.some((t) => t.hidden)) add(lt, 'should', 'Bài code nên có ít nhất 3 test, trong đó có test ẩn cho trường hợp biên.');
+      const ct = { type: 'code', lessonId: l.id, label: 'Bài code · ' + l.title };
+      if (!l.code.solutionCheck || !l.code.solutionCheck.ok) add(ct, 'must', 'Lời giải mẫu chưa chạy đạt tất cả test.');
+      if (!l.code.tests || l.code.tests.length < 3 || !l.code.tests.some((t) => t.hidden)) add(ct, 'should', 'Bài code nên có ít nhất 3 test, trong đó có test ẩn cho trường hợp biên.');
     }
     if (l.assignment && (!l.assignment.rubric || l.assignment.rubric.length === 0)) {
       add({ type: 'assignment', lessonId: l.id, label: `Bài tập: ${l.title}` }, 'should', 'Bài tập chưa có thang chấm — học viên không biết được chấm theo tiêu chí nào.');
