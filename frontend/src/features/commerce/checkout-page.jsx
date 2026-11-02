@@ -139,6 +139,12 @@ function CreatingOrder() {
     (async () => {
       try {
         const cart = await api.get('/api/student/cart');
+        // Nothing to buy: resume the pending order if there is one, otherwise say so without a failing request.
+        if (!cart.count) {
+          if (cart.pendingOrder) navigate('/checkout?order=' + encodeURIComponent(cart.pendingOrder.code), { replace: true });
+          else setErr({ type: 'create', message: 'Giỏ hàng của bạn đang trống' });
+          return;
+        }
         const r = await checkoutCart({ total: cart.total });
         navigate((r.totalAmount === 0 ? '/checkout/success?order=' : '/checkout?order=') + encodeURIComponent(r.orderCode), { replace: true });
       } catch (e) {
