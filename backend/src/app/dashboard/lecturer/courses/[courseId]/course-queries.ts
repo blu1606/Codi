@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { courseChapters, courseLessons, courses } from "@codi-1/db";
 import { db } from "@/services";
 import { readLecturerIdentity, verifyLecturerSession, type LecturerIdentity } from "@/lib/lecturer-auth";
+import { knowledgeMapProducerEnabled } from "@/lib/knowledge-map-extraction";
+import { enqueueLatestKnowledgeMapAnalysis } from "@/lib/knowledge-map-jobs";
 
 /**
  * Lấy khoá học thuộc quyền sở hữu của giảng viên (kể cả pending).
@@ -108,6 +110,15 @@ export async function withCourseContentWrite<T>(
     return result;
   });
   if (!(result && typeof result === "object" && "success" in result && result.success === false)) {
+    if (knowledgeMapProducerEnabled()) {
+      try {
+        await enqueueLatestKnowledgeMapAnalysis(db, { courseId, userId: identity.user.id });
+      } catch {
+        // The content transaction has already committed. Keep saves successful if
+        // queue infrastructure is temporarily unavailable; the map stays stale.
+        console.error("Knowledge map auto-enqueue failed");
+      }
+    }
     revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
   }
   return result;

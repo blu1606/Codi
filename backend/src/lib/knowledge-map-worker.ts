@@ -7,6 +7,7 @@ import { courseChapters, courseLessons, courses, lessonSkills, skillPrerequisite
 import { AiJobLeaseError, finishAiJob, lockAiJob, type AiJob } from "@codi-1/db/ai-jobs";
 import { lockKnowledgeMap } from "./confirmed-knowledge-map";
 import { extractKnowledgeMap, knowledgeMapWorkerConfigured, type KnowledgeMapLesson } from "./knowledge-map-extraction";
+import { enqueueKnowledgeMapAnalysis } from "./knowledge-map-jobs";
 
 async function hasActiveLecturer(tx: Parameters<Parameters<Database["transaction"]>[0]>[0], userId: string): Promise<boolean> {
   const result = await tx.execute(sql`select ${user.id} from ${user} join ${userRoles} on ${userRoles.userId} = ${user.id}
@@ -54,6 +55,9 @@ export async function runKnowledgeMapJob(
         await finishAiJob(tx, job.id, job.leaseToken, "failed", "content_changed");
         if (course && course.instructorId === job.userId && course.knowledgeMapStatus === "analysing") {
           await tx.update(courses).set({ knowledgeMapStatus: "stale" }).where(eq(courses.id, job.resourceId));
+          if (allowed && course.status !== "pending" && course.knowledgeMapContentGeneration !== generation) {
+            await enqueueKnowledgeMapAnalysis(tx, { courseId: job.resourceId, userId: job.userId });
+          }
         }
         return;
       }
@@ -109,6 +113,10 @@ export async function runKnowledgeMapJob(
           await tx.update(courses).set({ knowledgeMapStatus: course.knowledgeMapContentGeneration === generation ? "failed" : "stale" }).where(eq(courses.id, job.resourceId));
         }
         await finishAiJob(tx, job.id, job.leaseToken, "failed", "analysis_failed");
+        if (course && course.instructorId === job.userId && course.status !== "pending" &&
+            course.knowledgeMapContentGeneration !== generation && await hasActiveLecturer(tx, job.userId)) {
+          await enqueueKnowledgeMapAnalysis(tx, { courseId: job.resourceId, userId: job.userId });
+        }
       });
     } catch (finishError) {
       if (!(finishError instanceof AiJobLeaseError)) throw finishError;
