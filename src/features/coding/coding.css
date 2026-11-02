@@ -29,6 +29,7 @@
 @container (max-width: 759px) { .cp-bar-label { display: none; } }
 .cp-kbd { padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5; }
 .cp-num { color: var(--fg); font-variant-numeric: tabular-nums; }
+.cp-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .cp-meta { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 .cp-meta p { margin: 0; }
 .cp-keys summary { cursor: pointer; }

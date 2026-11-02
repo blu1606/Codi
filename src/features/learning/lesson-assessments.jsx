@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
-import { Alert, Icon, Ring } from '../../components/ui/primitives';
+import { Alert, Icon } from '../../components/ui/primitives';
 import {
   applyObservations, assignmentFileLimitMb, attemptQuestions, gradeQuiz, linkValid, mySubmission, persistNow, quizUnavailable,
   rec, save, scoreText, submissionFormat, uid,
@@ -102,10 +102,9 @@ export function QuizSection({ c, r, l, bare = false, onContinue }) {
     body = (
       <>
         <div className="panel row ln-quiz-result">
-          <Ring pct={st.score} size={88} ariaLabel="Kết quả quiz" />
+          <p className="ln-score" aria-label={`Kết quả quiz: ${Math.round(st.score)}% đúng`}>{Math.round(st.score)}<span className="ln-score-unit">%</span></p>
           <div className="stack-1">
             <strong className={st.passed ? 'text-success' : 'text-warn'}>{st.passed ? 'Đạt' : 'Chưa đạt'}</strong>
-            <span className="strong">{Math.round(st.score)}% đúng</span>
             <span className="small muted">Điểm đạt: {pass}% · Lần làm {st.attempts || 1}</span>
             <span className="small muted">Làm lại không giới hạn; lần gần nhất được tính.</span>
           </div>
@@ -129,7 +128,7 @@ export function QuizSection({ c, r, l, bare = false, onContinue }) {
         </details>
         <div className="row ln-dock">
           <button type="button" className="btn btn-secondary" onClick={() => startAttempt('retake')} disabled={busy} aria-busy={busy || undefined}><Icon name="rotate-ccw" className="icon-sm" /> Làm lại</button>
-          <a className="btn btn-ghost" href="#checklist" onClick={(e) => { e.preventDefault(); if (onContinue) onContinue(); else scrollToId('checklist'); }}>Tiếp tục</a>
+          <a className="btn btn-secondary" href="#checklist" onClick={(e) => { e.preventDefault(); if (onContinue) onContinue(); else scrollToId('checklist'); }}>Tiếp tục</a>
         </div>
       </>
     );

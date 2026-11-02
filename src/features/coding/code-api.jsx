@@ -466,6 +466,14 @@ function runTests(courseId, lessonId) {
 // ───────────────────────── shared result pieces ─────────────────────────
 const phaseLabel = (r) => (!r ? 'Chưa chạy' : r.phase === 'syntax' ? 'Lỗi cú pháp' : r.phase === 'runtime' ? 'Lỗi khi chạy' : r.phase === 'timeout' ? 'Quá thời gian'
   : `Đạt ${(r.outcomes || []).filter((o) => o.pass).length}/${(r.outcomes || []).length} test${r.mode === 'run' ? ' mẫu' : ''}`);
+// Status chip tone + icon for a run result: errors read red, a never-run task neutral, a passed task green.
+const phaseTone = (r, passed) => {
+  if (passed) return ['badge-success', 'check-circle'];
+  if (!r) return ['badge-neutral', 'clock'];
+  if (r.phase === 'syntax' || r.phase === 'runtime' || r.phase === 'timeout') return ['badge-danger', 'alert-circle'];
+  const outs = r.outcomes || [];
+  return outs.length && outs.every((o) => o.pass) ? ['badge-neutral', 'check-circle'] : ['badge-warn', 'x-circle'];
+};
 const logLines = (r) => (r.logs || []).map((l, i) => (
   <div key={i} className={`cp-log is-${l.kind || 'log'}`}>
     {l.kind === 'warn' ? <Icon name="alert-triangle" className="icon-sm" /> : l.kind === 'error' ? <Icon name="alert-circle" className="icon-sm" /> : <span className="cp-log-caret" aria-hidden="true">›</span>}
@@ -577,11 +585,12 @@ function ChallengeView({ c, l, preview, part = 'all', onContinue }) {
   const scrollToChecklist = () => { if (typeof onContinue === 'function') { onContinue(); return; } const el = document.getElementById('checklist') || document.querySelector('.ln-checklist, [data-checklist]'); if (el) el.scrollIntoView({ behavior: 'smooth' }); };
   const focusEditor = () => { const ta = document.querySelector(`[data-cp-input="${key}"]`); if (ta) ta.focus(); };
 
+  const [tone, toneIcon] = busy ? ['badge-neutral', 'loader'] : phaseTone(r, e.passed);
   const statusbar = (
     <div className="cp-statusbar">
       <div className="cp-status" role="status">
-        <span className={`badge ${e.passed && !busy ? 'badge-success' : 'badge-neutral'}`}>
-          {e.passed && !busy ? <Icon name="check-circle" /> : null}
+        <span className={`badge ${tone}`}>
+          <Icon name={toneIcon} className={busy ? 'cp-spin' : undefined} />
           {busy ? 'Đang chạy…' : e.passed ? `Đã đạt tất cả test${e.solutionViewed ? ' · đã xem lời giải' : ''}` : phaseLabel(r)}
         </span>
         <span className="small muted">Đã nộp {e.submits || 0} lần</span>
@@ -633,7 +642,7 @@ function ChallengeView({ c, l, preview, part = 'all', onContinue }) {
   });
   const actions = (
     <div className="cp-actions">
-      <button type="button" className="btn btn-primary" data-action="cp-run" data-cp-run="" data-mode="run" disabled={busy || !can} aria-busy={busy ? 'true' : undefined} onClick={() => runAction(key, 'run')}>
+      <button type="button" className="btn btn-secondary" data-action="cp-run" data-cp-run="" data-mode="run" disabled={busy || !can} aria-busy={busy ? 'true' : undefined} onClick={() => runAction(key, 'run')}>
         {busy ? null : <Icon name="play" className="icon-sm" />} Chạy <kbd className="cp-kbd">Ctrl/⌘ ↵</kbd>
       </button>
       <button type="button" className="btn btn-primary" data-action="cp-run" data-mode="submit" disabled={busy || !can} onClick={() => runAction(key, 'submit')}><Icon name="check" className="icon-sm" /> Nộp bài</button>
@@ -650,7 +659,7 @@ function ChallengeView({ c, l, preview, part = 'all', onContinue }) {
   const testsBody = (
     <div className="stack-3">
       <div className="cp-tests-head">
-        <p className="small"><strong>{r ? `${outs.filter((o) => o.pass).length}/${outs.length} bài kiểm thử đạt` : 'Bấm Chạy để thử với test mẫu, hoặc Nộp bài để chấm toàn bộ.'}</strong></p>
+        <p className="small"><strong>{r ? <><span className="cp-mono">{outs.filter((o) => o.pass).length}/{outs.length}</span> bài kiểm thử đạt</> : 'Bấm Chạy để thử với test mẫu, hoặc Nộp bài để chấm toàn bộ.'}</strong></p>
         {r ? (
           <div className="cp-filter-tabs" aria-label="Lọc kiểm thử">
             {[['all', 'Tất cả'], ['pass', 'Đạt'], ['fail', 'Chưa đạt']].map(([t, label]) => (
@@ -796,7 +805,7 @@ function TutorialView({ c, l, preview, part = 'all' }) {
           <div className="cp-tut-nav">
             <button type="button" className="btn btn-ghost" disabled={busy || i === 0} onClick={() => stepAction(tKey, i - 1)}><Icon name="arrow-left" className="icon-sm" /> Bước trước</button>
             {i < steps.length - 1
-              ? <button type="button" className="btn btn-primary cp-tut-next" disabled={busy} onClick={() => stepAction(tKey, i + 1)}>Tiếp: {steps[i + 1].title} <Icon name="arrow-right" className="icon-sm" /></button>
+              ? <button type="button" className="btn btn-secondary cp-tut-next" disabled={busy} onClick={() => stepAction(tKey, i + 1)}>Tiếp: {steps[i + 1].title} <Icon name="arrow-right" className="icon-sm" /></button>
               : <span className="badge badge-success"><Icon name="check-circle" />Đã đi hết hướng dẫn</span>}
           </div>
         </div>

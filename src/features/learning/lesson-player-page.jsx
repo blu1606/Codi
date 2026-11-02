@@ -23,7 +23,7 @@ import {
   persistNow, rec, save, syncCodeEvidence, uid,
 } from './learning-store';
 import { CompletionCard, OfferCard, UpdateNotice, courseGuard, openReview } from './learning-shared';
-import { MaterialView, markStudied } from './lesson-materials';
+import { MaterialView, markStudied, materialProgress } from './lesson-materials';
 import { AssignmentSection, QuizSection } from './lesson-assessments';
 import LessonMarkdown from './lesson-markdown';
 import { LecturerConversation, learnerConversation } from './lecturer-conversation';
@@ -242,7 +242,7 @@ function QaPanel({ courseId, lessonId }) {
 
 // ───────────────────────── lesson bar ─────────────────────────
 const CHIP_ICON = { done: 'check-circle', active: 'circle-dot', todo: 'circle' };
-function TaskChips({ items, onPick }) {
+function TaskChips({ items, onPick, readout }) {
   const activeKey = (items.find((x) => !x.done) || {}).key;
   return (
     <ul className="ln-chips" aria-label="Việc cần làm để hoàn thành bài">
@@ -252,6 +252,7 @@ function TaskChips({ items, onPick }) {
           <li key={it.key}>
             <button type="button" className={`ln-chip is-${state}`} title={it.note} onClick={() => onPick(it.key)}>
               <Icon name={CHIP_ICON[state]} className="icon-sm" /><span>{it.label}</span>
+              {state === 'active' && readout && readout[it.key] ? <span className="ln-chip-readout">{readout[it.key]}</span> : null}
               <span className="sr-only">{it.done ? ': đã xong' : ': chưa xong'}{it.note ? ` (${it.note})` : ''}</span>
             </button>
           </li>
@@ -290,10 +291,14 @@ function TabList({ tabs, active, onSelect, label, className = '' }) {
 }
 
 // ───────────────────────── left pane ─────────────────────────
-function LessonMaterial({ c, r, l, kind, chapter }) {
-  const mats = materialsOf(l);
-  const [materialId, setMaterialId] = useState(mats[0] ? mats[0].id : null);
-  const m = mats.find((x) => x.id === materialId) || mats[0] || null;
+// The material's own type and length; a material without its own length falls back to the lesson's.
+function materialKind(m, l, kind) {
+  const label = (m && TYPE_LABEL[m.type]) || TYPE_LABEL[kind] || TYPE_LABEL.reading;
+  const min = m && m.durationSeconds > 0 ? Math.max(1, Math.round(m.durationSeconds / 60)) : l.durationMin;
+  return `${label} · ${Codi.fmt.duration(min)}`;
+}
+
+function LessonMaterial({ c, r, l, kind, chapter, mats, m, onPick }) {
   const body = l.body || l.reading || '';
   const studied = r.studied.includes(l.id);
   return (
@@ -301,11 +306,11 @@ function LessonMaterial({ c, r, l, kind, chapter }) {
       <div className="ln-meta-row">
         {mats.length > 1 ? (
           <div className="ln-material-pick"><label htmlFor="lesson-material">Tài liệu bài học</label>
-            <select id="lesson-material" className="input" value={m ? m.id : ''} onChange={(e) => setMaterialId(e.target.value)}>
+            <select id="lesson-material" className="input" value={m ? m.id : ''} onChange={(e) => onPick(e.target.value)}>
               {mats.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
             </select></div>
         ) : <span className="ln-meta-main">{m ? m.title : chapter ? chapter.title : ''}</span>}
-        <span className="ln-meta-kind">{TYPE_LABEL[kind] || TYPE_LABEL.reading} · {Codi.fmt.duration(l.durationMin)}</span>
+        <span className="ln-meta-kind">{materialKind(m, l, kind)}</span>
       </div>
       {m && <MaterialView key={m.id} c={c} l={l} m={m} />}
       {l.description && <p className="ln-lead">{l.description}</p>}
@@ -333,8 +338,10 @@ function FinishBlock({ c, items, missing, done, next, completing, onComplete, re
       {done ? (
         <div className="row"><p className="row strong text-success"><Icon name="check-circle" /> Đã hoàn thành bài học</p>{next && <Link className="btn btn-primary" to={`/learn/${c.id}/${next}`}>Bài tiếp theo <Icon name="arrow-right" className="icon-sm" /></Link>}</div>
       ) : (
-        <div className="ln-complete-bar"><button type="button" className="btn btn-primary btn-lg" onClick={onComplete} disabled={completing || missing.length > 0} aria-busy={completing || undefined}>Hoàn thành bài học</button>
-          {missing.length ? <span className="small muted">Còn thiếu: {missing.join(', ')}</span> : <span className="small text-success">Bạn đã đủ điều kiện hoàn thành bài học.</span>}</div>
+        <div className="ln-complete-bar">{missing.length
+          ? <span className="small muted">Còn thiếu: {missing.join(', ')}</span>
+          : <><button type="button" className="btn btn-primary btn-lg" onClick={onComplete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học</button>
+            <span className="small text-success">Bạn đã đủ điều kiện hoàn thành bài học.</span></>}</div>
       )}
       <div><button type="button" className="btn btn-ghost btn-sm" onClick={() => openReview(c.id, 0)}><Icon name="star" className="icon-sm" /> {reviewed ? 'Sửa đánh giá' : 'Đánh giá khóa học'}</button></div>
     </section>
@@ -356,6 +363,9 @@ function LessonWorkspace({ c, r, l }) {
     return open || taskKeys[0] || 'ai';
   });
   const [view, setView] = useState('lesson'); // compact layout only: 'lesson' | 'task'
+  const mats = isCode ? [] : materialsOf(l);
+  const [materialId, setMaterialId] = useState(mats[0] ? mats[0].id : null);
+  const material = mats.find((x) => x.id === materialId) || mats[0] || null;
   const sKey = splitKey(isCode, narrow);
   const [split, setSplit] = useState(() => readSplit(sKey) ?? splitDefault(isCode, narrow));
   useEffect(() => { setSplit(readSplit(sKey) ?? splitDefault(isCode, narrow)); }, [sKey, isCode, narrow]);
@@ -409,6 +419,8 @@ function LessonWorkspace({ c, r, l }) {
   const kind = l.code ? (l.code.kind === 'tutorial' ? 'tutorial' : 'code') : l.type;
   const reviewed = Codi.db().reviews.some((x) => x.courseId === c.id && x.userId === uid());
   const justCompleted = done && r.lastUpdate && r.lastUpdate.afterLessonId === l.id;
+  const progress = material ? materialProgress(r, l, material) : null;
+  const readout = progress ? { study: progress } : null;
   const qaCount = lessonQuestions(l.id).length + (learnerConversation(c.id, l.id) ? 1 : 0);
 
   const complete = async () => {
@@ -448,7 +460,7 @@ function LessonWorkspace({ c, r, l }) {
           </nav>
           <h1 className="ln-bar-h" id="lesson-title" tabIndex={-1}>{l.title}</h1>
         </div>
-        {!compact && <TaskChips items={items} onPick={pickChip} />}
+        {!compact && <TaskChips items={items} onPick={pickChip} readout={readout} />}
         {ready && !compact && <button type="button" className="btn btn-primary btn-sm" onClick={complete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học</button>}
         <nav className="ln-bar-nav" aria-label="Điều hướng bài học">
           {prev ? <Link className="btn btn-secondary btn-sm ln-bar-btn" to={`/learn/${c.id}/${prev}`}><Icon name="chevron-left" className="icon-sm" /><span className="ln-bar-label">Bài trước</span></Link> : null}
@@ -457,7 +469,7 @@ function LessonWorkspace({ c, r, l }) {
       </div>
       {compact && (
         <div className="ln-bar-row ln-bar-tasks">
-          <TaskChips items={items} onPick={pickChip} />
+          <TaskChips items={items} onPick={pickChip} readout={readout} />
           {ready && <button type="button" className="btn btn-primary btn-sm" onClick={complete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học</button>}
         </div>
       )}
@@ -485,7 +497,7 @@ function LessonWorkspace({ c, r, l }) {
           <>
             {lock && !done && <PrerequisiteAdvice c={c} advice={{ concept: lock.concept, lessonId: lock.lesson.id, lessonTitle: lock.lesson.title }} />}
             <OfferCard c={c} r={r} onViewPath={() => openPathMap(c.id, l.id)} />
-            <LessonMaterial c={c} r={r} l={l} kind={kind} chapter={chapter} />
+            <LessonMaterial c={c} r={r} l={l} kind={kind} chapter={chapter} mats={mats} m={material} onPick={setMaterialId} />
           </>
         )}
         <FinishBlock c={c} items={items} missing={missing} done={done} next={next} completing={completing} onComplete={complete} reviewed={reviewed} />

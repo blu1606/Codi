@@ -138,6 +138,34 @@ function SaveWarning({ onRetry, busy }) {
   );
 }
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const clock = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const pdfPageTotal = (m) => Math.max(1, Math.min(2000, Number(m.pages) || 8));
+
+/**
+ * Short progress readout for the selected material ("04:00/18:00", "PDF 3/12"), or null when there is nothing
+ * reported yet. Video: the position the player last saved; PDF/slide: pages seen out of the total.
+ */
+export function materialProgress(r, l, m) {
+  if (!r || !m) return null;
+  if (m.type === 'video') {
+    if (m.url) {
+      const pos = r.videoPos[m.id];
+      if (!Number.isFinite(pos)) return null;
+      return m.durationSeconds > 0 ? `${clock(pos)}/${clock(m.durationSeconds)}` : clock(pos);
+    }
+    const pct = r.video[m.id];
+    const total = m.durationSeconds || (l.durationMin || 0) * 60;
+    if (!Number.isFinite(pct) || !total) return null;
+    return `${clock((total * pct) / 100)}/${clock(total)}`;
+  }
+  if (m.type === 'pdf' || m.type === 'slide') {
+    const total = pdfPageTotal(m);
+    const prog = r.pdf[m.id];
+    const seen = prog && prog.pageCount === total ? (prog.pages || []).length : 0;
+    return `${m.type === 'slide' ? 'Slide' : 'PDF'} ${seen}/${total}`;
+  }
+  return null;
+}
 
 // ───────────────────────── simulated video ─────────────────────────
 function SimulatedVideo({ c, l, m, persist }) {
@@ -213,7 +241,7 @@ function YouTubeMaterial({ c, l, m, videoId, persist, onFail }) {
     const dur = Number.isFinite(duration) && duration > 0 ? duration : m.durationSeconds;
     rr.videoPos[m.id] = dur ? Math.min(seconds, dur) : seconds;
     if (videoStudied(rr.videoPos[m.id], dur, ended) && !rr.studied.includes(l.id)) markStudied(c.id, l.id, { toast: false });
-    else save(false);
+    else save(); // re-render so the lesson bar's progress readout shows the reported position
     persist();
   }, [c.id, l.id, m.id, m.durationSeconds, persist]);
   return (
@@ -232,7 +260,7 @@ function YouTubeMaterial({ c, l, m, videoId, persist, onFail }) {
 // ───────────────────────── simulated PDF ─────────────────────────
 const pageCaption = (page, total) => (page === 1 ? 'Mục tiêu bài học' : page === total ? 'Tóm tắt và bài tập về nhà' : 'Nội dung chính · phần ' + (page - 1));
 function PdfMaterial({ c, l, m, persist }) {
-  const total = Math.max(1, Math.min(2000, Number(m.pages) || 8));
+  const total = pdfPageTotal(m);
   const r = rec(c.id);
   const prog = r.pdf[m.id];
   const page = Math.min(total, (prog && prog.lastPage) || 1);
