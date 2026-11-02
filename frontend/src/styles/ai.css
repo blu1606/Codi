@@ -109,43 +109,111 @@
 .tutor-hint-btn:disabled { color: var(--faint); cursor: not-allowed; }
 
 /* ───────────────────────── /ai advisor page ───────────────────────── */
-.ai-col { width: 100%; max-width: 720px; margin: 0 auto; display: grid; gap: var(--space-6); }
+/* One 760 px reading column. Empty: header → composer → intake → suggestions. Conversation: header, thread and a
+   composer docked to the bottom of the window. Answers sit on the page beside Codi's mark; only the learner's
+   questions are bubbles. */
+.ai-col { width: 100%; max-width: 760px; margin: 0 auto; display: grid; gap: var(--space-6); }
 .ai-page.is-empty { padding-top: var(--space-12); }
-.ai-hero { display: grid; gap: var(--space-2); }
-.ai-hero h1 { margin: 0; font-size: var(--text-2xl); line-height: 1.25; }
-.ai-hero p { margin: 0; color: var(--muted); font-size: var(--text-base); max-width: 60ch; }
 
-.ai-composer { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface); transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
+.ai-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-4); flex-wrap: wrap; }
+.ai-head-text { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 320px; }
+.ai-head h1 { margin: 0; font-size: var(--text-xl); line-height: 1.25; letter-spacing: -0.01em; text-wrap: balance; }
+.ai-head-note { margin: 0; font-size: var(--text-xs); color: var(--faint); }
+.ai-head-sub { margin: var(--space-1) 0 0; font-size: var(--text-base); color: var(--muted); max-width: 62ch; text-wrap: pretty; }
+.ai-page.is-empty .ai-head h1 { font-size: var(--text-2xl); }
+
+.ai-start { display: grid; gap: var(--space-3); }
+
+/* Composer: textarea above, actions below on the large one; one row in the dock */
+.ai-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface); transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .ai-composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.ai-composer-input { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 var(--space-3); border: 0; background: none; color: var(--fg); font: inherit; font-size: var(--text-base); }
-.ai-composer-input:focus { outline: none; }
+.ai-composer-input { display: block; width: 100%; min-height: 44px; max-height: 200px; margin: 0; padding: 10px var(--space-3); border: 0; background: none; color: var(--fg); font: inherit; font-size: var(--text-base); line-height: 1.5; resize: none; overflow-y: auto; }
+.ai-composer-input:focus, .ai-composer-input:focus-visible { outline: none; box-shadow: none; } /* the composer frame shows focus */
 .ai-composer-input::placeholder { color: var(--faint); }
-.ai-composer.is-big { padding: var(--space-3); box-shadow: var(--elev-raised); }
-.ai-composer.is-big .ai-composer-input { min-height: 52px; font-size: var(--text-lg); }
-.ai-composer-send { flex: none; min-height: 44px; }
-.ai-composer.is-sticky { position: sticky; bottom: var(--space-4); z-index: 3; box-shadow: var(--elev-pop); }
+.ai-composer-actions { display: flex; align-items: center; gap: var(--space-3); }
+.ai-composer-hint { font-size: var(--text-xs); color: var(--faint); }
+.ai-composer-send { flex: none; min-height: 44px; gap: var(--space-2); }
+.ai-composer.is-dock .ai-composer-send { width: 44px; min-width: 44px; padding: 0; border-radius: 50%; }
+.ai-composer-send.is-stop { color: var(--fg); }
+.ai-stop-glyph { display: block; width: 12px; height: 12px; border-radius: 3px; background: currentColor; }
 
-.ai-guest-line { margin: calc(-1 * var(--space-3)) 0 0; font-size: var(--text-sm); color: var(--muted); }
+.ai-composer.is-big { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); padding: var(--space-3) var(--space-3) var(--space-2); }
+.ai-composer.is-big .ai-composer-input { min-height: 56px; font-size: var(--text-lg); padding: var(--space-2) var(--space-2); }
+.ai-composer.is-big .ai-composer-actions { justify-content: flex-end; }
+
+.ai-guest-line { margin: 0; font-size: var(--text-sm); color: var(--muted); }
 .ai-guest-line .btn-link { padding: 0; font-size: inherit; }
 
-.ai-suggest-wrap { display: grid; gap: var(--space-3); }
-.ai-suggest-title { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
-.ai-suggest { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
-.ai-suggest-card { display: flex; align-items: flex-start; gap: var(--space-3); width: 100%; height: 100%; min-height: 72px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
-.ai-suggest-card > .icon { flex: none; margin-top: 3px; color: var(--accent); }
-.ai-suggest-text { display: grid; gap: 2px; min-width: 0; }
-.ai-suggest-name { display: block; font-weight: 600; font-size: var(--text-sm); }
-.ai-suggest-desc { display: block; font-size: var(--text-sm); color: var(--muted); }
-.ai-suggest-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-@media (hover: hover) { .ai-suggest-card:hover { border-color: var(--accent); background: var(--accent-soft); } }
-
-.ai-chat-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-.ai-chat-head h1 { margin: 0; font-size: var(--text-lg); }
-.ai-page.is-chat .ai-col { gap: var(--space-5); padding-bottom: var(--space-4); }
-
-.ai-intake { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* Intake summary: one quiet slate panel */
+.ai-intake { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--subtle); }
 .ai-intake-label { font-size: var(--text-sm); font-weight: 600; color: var(--muted); margin-right: var(--space-1); }
-.ai-intake .btn-link { padding: 4px; font-size: var(--text-sm); }
+.ai-intake .btn-link { min-height: 32px; padding: 4px; font-size: var(--text-sm); }
+
+/* "Thử hỏi": four prompts as hairline-divided cells of one surface */
+.ai-suggest-wrap { display: grid; gap: var(--space-3); }
+.ai-suggest-title { margin: 0; font-family: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.ai-suggest { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--border); }
+.ai-suggest > li { display: flex; background: var(--surface); }
+.ai-suggest-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); width: 100%; min-height: 76px; padding: var(--space-4); border: 0; background: var(--surface); color: var(--fg); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out); }
+.ai-suggest-card > .icon { margin-top: 2px; color: var(--accent); }
+.ai-suggest-text { display: grid; gap: 2px; min-width: 0; }
+.ai-suggest-name { display: block; font-weight: 600; font-size: var(--text-base); line-height: 1.35; transition: color var(--motion-fast) var(--ease-out); }
+.ai-suggest-desc { display: block; font-size: var(--text-sm); color: var(--muted); }
+.ai-suggest-card > .ai-suggest-go { margin-top: 3px; color: var(--faint); opacity: 0; transform: translateX(-4px); transition: opacity var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
+.ai-suggest-card:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+.ai-suggest-card:focus-visible > .ai-suggest-go { opacity: 1; transform: none; }
+@media (hover: hover) {
+  .ai-suggest-card:hover { background: var(--subtle); }
+  .ai-suggest-card:hover .ai-suggest-name { color: var(--accent); }
+  .ai-suggest-card:hover > .ai-suggest-go { opacity: 1; transform: none; color: var(--accent); }
+}
+
+/* Thread rhythm: learner bubbles on the right, Codi's turns on the page beside its mark */
+.ai-page.is-chat .ai-col { gap: var(--space-5); }
+.ai-page.is-chat { padding-bottom: 0; }
+/* app.css still carries the retired fixed-shell advisor (.ai-shell era); neutralise what those rules leak here */
+.ai-page .ai-courses { gap: 0; }
+.ai-page .ai-feedback { margin-top: 0; }
+.ai-page .ai-thread { gap: var(--space-6); }
+.ai-page .ai-thread .msg-user { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-turn { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.ai-mark { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--accent-soft-border); border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.ai-turn-body { display: grid; gap: var(--space-3); min-width: 0; padding-top: 4px; }
+.ai-turn[aria-busy="true"] .ai-mark { animation: ai-mark-breathe 1.6s var(--ease-out) infinite; }
+@keyframes ai-mark-breathe { 50% { box-shadow: 0 0 0 4px var(--accent-soft); } }
+.ai-page .ai-thinking-row { margin: 0; min-height: 24px; gap: var(--space-3); }
+.ai-page .msg-ai .md { gap: var(--space-3); }
+.ai-page .msg-ai .md ul, .ai-page .msg-ai .md ol { padding-left: var(--space-6); display: grid; gap: var(--space-1); }
+
+/* Revealing answer: a teal caret after the last line */
+.ai-caret, .ai-page .is-streaming .md > p:last-child::after, .ai-page .is-streaming .md > :is(ul, ol):last-child > li:last-child::after { content: ""; display: inline-block; width: 8px; height: 1.1em; margin-left: 2px; vertical-align: -0.15em; border-radius: 2px; background: var(--accent); animation: ai-caret 1s steps(1) infinite; }
+@keyframes ai-caret { 50% { opacity: 0; } }
+
+.ai-stopped { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-sm); color: var(--muted); }
+
+/* Intake question: one bordered card with its answers */
+.ai-ask { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.ai-ask-q { margin: 0; font-weight: 600; }
+
+/* Course cards inside an answer */
+.ai-course-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+.ai-course-price { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--fg); white-space: nowrap; }
+.ai-course-why { text-wrap: pretty; }
+.ai-order { list-style: none; counter-reset: ai-step; padding: 0; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.ai-order li { counter-increment: ai-step; display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.ai-order li + li { border-top: 1px solid var(--border); }
+.ai-order li::before { content: counter(ai-step); grid-row: span 2; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--subtle); color: var(--muted); font-family: var(--font-mono); font-size: var(--text-sm); }
+.ai-followups .ai-chip > .icon { color: var(--accent); }
+
+/* Docked composer: covers the thread it floats over, with a short fade above it */
+.ai-end { height: 1px; margin-top: calc(-1 * var(--space-5)); }
+.ai-dock { position: sticky; bottom: 0; z-index: 3; display: grid; gap: var(--space-2); padding: var(--space-4) 0 var(--space-3); background: linear-gradient(to bottom, transparent, var(--bg) var(--space-4)); }
+.ai-dock .ai-composer { box-shadow: var(--elev-pop); }
+.ai-dock .ai-disclaimer { text-align: center; }
+.ai-jump { position: absolute; left: 50%; top: calc(-1 * var(--space-8)); display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--fg); box-shadow: var(--elev-pop); cursor: pointer; transform: translateX(-50%); animation: ai-jump-in var(--motion-fast) var(--ease-out); }
+.ai-jump:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+@media (hover: hover) { .ai-jump:hover { background: var(--subtle); } }
+@keyframes ai-jump-in { from { opacity: 0; transform: translate(-50%, 6px); } }
 
 /* ───────────────────────── Selection toolbar (S11a') ───────────────────────── */
 .tutor-seltool { position: fixed; z-index: 90; display: flex; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-pop); }
@@ -153,16 +221,22 @@
 
 /* ───────────────────────── Small screens ───────────────────────── */
 @media (max-width: 640px) {
+  .ai-page { padding-inline: var(--space-4); padding-top: var(--space-5); }
   .ai-page.is-empty { padding-top: var(--space-6); }
-  .ai-hero h1 { font-size: var(--text-xl); }
+  .ai-page.is-empty .ai-head h1 { font-size: var(--text-xl); }
   .ai-suggest { grid-template-columns: 1fr; }
-  .ai-composer.is-big .ai-composer-input { font-size: var(--text-base); }
-  .ai-composer-send span { display: none; }
+  .ai-suggest-card { min-height: 64px; padding: var(--space-3) var(--space-4); }
+  .ai-composer.is-big .ai-composer-input { font-size: var(--text-base); min-height: 48px; }
+  .ai-composer-hint { display: none; }
+  .ai-turn { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .ai-turn-body { padding-top: 0; }
+  .ai-mark { width: 28px; height: 28px; }
   .ai-course { grid-template-columns: auto minmax(0, 1fr); }
-  .ai-course-cta { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
-  .ai-composer.is-sticky { bottom: calc(var(--space-2) + env(safe-area-inset-bottom)); }
+  .ai-course-cta { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: flex-end; }
+  .ai-dock { padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ai-chip, .ai-suggest-card, .ai-feedback-btn, .ai-composer { transition: none; }
+  .ai-chip, .ai-suggest-card, .ai-suggest-name, .ai-suggest-go, .ai-feedback-btn, .ai-composer { transition: none; }
+  .ai-turn[aria-busy="true"] .ai-mark, .ai-caret, .ai-page .is-streaming .md > p:last-child::after, .ai-page .is-streaming .md > :is(ul, ol):last-child > li:last-child::after, .ai-jump { animation: none; }
 }
