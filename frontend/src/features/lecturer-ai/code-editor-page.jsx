@@ -11,12 +11,16 @@
  *   tutorial tab: Các bước (title, body, starter code per step, optional step tests)
  *  - /teach/courses/:courseId/code/:lessonId/preview — "Xem trước trải nghiệm học viên"; runs are stateless
  *      (nothing is written), sample tests show details, hidden tests only a count on "Nộp bài".
- * The draft lives in a module variable (keyed by course/lesson) so it survives navigation; it reaches the lesson only
- * on save. Depends on Codi.code (coding feature), Codi.teach (lecturer feature) and Codi.lecturerAI.suggestTests.
+ * The draft lives in a module variable (keyed by course/lesson) so it survives navigation; it reaches the backend
+ * only on save. Backend: getCodingExerciseData / saveCodingExercise (the server re-verifies the solution against
+ * every test) for challenges; GET/PUT /api/lecturer/courses/:courseId/lessons/:lessonId/tutorial for tutorials.
+ * Every run uses the backend sandbox (verifySolutionCode, runPreviewCode, generateAiCodingTestCases). Codi.code
+ * (coding feature) supplies only UI pieces: editor, testRow, consoleView, stableJSON, focus helpers, tutorial view.
  */
-import { Fragment, useEffect } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { Alert, Empty, Icon, Md } from '../../components/ui/primitives';
 import { createViewStore } from './view-store';
 import './lecturer-ai.css';
@@ -32,18 +36,12 @@ const MAX_EXPECTED_CHARS = 4096;
 const MAX_DURATION = 180;
 const INVALID_SUITE = 'Bài tập chưa có bộ kiểm thử hợp lệ. Vui lòng liên hệ giảng viên.';
 
-// Cross-feature helpers, with the mockup behaviour as fallback while Codi.teach is not installed.
-const isMine = (c) => (T().isMine ? T().isMine(c) : !!c && c.lecturerId === Codi.state.currentUserId);
+// Cross-feature helpers, with a plain fallback while Codi.teach is not installed.
 const shell = (active, body) => (T().shell ? T().shell(active, body) : <div className="page">{body}</div>);
 const notMine = () => (T().notMine ? T().notMine() : shell('', (
   <Empty icon="lock" title="Không tìm thấy khoá học của bạn" body="Khoá học không tồn tại hoặc thuộc giảng viên khác."
     actions={<Link className="btn btn-primary" to="/teach/courses">Về danh sách khoá học</Link>} />
 )));
-function findLesson(c, id) {
-  if (T().findLesson) return T().findLesson(c, id);
-  for (const ch of c.chapters) { const i = ch.lessons.findIndex((l) => l.id === id); if (i >= 0) return { ch, i, l: ch.lessons[i] }; }
-  return null;
-}
 const toast = (msg, type) => Codi.ui.toast(msg, { type: type || 'info' });
 
 // ───────────────────────── expected values (real normalizeExpectedValue) ─────────────────────────
@@ -55,6 +53,57 @@ function expectedOf(t) {
 }
 const canonical = (v) => (CC().stableJSON ? CC().stableJSON(v) : JSON.stringify(v));
 const toText = (v) => (v === undefined ? '' : JSON.stringify(v));
+const parseJson = (t) => { try { return JSON.parse(t); } catch { return t; } };
+
+// ───────────────────────── backend data ─────────────────────────
+const tutorialUrl = (courseId, lessonId) => `/api/lecturer/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/tutorial`;
+/** Drafts handed over by "Tạo bằng AI" (lecturer-ai-create): used instead of the stored exercise until saved. */
+const seeds = new Map();
+export function seedCodeDraft(courseId, lessonId, draft) { seeds.set(courseId + '/' + lessonId, draft); }
+
+/** Lesson view of the stored exercise: { id, title, durationMin, code } with the editor's code shape. */
+async function fetchLesson(courseId, lessonId) {
+  const tut = await api.get(tutorialUrl(courseId, lessonId));
+  if (tut && tut.tutorial) {
+    const t = tut.tutorial;
+    return {
+      courseId, id: lessonId, title: t.title, durationMin: t.durationMinutes, locked: false,
+      code: { kind: 'tutorial', language: t.language || 'javascript', fileName: t.fileName || 'main.js', steps: (t.steps || []).map((st, si) => ({
+        title: st.title, body: st.body, starter: st.starter, isSolution: !!st.isSolution,
+        tests: (st.tests || []).map((x, i) => ({ id: `st-${si}-${i}`, name: x.name, call: x.input, expected: parseJson(x.expectedOutput) })),
+      })) },
+    };
+  }
+  const d = await Codi.teach.act('code', 'getCodingExerciseData', courseId, lessonId);
+  const ex = d.exercise;
+  return {
+    courseId, id: lessonId, title: ex.title || d.lesson.title, durationMin: ex.durationMinutes || 15, locked: !!d.isLocked, courseTitle: d.course.title,
+    code: {
+      kind: 'challenge', language: ex.language || 'javascript', fileName: 'main.js', instructions: ex.instructions || [], hints: ex.hints || [],
+      starter: ex.starterCode || '', solution: ex.solutionCode || '', solutionVerifiedAt: ex.solutionVerifiedAt || null,
+      tests: (ex.tests || []).map((t) => ({ id: t.id, name: t.name, call: t.call, expected: t.expected, hidden: !!t.hidden })),
+    },
+  };
+}
+/** Course (from the lecturer cache) + stored lesson exercise for the editor and preview routes. */
+function useCodeLesson(courseId, lessonId) {
+  const [st, setSt] = useState({ l: null, error: null });
+  const load = useCallback(async () => {
+    setSt({ l: null, error: null });
+    try {
+      const [l] = await Promise.all([fetchLesson(courseId, lessonId), T().course && T().course(courseId) ? null : T().reloadCourse && T().reloadCourse(courseId)]);
+      const seed = seeds.get(courseId + '/' + lessonId);
+      setSt({ l: seed ? { ...l, ...seed, seeded: true } : l, error: null });
+    } catch (error) { setSt({ l: null, error }); }
+  }, [courseId, lessonId]);
+  useEffect(() => { load(); }, [load]);
+  const c = T().course ? T().course(courseId) : null;
+  return { ...st, c: c || (st.l ? { id: courseId, title: st.l.courseTitle || '', status: st.l.locked ? 'pending' : 'draft', chapters: [] } : null), reload: load };
+}
+const loadingFrame = (s) => shell('/teach/courses', s.error
+  ? <Alert type="danger" title="Không tải được bài code" body={s.error.message || 'Vui lòng thử lại.'} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => s.reload()}>Thử lại</button>} />
+  : <div className="card" role="status" aria-busy="true"><div className="card-body stack-2"><span className="sr-only">Đang tải bài code…</span><div className="skeleton skeleton-line" style={{ height: 40 }} /><div className="skeleton skeleton-line" style={{ height: 160 }} /></div></div>);
+const isNotFound = (e) => !!e && (e.status === 403 || e.status === 404 || /Không tìm thấy/.test(e.message || ''));
 
 // ───────────────────────── editor draft ─────────────────────────
 let ce = null; // {key, courseId, lessonId, title, durationMin, code, tab, dirty, rev, showErrors, check, stepChecks, running, saving, aiBusy, savedTestIds}
@@ -78,9 +127,8 @@ function load(c, l) {
   }
   ce = {
     key, courseId: c.id, lessonId: l.id, title: l.title, durationMin: l.durationMin || 15, code,
-    tab: code.kind === 'tutorial' ? 'steps' : 'brief', dirty: false, rev: 0, showErrors: false,
+    tab: code.kind === 'tutorial' ? 'steps' : 'brief', dirty: !!l.seeded, rev: 0, showErrors: false,
     check: null, stepChecks: {}, running: false, saving: false, aiBusy: false,
-    savedTestIds: ((l.code && l.code.tests) || []).map((t) => t.id),
   };
   return ce;
 }
@@ -394,18 +442,23 @@ async function remove(w, i, j) {
   touch(); rerender();
 }
 
+/** Real generateAiCodingTestCases: boundary calls run with the solution in the backend sandbox (no LLM). */
 async function aiTests() {
   const d = ce;
-  if (!d || d.aiBusy || !Codi.lecturerAI || !Codi.lecturerAI.suggestTests) return;
+  if (!d || d.aiBusy) return;
   if (!d.code.solution.trim()) {
     toast('Vui lòng nhập lời giải mẫu trước để AI có thể phân tích và sinh test biên.', 'danger');
     d.tab = 'solution'; rerender(); return;
   }
   d.aiBusy = true; rerender();
   try {
-    const items = await Codi.lecturerAI.suggestTests(d.code);
+    const r = await Codi.teach.act('code', 'generateAiCodingTestCases', d.courseId, d.lessonId, {
+      solutionCode: d.code.solution, instructions: d.code.instructions, existingTests: d.code.tests.map(wireTest),
+    });
+    const items = (r && r.tests) || [];
     if (items.length) {
-      items.forEach((t) => d.code.tests.push({ id: t.id, name: t.name, call: t.call, expected: expectedOf(t), expectedText: t.expectedText, step: t.step || 0, hidden: true }));
+      const stamp = Date.now().toString(36);
+      items.forEach((t, i) => d.code.tests.push({ id: `ai-test-${stamp}-${i}`, name: t.name, call: t.call, expected: t.expected !== undefined ? t.expected : parseJson(t.expectedText), expectedText: t.expectedText, step: 0, hidden: true }));
       touch(); d.tab = 'tests';
       toast(`Đã gợi ý thành công ${items.length} test case biên mới!`, 'success');
     } else {
@@ -418,33 +471,41 @@ async function aiTests() {
   }
 }
 
-const runnable = (list) => list.map((t) => ({ id: t.id, name: t.name, call: String(t.call || '').trim(), expected: expectedOf(t) }));
-async function runSafely(code, tests, opts) {
-  try { return await CC().run(code, tests, opts); }
-  catch (e) { return { phase: 'runtime', error: String((e && e.message) || e), logs: [], results: [] }; }
+/** Test in the backend contract shape. */
+const wireTest = (t) => { const ex = expectedOf(t); return { name: t.name || 'Test', call: String(t.call || '').trim(), expected: ex, expectedText: canonical(ex), hidden: !!t.hidden, isSample: !t.hidden }; };
+/**
+ * Runs code against tests with the backend verifySolutionCode action (QuickJS sandbox, 2 s cooldown per user).
+ * Outcomes come back by position and are mapped onto the draft test ids for the result rows.
+ */
+async function runRemote(d, code, tests) {
+  try {
+    const r = await Codi.teach.act('code', 'verifySolutionCode', d.courseId, d.lessonId, { solutionCode: code, language: 'javascript', tests: tests.map(wireTest) });
+    const outcomes = (r.outcomes || []).map((o, i) => ({ ...o, id: tests[i] ? tests[i].id : o.id }));
+    return { ok: !!r.ok, passed: r.passed || 0, total: r.total || tests.length, outcomes, res: { phase: r.phase || 'done', error: r.error || null, logs: r.logs || [] } };
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    return { ok: false, passed: 0, total: tests.length, outcomes: [], res: { phase: 'runtime', error: msg, logs: [{ kind: 'error', text: msg }] }, failed: msg };
+  }
 }
 /** Real verifySolutionCode: runs the solution against every test; ok only when all pass and the run finished. */
 async function verifySolution(d) {
   const tests = d.code.tests.map((t) => ({ ...t }));
-  const prepared = runnable(tests);
-  const res = await runSafely(d.code.solution, prepared, { language: 'javascript', solution: d.code.solution });
-  const outcomes = CC().grade(prepared, res);
-  const passed = outcomes.filter((o) => o.pass).length;
-  const phase = res.phase || 'done';
-  return { at: new Date().toISOString(), sig: signature(d.code), tests, outcomes, res, passed, total: outcomes.length, ok: outcomes.length > 0 && passed === outcomes.length && phase === 'done' };
+  const r = await runRemote(d, d.code.solution, tests);
+  return { at: new Date().toISOString(), sig: signature(d.code), tests, ...r };
 }
 async function stepCheck(si) {
-  if (!ce || ce.running || !CC().run) return;
+  if (!ce || ce.running) return;
   const d = ce;
-  const tests = runnable(d.code.steps[si].tests);
+  const tests = d.code.steps[si].tests;
   d.running = true; rerender();
-  const res = await runSafely(solutionCode(d), tests, { language: d.code.language });
-  d.stepChecks[si] = { outcomes: CC().grade(tests, res), res };
+  const r = await runRemote(d, solutionCode(d), tests);
+  if (r.failed) toast(r.failed, 'danger');
+  d.stepChecks[si] = { outcomes: r.outcomes, res: r.res };
   d.running = false; rerender();
 }
 async function check() {
   const d = ce;
-  if (!d || d.running || !CC().run) return;
+  if (!d || d.running) return;
   if (!d.code.solution.trim()) { toast('Vui lòng nhập lời giải mẫu trước khi chạy thử.', 'danger'); d.tab = 'solution'; rerender(); return; }
   if (!d.code.tests.length) { toast('Cần có ít nhất một test case để chạy thử.', 'danger'); d.tab = 'tests'; rerender(); return; }
   if (String(d.code.language).toLowerCase() !== 'javascript') { toast(`Ngôn ngữ ${d.code.language || 'được chọn'} hiện chưa được hỗ trợ trong môi trường chạy sandbox. Vui lòng chọn JavaScript.`, 'danger'); return; }
@@ -452,46 +513,29 @@ async function check() {
   if (CC().rememberFocus) CC().rememberFocus();
   d.running = true; rerender();
   try {
-    d.check = await verifySolution(d);
-    if (d.check.ok) toast(`Tuyệt vời! Lời giải mẫu đã vượt qua ${d.check.passed}/${d.check.total} test case.`, 'success');
-    else toast(`Lời giải mẫu chưa đạt (${d.check.passed}/${d.check.total} test). Hãy xem chi tiết lỗi bên dưới.`, 'danger');
-  } catch (e) {
-    toast((e && e.message) || 'Lỗi khi chạy thử lời giải mẫu.', 'danger');
+    const chk = await verifySolution(d);
+    if (chk.failed) { toast(chk.failed, 'danger'); return; }
+    d.check = chk;
+    if (chk.ok) toast(`Tuyệt vời! Lời giải mẫu đã vượt qua ${chk.passed}/${chk.total} test case.`, 'success');
+    else toast(`Lời giải mẫu chưa đạt (${chk.passed}/${chk.total} test). Hãy xem chi tiết lỗi bên dưới.`, 'danger');
   } finally {
     d.running = false; rerender();
   }
 }
 
-/** Test ids that learners already have graded results for (failed counts or the last submitted run). */
-function testIdsWithResults(courseId, lessonId) {
-  const ids = new Set();
-  (Codi.db().codeAttempts || []).forEach((a) => {
-    if (a.courseId !== courseId || a.lessonId !== lessonId) return;
-    const u = Codi.user ? Codi.user(a.userId) : null;
-    if (u && u.role !== 'learner') return;
-    Object.keys(a.failedTests || {}).forEach((k) => ids.add(k));
-    if (a.lastRun && a.lastRun.mode === 'submit') (a.lastRun.outcomes || []).forEach((o) => ids.add(String(o.id)));
-  });
-  return ids;
-}
-
 const storeTest = (t) => { const o = { ...t, expected: expectedOf(t) }; delete o.expectedText; delete o.isSample; return o; };
-function writeLesson(d, code) {
-  const c = Codi.course(d.courseId); const f = c && findLesson(c, d.lessonId);
-  if (!f) { toast('Không tìm thấy bài học trong khoá học này.', 'danger'); return false; }
-  const n = Math.round(Number(d.durationMin));
-  Codi.set(() => {
-    Object.assign(f.l, { title: String(d.title).trim(), durationMin: Math.min(MAX_DURATION, Math.max(1, Number.isFinite(n) && n > 0 ? n : 15)), code });
-    if (T().contentChanged) T().contentChanged(c);
-  });
-  return true;
+const minutesOf = (d) => { const n = Math.round(Number(d.durationMin)); return Math.min(MAX_DURATION, Math.max(1, Number.isFinite(n) && n > 0 ? n : 15)); };
+/** After a save: drop the AI seed, refresh the course outline. */
+function saved(d) {
+  seeds.delete(d.courseId + '/' + d.lessonId);
+  if (T().reloadCourse) T().reloadCourse(d.courseId);
+  if (T().persist) T().persist();
 }
 
 async function save() {
   const d = ce;
   if (!d || d.saving) return;
-  const c = Codi.course(d.courseId);
-  if (!c || c.status === 'pending') return;
+  if (d.locked) return;
   const pr = problems(d);
   if (pr.list.length) {
     d.showErrors = true; d.tab = pr.list[0].tab;
@@ -499,38 +543,36 @@ async function save() {
     rerender(); return;
   }
   if (d.code.kind === 'tutorial') {
-    const code = JSON.parse(JSON.stringify(d.code));
     // Steps without tests are stored without the field, so learners see no empty "Kiểm tra bước này".
-    code.steps.forEach((s) => { if (s.tests && s.tests.length) s.tests = s.tests.map(storeTest); else delete s.tests; });
-    if (writeLesson(d, code)) { d.dirty = false; d.showErrors = false; toast('Đã lưu bài code.', 'success'); }
-    rerender(); return;
+    const steps = d.code.steps.map((st) => ({ title: st.title, body: st.body || '', starter: st.starter || '', ...(st.isSolution ? { isSolution: true } : {}),
+      ...(st.tests && st.tests.length ? { tests: st.tests.map(storeTest).map((t) => ({ name: t.name, input: String(t.call || '').trim(), expectedOutput: canonical(t.expected) })) } : {}) }));
+    d.saving = true; rerender();
+    try {
+      await api.put(tutorialUrl(d.courseId, d.lessonId), { title: String(d.title).trim(), durationMinutes: minutesOf(d), fileName: d.code.fileName || 'main.js', steps });
+      d.dirty = false; d.showErrors = false; saved(d); toast('Đã lưu bài code.', 'success');
+    } catch (e) {
+      toast((e && e.message) || 'Lỗi khi lưu bài code.', 'danger');
+    } finally {
+      d.saving = false; rerender();
+    }
+    return;
   }
 
   const startRev = d.rev;
   d.saving = true; rerender();
   try {
-    // The solution is verified again at save time; a client-side run is never trusted.
-    const verification = await verifySolution(d);
-    d.check = verification;
-    if (!verification.ok) {
-      toast(`Lời giải mẫu chưa vượt qua tất cả các test case (${verification.passed}/${verification.total} test đạt). Không thể lưu bài tập.`, 'danger');
-      return;
-    }
-    const kept = new Set(verification.tests.map((t) => String(t.id)));
-    const used = testIdsWithResults(d.courseId, d.lessonId);
-    if (d.savedTestIds.some((id) => !kept.has(String(id)) && used.has(String(id)))) {
-      toast('Không thể xoá test case đã có học viên nộp bài và chấm điểm. Bạn có thể sửa nội dung thay vì xoá test case này.', 'danger');
-      return;
-    }
-    const code = JSON.parse(JSON.stringify({ ...d.code, tests: verification.tests }));
-    code.language = 'javascript';
-    code.instructions = code.instructions.filter((s) => String(s).trim());
-    code.hints = code.hints.filter((h) => String(h).trim());
-    code.tests = code.tests.map(storeTest);
-    code.solutionVerifiedAt = verification.at;
-    code.solutionCheck = { ok: true, passed: verification.passed, total: verification.total, at: verification.at };
-    if (!writeLesson(d, code)) return;
-    d.savedTestIds = code.tests.map((t) => t.id);
+    // saveCodingExercise runs the reference solution again in the backend sandbox and refuses the save unless every
+    // test passes; tests learners already have results for are kept.
+    const r = await Codi.teach.act('code', 'saveCodingExercise', d.courseId, d.lessonId, {
+      title: String(d.title).trim(), durationMinutes: minutesOf(d), language: 'javascript',
+      instructions: d.code.instructions.filter((x) => String(x).trim()), starterCode: d.code.starter, solutionCode: d.code.solution,
+      hints: d.code.hints.filter((h) => String(h).trim()),
+      tests: d.code.tests.map((t) => ({ ...(typeof t.id === 'number' ? { id: t.id } : {}), ...wireTest(t) })),
+    });
+    // stored rows get numeric ids: map them back so the next save updates instead of re-inserting
+    if (r && Array.isArray(r.testIds)) d.code.tests.forEach((t, i) => { if (r.testIds[i] != null) t.id = r.testIds[i]; });
+    d.code.solutionVerifiedAt = (r && r.verifiedAt) || new Date().toISOString();
+    saved(d);
     d.dirty = d.rev !== startRev;
     d.showErrors = false;
     toast('Đã lưu bài tập thực hành code thành công!', 'success');
@@ -548,15 +590,13 @@ export function CodeEditorPage({ params }) {
   useEffect(() => { if (CC().restoreFocus) CC().restoreFocus(); });
   if (CC().onInput) CC().onInput('te', teInput);
 
-  const c = Codi.course(params.courseId);
-  if (!isMine(c)) return notMine();
-  const f = findLesson(c, params.lessonId);
-  if (!f || !f.l.code) {
-    return shell('/teach/courses', <Empty icon="code" title="Không tìm thấy bài code" actions={<Link className="btn btn-primary" to={`/teach/courses/${c.id}/content`}>Về nội dung khoá học</Link>} />);
-  }
+  const s = useCodeLesson(params.courseId, params.lessonId);
+  if (!s.l) return isNotFound(s.error) ? notMine() : loadingFrame(s);
+  const c = s.c; const f = { l: s.l };
   const d = load(c, f.l); const pr = problems(d);
   const isTut = d.code.kind === 'tutorial';
-  const ro = c.status === 'pending';
+  const ro = f.l.locked || c.status === 'pending' || !!c.isLocked;
+  d.locked = ro;
   const tabs = isTut ? [['steps', 'Các bước']] : [['brief', 'Đề bài'], ['starter', 'Code khởi đầu'], ['solution', 'Lời giải mẫu'], ['tests', `Test case (${d.code.tests.length})`], ['hints', `Gợi ý (${d.code.hints.length})`]];
   const body = {
     brief: () => <BriefTab pr={pr} />,
@@ -609,7 +649,7 @@ export function CodeEditorPage({ params }) {
 let pv = null; // {key, code, running, result, side: 'brief'|'hints', resTab: 'tests'|'console'}
 const pvView = createViewStore();
 function pvLoad(c, l) {
-  const key = c.id + '/' + l.id + '/' + (l.code.solutionVerifiedAt || (l.code.solutionCheck && l.code.solutionCheck.at) || '');
+  const key = c.id + '/' + l.id + '/' + (l.code.solutionVerifiedAt || '');
   if (!pv || pv.key !== key) pv = { key, code: l.code.starter || '', running: false, result: null, side: 'brief', resTab: 'tests' };
   return pv;
 }
@@ -627,30 +667,28 @@ async function pvReset(l) {
   toast('Đã khôi phục mã nguồn ban đầu.');
 }
 
-/** Real runPreviewCode: "run" uses sample tests only; "submit" runs all and reports hidden tests as a count. */
-async function pvExecute(l, mode) {
+/** Real runPreviewCode on the saved exercise: "run" uses sample tests only; "submit" runs all and reports hidden tests as a count. */
+async function pvExecute(c, l, mode) {
   const p = pv;
   if (!p || p.running) return;
   const all = (l.code.tests || []).map((t) => ({ ...t, expectedText: toText(t.expected) }));
   if (!all.length) { toast('Bài tập chưa có bộ kiểm thử nào.', 'danger'); return; }
-  if (!CC().run) { toast('Lỗi khi chạy code xem trước.', 'danger'); return; }
-  const toRun = runnable(mode === 'run' ? all.filter((t) => !t.hidden) : all);
   p.running = true; pvView.bump();
   try {
-    const res = await runSafely(p.code, toRun, { language: 'javascript' });
-    const outcomes = CC().grade(toRun, res);
-    const by = {}; outcomes.forEach((o) => { by[o.id] = o; });
-    const samples = all.filter((t) => !t.hidden).map((t) => ({ test: t, outcome: by[t.id] || null }));
-    const hidden = mode === 'submit' ? all.filter((t) => t.hidden) : [];
-    const hiddenPassed = hidden.filter((t) => by[t.id] && by[t.id].pass).length;
-    const samplePassed = samples.filter((s) => s.outcome && s.outcome.pass).length;
-    const totalPassed = samplePassed + hiddenPassed; const totalTests = samples.length + hidden.length;
-    p.result = { mode, res, samples, hiddenPassed, hiddenTotal: hidden.length, totalPassed, totalTests, allPass: totalPassed === totalTests && (res.phase || 'done') === 'done' };
+    const r = await Codi.teach.act('code', 'runPreviewCode', c.id, l.id, { code: p.code, mode });
+    const sampleTests = all.filter((t) => !t.hidden);
+    const outs = r.sampleOutcomes || [];
+    const samples = sampleTests.map((t, i) => {
+      const o = outs.find((x) => String(x.id) === String(t.id)) || outs[i] || null;
+      return { test: t, outcome: o ? { ...o, id: t.id, pass: o.pass !== undefined ? o.pass : o.passed } : null };
+    });
+    const res = { phase: r.phase || 'done', error: r.phase && r.phase !== 'done' ? r.phase : null, logs: r.logs || [] };
+    p.result = { mode, res, samples, hiddenPassed: r.hiddenPassed || 0, hiddenTotal: mode === 'submit' ? (r.hiddenTotal || 0) : 0, totalPassed: r.totalPassed || 0, totalTests: r.totalTests || samples.length, allPass: !!r.allPass };
     if (mode === 'submit') {
       if (p.result.allPass) toast('Chúc mừng! Bạn đã vượt qua tất cả test case!', 'success');
-      else toast(`Chưa đạt: bạn đã đúng ${totalPassed}/${totalTests} test case.`, 'danger');
+      else toast(`Chưa đạt: bạn đã đúng ${p.result.totalPassed}/${p.result.totalTests} test case.`, 'danger');
     } else {
-      toast(`Chạy thử hoàn tất: ${samplePassed}/${samples.length} test mẫu đạt.`);
+      toast(`Chạy thử hoàn tất: ${samples.filter((x) => x.outcome && x.outcome.pass).length}/${samples.length} test mẫu đạt.`);
     }
   } catch (e) {
     toast((e && e.message) || 'Lỗi khi chạy code xem trước.', 'danger');
@@ -676,8 +714,8 @@ function ChallengePreview({ c, l }) {
         </div>
         <div className="row">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => pvReset(l)} disabled={p.running}><Icon name="rotate-ccw" className="icon-sm" /> Khôi phục code ban đầu</button>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => pvExecute(l, 'run')} disabled={p.running} aria-busy={p.running ? 'true' : undefined}>{p.running ? null : <Icon name="play" className="icon-sm" />} Chạy thử (Sample tests)</button>
-          <button type="button" className="btn btn-primary btn-sm" data-cp-run="" onClick={() => pvExecute(l, 'submit')} disabled={p.running} aria-busy={p.running ? 'true' : undefined}>{p.running ? null : <Icon name="send" className="icon-sm" />} Nộp bài (Tất cả tests)</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => pvExecute(c, l, 'run')} disabled={p.running} aria-busy={p.running ? 'true' : undefined}>{p.running ? null : <Icon name="play" className="icon-sm" />} Chạy thử (Sample tests)</button>
+          <button type="button" className="btn btn-primary btn-sm" data-cp-run="" onClick={() => pvExecute(c, l, 'submit')} disabled={p.running} aria-busy={p.running ? 'true' : undefined}>{p.running ? null : <Icon name="send" className="icon-sm" />} Nộp bài (Tất cả tests)</button>
         </div>
       </div>
       <div className="lai-preview">
@@ -740,18 +778,25 @@ function ChallengePreview({ c, l }) {
 
 export function CodePreviewPage({ params }) {
   useCodi();
-  const c = Codi.course(params.courseId);
-  if (!isMine(c)) return notMine();
-  const l = Codi.lesson(c, params.lessonId);
-  if (!l || !l.code) return notMine();
+  const s = useCodeLesson(params.courseId, params.lessonId);
+  if (!s.l) return isNotFound(s.error) ? notMine() : loadingFrame(s);
+  const c = s.c; const l = s.l;
   if (l.code.kind !== 'tutorial') return shell('/teach/courses', <ChallengePreview c={c} l={l} />);
-  // Guided tutorials (port-only lesson kind) reuse the learner player.
+  // Guided tutorials: read-only walk-through of the saved steps (the learner player runs code only for enrolled
+  // learners through the backend, so the lecturer checks step tests from the editor instead).
+  const steps = l.code.steps || [];
   return shell('/teach/courses', (
     <div className="stack-4">
       <Link className="small" to={`/teach/courses/${c.id}/code/${l.id}`}><Icon name="arrow-left" className="icon-sm" /> Quay lại trình soạn thảo bài code</Link>
-      <Alert type="info" title="Xem như học viên" body="Bạn thử bài đúng như học viên thấy. Lượt chạy của giảng viên không tính vào số liệu Tiến độ học viên." />
+      <Alert type="info" title="Xem như học viên" body="Các bước học viên sẽ đi qua, theo thứ tự đã lưu. Để chạy thử test của từng bước, dùng nút “Chạy thử” trong trình soạn." />
       <h1>{l.title}</h1>
-      {CC().view ? CC().view(c, l) : null}
+      <ol className="stack-4">{steps.map((st, i) => (
+        <li key={i} className="card"><div className="card-body stack-3">
+          <span className="row" style={{ gap: 8 }}><strong>Bước {i + 1}: {st.title}</strong>{st.isSolution ? <span className="badge badge-neutral">Lời giải (được che)</span> : null}{(st.tests || []).length ? <span className="badge badge-info">{st.tests.length} test</span> : null}</span>
+          {st.body ? <Md text={st.body} /> : null}
+          {st.starter ? <pre className="la-code"><code>{st.starter}</code></pre> : null}
+        </div></li>
+      ))}</ol>
     </div>
   ));
 }

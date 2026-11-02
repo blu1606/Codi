@@ -1,10 +1,15 @@
 // S22 lesson editor (real "Biên tập chi tiết bài học": description, duration 1–360, free preview, body, URL-only
 // materials, load / error / retry, save guard) plus the port-only assignment builder with rubric, and the typed
 // "Thêm bài học" menu (chapter + lesson kind, manual or AI).
+// Backend: getLessonDetails / updateLesson / addLesson actions; the assignment (instructions, submission format,
+// scores, rubric) goes to /api/lecturer/courses/:courseId/lessons/:lessonId/assignment, a new guided tutorial to
+// …/tutorial. Late-submission policy and accepted file types have no column in Codi, so they stay on the draft only.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
-import { findLesson, contentChanged, persist, locked, lecturerAI, AIThinking, FieldError } from './teach-api';
+import { findLesson, locked, lecturerAI, AIThinking, FieldError } from './teach-api';
+import { act, cachedCourse, reloadCourse, reloadMine } from './teach-data';
 
 const LATE = { accept: 'Vẫn nhận, không trừ điểm', penalty: 'Nhận và trừ điểm', reject: 'Không nhận bài nộp muộn' };
 const newAssignment = () => ({ instructions: '', requiresFile: false, requiresLink: true, acceptedTypes: '', maxScore: 10, passingScore: 50, passScore: 5, dueDays: 7, latePolicy: 'penalty', latePenalty: 20, rubric: [] });
@@ -21,17 +26,15 @@ export const MATERIAL_KINDS = [
   ['link', 'Liên kết ngoài (URL)', 'link'],
 ];
 const kindIcon = (t) => (MATERIAL_KINDS.find((k) => k[0] === t) || MATERIAL_KINDS[4])[2];
-/** Materials stored on the lesson, or the legacy single `material` file of older seed rows. */
-export function lessonMaterials(l) {
-  if (Array.isArray(l.materials)) return l.materials.map((m) => ({ ...m }));
-  if (l.material && l.material.fileName) {
-    const kind = { pdf: 'pdf', pptx: 'slide', ppt: 'slide', mp4: 'video', video: 'video' }[l.material.kind] || 'document';
-    return [{ id: Codi.uid('mat'), type: kind, title: l.material.fileName, url: l.material.url || '' }];
-  }
-  return [];
-}
-/** Learner-facing lesson type follows the first material (reading when there is none). */
-const typeFromMaterials = (list) => { const t = list[0] && list[0].type; return t === 'video' ? 'video' : t === 'pdf' || t === 'slide' ? 'pdf' : 'reading'; };
+const assignmentUrl = (courseId, lessonId) => `/api/lecturer/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/assignment`;
+/** Builder draft from the stored assignment (GET …/assignment). */
+const fromServerAssignment = (a) => Object.assign(newAssignment(), {
+  instructions: a.instructions || '', requiresFile: a.submissionFormat === 'file' || a.submissionFormat === 'file_or_link',
+  requiresLink: a.submissionFormat === 'link' || a.submissionFormat === 'file_or_link' || a.submissionFormat === 'text',
+  maxScore: Number(a.maxScore) || 10, passingScore: a.passingScore ?? 50, dueDays: a.dueDays || 7,
+  rubric: (a.rubric || []).map((k) => ({ id: k.id, name: k.name || '', desc: k.desc || '', points: Number(k.points) || 0 })),
+});
+const submissionFormat = (a) => (a.requiresFile && a.requiresLink ? 'file_or_link' : a.requiresFile ? 'file' : 'link');
 
 function assignmentProblem(a) {
   if (!a.instructions.trim()) return 'Nhập yêu cầu bài tập hoặc tắt "Có bài tập".';
@@ -123,7 +126,7 @@ function MaterialForm({ onAdd, onClose, disabled }) {
   const add = () => {
     if (!title.trim()) { setErr('Vui lòng nhập tên tài liệu.'); return; }
     if (!url.trim()) { setErr('Vui lòng nhập URL tài liệu.'); return; }
-    onAdd({ id: Codi.uid('mat'), type, title: title.trim(), url: url.trim() });
+    onAdd({ id: Codi.uid('mat'), type, title: title.trim(), url: url.trim() }); // string id = not saved yet
   };
   return (
     <div className="panel stack-3 tc-mat-form">
@@ -139,17 +142,18 @@ function MaterialForm({ onAdd, onClose, disabled }) {
   );
 }
 
-/** Builds the editable draft from the stored lesson; throws when the lesson is gone (load error state). */
-function loadDraft(courseId, lessonId, withAssignment) {
-  const c = Codi.course(courseId);
-  const f = c && findLesson(c, lessonId);
-  if (!f) throw new Error('Không thể tải chi tiết bài học. Vui lòng thử lại.');
-  const l = f.l;
-  const assignment = l.assignment ? Object.assign(newAssignment(), JSON.parse(JSON.stringify(l.assignment))) : (withAssignment ? newAssignment() : null);
+/** Builds the editable draft from the backend (lesson details + assignment); throws on a load failure. */
+async function loadDraft(courseId, lessonId, withAssignment) {
+  const [det, asg] = await Promise.all([act('course', 'getLessonDetails', courseId, lessonId), api.get(assignmentUrl(courseId, lessonId))]);
+  if (!det || !det.lesson) throw new Error('Không thể tải chi tiết bài học. Vui lòng thử lại.');
+  const l = det.lesson;
+  const assignment = asg && asg.assignment ? fromServerAssignment(asg.assignment) : (withAssignment ? newAssignment() : null);
   if (assignment) assignment.passingScore = pctOf(assignment);
   return {
-    title: l.title, description: l.description || '', durationMin: Math.round(Number(l.durationMin) || 0) || 10,
-    body: l.reading || '', isFreePreview: !!l.isFreePreview, materials: lessonMaterials(l), assignment,
+    title: l.title, description: l.description || '', durationMin: Math.round((Number(l.durationSeconds) || 0) / 60) || 10,
+    body: l.body || '', isFreePreview: !!l.isFreePreview, hadAssignment: !!(asg && asg.assignment),
+    materials: (det.materials || []).map((m) => ({ id: m.id, type: m.type, title: m.title, url: m.url, fileSizeKb: m.fileSizeKb, durationSeconds: m.durationSeconds })),
+    assignment,
   };
 }
 
@@ -161,18 +165,19 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
   const [saving, setSaving] = useState(false);
   const rubricJob = useRef(null);
   const request = useRef(0);
-  const c = Codi.course(courseId);
+  const c = cachedCourse(courseId);
   const ro = !!c && locked(c);
 
   const fetchDetails = useCallback(async () => {
     const req = ++request.current;
     setLoad({ state: 'loading', message: '' });
-    await Codi.wait(250); // the real editor fetches lesson details before it allows saving
-    if (req !== request.current || d.closed) return;
     try {
-      Object.assign(d, loadDraft(courseId, lessonId, withAssignment), { error: null });
+      const draft = await loadDraft(courseId, lessonId, withAssignment);
+      if (req !== request.current || d.closed) return;
+      Object.assign(d, draft, { error: null });
       setLoad({ state: 'ready', message: '' });
     } catch (err) {
+      if (req !== request.current || d.closed) return;
       const message = err && err.message ? err.message : 'Không thể tải chi tiết bài học.';
       setLoad({ state: 'error', message });
       Codi.ui.toast(message, { type: 'danger' });
@@ -187,7 +192,7 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
 
   const canSave = !ro && !saving && load.state === 'ready';
   const fail = (msg) => { d.error = msg; refresh(); return false; };
-  const save = () => {
+  const save = async () => {
     if (!canSave) return false;
     const title = (d.title || '').trim();
     if (!title) { Codi.ui.toast('Tên bài học không được để trống.', { type: 'danger' }); return fail('Tên bài học không được để trống.'); }
@@ -196,28 +201,26 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
     if (!Number.isFinite(dur) || dur < 1 || dur > 360) return fail('Thời lượng (phút) phải từ 1 đến 360.');
     const ap = d.assignment && assignmentProblem(d.assignment);
     if (ap) return fail(ap);
-    const cc = Codi.course(courseId); const ff = cc && findLesson(cc, lessonId);
-    if (!ff) return fail('Không tìm thấy bài học trong khoá học này.');
     setSaving(true);
     try {
-      const mats = d.materials.map((m, i) => ({ id: m.id || Codi.uid('mat'), type: m.type, title: m.title, url: m.url, position: i }));
-      const isCode = ff.l.type === 'code' || ff.l.type === 'tutorial';
-      Object.assign(ff.l, {
-        title, description: d.description.trim(), durationMin: Math.round(dur), reading: d.body, isFreePreview: !!d.isFreePreview,
-        materials: mats, type: isCode ? ff.l.type : typeFromMaterials(mats),
-        assignment: d.assignment ? cleanAssignment(d.assignment) : null, materialError: false,
-      });
-      // review checks read the first material as the lesson file
-      ff.l.material = mats[0] ? { fileName: mats[0].title, kind: mats[0].type, url: mats[0].url } : null;
-      contentChanged(cc); persist();
+      const materials = d.materials.map((m) => ({ ...(typeof m.id === 'number' ? { id: m.id } : {}), type: m.type, title: m.title, url: m.url, fileSizeKb: m.fileSizeKb || undefined, durationSeconds: m.durationSeconds || undefined }));
+      await act('course', 'updateLesson', courseId, lessonId, { title, description: d.description.trim(), durationMinutes: Math.round(dur), body: d.body, isFreePreview: !!d.isFreePreview, materials });
+      if (d.assignment || d.hadAssignment) {
+        const a = d.assignment ? cleanAssignment(d.assignment) : null;
+        await api.put(assignmentUrl(courseId, lessonId), a ? { instructions: a.instructions, submissionFormat: submissionFormat(a), maxScore: a.maxScore, passingScore: a.passingScore, dueDays: a.dueDays, rubric: a.rubric } : null);
+        d.hadAssignment = !!a;
+      }
       return true;
+    } catch (e) {
+      return fail((e && e.message) || 'Không thể lưu bài học.');
     } finally {
       setSaving(false);
+      reloadCourse(courseId); reloadMine();
     }
   };
-  const importAI = () => {
+  const importAI = async () => {
     // the import works on the saved lesson, so save the draft first
-    if (!save()) return;
+    if (!(await save())) return;
     const AI = lecturerAI();
     handle.close();
     if (AI && AI.openImport) AI.openImport(courseId, lessonId);
@@ -280,7 +283,7 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
       </div>
       <div className="sheet-footer">
         <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => handle.close()}>Huỷ</button>
-        <button type="button" className="btn btn-primary" disabled={!canSave} onClick={() => { if (save()) { handle.close(); Codi.ui.toast('Đã cập nhật bài học thành công!', { type: 'success' }); } }}>
+        <button type="button" className="btn btn-primary" disabled={!canSave} onClick={async () => { if (await save()) { handle.close(); Codi.ui.toast('Đã cập nhật bài học thành công!', { type: 'success' }); } }}>
           {saving ? <><Icon name="loader" className="icon-sm" /> Đang lưu...</> : <><Icon name="save" className="icon-sm" /> Lưu bài học</>}</button>
       </div>
     </>
@@ -288,7 +291,7 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
 }
 
 export function openLessonEditor(courseId, lessonId, opts) {
-  const c = Codi.course(courseId);
+  const c = cachedCourse(courseId);
   if (!findLesson(c, lessonId)) { Codi.ui.toast('Không tìm thấy bài học trong khoá học này.', { type: 'danger' }); return null; }
   return Codi.ui.sheet({
     title: 'Biên tập chi tiết bài học', wide: true, raw: true,
@@ -297,26 +300,41 @@ export function openLessonEditor(courseId, lessonId, opts) {
 }
 
 // ───────────────────────── add lesson ─────────────────────────
-/** Creates a lesson of the chosen type in the chosen chapter, then opens its editor. Real default: "Bài học {n}", 10 min. */
-export function addLesson(c, chapterId, kind) {
+const tutorialUrl = (courseId, lessonId) => `/api/lecturer/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/tutorial`;
+/** Real addLesson (default "Bài học {n}", 10 min) in the chosen chapter; returns the new lesson row or null. */
+async function createLesson(c, chapterId, title) {
   const ch = c.chapters.find((x) => x.id === chapterId) || c.chapters[0];
   if (!ch) return null;
+  try {
+    const r = await act('course', 'addLesson', c.id, ch.id, title);
+    return r && r.lesson ? r.lesson : null;
+  } catch (e) {
+    Codi.ui.toast((e && e.message) || 'Không thể thêm bài học.', { type: 'danger' });
+    return null;
+  }
+}
+/** Creates a lesson of the chosen type, then opens its editor (code kinds open the code editor route). */
+export async function addLesson(c, chapterId, kind) {
   const isCode = kind === 'code' || kind === 'tutorial';
-  if (isCode && !(Codi.code && Codi.code.blank)) { Codi.ui.toast('Trình soạn bài code chưa sẵn sàng.', { type: 'danger' }); return null; }
-  const id = 'lesson-' + Date.now().toString(36);
-  const type = isCode ? kind : kind === 'lesson' ? 'reading' : kind;
-  const l = { id, title: isCode ? (kind === 'code' ? 'Bài code mới' : 'Hướng dẫn code mới') : `Bài học ${ch.lessons.length + 1}`, type, durationMin: isCode ? 20 : 10, conceptIds: [], reading: '', description: '', isFreePreview: false, materials: [], quiz: null, assignment: null };
-  if (isCode) l.code = Codi.code.blank(kind === 'code' ? 'challenge' : 'tutorial');
-  ch.lessons.push(l); contentChanged(c); persist();
+  const l = await createLesson(c, chapterId, kind === 'code' ? 'Bài code mới' : kind === 'tutorial' ? 'Hướng dẫn code mới' : undefined);
+  if (!l) return null;
+  if (kind === 'tutorial') {
+    try {
+      await api.put(tutorialUrl(c.id, l.id), { title: l.title, durationMinutes: 20, fileName: 'main.js', steps: [{ title: 'Bước 1', body: '', starter: '' }] });
+    } catch (e) {
+      Codi.ui.toast((e && e.message) || 'Không thể tạo bài hướng dẫn.', { type: 'danger' });
+    }
+  }
+  await reloadCourse(c.id); reloadMine();
   Codi.ui.toast('Đã thêm bài học mới.', { type: 'success' });
-  if (isCode) Codi.go(`/teach/courses/${c.id}/code/${id}`); else openLessonEditor(c.id, id);
+  if (isCode) Codi.go(`/teach/courses/${c.id}/code/${l.id}`); else openLessonEditor(c.id, l.id);
   return l;
 }
-/** Blank PDF lesson for "Từ tài liệu / slide": the import sheet fills it, without opening the lesson editor. */
-function addLessonQuiet(c, chapterId) {
-  const ch = c.chapters.find((x) => x.id === chapterId) || c.chapters[0];
-  const l = { id: 'lesson-' + Date.now().toString(36), title: `Bài học ${ch.lessons.length + 1}`, type: 'pdf', durationMin: 10, conceptIds: [], reading: '', description: '', isFreePreview: false, materials: [], quiz: null, assignment: null };
-  ch.lessons.push(l); contentChanged(c); persist(); return l;
+/** Blank lesson for "Từ tài liệu / slide": the import sheet fills it, without opening the lesson editor. */
+async function addLessonQuiet(c, chapterId) {
+  const l = await createLesson(c, chapterId);
+  if (l) await reloadCourse(c.id);
+  return l;
 }
 
 const LESSON_KINDS = [
@@ -335,7 +353,7 @@ const LESSON_KINDS = [
 ];
 
 function AddLessonBody({ handle, courseId, chapterId }) {
-  const c = Codi.course(courseId);
+  const c = cachedCourse(courseId);
   const [ch, setCh] = useState(chapterId);
   if (!c) return null;
   const pick = (kind) => {
@@ -346,7 +364,7 @@ function AddLessonBody({ handle, courseId, chapterId }) {
       else if (AI) Codi.ui.toast('Tạo bài bằng AI chưa sẵn sàng.', { type: 'danger' });
     } else if (kind === 'ai-import') {
       const AI = lecturerAI(); if (!AI || !AI.openImport) return;
-      const l = addLessonQuiet(c, ch); AI.openImport(c.id, l.id);
+      addLessonQuiet(c, ch).then((l) => { if (l) AI.openImport(c.id, l.id); });
     } else addLesson(c, ch, kind);
   };
   return (

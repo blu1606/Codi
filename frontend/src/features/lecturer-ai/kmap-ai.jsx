@@ -1,32 +1,43 @@
 /**
- * Knowledge-map AI for lecturers: simulated analysis plus the real graph rules.
- * Graph helpers are ported from the real app's lib/knowledge-map-runner.ts; the analysis follows the mockup
- * (docs/mockup/js/lecturer.js runAnalysis) because the real runKnowledgeMapAnalysis is disabled in its trial build
- * and the product owner kept the simulation working.
+ * Knowledge-map graph rules for lecturers, ported from the real app's lib/knowledge-map-runner.ts.
+ * The map itself (concepts, edges, review states, confirmation) lives in the backend kmap actions used by
+ * lecturer/kmap-tab.jsx. Codi's own runKnowledgeMapAnalysis is disabled, so the analysis is the product owner's
+ * simulation, run and stored by POST /api/lecturer/courses/:courseId/kmap-analysis.
  *
- * Map shape: Codi.db().knowledgeMaps[courseId] = { status: empty|analysing|ready|confirmed|failed|stale, updatedAt,
- *   generatedAt?, concepts[{ id, name, lessonIds[], review: suggested|accepted|edited|declined }],
+ * Map shape: { status, concepts[{ id, name, lessonIds[], review: suggested|accepted|edited|declined }],
  *   edges[{ from, to, review }] }   (an edge means "from must be learned before to").
  *
  * Installs on Codi.lecturerAI:
- *   runKnowledgeMapAnalysis(courseId) → Promise<{ ok: true, map } | { ok: false, error }>
- *       status → 'analysing' at once, then 'ready' with AI suggestions (or 'failed') after ~2.5 s.
- *       Scenario Codi.state.scenario.kmap: 'fail' → failed; 'cycle' → adds one loop-closing suggested edge.
- *       Re-analysis (stale / failed / ready) re-suggests the existing concepts and drops lessons that no longer exist.
- *       Notifies the lecturer: "Bản đồ kiến thức đã sẵn sàng".
+ *   runKnowledgeMapAnalysis(courseId) → Promise<{ ok: true, concepts, added } | { ok: false, error }>
+ *       every concept and edge is suggested again, each lesson without a concept gets one (chained in authored
+ *       order); the map becomes 'ready' for the current content. Demo flag Codi.state.scenario.kmap === 'fail'
+ *       fails client-side after the usual wait.
  *   kmapGraph: { findCycle(conceptIds, edges), reaches(from, to, edges), computeAcceptAllPlan(conceptIds,
  *       suggestedEdges, keptEdges), activeEdges(map), mapCycle(map), topoSortLessons(concepts, edges, lessons) }
  *   acceptAllPlan(map) → { acceptedConcepts[], acceptedEdges[], skippedEdges[] }   (D10 preview, pure)
- *   acceptAll(courseId) → Promise<{ ok, acceptedConcepts, acceptedEdges, skippedEdges }>
- *       opens the real "Chấp nhận tất cả đề xuất?" confirm, then applies the plan; loop-closing edges stay suggested.
  */
 import { Codi } from '../../lib/codi';
+import { api } from '../../lib/api';
 
-const ANALYSIS_MS = 2500;
-const LOCKED = 'Khoá học đang chờ duyệt — nội dung chỉ đọc.';
-const NOT_FOUND = 'Không tìm thấy khoá học hoặc khoá học không thuộc quyền quản lý của bạn.';
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
-const lessonsOf = (c) => (c.chapters || []).flatMap((ch) => ch.lessons || []);
+const inflight = new Map();
+export function runKnowledgeMapAnalysis(courseId) {
+  if (inflight.has(courseId)) return inflight.get(courseId);
+  const job = (async () => {
+    try {
+      await sleep(1500); // visible "Đang phân tích" state, like the mockup
+      if (Codi.state.scenario && Codi.state.scenario.kmap === 'fail') return { ok: false, error: 'Phân tích bản đồ kiến thức thất bại' };
+      const r = await api.post(`/api/lecturer/courses/${encodeURIComponent(courseId)}/kmap-analysis`, {});
+      return { ok: true, concepts: r.concepts, added: r.added };
+    } catch (e) {
+      return { ok: false, error: (e && e.message) || 'Phân tích bản đồ kiến thức thất bại' };
+    } finally {
+      inflight.delete(courseId);
+    }
+  })();
+  inflight.set(courseId, job);
+  return job;
+}
 
 // ───────────────────────── graph rules (real knowledge-map-runner.ts) ─────────────────────────
 export function findCycle(conceptIds, edges) {
@@ -107,121 +118,10 @@ export function acceptAllPlan(m) {
   );
 }
 
-// ───────────────────────── actions ─────────────────────────
-function ensureMap(db, c) {
-  if (!db.knowledgeMaps) db.knowledgeMaps = {};
-  if (!db.knowledgeMaps[c.id]) db.knowledgeMaps[c.id] = { status: lessonsOf(c).length ? 'ready' : 'empty', updatedAt: new Date().toISOString(), concepts: [], edges: [] };
-  return db.knowledgeMaps[c.id];
-}
-const conceptName = (title) => String(title || '').replace(/^Bài \d+[:.]\s*/i, '').trim() || String(title || '');
-
-// One in-flight analysis per course; a second call while analysing returns the same promise.
-const inflight = new Map();
-
-export function runKnowledgeMapAnalysis(courseId) {
-  if (inflight.has(courseId)) return inflight.get(courseId);
-  const c = Codi.course(courseId);
-  if (!c) return Promise.resolve({ ok: false, error: NOT_FOUND });
-  if (c.status === 'pending') return Promise.resolve({ ok: false, error: LOCKED });
-  if (!lessonsOf(c).length) return Promise.resolve({ ok: false, error: 'Chưa có nội dung để phân tích' });
-
-  Codi.set((s) => { const m = ensureMap(s.db, c); m.status = 'analysing'; m.updatedAt = new Date().toISOString(); });
-  const job = (async () => {
-    try {
-      await sleep(ANALYSIS_MS);
-      const course = Codi.course(courseId);
-      if (!course) return { ok: false, error: NOT_FOUND };
-      const sc = Codi.state.scenario && Codi.state.scenario.kmap;
-      if (sc === 'fail') {
-        Codi.set((s) => { const m = ensureMap(s.db, course); m.status = 'failed'; m.updatedAt = new Date().toISOString(); });
-        return { ok: false, error: 'Phân tích bản đồ kiến thức thất bại' };
-      }
-      let snapshot = null;
-      Codi.set((s) => {
-        const m = ensureMap(s.db, course);
-        const lessons = lessonsOf(course); const exists = new Set(lessons.map((l) => l.id));
-        if (!m.concepts.length) {
-          // New course: one suggested concept per lesson, chained in authored order.
-          m.concepts = lessons.map((l) => ({ id: 'k-' + l.id, name: conceptName(l.title), lessonIds: [l.id], review: 'suggested' }));
-          m.edges = m.concepts.slice(1).map((k, i) => ({ from: m.concepts[i].id, to: k.id, review: 'suggested' }));
-        } else {
-          // Re-analysis: every concept and edge is suggested again; links to deleted lessons are dropped,
-          // and lessons that no concept covers get their own suggestion.
-          m.concepts.forEach((k) => { k.review = 'suggested'; k.lessonIds = (k.lessonIds || []).filter((lid) => exists.has(lid)); });
-          m.edges.forEach((e) => { e.review = 'suggested'; });
-          const covered = new Set(m.concepts.flatMap((k) => k.lessonIds));
-          lessons.filter((l) => !covered.has(l.id)).forEach((l) => {
-            if (!m.concepts.some((k) => k.id === 'k-' + l.id)) m.concepts.push({ id: 'k-' + l.id, name: conceptName(l.title), lessonIds: [l.id], review: 'suggested' });
-          });
-        }
-        if (sc === 'cycle' && m.concepts.length > 1) {
-          const from = m.concepts[m.concepts.length - 1].id; const to = m.concepts[0].id;
-          if (!m.edges.some((e) => e.from === from && e.to === to)) m.edges.push({ from, to, review: 'suggested' });
-        }
-        m.status = 'ready'; m.updatedAt = new Date().toISOString(); m.generatedAt = m.updatedAt;
-        snapshot = JSON.parse(JSON.stringify(m));
-      });
-      Codi.notify(Codi.state.currentUserId, { title: 'Bản đồ kiến thức đã sẵn sàng', body: `${course.title}: ${snapshot.concepts.length} khái niệm cần bạn xem lại.`, link: `/teach/courses/${courseId}/kmap` });
-      return { ok: true, map: snapshot };
-    } catch (e) {
-      console.error('[lecturerAI.runKnowledgeMapAnalysis]', e);
-      try { Codi.set((s) => { const course = Codi.course(courseId); if (course) ensureMap(s.db, course).status = 'failed'; }); } catch { /* store unavailable */ }
-      return { ok: false, error: 'Phân tích bản đồ kiến thức thất bại' };
-    } finally {
-      inflight.delete(courseId);
-    }
-  })();
-  inflight.set(courseId, job);
-  return job;
-}
-
-export async function acceptAll(courseId) {
-  const c = Codi.course(courseId);
-  const none = { ok: false, acceptedConcepts: [], acceptedEdges: [], skippedEdges: [] };
-  if (!c) return none;
-  if (c.status === 'pending') { Codi.ui.toast(LOCKED, { type: 'danger' }); return none; }
-  const m0 = (Codi.db().knowledgeMaps || {})[courseId];
-  if (!m0) return none;
-  const preview = acceptAllPlan(m0);
-  const body = (
-    <span className="stack-1" style={{ display: 'grid' }}>
-      <span><strong>{preview.acceptedConcepts.length}</strong> khái niệm</span>
-      <span><strong>{preview.acceptedEdges.length}</strong> quan hệ tiên quyết an toàn</span>
-      {preview.skippedEdges.length > 0 ? <span className="text-danger"><strong>{preview.skippedEdges.length}</strong> quan hệ bị bỏ qua vì sẽ tạo vòng lặp (vẫn giữ trạng thái chờ để bạn quyết định riêng)</span> : null}
-    </span>
-  );
-  const r = await Codi.ui.confirm({
-    title: 'Chấp nhận tất cả đề xuất?', body,
-    consequence: "Các đề xuất sẽ được đánh dấu 'Đã chấp nhận'. Bản đồ chỉ có hiệu lực khi bạn bấm xác nhận.",
-    reversible: 'Có thể đổi từng mục sau nếu muốn.', confirmLabel: 'Chấp nhận tất cả',
-  });
-  if (!r.ok) return none;
-  let plan = preview;
-  try {
-    Codi.set((s) => {
-      const m = s.db.knowledgeMaps[courseId];
-      plan = acceptAllPlan(m); // recompute on the current map, like the server does
-      const concepts = new Set(plan.acceptedConcepts);
-      m.concepts.forEach((k) => { if (concepts.has(k.id)) k.review = 'accepted'; });
-      plan.acceptedEdges.forEach((p) => { const e = m.edges.find((x) => x.from === p.from && x.to === p.to); if (e) e.review = 'accepted'; });
-      if (m.status === 'confirmed') m.status = 'ready';
-      m.updatedAt = new Date().toISOString();
-    });
-  } catch (e) {
-    console.error('[lecturerAI.acceptAll]', e);
-    Codi.ui.toast('Lỗi khi chấp nhận tất cả.', { type: 'danger' });
-    return none;
-  }
-  const total = plan.acceptedConcepts.length + plan.acceptedEdges.length;
-  if (plan.skippedEdges.length) Codi.ui.toast(`Đã chấp nhận ${total} đề xuất. Có ${plan.skippedEdges.length} quan hệ tạo vòng lặp cần bạn xử lý riêng.`, { type: 'info' });
-  else Codi.ui.toast(`Đã chấp nhận ${total} đề xuất. Kiểm tra lại rồi xác nhận bản đồ.`, { type: 'success' });
-  return { ok: true, ...plan };
-}
-
 Object.assign(Codi, {
   lecturerAI: {
     ...(Codi.lecturerAI || {}),
-    runKnowledgeMapAnalysis, acceptAllPlan, acceptAll,
+    runKnowledgeMapAnalysis, acceptAllPlan,
     kmapGraph: { findCycle, reaches, computeAcceptAllPlan, activeEdges, mapCycle, topoSortLessons },
   },
 });

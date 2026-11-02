@@ -7,7 +7,7 @@
  *     - Bài giảng: tiêu đề, bài đọc (mục tiêu, khái niệm, ví dụ, lỗi hay gặp, tự kiểm tra) + tối đa 3 câu quiz
  *       duyệt từng câu (Chấp nhận / Bỏ). Bài video/slide vẫn cần giảng viên tải tệp lên.
  *     - Bài code: đề bài theo bước, code khởi đầu, lời giải mẫu, test (có test ẩn), gợi ý. Giá trị mong đợi của
- *       test lấy bằng cách chạy thật lời giải mẫu (Codi.code.run), nên bài thêm vào đã có kết quả "Chạy thử".
+ *       test lấy bằng cách chạy thật lời giải mẫu trong sandbox của backend (verifySolutionCode), nên bài thêm vào đã có kết quả "Chạy thử".
  * Nothing reaches learners until the lecturer adds it; the code draft opens in the code editor for review.
  * The lecturer workspace ("Thêm nội dung" menu) calls Codi.lecturerAI.openCreate(c.id, 'lesson'|'code', chapterId).
  * Depends on Codi.lecturerAI (./lecturer-ai-api.jsx), Codi.code (run), Codi.teach (contentChanged).
@@ -15,6 +15,7 @@
 import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
 import './lecturer-ai-api';
+import { seedCodeDraft } from './code-editor-page';
 
 const AI = () => Codi.lecturerAI;
 
@@ -105,11 +106,17 @@ async function codeDraft(c, f) {
   const t = CODE.find((x) => x.k.test(f.topic)) || CODE.find((x) => x.k.test(c.title));
   let tests = t.tests.map(([name, call, step], i) => ({ id: 'ct-ai-' + Date.now().toString(36) + i, name, call, step, hidden: i >= t.tests.length - 2 }));
   if (f.difficulty === 'easy') tests = tests.slice(0, 3).map((x) => Object.assign(x, { hidden: false }));
-  const res = Codi.code && Codi.code.run
-    ? await Codi.code.run(t.solution, tests.map((x) => ({ id: x.id, call: x.call })), { language: 'javascript' })
-    : { results: [] };
-  const by = {}; (res.results || []).forEach((r) => { by[r.id] = r; });
-  tests.forEach((x) => { const r = by[x.id]; x.expected = r && r.ok ? JSON.parse(r.actual) : null; x.ok = !!(r && r.ok); });
+  // Expected values come from running the solution in the backend sandbox (verifySolutionCode, scoped to any lesson
+  // of this course); without a lesson yet they stay empty and are filled when the exercise is saved in the editor.
+  const anyLesson = (c.chapters || []).flatMap((ch) => ch.lessons)[0];
+  let outcomes = [];
+  if (anyLesson && Codi.teach && Codi.teach.act) {
+    try {
+      const r = await Codi.teach.act('code', 'verifySolutionCode', c.id, anyLesson.id, { solutionCode: t.solution, language: 'javascript', tests: tests.map((x) => ({ name: x.name, call: x.call, expectedText: 'null', hidden: x.hidden, isSample: !x.hidden })) });
+      outcomes = r.outcomes || [];
+    } catch (e) { console.error('[lecturerAI.codeDraft] run failed', e); }
+  }
+  tests.forEach((x, i) => { const o = outcomes[i]; const ok = !!(o && o.phase === 'done' && o.actual != null); x.expected = ok ? JSON.parse(o.actual) : null; x.ok = ok; });
   const passed = tests.filter((x) => x.ok).length;
   return {
     title: 'Thử thách: ' + (f.topic.trim() || t.title), durationMin: f.difficulty === 'hard' ? 30 : f.difficulty === 'easy' ? 15 : 20,
@@ -146,7 +153,7 @@ function lessonDraft(c, f) {
 
 // ───────────────────────── sheet ─────────────────────────
 let cr = null; let handle = null; let job = null;
-const course = () => Codi.course(cr.courseId);
+const course = () => (Codi.teach && Codi.teach.course ? Codi.teach.course(cr.courseId) : null);
 const refresh = () => { if (handle) handle.update({}); };
 const setForm = (key, value) => { cr.form[key] = value; refresh(); };
 
@@ -315,29 +322,38 @@ function generate() {
     onDone(res) { if (cr !== cur) return; cur.result = res; cur.step = 'review'; refresh(); },
   }, () => (kind === 'code' ? codeDraft(c, f) : lessonDraft(c, f)), 1500);
 }
-function apply() {
-  const c = course(); const r = cr.result; const kind = cr.kind; const chapterId = cr.form.chapterId;
-  const id = 'lesson-' + Date.now().toString(36);
-  let l; let ch;
-  Codi.set(() => {
-    if (!c.chapters.length) c.chapters.push({ id: c.id + '-ch' + Date.now().toString(36), title: 'Chương 1', lessons: [] });
-    ch = c.chapters.find((x) => x.id === chapterId) || c.chapters[c.chapters.length - 1];
+/** Adds the reviewed draft through the backend: addLesson, then updateLesson + saveQuizData (lesson) or a seeded
+ * code-editor draft (code: the editor saves it, after the server re-verifies the solution). */
+async function apply() {
+  const c = course(); const r = cr.result; const kind = cr.kind; const chapterId = cr.form.chapterId; const T = Codi.teach;
+  if (!c || !T) return;
+  const ch = c.chapters.find((x) => x.id === chapterId) || c.chapters[c.chapters.length - 1];
+  if (!ch) { Codi.ui.toast('Hãy thêm một chương trước khi thêm bài học.', { type: 'danger' }); return; }
+  const title = String(kind === 'code' ? r.title : r.lesson.title).trim() || (kind === 'code' ? 'Bài code mới' : 'Bài học mới');
+  let l;
+  try {
+    const added = await T.act('course', 'addLesson', c.id, ch.id, title);
+    l = added.lesson;
     if (kind === 'code') {
-      l = { id, title: String(r.title).trim() || 'Bài code mới', type: 'code', durationMin: Math.max(1, Number(r.durationMin) || 20), conceptIds: [], reading: '', quiz: null, assignment: null, code: r.code, aiDraft: true };
+      seedCodeDraft(c.id, l.id, { title, durationMin: Math.max(1, Number(r.durationMin) || 20), code: JSON.parse(JSON.stringify(r.code)) });
     } else {
-      const qs = r.questions.filter((q) => q.state === 'accepted').map((q) => { const o = { ...q, aiReviewed: true }; delete o.state; return o; });
-      l = { id, title: String(r.lesson.title).trim() || 'Bài học mới', type: r.lesson.type, durationMin: Math.max(1, Number(r.lesson.durationMin) || 10), conceptIds: [], reading: r.lesson.reading, quiz: qs.length ? { id: id + '-quiz', passingScore: 70, questions: qs } : null, assignment: null, aiDraft: true };
+      await T.act('course', 'updateLesson', c.id, l.id, { title, description: '', durationMinutes: Math.max(1, Number(r.lesson.durationMin) || 10), body: r.lesson.reading, isFreePreview: false, materials: [] });
+      const qs = r.questions.filter((q) => q.state === 'accepted');
+      if (qs.length) await T.appendQuizQuestions(c.id, l.id, qs);
     }
-    ch.lessons.push(l);
-    if (Codi.teach && Codi.teach.contentChanged) Codi.teach.contentChanged(c);
-  });
+  } catch (e) {
+    Codi.ui.toast((e && e.message) || 'Không thể thêm bài học.', { type: 'danger' });
+    if (T.reloadCourse) T.reloadCourse(c.id);
+    return;
+  }
+  if (T.reloadCourse) await T.reloadCourse(c.id);
   handle.close();
-  if (kind === 'code') { Codi.go(`/teach/courses/${c.id}/code/${id}`); Codi.ui.toast('Đã thêm bài code do AI soạn. Kiểm tra đề, test rồi bấm "Lưu bài".', { type: 'success' }); }
-  else { Codi.go(`/teach/courses/${c.id}/content?lesson=${id}`); Codi.ui.toast(`Đã thêm bài "${l.title}" vào ${ch.title}.${l.type !== 'reading' ? ' Nhớ tải tệp lên cho bài này.' : ''}`, { type: 'success' }); }
+  if (kind === 'code') { Codi.go(`/teach/courses/${c.id}/code/${l.id}`); Codi.ui.toast('Đã thêm bài code do AI soạn. Kiểm tra đề, test rồi bấm "Lưu bài".', { type: 'success' }); }
+  else { Codi.go(`/teach/courses/${c.id}/content?lesson=${l.id}`); Codi.ui.toast(`Đã thêm bài "${title}" vào ${ch.title}.${r.lesson.type !== 'reading' ? ' Nhớ thêm tài liệu cho bài này.' : ''}`, { type: 'success' }); }
 }
 
 function openCreate(courseId, kind, chapterId) {
-  const c = Codi.course(courseId);
+  const c = Codi.teach && Codi.teach.course ? Codi.teach.course(courseId) : null;
   if (!c) { Codi.ui.toast('Không tìm thấy khoá học.', { type: 'danger' }); return; }
   if (handle) handle.close();
   cr = { courseId: c.id, kind: kind === 'code' ? 'code' : 'lesson', step: 'form', err: null, result: null,

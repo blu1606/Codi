@@ -1,23 +1,49 @@
 // S22 course editor: header + tabs Nội dung (curriculum tree, reorder, delete guards with undo) · Thông tin (real
 // validation, unsaved guard) · Bản đồ kiến thức (kmap-tab.jsx) · Xuất bản (status banners, review round, readiness).
-// Behaviour and copy follow the real app (dashboard/lecturer/courses/[courseId]/course-editor.tsx, actions.ts,
-// publish/publish-tab-client.tsx). Drag-and-drop reorder and course delete are port-only extras.
+// Data and rules come from Codi's actions (dashboard/lecturer/courses/[courseId]/actions.ts, publish/actions.ts)
+// through teach-data.js; the curriculum outline and course delete use /api/lecturer/courses/:courseId.
+// Drag and drop reorders within a chapter or the chapter list (the backend moves one step at a time).
 import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { Alert, Empty, Icon, CourseStatus } from '../../components/ui/primitives';
 import {
-  shell, notMine, isMine, me, ls, locked, findLesson, contentChanged, persist, guard,
-  TYPE_ICON, TYPE_LABEL, ENTRY_MIN, LEVELS, levelLabel, categoryOptions, categoryName, PRICE_MAX,
-  FieldError, reviewRound, reviewFlagsFor, promptReason,
+  shell, notMine, ls, locked, findLesson, guard,
+  TYPE_ICON, TYPE_LABEL, LEVELS, levelLabel, categoryOptions, PRICE_MAX,
+  FieldError, reviewRound, reviewFlagsFor, promptReason, Loading, LoadError,
 } from './teach-api';
 import { rerender, useView } from './view-store';
-import { KmapTab, kmapOf } from './kmap-tab';
+import { act, forgetCourse, reloadCourse, reloadMine, useCourse, write } from './teach-data';
+import { KmapTab } from './kmap-tab';
 import { openLessonEditor, openAddLesson } from './lesson-editor';
 import { aiImport } from './quiz-builder';
 
 const { fmt } = Codi;
+const toast = (msg, o) => Codi.ui.toast(msg, o);
 const TABS = [['content', 'Nội dung'], ['info', 'Thông tin'], ['kmap', 'Bản đồ kiến thức'], ['publish', 'Xuất bản']];
+
+// Review vocabulary shared with the admin publication screen.
+const CRITERIA = [
+  { id: 'info', label: 'Mô tả, đối tượng học viên và giá đề xuất' },
+  { id: 'materials', label: 'Video, slide và tài liệu đầy đủ, xem được' },
+  { id: 'quiz', label: 'Quiz đúng đáp án, giải thích rõ' },
+  { id: 'entry', label: 'Bài kiểm tra đầu vào (≥ 5 câu)' },
+  { id: 'code', label: 'Bài code có test và lời giải chạy đạt' },
+  { id: 'assignment', label: 'Bài tập có yêu cầu rõ và thang chấm' },
+  { id: 'rights', label: 'Bản quyền tài liệu, không có nội dung vi phạm' },
+];
+const SEVERITY = { must: 'Bắt buộc sửa', should: 'Nên sửa' };
+const FLAG_STATUS = { open: 'Đang mở', fixed: 'Giảng viên đã sửa', closed: 'Đã đóng' };
+function targetHref(c, t) {
+  const target = t || {};
+  if (target.type === 'question') return `/teach/courses/${c.id}/quiz/${target.lessonId}`;
+  if (target.type === 'test') return `/teach/courses/${c.id}/code/${target.lessonId}`;
+  if (target.label === 'Bài kiểm tra đầu vào') return `/teach/courses/${c.id}/quiz/entry`;
+  if (target.type === 'course') return `/teach/courses/${c.id}/info`;
+  if (target.lessonId) { const f = findLesson(c, target.lessonId); if (f && f.l.code) return `/teach/courses/${c.id}/code/${target.lessonId}`; }
+  return `/teach/courses/${c.id}/content?lesson=${target.lessonId || ''}`;
+}
 
 // Authoring steps in the order a course is prepared (Udemy: plan → create → publish). Each step maps to one tab;
 // every tab stays reachable from the rail, and each step's state comes from the readiness checks.
@@ -27,6 +53,8 @@ const STEPS = [
   { key: 'kmap', label: 'Bản đồ kiến thức', hint: 'phân tích và xác nhận bản đồ', labels: ['Bản đồ kiến thức đã xác nhận'] },
   { key: 'publish', label: 'Xuất bản', hint: 'gửi yêu cầu khi đủ điều kiện', labels: null },
 ];
+/** Readiness checks from Codi's publication service (getPublicationData). */
+export const readiness = (c) => c.readiness || [];
 /** Per-step missing counts. Content takes every readiness check not owned by Thông tin or Bản đồ kiến thức. */
 function stepMissing(c) {
   const items = readiness(c);
@@ -44,7 +72,6 @@ function stepMissing(c) {
 }
 function AuthoringRail({ c, tab }) {
   const missing = stepMissing(c);
-  const km = Codi.db().knowledgeMaps[c.id] || {};
   const next = STEPS.find((s) => missing[s.key] > 0);
   const nextStep = next && STEPS.findIndex((s) => s.key === next.key) + 1;
   const readyToSubmit = readiness(c).every((x) => x.ok) && ['draft', 'rejected'].includes(c.status);
@@ -61,7 +88,7 @@ function AuthoringRail({ c, tab }) {
             <Link to={`/teach/courses/${c.id}/${s.key}`} className={`step-link ${done ? 'is-done' : ''} ${current ? 'is-current' : ''}`} aria-current={current ? 'step' : undefined}>
               <span className="step-num" aria-hidden="true">{done ? <Icon name="check" className="icon-sm" /> : i + 1}</span>
               <span className="step-text"><strong className="small">{s.label}</strong><span className="xsmall muted">{status}</span></span>
-              {s.key === 'kmap' && ['stale', 'failed', 'ready'].includes(km.status) && <span className="count count-accent" aria-label="cần xem lại">!</span>}
+              {s.key === 'kmap' && ['stale', 'failed', 'ready'].includes(c.knowledgeMapStatus) && <span className="count count-accent" aria-label="cần xem lại">!</span>}
             </Link>
           </li>
         );
@@ -73,7 +100,7 @@ function AuthoringRail({ c, tab }) {
   );
 }
 function EditorHeader({ c, tab }) {
-  const cat = categoryName(c.categoryId);
+  const cat = c.category;
   return (
     <div className="stack-3" style={{ marginBottom: 16 }}>
       <Link className="small" to="/teach/courses"><Icon name="arrow-left" className="icon-sm" /> Khoá học của tôi</Link>
@@ -93,27 +120,20 @@ let drag = null;
 
 const codeBadge = (l) => {
   if (!l.code || l.code.kind !== 'challenge') return null;
-  const chk = l.code.solutionCheck; const tests = l.code.tests || [];
-  if (!tests.length) return <span className="badge badge-warn"><Icon name="alert-triangle" />Chưa có test</span>;
-  return chk && chk.ok ? <span className="badge badge-success"><Icon name="check" />{tests.length} test · lời giải đạt</span> : <span className="badge badge-warn"><Icon name="alert-triangle" />Chưa chạy thử lời giải</span>;
+  if (!l.code.tests) return <span className="badge badge-warn"><Icon name="alert-triangle" />Chưa có test</span>;
+  return l.code.verified ? <span className="badge badge-success"><Icon name="check" />{l.code.tests} test · lời giải đạt</span> : <span className="badge badge-warn"><Icon name="alert-triangle" />Chưa chạy thử lời giải</span>;
 };
-const materialCount = (l) => (Array.isArray(l.materials) ? l.materials.length : l.material && l.material.fileName ? 1 : 0);
+const materialCount = (l) => (l.materials || []).length;
 
 /**
- * One lesson's blockers, using the same rules as readiness(): an unverified code challenge, an assignment without
- * a rubric and AI questions awaiting review block submission; an open "must" review flag does too. Kind 'fix' means
- * the lecturer must change content, 'review' means a decision is still open.
+ * One lesson's blockers, using the publication rules: an unverified code challenge and an assignment without a
+ * rubric block submission; an open "must" review flag does too. Kind 'fix' means the lecturer must change content,
+ * 'review' means a decision is still open.
  */
 export function lessonIssues(c, l) {
   const issues = [];
-  if (l.code && l.code.kind === 'challenge') {
-    const code = l.code;
-    const verified = (code.tests || []).length > 0 && !!(code.solutionVerifiedAt || (code.solutionVerifiedAt === undefined && code.solutionCheck && code.solutionCheck.ok));
-    if (!verified) issues.push({ kind: 'fix', text: (code.tests || []).length ? 'Lời giải chưa đạt test' : 'Chưa có test' });
-  }
-  if (l.assignment && !(l.assignment.rubric || []).length) issues.push({ kind: 'fix', text: 'Thiếu thang chấm' });
-  const aiLeft = l.quiz ? l.quiz.questions.filter((q) => q.aiGenerated && q.aiReviewed === false).length : 0;
-  if (aiLeft) issues.push({ kind: 'review', text: `${aiLeft} câu AI chưa duyệt` });
+  if (l.code && l.code.kind === 'challenge' && !l.code.verified) issues.push({ kind: 'fix', text: l.code.tests ? 'Lời giải chưa đạt test' : 'Chưa có test' });
+  if (l.assignment && !l.assignment.rubricCount) issues.push({ kind: 'fix', text: 'Thiếu thang chấm' });
   const rr = reviewRound(c);
   const open = rr ? reviewFlagsFor(rr, l.id).filter((x) => x.status === 'open') : [];
   if (open.length) issues.push({ kind: open.some((x) => x.severity === 'must') ? 'fix' : 'review', text: `${open.length} góp ý từ quản trị` });
@@ -121,14 +141,13 @@ export function lessonIssues(c, l) {
 }
 
 function RenameForm({ c, id, value, label }) {
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     const name = String(new FormData(e.currentTarget).get('title') || '').trim();
     if (!name) return; // real: empty rename is a silent no-op
-    const ch = c.chapters.find((x) => x.id === id);
-    if (ch) ch.title = name; else { const f = findLesson(c, id); if (f) f.l.title = name; }
-    renaming = null; contentChanged(c); persist();
-    Codi.ui.toast(ch ? 'Đã đổi tên chương.' : 'Đã đổi tên bài học.', { type: 'success' });
+    const isChapter = c.chapters.some((x) => x.id === id);
+    renaming = null; rerender();
+    await write(c.id, () => act('course', isChapter ? 'renameChapter' : 'renameLesson', c.id, id, name), { toast, okMessage: isChapter ? 'Đã đổi tên chương.' : 'Đã đổi tên bài học.' });
   };
   return (
     <form className="input-group od-fill" onSubmit={submit}>
@@ -139,98 +158,62 @@ function RenameForm({ c, id, value, label }) {
   );
 }
 
-/** Arrow moves stay inside the list (real: disabled at the ends); cross-chapter moves use drag and drop. */
-function move(c, kind, id, dir) {
-  if (kind === 'chapter') { const i = c.chapters.findIndex((x) => x.id === id); const j = i + dir; if (i < 0 || j < 0 || j >= c.chapters.length) return; [c.chapters[i], c.chapters[j]] = [c.chapters[j], c.chapters[i]]; }
-  else {
-    const f = findLesson(c, id); if (!f) return;
-    const j = f.i + dir;
-    if (j < 0 || j >= f.ch.lessons.length) return;
-    [f.ch.lessons[f.i], f.ch.lessons[j]] = [f.ch.lessons[j], f.ch.lessons[f.i]];
-  }
-  contentChanged(c); persist();
+/** Moves a chapter or lesson `steps` places (negative = up) with the backend's one-step move actions. */
+async function moveBy(c, kind, id, steps) {
+  const dir = steps < 0 ? -1 : 1;
+  await write(c.id, async () => {
+    for (let i = 0; i < Math.abs(steps); i += 1) {
+      const r = await act('course', kind === 'chapter' ? 'moveChapter' : 'moveLesson', c.id, id, dir);
+      if (r && r.success === false) break;
+    }
+    return { success: true };
+  }, { toast });
 }
+const move = (c, kind, id, dir) => moveBy(c, kind, id, dir);
 
-/**
- * Real deleteLesson guards (actions.ts): learner work blocks first, then any dependent row that Undo could not
- * restore (assessments: quiz / code / assignment, progress, concept links, Q&A, conversations, review flags, path).
- */
-export function lessonDeleteBlock(c, l) {
-  const db = Codi.db();
-  const worked = (db.submissions || []).some((s) => s.lessonId === l.id)
-    || (db.codeAttempts || []).some((a) => a.lessonId === l.id && ((a.submits || 0) > 0 || (a.runs || 0) > 0))
-    || (db.learnerProgress || []).some((p) => p.courseId === c.id && p.quizScores && p.quizScores[l.id] !== undefined);
-  if (worked) return 'Không thể xoá bài học vì đã có học viên làm bài kiểm tra hoặc nộp bài trong bài học này.';
-  const m = db.knowledgeMaps[c.id];
-  const linked = !!(l.quiz || l.code || l.assignment)
-    || (db.learnerProgress || []).some((p) => p.courseId === c.id && (p.completed || []).includes(l.id))
-    || (l.conceptIds || []).length > 0
-    || !!(m && (m.concepts || []).some((k) => (k.lessonIds || []).includes(l.id)))
-    || (db.questions || []).some((q) => q.lessonId === l.id)
-    || (db.conversations || []).some((x) => x.lessonId === l.id)
-    || (db.courseReviews || []).some((r) => r.courseId === c.id && (r.flags || []).some((f) => f.target && f.target.lessonId === l.id))
-    || (c.aiPath || []).some((p) => p.lessonId === l.id)
-    || (c.entryTest && (c.entryTest.questions || []).some((q) => q.lessonId === l.id));
-  if (linked) return 'Không thể xoá bài học vì có dữ liệu liên kết không thể phục hồi khi Hoàn tác. Hãy giữ lại bài học này.';
-  return null;
-}
-
-function restoreLesson(courseId, snap) {
-  const c = Codi.course(courseId);
-  const ch = c && c.chapters.find((x) => x.id === snap.chapterId);
-  if (!ch || findLesson(c, snap.lesson.id)) { Codi.ui.toast('Không thể khôi phục bài học.', { type: 'danger' }); return; }
-  ch.lessons.splice(Math.min(snap.index, ch.lessons.length), 0, snap.lesson);
-  contentChanged(c); persist();
-  Codi.ui.toast(`Đã khôi phục "${snap.lesson.title}"`, { type: 'success' });
+/** Real restoreLesson with the snapshot deleteLesson returned. */
+async function restoreLesson(courseId, snap) {
+  await write(courseId, () => act('course', 'restoreLesson', courseId, snap), { toast, okMessage: `Đã khôi phục "${snap && snap.lesson ? snap.lesson.title : 'bài học'}"` });
 }
 
 async function removeLesson(c, id) {
   const f = findLesson(c, id); if (!f) return;
   const t = f.l.title;
-  const blocked = lessonDeleteBlock(c, f.l);
-  if (blocked) { Codi.ui.toast(blocked, { type: 'danger' }); return; }
   const r = await Codi.ui.confirm({
     title: 'Xoá bài học?',
     consequence: c.status === 'published' ? `Khoá học đang xuất bản. Xoá bài học "${t}" có thể làm gián đoạn tiến độ của học viên đã đăng ký.` : `Bài học "${t}" sẽ bị xoá khỏi chương này.`,
     reversible: 'Bạn có thể hoàn tác ngay sau khi xoá.', confirmLabel: 'Xoá', danger: true,
   });
   if (!r.ok) return;
-  const g = findLesson(c, id); if (!g) return;
-  const again = lessonDeleteBlock(c, g.l); // state may have changed while the dialog was open
-  if (again) { Codi.ui.toast(again, { type: 'danger' }); return; }
-  const snap = { chapterId: g.ch.id, index: g.i, lesson: JSON.parse(JSON.stringify(g.l)) };
-  g.ch.lessons.splice(g.i, 1);
-  contentChanged(c); persist();
-  Codi.ui.toast(`Đã xoá "${t}"`, { action: { label: 'Hoàn tác', onClick: () => restoreLesson(c.id, snap) } });
+  // the backend refuses lessons with learner work or links Undo could not restore, with the real message
+  const res = await write(c.id, () => act('course', 'deleteLesson', c.id, id), { toast });
+  if (res && res.success && res.deletedLesson) toast(`Đã xoá "${t}"`, { action: { label: 'Hoàn tác', onClick: () => restoreLesson(c.id, res.deletedLesson) } });
 }
 
 async function removeChapter(c, id) {
   const ch = c.chapters.find((x) => x.id === id); if (!ch) return;
-  if (ch.lessons.length) { Codi.ui.toast('Không thể xoá chương còn bài học. Hãy xoá từng bài học đủ điều kiện trước, rồi xoá chương trống.', { type: 'danger' }); return; }
+  if (ch.lessons.length) { toast('Không thể xoá chương còn bài học. Hãy xoá từng bài học đủ điều kiện trước, rồi xoá chương trống.', { type: 'danger' }); return; }
   const r = await Codi.ui.confirm({
     title: 'Xoá chương?',
     consequence: c.status === 'published' ? `Khoá học đã xuất bản. Xoá chương "${ch.title}" có thể ảnh hưởng trực tiếp đến học viên đã đăng ký. Chỉ có thể xoá chương trống.` : `Chương "${ch.title}" sẽ bị xoá khỏi khoá học. Chỉ có thể xoá chương trống.`,
     reversible: 'Thao tác này không hoàn tác được.', confirmLabel: 'Xoá', danger: true,
   });
   if (!r.ok) return;
-  const cur = c.chapters.find((x) => x.id === id);
-  if (!cur) return;
-  if (cur.lessons.length) { Codi.ui.toast('Không thể xoá chương còn bài học. Hãy xoá từng bài học đủ điều kiện trước, rồi xoá chương trống.', { type: 'danger' }); return; }
-  c.chapters = c.chapters.filter((x) => x !== cur);
-  contentChanged(c); persist(); Codi.ui.toast('Đã xoá chương.', { type: 'success' });
+  await write(c.id, () => act('course', 'deleteChapter', c.id, id), { toast, okMessage: 'Đã xoá chương.' });
 }
 
-function addChapter(c) {
-  c.chapters.push({ id: c.id + '-ch' + Date.now().toString(36), title: `Chương ${c.chapters.length + 1}`, lessons: [] });
-  contentChanged(c); persist();
-  Codi.ui.toast('Đã thêm chương mới.', { type: 'success' });
-}
+const addChapter = (c) => write(c.id, () => act('course', 'addChapter', c.id, `Chương ${c.chapters.length + 1}`), { toast, okMessage: 'Đã thêm chương mới.' });
 async function deleteCourse(c) {
-  if (Codi.db().enrolments.some((e) => e.courseId === c.id)) return;
+  if (c.enrolledCount) return;
   const r = await Codi.ui.confirm({ title: 'Xoá vĩnh viễn khoá học?', body: `"${c.title}" và toàn bộ nội dung sẽ bị xoá.`, reversible: false, typeToConfirm: c.title, confirmLabel: 'Xoá khoá học', danger: true });
   if (!r.ok) return;
-  Codi.set((st) => { st.db.courses = st.db.courses.filter((x) => x.id !== c.id); delete st.db.knowledgeMaps[c.id]; }, { render: false });
-  Codi.ui.toast('Đã xoá khoá học.'); Codi.go('/teach/courses');
+  try {
+    await api.del(`/api/lecturer/courses/${encodeURIComponent(c.id)}`);
+    forgetCourse(c.id); reloadMine();
+    toast('Đã xoá khoá học.'); Codi.go('/teach/courses');
+  } catch (e) {
+    toast(e.message || 'Không thể xoá khoá học.', { type: 'danger' });
+  }
 }
 
 // Drag and drop (pointer users); keyboard users have the arrow buttons. Delegated like the mockup.
@@ -259,17 +242,17 @@ function dndHandlers(c) {
       e.preventDefault();
       const d = drag; drag = null; clearDragMarks();
       if (d.kind === 'chapter' && t.dataset.drop === 'chapter' && t.dataset.id !== d.id) {
-        const from = c.chapters.findIndex((x) => x.id === d.id); if (from < 0) return;
-        const [moved] = c.chapters.splice(from, 1);
-        c.chapters.splice(c.chapters.findIndex((x) => x.id === t.dataset.id), 0, moved);
+        const from = c.chapters.findIndex((x) => x.id === d.id); const to = c.chapters.findIndex((x) => x.id === t.dataset.id);
+        if (from >= 0 && to >= 0) moveBy(c, 'chapter', d.id, to - from).then(() => toast('Đã sắp xếp lại nội dung.'));
       } else if (d.kind === 'lesson') {
         if (t.dataset.drop === 'lesson' && t.dataset.id === d.id) return;
         const f = findLesson(c, d.id); if (!f) return;
-        f.ch.lessons.splice(f.i, 1);
-        if (t.dataset.drop === 'lesson') { const g = findLesson(c, t.dataset.id); g.ch.lessons.splice(g.i, 0, f.l); }
-        else { const ch = c.chapters.find((x) => x.id === t.dataset.id); ch.lessons.push(f.l); }
-      } else return;
-      contentChanged(c); persist(); Codi.ui.toast('Đã sắp xếp lại nội dung.');
+        const target = t.dataset.drop === 'lesson' ? findLesson(c, t.dataset.id) : null;
+        const chId = target ? target.ch.id : t.dataset.id;
+        if (chId !== f.ch.id) { toast('Chỉ sắp xếp được bài học trong cùng một chương. Hãy tạo bài mới ở chương đích.', { type: 'warn' }); return; }
+        const to = target ? target.i : f.ch.lessons.length - 1;
+        if (to !== f.i) moveBy(c, 'lesson', d.id, to - f.i).then(() => toast('Đã sắp xếp lại nội dung.'));
+      }
     },
   };
 }
@@ -303,7 +286,6 @@ function ContentTab({ c, query }) {
   const rr = reviewRound(c);
   const openFlags = (l) => reviewFlagsFor(rr, l.id).filter((x) => x.status === 'open');
   const flagBadge = (l) => { const n = openFlags(l); return n.length ? <Link className={`badge ${n.some((x) => x.severity === 'must') ? 'badge-danger' : 'badge-warn'}`} to={`/teach/courses/${c.id}/publish`}><Icon name="flag" />{n.length} góp ý từ quản trị</Link> : null; };
-  const aiPending = (l) => (l.quiz ? l.quiz.questions.filter((q) => q.aiGenerated && q.aiReviewed === false).length : 0);
   const hl = query && query.lesson;
   const dragAttrs = (kind, id) => (ro ? {} : { draggable: true, 'data-drag': kind, 'data-id': id });
   const startRename = (id) => { renaming = id; rerender(); };
@@ -320,13 +302,13 @@ function ContentTab({ c, query }) {
       <div className="tc-lesson-main">
         {renaming === l.id ? <RenameForm c={c} id={l.id} value={l.title} label="Tên bài học" /> : (
           <div className="stack-1"><span className="row small strong" style={{ gap: 8, flexWrap: 'wrap' }}><span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span>{l.title}{l.isFreePreview && <span className="badge badge-info">Học thử</span>}</span>
-            <span className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>{materialCount(l) ? `${materialCount(l)} tài liệu` : ''}{codeBadge(l)}{l.aiDraft && <span className="badge badge-neutral"><Icon name="sparkles" />AI soạn</span>}{flagBadge(l)}</span></div>
+            <span className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>{materialCount(l) ? `${materialCount(l)} tài liệu` : ''}{codeBadge(l)}{flagBadge(l)}</span></div>
         )}
       </div>
       <span className="tc-cell tc-type-cell small">{TYPE_LABEL[l.type] || 'Bài đọc'}</span>
       <span className="tc-cell tc-dur small mono">{Math.round(Number(l.durationMin) || 0)} phút</span>
       <span className="tc-cell tc-checks">
-        {l.quiz && <span className="badge badge-neutral">Quiz {l.quiz.questions.length} câu</span>}
+        {l.quiz && <span className="badge badge-neutral">Quiz {l.quiz.count} câu</span>}
         {l.assignment && <span className="badge badge-neutral">Bài tập</span>}
         {!l.quiz && !l.assignment && !l.code && <span className="xsmall muted">—</span>}
       </span>
@@ -363,13 +345,13 @@ function ContentTab({ c, query }) {
     </div>
   );
   const dnd = dndHandlers(c);
-  const enrolled = Codi.db().enrolments.filter((e) => e.courseId === c.id).length;
+  const enrolled = c.enrolledCount;
   return (
     <div className="stack-4" onDragStart={dnd.onDragStart} onDragEnd={dnd.onDragEnd} onDragOver={dnd.onDragOver} onDrop={dnd.onDrop}>
       <div className="card"><div className="card-body compact row-between" style={{ flexWrap: 'wrap', gap: 12 }}>
-        <div className="stack-1 small muted"><p>Dùng nút mũi tên để sắp xếp thứ tự chương và bài học. Bấm &quot;Chi tiết&quot; để biên tập nội dung bài và tài liệu.{ro ? '' : ' Bạn cũng có thể kéo thả biểu tượng ⋮⋮ để chuyển bài sang chương khác.'}</p>
+        <div className="stack-1 small muted"><p>Dùng nút mũi tên để sắp xếp thứ tự chương và bài học. Bấm &quot;Chi tiết&quot; để biên tập nội dung bài và tài liệu.{ro ? '' : ' Bạn cũng có thể kéo thả biểu tượng ⋮⋮ để sắp xếp trong cùng chương.'}</p>
           <p>Bài kiểm tra đầu vào (Diagnostic Test): {c.entryTest
-            ? <Link className="strong" to={`/teach/courses/${c.id}/quiz/entry`}>Đã có ({c.entryTest.questions.length} câu)</Link>
+            ? <Link className="strong" to={`/teach/courses/${c.id}/quiz/entry`}>Đã có ({c.entryTest.count} câu)</Link>
             : <Link className="strong text-danger" to={`/teach/courses/${c.id}/quiz/entry`}>Chưa có — Tạo bài kiểm tra đầu vào</Link>}</p></div>
         {addBar}</div></div>
       {!c.chapters.length && <div className="card"><Empty icon="layers" title="Khoá học chưa có nội dung" body="Bắt đầu bằng cách thêm chương đầu tiên, sau đó thêm các bài học lý thuyết, bài thực hành và câu hỏi trắc nghiệm." actions={ro ? null : <button type="button" className="btn btn-primary" onClick={() => addChapter(c)}><Icon name="plus" /> Thêm chương đầu tiên</button>} /></div>}
@@ -399,8 +381,8 @@ function ContentTab({ c, query }) {
       ))}
       {!ro && (
         <section className="card tc-danger"><div className="card-body row-between">
-          <div className="stack-1"><strong>Xoá khoá học</strong><span className="small muted">{enrolled ? `Khoá học có ${enrolled} học viên nên không thể xoá. Liên hệ quản trị viên nếu cần ẩn khoá học.` : 'Xoá vĩnh viễn khoá học và toàn bộ nội dung.'}</span></div>
-          <button type="button" className="btn btn-danger-outline" disabled={!!enrolled} onClick={() => deleteCourse(c)}>Xoá khoá học</button>
+          <div className="stack-1"><strong>Xoá khoá học</strong><span className="small muted">{enrolled ? `Khoá học có ${enrolled} học viên nên không thể xoá. Liên hệ quản trị viên nếu cần ẩn khoá học.` : c.status === 'published' ? 'Khoá học đang bán không thể xoá. Liên hệ quản trị viên nếu cần ẩn khoá học.' : 'Xoá vĩnh viễn khoá học và toàn bộ nội dung.'}</span></div>
+          <button type="button" className="btn btn-danger-outline" disabled={!!enrolled || c.status === 'published'} onClick={() => deleteCourse(c)}>Xoá khoá học</button>
         </div></section>
       )}
     </div>
@@ -409,6 +391,7 @@ function ContentTab({ c, query }) {
 
 // ───────────────────────── Thông tin ─────────────────────────
 let infoDraft = null;
+let infoSaving = false;
 /** Real handleSaveInfo + updateCourseInfo: title ≥ 5, summary ≥ 20, price a non-blank integer 0…2,147,483,647. */
 export function validateInfo(d) {
   const err = {};
@@ -418,14 +401,14 @@ export function validateInfo(d) {
   const n = Number(raw);
   if (!raw || !/^\d+$/.test(raw) || !Number.isSafeInteger(n) || n < 0) err.proposedPrice = 'Giá đề xuất phải là số nguyên không âm.';
   else if (n > PRICE_MAX) err.proposedPrice = 'Giá đề xuất phải là số nguyên không âm, không vượt quá 2.147.483.647 VND.';
-  if (!categoryOptions(d.originalCategoryId).some((x) => x.id === d.categoryId)) err.categoryId = 'Chọn một danh mục hợp lệ.';
+  if (!categoryOptions(d.originalCategory).includes(d.category)) err.category = 'Chọn một danh mục hợp lệ.';
   if (!LEVELS.some(([k]) => k === d.level)) err.level = 'Chọn trình độ hợp lệ.';
   return err;
 }
 function InfoTab({ c }) {
   useView();
   const ro = locked(c);
-  if (!infoDraft || infoDraft.id !== c.id) infoDraft = { id: c.id, title: c.title, summary: c.summary, categoryId: c.categoryId, originalCategoryId: c.categoryId, level: c.level, outcomes: (c.outcomes || []).join('\n'), requirements: (c.requirements || []).join('\n'), proposedPrice: c.proposedPrice === null || c.proposedPrice === undefined ? '' : String(c.proposedPrice), errors: {} };
+  if (!infoDraft || infoDraft.id !== c.id) infoDraft = { id: c.id, title: c.title, summary: c.summary, category: c.category, originalCategory: c.category, level: c.level, outcomes: (c.outcomes || []).join('\n'), requirements: (c.requirements || []).join('\n'), proposedPrice: c.proposedPrice === null || c.proposedPrice === undefined ? '' : String(c.proposedPrice), errors: {} };
   const d = infoDraft; const e = d.errors;
   const onInput = (ev) => {
     infoDraft[ev.target.name] = ev.target.value;
@@ -433,24 +416,31 @@ function InfoTab({ c }) {
     if (!guard.dirty) guard.dirty = { label: 'Thông tin khoá học', scope: '/teach/courses/' + c.id + '/info', reset: () => { infoDraft = null; } };
     rerender();
   };
-  const save = (ev) => {
+  const save = async (ev) => {
     ev.preventDefault();
-    if (ro) return;
+    if (ro || infoSaving) return;
     const err = validateInfo(d);
     d.errors = err;
     if (Object.keys(err).length) { rerender(); return; }
-    Object.assign(c, { title: d.title.trim(), summary: d.summary.trim(), categoryId: d.categoryId, level: d.level, outcomes: d.outcomes.split('\n').map((x) => x.trim()).filter(Boolean), requirements: d.requirements.split('\n').map((x) => x.trim()).filter(Boolean), proposedPrice: Number(String(d.proposedPrice).trim()) });
-    infoDraft = null; guard.dirty = null;
-    contentChanged(c); persist(); Codi.ui.toast('Đã lưu thông tin khoá học.', { type: 'success' });
+    infoSaving = true; rerender();
+    const lines = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean);
+    const r = await write(c.id, () => act('course', 'updateCourseInfo', c.id, {
+      title: d.title.trim(), summary: d.summary.trim(), category: d.category, level: d.level,
+      learningOutcomes: lines(d.outcomes), requirements: lines(d.requirements), proposedPrice: Number(String(d.proposedPrice).trim()),
+    }), { toast });
+    infoSaving = false;
+    if (r && r.success) { infoDraft = null; guard.dirty = null; toast('Đã lưu thông tin khoá học.', { type: 'success' }); }
+    else if (r && r.errors) d.errors = { ...r.errors, proposedPrice: r.errors.price || r.errors.proposedPrice };
+    rerender();
   };
   return (
-    <form className="card" onSubmit={save} noValidate data-dirty-scope>
+    <form className="card" onSubmit={save} noValidate data-dirty-scope aria-busy={infoSaving}>
       <div className="card-header"><h2 className="tc-h">Thông tin chi tiết khoá học</h2></div>
       <div className="card-body stack-4">
         <div className={`field ${e.title ? 'is-invalid' : ''}`}><label htmlFor="in-title">Tên khoá học</label><input id="in-title" name="title" value={d.title} onChange={onInput} disabled={ro} aria-invalid={!!e.title} /><FieldError>{e.title}</FieldError></div>
         <div className={`field ${e.summary ? 'is-invalid' : ''}`}><label htmlFor="in-sum">Mô tả ngắn</label><textarea id="in-sum" name="summary" rows={3} value={d.summary} onChange={onInput} disabled={ro} aria-invalid={!!e.summary} /><FieldError>{e.summary}</FieldError></div>
         <div className="grid-3" style={{ alignItems: 'start' }}>
-          <div className={`field ${e.categoryId ? 'is-invalid' : ''}`}><label htmlFor="in-cat">Danh mục</label><select id="in-cat" name="categoryId" value={d.categoryId} onChange={onInput} disabled={ro}>{categoryOptions(d.originalCategoryId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select><FieldError>{e.categoryId}</FieldError></div>
+          <div className={`field ${e.category ? 'is-invalid' : ''}`}><label htmlFor="in-cat">Danh mục</label><select id="in-cat" name="category" value={d.category} onChange={onInput} disabled={ro}>{categoryOptions(d.originalCategory).map((x) => <option key={x} value={x}>{x}</option>)}</select><FieldError>{e.category}</FieldError></div>
           <div className={`field ${e.level ? 'is-invalid' : ''}`}><label htmlFor="in-level">Trình độ</label><select id="in-level" name="level" value={d.level} onChange={onInput} disabled={ro}>{LEVELS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select><FieldError>{e.level}</FieldError></div>
           <div className={`field ${e.proposedPrice ? 'is-invalid' : ''}`}><label htmlFor="in-price">Giá đề xuất (VND)</label><input id="in-price" name="proposedPrice" type="number" min="0" step="10000" inputMode="numeric" value={d.proposedPrice} onChange={onInput} disabled={ro} aria-invalid={!!e.proposedPrice} />
             <p className="field-help">Quản trị viên xác nhận giá cuối cùng khi duyệt. Nhập 0 cho khoá miễn phí.{c.status === 'published' ? ` Giá đang bán: ${fmt.vnd(c.price)}.` : ''}</p><FieldError>{e.proposedPrice}</FieldError></div>
@@ -458,7 +448,7 @@ function InfoTab({ c }) {
         <div className="field"><label htmlFor="in-out">Học viên sẽ học được gì? (Mỗi dòng một ý)</label><textarea id="in-out" name="outcomes" rows={4} value={d.outcomes} onChange={onInput} disabled={ro} /></div>
         <div className="field"><label htmlFor="in-req">Yêu cầu trước khi học (Mỗi dòng một ý)</label><textarea id="in-req" name="requirements" rows={3} value={d.requirements} onChange={onInput} disabled={ro} /></div>
         {!ro && guard.dirty && (
-          <div className="row tc-savebar"><button className="btn btn-primary" type="submit"><Icon name="check" className="icon-sm" /> Lưu thay đổi</button><span className="small muted"><Icon name="alert-circle" className="icon-sm text-warn" /> Có thay đổi chưa lưu</span></div>
+          <div className="row tc-savebar"><button className="btn btn-primary" type="submit" disabled={infoSaving}>{infoSaving ? <><Icon name="loader" className="icon-sm" /> Đang lưu...</> : <><Icon name="check" className="icon-sm" /> Lưu thay đổi</>}</button><span className="small muted"><Icon name="alert-circle" className="icon-sm text-warn" /> Có thay đổi chưa lưu</span></div>
         )}
       </div>
     </form>
@@ -468,90 +458,66 @@ function InfoTab({ c }) {
 // ───────────────────────── Xuất bản ─────────────────────────
 /** Advisory notes that never gate submission (real publication-service advisory items). */
 export function readinessAdvice(c) {
-  const weak = ls(c).filter((l) => l.code && l.code.kind === 'challenge' && ((l.code.tests || []).length < 3 || !(l.code.tests || []).some((t) => t.hidden)));
+  const weak = ls(c).filter((l) => l.code && l.code.kind === 'challenge' && (l.code.tests < 3 || !l.code.hiddenTests));
   return weak.map((l) => ({ label: l.title, text: 'Bài code nên có ít nhất 3 test, trong đó có test ẩn cho trường hợp biên.', href: `/teach/courses/${c.id}/code/${l.id}` }));
-}
-export function readiness(c) {
-  const m = kmapOf(c);
-  const challenges = ls(c).filter((l) => l.code && l.code.kind === 'challenge');
-  // real rule: tests exist and the reference solution was verified (solutionVerifiedAt); older rows use solutionCheck
-  const verified = (code) => (code.tests || []).length > 0 && !!(code.solutionVerifiedAt || (code.solutionVerifiedAt === undefined && code.solutionCheck && code.solutionCheck.ok));
-  const badCode = challenges.filter((l) => !verified(l.code));
-  const codeItem = challenges.length ? [{ ok: !badCode.length, label: 'Bài code có test và lời giải chạy đạt', action: 'Mở bài code', hint: badCode.length ? `Lời giải mẫu chưa chạy đạt tất cả test. (${badCode.map((l) => `"${l.title}"`).join(', ')})` : '', href: badCode.length ? `/teach/courses/${c.id}/code/${badCode[0].id}` : '' }] : [];
-  // AI-generated questions must be reviewed by the lecturer before learners see them
-  const unreviewed = (quiz) => (quiz ? quiz.questions.filter((q) => q.aiGenerated && q.aiReviewed === false).length : 0);
-  const aiLessons = ls(c).filter((l) => unreviewed(l.quiz));
-  const aiCount = aiLessons.reduce((s, l) => s + unreviewed(l.quiz), 0) + unreviewed(c.entryTest);
-  const aiItem = aiCount ? [{ ok: false, label: 'Câu hỏi do AI tạo đã được duyệt', action: 'Duyệt câu hỏi', hint: `Còn ${aiCount} câu do AI tạo chưa duyệt.`, href: aiLessons.length ? `/teach/courses/${c.id}/quiz/${aiLessons[0].id}` : `/teach/courses/${c.id}/quiz/entry` }]
-    : ls(c).some((l) => l.quiz && l.quiz.questions.some((q) => q.aiGenerated)) ? [{ ok: true, label: 'Câu hỏi do AI tạo đã được duyệt' }] : [];
-  const assigns = ls(c).filter((l) => l.assignment);
-  const noRubric = assigns.filter((l) => !(l.assignment.rubric || []).length);
-  const rubricItem = assigns.length ? [{ ok: !noRubric.length, label: 'Bài tập có thang chấm', action: 'Thêm thang chấm', hint: `Cần thêm thang chấm: ${noRubric.map((l) => `"${l.title}"`).join(', ')}.`, href: noRubric.length ? `/teach/courses/${c.id}/content?lesson=${noRubric[0].id}` : '' }] : [];
-  return codeItem.concat(aiItem, rubricItem, [
-    { ok: (c.summary || '').trim().length >= 20, label: 'Mô tả khoá học', action: 'Viết mô tả', hint: 'Mô tả ít nhất 20 ký tự.', href: `/teach/courses/${c.id}/info` },
-    { ok: ls(c).length >= 1, label: 'Ít nhất 1 bài học', action: 'Thêm bài học', hint: 'Thêm chương và bài học.', href: `/teach/courses/${c.id}/content` },
-    { ok: c.proposedPrice !== null && c.proposedPrice !== undefined, label: 'Giá đề xuất', action: 'Nhập giá', hint: 'Nhập giá đề xuất (quản trị viên xác nhận giá cuối).', href: `/teach/courses/${c.id}/info` },
-    { ok: !!(c.entryTest && c.entryTest.questions.length >= ENTRY_MIN), label: `Bài kiểm tra đầu vào (≥ ${ENTRY_MIN} câu)`, action: 'Tạo bài kiểm tra', hint: c.entryTest ? `Hiện có ${c.entryTest.questions.length} câu.` : 'Chưa có bài kiểm tra đầu vào.', href: `/teach/courses/${c.id}/quiz/entry` },
-    { ok: m.status === 'confirmed', label: 'Bản đồ kiến thức đã xác nhận', action: 'Xem và xác nhận', hint: m.status === 'stale' ? 'Nội dung đã thay đổi sau khi xác nhận bản đồ.' : 'Xem lại và xác nhận bản đồ.', href: `/teach/courses/${c.id}/kmap` },
-  ]);
 }
 
 const CRIT_TXT = { pass: ['badge-success', 'Đạt'], fix: ['badge-danger', 'Cần sửa'], na: ['badge-neutral', 'Không áp dụng'] };
 const ROUND_STATUS = { in_review: ['badge-info', 'Đang duyệt'], changes_requested: ['badge-warn', 'Yêu cầu sửa'], approved: ['badge-success', 'Đã duyệt'], rejected: ['badge-danger', 'Từ chối'] };
-const latestRound = (c) => (Codi.review && Codi.review.latest ? Codi.review.latest(c) : null);
-/** Changes requested comes from the newest decided review round (the seed has no course-level outcome flag). */
+/** Changes requested comes from the newest decided review round. */
 const changesRequested = (c) => c.status === 'rejected' && (c.reviewOutcome === 'changes' || (reviewRound(c) || {}).status === 'changes_requested');
 
 async function flagFixed(c, id) {
-  const f = reviewRound(c)?.flags.find((x) => x.id === id); if (!f) return;
+  const f = (reviewRound(c) || { flags: [] }).flags.find((x) => x.id === id); if (!f) return;
   const returned = (r) => c.status === 'rejected' && r && ['changes_requested', 'rejected'].includes(r.status);
-  if (!returned(reviewRound(c))) { Codi.ui.toast('Chỉ có thể phản hồi góp ý của vòng mới nhất đã trả về để chỉnh sửa.', { type: 'danger' }); return; }
+  if (!returned(reviewRound(c))) { toast('Chỉ có thể phản hồi góp ý của vòng mới nhất đã trả về để chỉnh sửa.', { type: 'danger' }); return; }
   const r = await promptReason({
     title: 'Đánh dấu góp ý đã sửa?',
-    body: <p className="small"><strong>{f.target.label}</strong><br /><span className="muted">{f.comment}</span></p>,
+    body: <p className="small"><strong>{(f.target && f.target.label) || f.targetLabel}</strong><br /><span className="muted">{f.comment}</span></p>,
     label: 'Bạn đã chỉnh sửa nội dung gì?', help: 'Ít nhất 5 ký tự để người duyệt nắm rõ nội dung đã sửa.', min: 5,
     error: 'Vui lòng mô tả bạn đã sửa gì (ít nhất 5 ký tự).', placeholder: 'Ví dụ: đã đổi đáp án đúng thành "Thêm use client" và cập nhật giải thích.',
     confirmLabel: 'Xác nhận đã sửa',
   });
   if (!r.ok || f.status !== 'open') return;
-  Object.assign(f, { status: 'fixed', reply: r.reason, repliedAt: new Date().toISOString() });
-  persist(); Codi.ui.toast('Đã đánh dấu đã sửa.', { type: 'success' });
+  await write(c.id, () => act('publish', 'markFlagFixed', c.id, f.id, r.reason), { toast, okMessage: 'Đã đánh dấu đã sửa.' });
 }
-function flagReopen(c, id) {
-  const f = reviewRound(c)?.flags.find((x) => x.id === id); if (!f || f.status !== 'fixed' || c.status !== 'rejected') return;
-  Object.assign(f, { status: 'open', reply: '' }); persist();
+async function flagReopen(c, id) {
+  const f = (reviewRound(c) || { flags: [] }).flags.find((x) => x.id === id); if (!f || f.status !== 'fixed' || c.status !== 'rejected') return;
+  await write(c.id, () => act('publish', 'reopenFlag', c.id, f.id), { toast });
 }
 
 /** Result of the last decided review round: criterion verdicts + flags the lecturer works through. */
 function ReviewBlock({ c }) {
-  const R = Codi.review; const r = reviewRound(c);
-  if (!r || !R) return null;
+  const r = reviewRound(c);
+  if (!r) return null;
   const canMark = c.status === 'rejected';
-  const open = r.flags.filter((f) => f.status === 'open');
+  const all = r.flags || [];
+  const open = all.filter((f) => f.status === 'open');
   const order = { open: 0, fixed: 1, closed: 2 };
-  const flags = r.flags.slice().sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3) || (a.severity === 'must' ? 0 : 1) - (b.severity === 'must' ? 0 : 1));
+  const flags = all.slice().sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3) || (a.severity === 'must' ? 0 : 1) - (b.severity === 'must' ? 0 : 1));
   const rs = ROUND_STATUS[r.status];
+  const criteria = r.criteria || {};
   return (
     <section className="card tc-review" aria-labelledby="tc-review-h">
-      <div className="card-header"><div className="stack-1"><span className="row" style={{ gap: 8 }}><h2 className="tc-h" id="tc-review-h">Kết quả kiểm duyệt lần {r.round}</h2>{rs && <span className={`badge ${rs[0]}`}>{rs[1]}</span>}</span><span className="xsmall muted">{r.decidedAt ? fmt.datetime(r.decidedAt) : ''}{r.note ? ` · ${r.note}` : ''}</span></div>
-        {open.length ? <span className="badge badge-warn">{open.length} góp ý cần xử lý</span> : r.flags.length ? <span className="badge badge-success">Đã xử lý mọi góp ý</span> : null}</div>
+      <div className="card-header"><div className="stack-1"><span className="row" style={{ gap: 8 }}><h2 className="tc-h" id="tc-review-h">Kết quả kiểm duyệt lần {r.round}</h2>{rs && <span className={`badge ${rs[0]}`}>{rs[1]}</span>}</span><span className="xsmall muted">{r.reviewedAt ? fmt.datetime(r.reviewedAt) : ''}{r.reviewNote ? ` · ${r.reviewNote}` : ''}</span></div>
+        {open.length ? <span className="badge badge-warn">{open.length} góp ý cần xử lý</span> : all.length ? <span className="badge badge-success">Đã xử lý mọi góp ý</span> : null}</div>
       <div className="card-body stack-4">
         <div className="stack-2"><strong className="small">Tiêu chí</strong>
-          <ul className="rv-crit">{(R.CRITERIA || []).map((k) => {
-            const v = r.criteria[k.id] || {}; const t = CRIT_TXT[v.status];
+          <ul className="rv-crit">{CRITERIA.map((k) => {
+            const v = criteria[k.id] || {}; const t = CRIT_TXT[v.status];
             return <li key={k.id} className="rv-crit-row"><div className="rv-crit-main"><span className="small strong">{k.label}</span>{v.note && <span className="xsmall">{v.note}</span>}</div>{t ? <span className={`badge ${t[0]}`}>{t[1]}</span> : <span className="badge badge-neutral">Chưa chấm</span>}</li>;
           })}</ul></div>
         {flags.length > 0 && (
           <div className="stack-2"><strong className="small">Góp ý chi tiết</strong>
             <ul className="rv-flags">{flags.map((f) => (
               <li key={f.id} className={`rv-flag ${f.status !== 'open' ? 'is-closed' : ''}`}>
-                <div className="row-between"><span className="row" style={{ gap: 8, flexWrap: 'wrap' }}><span className={`badge ${f.severity === 'must' ? 'badge-danger' : 'badge-warn'}`}>{(R.SEVERITY || {})[f.severity] || f.severity}</span><span className="badge badge-neutral">{(R.FLAG_STATUS || {})[f.status] || f.status}</span>
+                <div className="row-between"><span className="row" style={{ gap: 8, flexWrap: 'wrap' }}><span className={`badge ${f.severity === 'must' ? 'badge-danger' : 'badge-warn'}`}>{SEVERITY[f.severity] || f.severity}</span><span className="badge badge-neutral">{FLAG_STATUS[f.status] || f.status}</span>
                   {f.source === 'ai' && <span className="badge badge-accent"><Icon name="sparkles" />AI đề xuất</span>}{f.carried && <span className="badge badge-neutral">Vòng trước</span>}</span>
-                  <span className="xsmall muted">{f.at ? fmt.datetime(f.at) : ''}</span></div>
-                <span className="rv-flag-target small strong">{f.target.label}</span>
+                  <span className="xsmall muted">{f.createdAt ? fmt.datetime(f.createdAt) : ''}</span></div>
+                <span className="rv-flag-target small strong">{(f.target && f.target.label) || f.targetLabel}</span>
                 <p className="small">{f.comment}</p>
-                {f.reply && <p className="rv-reply small"><strong>Bạn đã phản hồi:</strong> {f.reply}</p>}
-                <div className="row" style={{ gap: 8 }}>{R.targetHref && <Link className="btn btn-secondary btn-sm" to={R.targetHref(c, f.target)}><Icon name="external-link" className="icon-sm" /> Mở để sửa</Link>}
+                {(f.reply || f.lecturerReply) && <p className="rv-reply small"><strong>Bạn đã phản hồi:</strong> {f.reply || f.lecturerReply}</p>}
+                <div className="row" style={{ gap: 8 }}><Link className="btn btn-secondary btn-sm" to={targetHref(c, f.target)}><Icon name="external-link" className="icon-sm" /> Mở để sửa</Link>
                   {!canMark ? null : f.status === 'open' ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => flagFixed(c, f.id)}><Icon name="check" className="icon-sm" /> Đánh dấu đã sửa</button>
                     : f.status === 'fixed' ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => flagReopen(c, f.id)}>Bỏ đánh dấu</button> : null}</div></li>
             ))}</ul></div>
@@ -565,15 +531,8 @@ async function submitForReview(c) {
   if (!readiness(c).every((x) => x.ok)) return;
   const r = await Codi.ui.confirm({ title: c.status === 'rejected' ? 'Sửa và gửi lại?' : 'Gửi yêu cầu xuất bản?', body: `"${c.title}" sẽ chuyển sang Chờ duyệt.`, consequence: 'Trong lúc chờ duyệt, nội dung khoá học ở chế độ chỉ đọc. Quản trị viên sẽ kiểm tra nội dung và xác nhận giá bán hoặc gửi góp ý.', reversible: 'Sau khi có kết quả, bạn có thể chỉnh sửa như bình thường.', confirmLabel: c.status === 'rejected' ? 'Sửa và gửi lại' : 'Gửi yêu cầu' });
   if (!r.ok) return;
-  const R = Codi.review;
-  const prev = latestRound(c);
-  c.status = 'pending'; c.submittedAt = new Date().toISOString(); c.rejectReason = null; c.reviewOutcome = null;
-  // resubmission opens a new review round; open/fixed flags are carried over for the reviewer to verify
-  if ((!prev || prev.status !== 'in_review') && R && R.startNextRound) R.startNextRound(c, prev);
-  const fixed = prev ? prev.flags.filter((f) => f.status === 'fixed').length : 0;
-  const admin = Codi.db().users.find((u) => u.role === 'admin');
-  if (admin) Codi.notify(admin.id, { title: prev ? `Gửi lại sau góp ý (lần ${prev.round + 1})` : 'Yêu cầu xuất bản mới', body: `${c.title} — ${me().name}${fixed ? ` · đã sửa ${fixed} góp ý` : ''}`, link: '/admin/publication?id=' + c.id });
-  persist(); Codi.ui.toast('Đã gửi yêu cầu xuất bản.', { type: 'success' });
+  // the backend opens the review round, carries open flags over and notifies the admins
+  await write(c.id, () => act('publish', 'submitCourseForPublication', c.id), { toast, okMessage: 'Đã gửi yêu cầu xuất bản.' });
 }
 
 function PublishTab({ c }) {
@@ -589,7 +548,7 @@ function PublishTab({ c }) {
   }[c.status];
   const canSubmit = ['draft', 'rejected'].includes(c.status);
   const rr = reviewRound(c);
-  const openMust = !!rr && rr.flags.some((f) => f.status === 'open' && f.severity === 'must');
+  const openMust = !!rr && (rr.flags || []).some((f) => f.status === 'open' && f.severity === 'must');
   const infoLabels = STEPS[0].labels; const kmapLabels = STEPS[2].labels;
   const groups = [
     ['Thông tin', items.filter((x) => infoLabels.includes(x.label))],
@@ -597,6 +556,7 @@ function PublishTab({ c }) {
     ['Bản đồ kiến thức', items.filter((x) => kmapLabels.includes(x.label))],
   ];
   const blockers = items.filter((x) => !x.ok);
+  const advice = readinessAdvice(c);
   return (
     <div className="stack-4">
       {status}
@@ -629,17 +589,30 @@ function PublishTab({ c }) {
                 <span className={`badge ${x.ok ? 'badge-success' : 'badge-warn'}`}>{x.ok ? 'Đạt' : 'Chưa đạt'}</span></li>
             ))}</ul></div>
         ))}</div></section>
-      {readinessAdvice(c).length > 0 && <section className="card"><div className="card-header"><h2 className="tc-h">Gợi ý thêm</h2><span className="xsmall muted">Không bắt buộc để gửi duyệt</span></div>
-        <ul className="list">{readinessAdvice(c).map((x) => <li key={x.href} className="list-row"><Icon name="info" className="text-info" /><div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.text}</span></div><Link className="btn btn-ghost btn-sm" to={x.href}>Mở</Link></li>)}</ul></section>}
+      {advice.length > 0 && <section className="card"><div className="card-header"><h2 className="tc-h">Gợi ý thêm</h2><span className="xsmall muted">Không bắt buộc để gửi duyệt</span></div>
+        <ul className="list">{advice.map((x) => <li key={x.href} className="list-row"><Icon name="info" className="text-info" /><div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.text}</span></div><Link className="btn btn-ghost btn-sm" to={x.href}>Mở</Link></li>)}</ul></section>}
       {canSubmit && openMust && <Alert type="warn" title="Còn góp ý bắt buộc" body={'Khoá học còn góp ý "Bắt buộc sửa" chưa được xử lý. Vui lòng chỉnh sửa nội dung và đánh dấu đã sửa để đảm bảo khoá học được duyệt.'} />}
     </div>
   );
 }
 
+/** Loading / not-found / error frame shared by the course-scoped lecturer screens. */
+export function courseGate(state, retry) {
+  if (state.c) return null;
+  if (state.error) {
+    const st = state.error.status;
+    if (st === 403 || st === 404 || /Không tìm thấy/.test(state.error.message || '')) return notMine();
+    return shell('/teach/courses', <LoadError error={state.error} onRetry={retry} />);
+  }
+  return shell('/teach/courses', <Loading rows={5} label="Đang tải khoá học…" />);
+}
+
 export function CourseEditorPage({ params, query }) {
   useCodi();
-  const c = Codi.course(params.courseId);
-  if (!isMine(c)) return notMine();
+  const state = useCourse(params.courseId);
+  const gate = courseGate(state, () => reloadCourse(params.courseId));
+  if (gate) return gate;
+  const c = state.c;
   const tab = TABS.some(([k]) => k === params.tab) ? params.tab : 'content';
   const body = { content: <ContentTab c={c} query={query} />, info: <InfoTab c={c} />, kmap: <KmapTab c={c} />, publish: <PublishTab c={c} /> }[tab];
   return shell('/teach/courses', <><EditorHeader c={c} tab={tab} />{body}</>);

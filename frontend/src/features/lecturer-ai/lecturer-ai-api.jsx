@@ -12,10 +12,9 @@
  *                                                            → review (real accept/discard gate) → apply
  *   generateQuestions(course, lesson, { count, difficulty }) → question[] (aiGenerated, aiReviewed:false, 4 options)
  *   suggestRubric(instructions, maxScore) → rubric[] ({ id, name, points, desc })
- *   suggestTests(code) → Promise<test[]>   real generateAiCodingTestCases: function name from the solution
- *                        (fallback "solution"), candidates f([]) f(0) f("") f(-1) f([1, 2, 3]) f(null) minus existing
- *                        calls, first 3 run with the solution, keep the ones that return. Each test:
- *                        { id, name: "Trường hợp biên: <call>", call, expectedText, step: 0, hidden: true, isSample: false, ok: true }
+ *   suggestTests(code, courseId, lessonId) → Promise<test[]>   backend generateAiCodingTestCases (boundary calls run
+ *                        with the solution in the backend sandbox). Each test:
+ *                        { id, name, call, expected, expectedText, step: 0, hidden: true, isSample: false, ok: true }
  *                        Throws when the solution is empty.
  *   gradeSuggestion(submission, assignment) → { scores: { [criterionId]: points }, feedback }   (legacy sync helper)
  *   task({ onStart, onDone, onError, onLimit }, produce, ms?) → { stop() }   scenario-aware async runner
@@ -84,25 +83,15 @@ function suggestRubric(instructions, maxScore) {
   let used = 0;
   return parts.map(([name, w, desc], i) => { const pts = i === parts.length - 1 ? max - used : Math.round(max * w * 2) / 2; used += pts; return { id: Codi.uid('r'), name, points: pts, desc }; });
 }
-// Real generateAiCodingTestCases (deterministic, JavaScript only). Expected values come from the solution,
-// so the lecturer should still check them against the brief.
-async function suggestTests(code) {
+async function suggestTests(code, courseId, lessonId) {
   const solution = String((code && code.solution) || '');
   if (!solution.trim()) throw new Error('Cần có lời giải mẫu để chạy thử và sinh test case biên.');
-  const m = /function\s+([a-zA-Z0-9_$]+)\s*\(([^)]*)\)/.exec(solution);
-  const fn = m ? m[1] : 'solution';
-  const existing = new Set(((code && code.tests) || []).map((t) => String(t.call || '').replace(/\s+/g, '')));
-  const calls = [`${fn}([])`, `${fn}(0)`, `${fn}("")`, `${fn}(-1)`, `${fn}([1, 2, 3])`, `${fn}(null)`]
-    .filter((call) => !existing.has(call.replace(/\s+/g, '')))
-    .slice(0, 3);
-  if (!calls.length || !(Codi.code && Codi.code.run)) return [];
+  const r = await Codi.teach.act('code', 'generateAiCodingTestCases', courseId, lessonId, {
+    solutionCode: solution, instructions: (code && code.instructions) || [],
+    existingTests: ((code && code.tests) || []).map((t) => ({ name: t.name, call: t.call, expected: t.expected })),
+  });
   const stamp = Date.now().toString(36);
-  const probes = calls.map((call, i) => ({ id: `ai-test-${stamp}-${i}`, name: `Trường hợp biên: ${call}`, call }));
-  const res = await Codi.code.run(solution, probes, { language: 'javascript' });
-  const by = {}; ((res && res.results) || []).forEach((r) => { by[r.id] = r; });
-  return probes
-    .filter((p) => by[p.id] && by[p.id].ok && typeof by[p.id].actual === 'string')
-    .map((p) => ({ ...p, expectedText: by[p.id].actual, step: 0, hidden: true, isSample: false, ok: true }));
+  return ((r && r.tests) || []).map((t, i) => ({ id: `ai-test-${stamp}-${i}`, name: t.name, call: t.call, expected: t.expected, expectedText: t.expectedText, step: 0, hidden: true, isSample: false, ok: true }));
 }
 function gradeSuggestion(sub, a) {
   const strong = (sub.link ? 1 : 0) + (sub.fileName ? 1 : 0) + ((sub.note || '').length > 20 ? 1 : 0);
@@ -115,10 +104,11 @@ function gradeSuggestion(sub, a) {
 
 // ───────────────────────── import sheet ─────────────────────────
 let imp = null; let handle = null; let job = null;
-const OUT = { summary: 'Tóm tắt bài đọc', quiz: 'Câu hỏi quiz', concepts: 'Khái niệm của bài' };
+// Concept suggestions are not offered: Codi has no action that adds knowledge-map concepts outside its (disabled) analysis.
+const OUT = { summary: 'Tóm tắt bài đọc', quiz: 'Câu hỏi quiz' };
 // The sheet body/footer read the module state; update({}) re-evaluates them.
 const refresh = () => { if (handle) handle.update({}); };
-const target = () => { const c = Codi.course(imp.courseId); return { c, l: Codi.lesson(c, imp.lessonId) }; };
+const target = () => { const T = Codi.teach || {}; const c = T.course ? T.course(imp.courseId) : null; const f = c && T.findLesson ? T.findLesson(c, imp.lessonId) : null; return { c, l: f ? f.l : null }; };
 
 function ImportBody() {
   if (!imp) return null;
@@ -156,7 +146,7 @@ function ImportBody() {
             {Object.keys(OUT).map((k) => (
               <label key={k} className="check">
                 <input type="checkbox" checked={!!imp.opts[k]} onChange={(e) => { imp.opts[k] = e.target.checked; refresh(); }} /> {OUT[k]}
-                {k === 'summary' && l.reading ? <> <span className="xsmall muted">(sẽ thay bài đọc hiện tại)</span></> : null}
+                {k === 'summary' && l.type === 'reading' ? <> <span className="xsmall muted">(sẽ thay bài đọc hiện tại)</span></> : null}
               </label>
             ))}
             {imp.opts.quiz && (
@@ -275,26 +265,23 @@ function generate() {
   }, () => ({
     summary: cur.opts.summary ? { text: summaryFor(c, l, cur.file.name), state: 'pending' } : null,
     items: cur.opts.quiz ? toReviewItems(generateQuestions(c, l, cur.opts)) : [],
-    concepts: cur.opts.concepts ? conceptsFor(c, l) : [],
+    concepts: [],
   }), 1600);
 }
-function apply() {
-  const { c, l } = target(); const r = imp.result; const file = imp.file;
+async function apply() {
+  const { c, l } = target(); const r = imp.result; const T = Codi.teach || {};
+  if (!c || !l || !T.saveLessonBody) { Codi.ui.toast('Không tìm thấy bài học trong khoá học này.', { type: 'danger' }); return; }
   let n = 0;
-  Codi.set((s) => {
-    l.material = { fileName: file.name, kind: (file.name.split('.').pop() || 'pdf').toLowerCase(), pages: file.pages };
-    if (r.summary && r.summary.state === 'accepted') { l.reading = r.summary.text; n += 1; }
-    const qs = acceptedItems(r).map((it) => ({ ...it.question, aiGenerated: true, aiReviewed: true }));
-    if (qs.length) { if (!l.quiz) l.quiz = { id: l.id + '-quiz', passingScore: 70, questions: [] }; l.quiz.questions.push(...qs); n += qs.length; }
-    const ks = r.concepts.filter((k) => k.state === 'accepted');
-    if (ks.length) {
-      const db = s.db; if (!db.knowledgeMaps) db.knowledgeMaps = {};
-      const m = db.knowledgeMaps[c.id] || (db.knowledgeMaps[c.id] = { status: 'ready', updatedAt: now(), concepts: [], edges: [] });
-      ks.forEach((k) => { if (!m.concepts.some((x) => x.name === k.name)) m.concepts.push({ id: Codi.uid('k'), name: k.name, lessonIds: [l.id], review: 'suggested' }); });
-      if (m.status === 'confirmed') m.status = 'ready'; n += ks.length;
-    }
-    if (Codi.teach && Codi.teach.contentChanged) Codi.teach.contentChanged(c);
-  });
+  try {
+    if (r.summary && r.summary.state === 'accepted') { await T.saveLessonBody(c.id, l.id, r.summary.text); n += 1; }
+    const qs = acceptedItems(r).map((it) => it.question);
+    if (qs.length) { await T.appendQuizQuestions(c.id, l.id, qs); n += qs.length; }
+  } catch (e) {
+    Codi.ui.toast((e && e.message) || 'Không thể thêm nội dung vào bài học.', { type: 'danger' });
+    if (T.reloadCourse) T.reloadCourse(c.id);
+    return;
+  }
+  if (T.reloadCourse) T.reloadCourse(c.id);
   const done = imp.onApplied;
   handle.close();
   if (done) done();
@@ -303,7 +290,7 @@ function apply() {
 
 function openImport(courseId, lessonId, opts) {
   if (handle) handle.close();
-  imp = { courseId, lessonId, onApplied: opts && opts.onApplied, step: 'upload', opts: { summary: true, quiz: true, concepts: true, count: 5, difficulty: 'medium' }, outline: [], result: null };
+  imp = { courseId, lessonId, onApplied: opts && opts.onApplied, step: 'upload', opts: { summary: true, quiz: true, count: 5, difficulty: 'medium' }, outline: [], result: null };
   handle = Codi.ui.sheet({
     title: 'Tạo nội dung từ tài liệu', wide: true,
     body: () => <ImportBody />,

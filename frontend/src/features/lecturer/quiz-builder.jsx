@@ -2,12 +2,14 @@
 // quiz-builder-client.tsx: 2–6 options (4 blank by default), collapsed explanation, inline errors, entry-test
 // warning card and per-question lesson links, batch import. AI generation with its accept/discard review gate is
 // owned by the lecturer-ai feature and mounted through Codi.lecturerAI.quizReview (see AiQuizSlot).
-import { useMemo, useRef, useState } from 'react';
+// Backend: getQuizBuilderData / saveQuizData (each save writes a new quiz revision, so learner history is kept).
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Empty, Icon } from '../../components/ui/primitives';
-import { shell, notMine, isMine, locked, persist, guard, lecturerAI, ENTRY_MIN, FieldError } from './teach-api';
+import { shell, notMine, guard, lecturerAI, ENTRY_MIN, FieldError, Loading, LoadError } from './teach-api';
 import { rerender, useView } from './view-store';
+import { act, reloadCourse, reloadMine } from './teach-data';
 import { parseQuizImport, DEFAULT_MAX_QUIZ_OPTIONS } from './quiz-import';
 
 let qb = null; // { key, courseId, lessonId, isEntry, quiz, errors, openExplain:Set }
@@ -145,25 +147,45 @@ function advisories(quiz) {
   return out;
 }
 
+/** Loads getQuizBuilderData for one lesson quiz or the entry test. */
+function useQuizData(courseId, lessonId) {
+  const [st, setSt] = useState({ data: null, error: null });
+  const load = useCallback(async () => {
+    setSt({ data: null, error: null });
+    try { setSt({ data: await act('course', 'getQuizBuilderData', courseId, lessonId), error: null }); }
+    catch (error) { setSt({ data: null, error }); }
+  }, [courseId, lessonId]);
+  useEffect(() => { load(); }, [load]);
+  return { ...st, reload: load };
+}
+
 export function QuizBuilderPage({ params }) {
   useCodi(); useView();
+  const qd = useQuizData(params.courseId, params.lessonId);
+  if (!qd.data) {
+    if (qd.error && (qd.error.status === 403 || qd.error.status === 404 || /Không tìm thấy/.test(qd.error.message || ''))) return notMine();
+    return shell('/teach/courses', qd.error ? <LoadError error={qd.error} onRetry={qd.reload} /> : <Loading rows={4} label="Đang tải bài trắc nghiệm…" />);
+  }
+  return <QuizBuilder params={params} data={qd.data} />;
+}
+
+function QuizBuilder({ params, data }) {
   const focusNext = useRef(null);
-  const c = Codi.course(params.courseId);
-  if (!isMine(c)) return notMine();
+  const c = data.course;
   const isEntry = params.lessonId === 'entry';
-  const lesson = isEntry ? null : Codi.lesson(c, params.lessonId);
+  const lesson = isEntry ? null : data.lesson;
   if (!isEntry && !lesson) return notMine();
   const key = qbKey(c.id, params.lessonId);
   if (!qb || qb.key !== key) {
-    const src = isEntry ? c.entryTest : lesson.quiz;
-    const quiz = src ? JSON.parse(JSON.stringify(src)) : { id: isEntry ? c.id + '-entry' : lesson.id + '-quiz', passingScore: 70, questions: [] };
-    quiz.passingScore = quiz.passingScore || 70;
-    quiz.questions.forEach((q) => { q.explanation = q.explanation || ''; if (isEntry && q.lessonId === undefined) q.lessonId = null; });
-    qb = { key, courseId: c.id, lessonId: params.lessonId, isEntry, quiz, errors: null, openExplain: new Set() };
+    const quiz = {
+      passingScore: data.passingScore || 70,
+      questions: (data.questions || []).map((q) => ({ id: q.id, text: q.text || '', options: (q.options || []).slice(), correctIndex: q.correctIndex < 0 ? 0 : q.correctIndex, explanation: q.explanation || '', ...(isEntry ? { lessonId: q.lessonId || null } : {}) })),
+    };
+    qb = { key, courseId: c.id, lessonId: params.lessonId, isEntry, quiz, errors: null, openExplain: new Set(), saving: false };
   }
-  const quiz = qb.quiz; const ro = locked(c); const errs = qb.errors || { questions: {} };
+  const quiz = qb.quiz; const ro = !!data.isLocked || c.status === 'pending'; const errs = qb.errors || { questions: {} };
   const dirty = !!guard.dirty && guard.dirty.scope === '/teach/courses/' + c.id + '/quiz/';
-  const courseLessons = c.chapters.flatMap((ch) => ch.lessons.map((l) => ({ id: l.id, title: l.title, chapter: ch.title })));
+  const courseLessons = (data.allCourseLessons || []).map((l) => ({ id: l.id, title: l.title, chapter: l.chapterTitle }));
 
   const addQuestion = () => {
     change(() => quiz.questions.push(blankQuestion(isEntry)));
@@ -184,16 +206,24 @@ export function QuizBuilderPage({ params }) {
     if (q.options.length <= 2) { Codi.ui.toast('Mỗi câu hỏi cần tối thiểu 2 phương án lựa chọn.', { type: 'danger' }); return; }
     change(() => { q.options.splice(k, 1); if (q.correctIndex === k) q.correctIndex = 0; else if (q.correctIndex > k) q.correctIndex -= 1; });
   };
-  const save = () => {
-    if (ro) return;
+  const save = async () => {
+    if (ro || qb.saving) return;
     if (!quiz.questions.length) { Codi.ui.toast('Vui lòng thêm ít nhất một câu hỏi.', { type: 'danger' }); return; }
     const v = validateQuiz(quiz);
     if (v) { qb.errors = v; rerender(); Codi.ui.toast('Quiz chưa hợp lệ — xem các lỗi được đánh dấu.', { type: 'danger' }); return; }
-    const clean = JSON.parse(JSON.stringify(quiz));
-    clean.passingScore = Number(clean.passingScore);
-    if (qb.isEntry) c.entryTest = Object.assign(clean, { title: 'Bài kiểm tra đầu vào', isEntryTest: true });
-    else Codi.lesson(c, qb.lessonId).quiz = clean;
-    guard.dirty = null; const wasEntry = qb.isEntry; resetQb(); persist(false);
+    const cur = qb; cur.saving = true; rerender();
+    try {
+      await act('course', 'saveQuizData', c.id, cur.isEntry ? 'entry' : cur.lessonId, {
+        passingScore: Number(quiz.passingScore), isEntry: cur.isEntry,
+        questions: quiz.questions.map((q) => ({ text: q.text, explanation: q.explanation || '', correctIndex: q.correctIndex, options: q.options, ...(cur.isEntry ? { lessonId: q.lessonId || null } : {}), aiGenerated: !!q.aiGenerated, aiReviewed: q.aiReviewed !== false })),
+      });
+    } catch (e) {
+      cur.saving = false; rerender();
+      Codi.ui.toast((e && e.message) || 'Không thể lưu bài trắc nghiệm.', { type: 'danger' });
+      return;
+    }
+    guard.dirty = null; const wasEntry = cur.isEntry; resetQb();
+    reloadCourse(c.id); reloadMine();
     Codi.ui.toast(wasEntry ? 'Đã lưu Bài kiểm tra đầu vào thành công!' : 'Đã lưu Quiz bài học thành công!', { type: 'success' });
     Codi.go('/teach/courses/' + c.id + '/content');
   };
@@ -207,7 +237,7 @@ export function QuizBuilderPage({ params }) {
           {ro && <span className="badge badge-warn">Đang chờ duyệt — Chỉ đọc</span>}</div>
         <p className="small muted">{isEntry ? 'Bài kiểm tra giúp hệ thống BKT phân tích kỹ năng và đề xuất lộ trình học thích ứng cho từng học viên.' : 'Kiểm tra kiến thức cốt lõi ngay sau khi học viên hoàn thành nội dung bài học.'}</p></div>
       {!ro && <div className="row" style={{ gap: 12 }}>{dirty && <span className="small muted row" style={{ gap: 4 }}><Icon name="alert-circle" className="icon-sm text-warn" /> Có thay đổi chưa lưu</span>}
-        <button type="button" className="btn btn-primary" onClick={save}><Icon name="save" className="icon-sm" /> Lưu bài trắc nghiệm</button></div>}
+        <button type="button" className="btn btn-primary" onClick={save} disabled={qb.saving} aria-busy={qb.saving || undefined}>{qb.saving ? <><Icon name="loader" className="icon-sm" /> Đang lưu...</> : <><Icon name="save" className="icon-sm" /> Lưu bài trắc nghiệm</>}</button></div>}
     </div>
     {ro && <div style={{ marginBottom: 16 }}><Alert type="warn" title="Khoá học đang chờ duyệt" body="Bạn đang xem nội dung ở chế độ chỉ đọc. Để chỉnh sửa bài quiz, hãy đợi ban quản trị hoàn tất quá trình duyệt hoặc yêu cầu bổ sung." /></div>}
     <div className="tc-qb" data-dirty-scope>

@@ -6,57 +6,43 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { act, cachedCourse, mineNow, reloadCourse, reloadMine, useMine } from './teach-data';
 import { Workspace, Empty, Icon, Alert } from '../../components/ui/primitives';
 import './lecturer.css';
 
-export const me = () => Codi.currentUser();
-export const myCourses = () => { const u = me(); return u ? Codi.db().courses.filter((c) => c.lecturerId === u.id) : []; };
-export const isMine = (c) => !!c && !!me() && c.lecturerId === me().id;
-export const byCourse = (list) => { const ids = new Set(myCourses().map((c) => c.id)); return (list || []).filter((x) => ids.has(x.courseId)); };
-/** Commits in-place mutations of Codi.db() (sync + re-render). */
-export const persist = (render) => Codi.set(() => {}, { render: render !== false });
+/** Signed-in lecturer from the backend session ({ id, name, email, image }). */
+export const me = () => (Codi.session && Codi.session.user) || null;
+/** Lecturer's courses from the backend list (LecturerCourseItem[]); empty until loaded. */
+export const myCourses = () => mineNow().list || [];
 
 export const TYPE_ICON = { video: 'video', pdf: 'presentation', reading: 'book-open', tutorial: 'terminal', code: 'code' };
 export const TYPE_LABEL = { video: 'Video', pdf: 'Slide/PDF', reading: 'Bài đọc', tutorial: 'Hướng dẫn code', code: 'Bài code' };
-export const MATERIAL_TYPES = ['video', 'pdf', 'reading']; // coding lessons are edited in the code editor route
 export const ENTRY_MIN = 5; // entry test needs at least this many questions to personalise (A5)
 export const LEVELS = [['Beginner', 'Cơ bản'], ['Intermediate', 'Trung cấp'], ['Advanced', 'Nâng cao']];
 export const levelLabel = (k) => (LEVELS.find(([v]) => v === k) || [k, k])[1];
-/** Fixed course category list of the real app (lib/course-constants.ts); stored as db.categories ids. */
+/** Fixed course category list of the real app (lib/course-constants.ts). */
 export const REAL_CATEGORIES = ['Frontend', 'Backend', 'Fullstack', 'Data & AI', 'Mobile', 'Computer Science'];
-/** Category options in the real order. A course still on a legacy category keeps it as an extra option. */
-export function categoryOptions(currentId) {
-  const all = Codi.db().categories || [];
-  const list = REAL_CATEGORIES.map((n) => all.find((c) => c.name === n)).filter(Boolean);
-  const cur = currentId && !list.some((c) => c.id === currentId) ? all.find((c) => c.id === currentId) : null;
-  return cur ? list.concat(cur) : list;
+/** Category names in the real order. A course still on a legacy category keeps it as an extra option. */
+export function categoryOptions(current) {
+  return current && !REAL_CATEGORIES.includes(current) ? REAL_CATEGORIES.concat(current) : REAL_CATEGORIES;
 }
-export const categoryName = (id) => ((Codi.db().categories || []).find((c) => c.id === id) || {}).name || '';
-/** Reviews the real app lists for lecturers: visible ones only. */
-export const isVisibleReview = (r) => r.isVisible !== false && !r.hidden;
 /** Max signed 32-bit integer, the real price column limit. */
 export const PRICE_MAX = 2147483647;
 export const decimal = (n) => String(n).replace('.', ',');
 
-export const ls = (c) => Codi.lessons(c);
-export const locked = (c) => c.status === 'pending';
+export const ls = (c) => (c ? c.chapters.flatMap((ch) => ch.lessons) : []);
+export const locked = (c) => !!c && (c.isLocked || c.status === 'pending');
 export function findLesson(c, id) {
   if (!c) return null;
   for (const ch of c.chapters) { const i = ch.lessons.findIndex((l) => l.id === id); if (i >= 0) return { ch, i, l: ch.lessons[i] }; }
   return null;
 }
-function recompute(c) {
-  const lessons = ls(c);
-  c.durationMin = lessons.reduce((s, l) => s + (Number(l.durationMin) || 0), 0);
-  c.defaultOrder = lessons.map((l) => l.id);
-}
-/** Content changed after the map was confirmed → mark it stale (needs re-analysis). Caller persists. */
-export function contentChanged(c) {
-  recompute(c);
-  const m = Codi.db().knowledgeMaps[c.id];
-  if (m && m.status === 'confirmed') { m.status = 'stale'; Codi.ui.toast('Nội dung đã đổi: bản đồ kiến thức cần phân tích lại.', { type: 'warn' }); }
-  if (m && m.status === 'empty' && ls(c).length) m.status = 'ready';
-}
+/** Course content changed on the server: refetch the editor data (the backend marks a confirmed map stale). */
+export const contentChanged = (c) => (c && c.id ? reloadCourse(c.id) : Promise.resolve(null));
+/** Refreshes the lecturer lists and counts after a backend write. */
+export const persist = () => reloadMine();
+/** Lecturer's own course; backend data is already scoped to the signed-in lecturer. */
+export const isMine = (c) => !!c && !!c.id;
 
 // ───────────────────────── cross-feature helpers (optional namespaces) ─────────────────────────
 /** Codi.lecturerAI, or null after telling the user the AI helpers are unavailable. */
@@ -65,8 +51,9 @@ export function lecturerAI() {
   Codi.ui.toast('Trợ lý AI cho giảng viên chưa sẵn sàng.', { type: 'danger' });
   return null;
 }
-export const reviewRound = (c) => (Codi.review && Codi.review.lecturerRound ? Codi.review.lecturerRound(c) : null);
-export const reviewFlagsFor = (r, lessonId) => (r && Codi.review && Codi.review.flagsFor ? Codi.review.flagsFor(r, lessonId) : []);
+/** Newest decided publication round (Codi getPublicationData.round), or null while it is still in review. */
+export const reviewRound = (c) => (c && c.round && c.round.status !== 'in_review' ? c.round : null);
+export const reviewFlagsFor = (r, lessonId) => (r ? (r.flags || []).filter((f) => f.lessonId === lessonId || (f.target && f.target.lessonId === lessonId)) : []);
 
 // ───────────────────────── unsaved-changes guard (Thông tin tab, quiz builder) ─────────────────────────
 // guard.dirty = { label, scope, reset } while a form has unsaved edits. Clicking a link (or [data-go]) outside
@@ -98,16 +85,16 @@ if (typeof document !== 'undefined' && !window.__codiTeachGuard) {
 }
 
 // ───────────────────────── workspace shell ─────────────────────────
+/** To-do counts of the lecturer dashboard (grading / questions / reviews); zeros until loaded. */
 export function counts() {
-  return {
-    grading: byCourse(Codi.db().submissions).filter((s) => s.status === 'pending').length,
-    questions: byCourse(Codi.db().questions).filter((q) => q.status === 'unanswered').length,
-    reviews: byCourse(Codi.db().reviews).filter((r) => isVisibleReview(r) && !r.reply).length,
-  };
+  const st = mineNow().stats;
+  const n = (st && st.counts) || {};
+  return { grading: n.grading || 0, questions: n.questions || 0, reviews: n.reviews || 0 };
 }
 
 function TeachShell({ active, children }) {
   useCodi();
+  useMine();
   const path = Codi.path();
   useEffect(() => {
     // navigation by other means (back button, programmatic) leaves the dirty scope → drop the draft
@@ -139,6 +126,19 @@ export const notMine = () => shell('', (
   <Empty icon="lock" title="Không tìm thấy khoá học của bạn" body="Khoá học không tồn tại hoặc thuộc giảng viên khác."
     actions={<Link className="btn btn-primary" to="/teach/courses">Về danh sách khoá học</Link>} />
 ));
+
+/** Skeleton rows while backend data loads. */
+export function Loading({ rows = 3, label = 'Đang tải dữ liệu…' }) {
+  return (
+    <div className="card" role="status" aria-busy="true"><div className="card-body stack-2"><span className="sr-only">{label}</span>
+      {Array.from({ length: rows }, (_, i) => <div key={i} className="skeleton skeleton-line" style={{ height: 40, width: i === rows - 1 ? '66%' : '100%' }} />)}</div></div>
+  );
+}
+/** Load failure with a retry button. */
+export function LoadError({ error, onRetry, title = 'Không tải được dữ liệu' }) {
+  return <Alert type="danger" title={title} body={(error && error.message) || 'Vui lòng thử lại.'}
+    actions={onRetry ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRetry()}><Icon name="refresh" className="icon-sm" /> Thử lại</button> : null} />;
+}
 
 /** Inline field error (mockup err(k)). */
 export function FieldError({ children }) {
@@ -197,4 +197,22 @@ export function promptReason(o) {
   });
 }
 
-Object.assign(Codi, { teach: { shell, isMine, notMine, findLesson, contentChanged, persist } });
+/** Backend writes used by the lecturer-ai feature (they refresh the cached course afterwards). */
+async function saveLessonBody(courseId, lessonId, body) {
+  const det = await act('course', 'getLessonDetails', courseId, lessonId);
+  const l = det.lesson;
+  await act('course', 'updateLesson', courseId, lessonId, {
+    title: l.title, description: l.description || '', durationMinutes: Math.round((l.durationSeconds || 0) / 60), body, isFreePreview: !!l.isFreePreview,
+    materials: (det.materials || []).map((m) => ({ id: m.id, type: m.type, title: m.title, url: m.url, fileSizeKb: m.fileSizeKb || undefined, durationSeconds: m.durationSeconds || undefined })),
+  });
+}
+async function appendQuizQuestions(courseId, lessonId, questions) {
+  const q = await act('course', 'getQuizBuilderData', courseId, lessonId);
+  const keep = (q.questions || []).map((x) => ({ text: x.text, explanation: x.explanation || '', correctIndex: x.correctIndex, options: x.options }));
+  await act('course', 'saveQuizData', courseId, lessonId, {
+    passingScore: q.passingScore || 70, isEntry: false,
+    questions: keep.concat(questions.map((x) => ({ text: x.text, explanation: x.explanation || '', correctIndex: x.correctIndex, options: x.options, aiGenerated: true, aiReviewed: true }))),
+  });
+}
+
+Object.assign(Codi, { teach: { shell, isMine, notMine, findLesson, contentChanged, persist, course: cachedCourse, reloadCourse, act, saveLessonBody, appendQuizQuestions } });

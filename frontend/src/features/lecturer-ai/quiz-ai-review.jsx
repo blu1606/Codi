@@ -1,7 +1,8 @@
 /**
  * AI quiz generation with a review gate before anything reaches the quiz.
  * Port of the real app's components/quiz-builder/quiz-ai-dialog.tsx and generateAiQuizQuestions
- * (courses/[courseId]/actions.ts). The LLM call is simulated with the topic fact banks (./ai-bank.js).
+ * (courses/[courseId]/actions.ts). Generation calls the real backend action (LLM via the configured AI key; the
+ * backend also logs the draft in ai_content_drafts).
  *
  * Installs on Codi.lecturerAI:
  *   quizReview(props) → ReactElement   "Tạo câu hỏi bằng AI" dialog. Props:
@@ -22,14 +23,14 @@
  *   validateQuestionDraft({ text, options, correctIndex }, maxOptions?) → string[]   (real lib/quiz-import.ts)
  *   QuizReviewList — the review list component, also used by the document import sheet.
  *
- * Simulation: Codi.state.scenario.aiAssistant 'ratelimit' → rate_limited, 'error' → unavailable,
- * 'thinking' → no answer until the real 45 s timeout, then unavailable.
+ * Demo flags (Alt+K, client-side): Codi.state.scenario.aiAssistant 'ratelimit' → rate_limited, 'error' →
+ * unavailable, 'thinking' → no answer until the real 45 s timeout, then unavailable.
  */
 import { useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { Modal } from '../../components/ui/overlay-host';
-import { bankFor, genericFacts, rot } from './ai-bank';
+import { api } from '../../lib/api';
 import './lecturer-ai.css';
 
 export const DEFAULT_MAX_QUIZ_OPTIONS = 6;
@@ -70,70 +71,25 @@ function titleFor(code) {
   }
 }
 
-// ───────────────────────── simulated server action ─────────────────────────
-function lessonText(l) {
-  return [l && l.description, l && l.summary, l && l.reading, l && l.body]
-    .map((p) => (typeof p === 'string' ? p.trim() : ''))
-    .filter(Boolean)
-    .join('\n\n');
-}
-
-function recordDraft(row) {
-  // The real insert is best-effort and never blocks the result.
-  try {
-    Codi.set((s) => {
-      if (!Array.isArray(s.db.aiContentDrafts)) s.db.aiContentDrafts = [];
-      s.db.aiContentDrafts.push(row);
-    }, { render: false });
-  } catch (e) {
-    console.error('[lecturerAI.generateQuizQuestions] draft log failed', e);
-  }
-}
-
+// ───────────────────────── server action ─────────────────────────
 export async function generateQuizQuestions(courseId, lessonId, count = 3, difficulty = 'medium', source = {}) {
-  const c = Codi.course(courseId);
-  if (!c) return failure('unavailable', 'Không tìm thấy khoá học hoặc khoá học không thuộc quyền quản lý của bạn.', false);
-  if (c.status === 'pending') return failure('unavailable', 'Khoá học đang chờ duyệt — nội dung chỉ đọc.', false);
-  const isEntry = lessonId === 'entry';
-  const l = isEntry ? null : Codi.lesson(c, lessonId);
-  if (!isEntry && !l) return failure('unavailable', 'Không tìm thấy bài học trong khoá học này.', false);
   const diff = ['easy', 'medium', 'hard'].includes(difficulty) ? difficulty : 'medium';
   const validCount = Math.min(Math.max(Math.trunc(Number(count)) || 1, 1), AI_QUIZ_MAX_QUESTIONS);
-  const pasted = typeof source.sourceText === 'string' ? source.sourceText.trim() : '';
+  const sourceText = typeof source.sourceText === 'string' ? source.sourceText.trim().slice(0, AI_QUIZ_MAX_MATERIAL_CHARS) : '';
   const focus = typeof source.focus === 'string' ? source.focus.trim().slice(0, MAX_FOCUS_CHARS) : '';
-  const material = (pasted || lessonText(l)).slice(0, AI_QUIZ_MAX_MATERIAL_CHARS);
-  if (!material) {
-    return failure('no_material', 'Bài học chưa có nội dung văn bản để AI đọc. Hãy dán nội dung vào ô bên dưới rồi tạo lại.', false);
-  }
-
   const flag = Codi.state.scenario && Codi.state.scenario.aiAssistant;
   if (flag === 'ratelimit') return failure('rate_limited', 'AI đang quá tải hoặc đã hết lượt tạo trong thời gian ngắn. Đợi một lúc rồi thử lại.', true);
   if (flag === 'thinking') { await sleep(AI_QUIZ_TIMEOUT_MS); return failure('unavailable', 'AI chưa phản hồi. Vui lòng thử lại.', true); }
-  await sleep(1400);
-  if (flag === 'error') return failure('unavailable', 'AI chưa phản hồi. Vui lòng thử lại.', true);
-
-  const title = l ? l.title : c.title;
-  const bank = bankFor(`${focus} ${material} ${title} ${c.title}`);
-  let facts = bank ? bank.facts.slice() : genericFacts(title);
-  // Focused facts first, then a difficulty-dependent starting point so each level draws a different set.
-  if (focus) {
-    const f = focus.toLowerCase();
-    facts.sort((x, y) => Number(`${y.q} ${y.a}`.toLowerCase().includes(f)) - Number(`${x.q} ${x.a}`.toLowerCase().includes(f)));
-  } else {
-    facts = rot(facts, { easy: 0, medium: 1, hard: 2 }[diff]);
+  if (flag === 'error') { await sleep(1400); return failure('unavailable', 'AI chưa phản hồi. Vui lòng thử lại.', true); }
+  let r;
+  try {
+    r = await api.action('dashboard/lecturer/courses/courseId', 'generateAiQuizQuestions', courseId, lessonId, validCount, diff, { ...(sourceText ? { sourceText } : {}), ...(focus ? { focus } : {}) });
+  } catch (e) {
+    return failure('unavailable', (e && e.message) || NETWORK_ERROR.message, true);
   }
-  const conceptId = l ? (l.conceptIds || [])[0] || null : null;
-  const questions = facts.slice(0, validCount).map((f, i) => {
-    const options = rot([f.a].concat(f.w.slice(0, 3)), (i * 2 + 1) % 4);
-    return { id: Codi.uid('q'), conceptId, text: f.q, options, correctIndex: options.indexOf(f.a), explanation: f.e.slice(0, 600) || null, difficulty: diff, aiGenerated: true, aiReviewed: false };
-  });
+  if (!r || !r.success) return r && r.code ? r : NETWORK_ERROR;
+  const questions = (r.questions || []).map((q) => ({ ...q, id: q.id || Codi.uid('q'), difficulty: diff, aiGenerated: true, aiReviewed: false }));
   if (!questions.length) return failure('invalid_output', 'AI trả về nội dung chưa đúng định dạng. Thử tạo lại.', true);
-
-  recordDraft({
-    id: Codi.uid('aid'), lecturerId: Codi.state.currentUserId, courseId, lessonId: isEntry ? null : lessonId,
-    kind: 'quiz_questions', status: 'pending', createdAt: new Date().toISOString(),
-    payload: { courseId, lessonId, difficulty: diff, questions },
-  });
   return { success: true, questions };
 }
 
@@ -268,8 +224,7 @@ function QuizAiDialog({ open, onClose, courseId, lessonId, lessonTitle, maxOptio
   const nextKey = useRef(1);
   const run = useRef(0);
 
-  const c = Codi.course(courseId);
-  const title = lessonTitle || (lessonId === 'entry' ? (c && c.entryTest && c.entryTest.title) || 'Bài kiểm tra đầu vào' : (c && Codi.lesson(c, lessonId) || {}).title || '');
+  const title = lessonTitle || (lessonId === 'entry' ? 'Bài kiểm tra đầu vào' : '');
   const close = () => { if (onClose) onClose(); };
 
   const runGeneration = async () => {

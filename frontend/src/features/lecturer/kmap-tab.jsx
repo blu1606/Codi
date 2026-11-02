@@ -1,23 +1,31 @@
 // S24 knowledge map tab: status banners, concept / edge review (accept · rename · decline · restore), accept-all
 // with loop skip (D10), cycle detection, graph view with zoom + chapter filter + side panel, default learning order
 // preview, confirmation with a confirmed snapshot. Copy follows the real knowledge-map-client.tsx.
-// AI analysis is owned by the lecturer-ai feature (Codi.lecturerAI.runKnowledgeMapAnalysis); without it the tab
-// shows the real trial state ("Phân tích AI chưa khả dụng") and offers no analysis.
-import { useState } from 'react';
+// Data and writes: Codi's kmap actions (getKnowledgeMapData, reviewKnowledgeMapItem, renameKnowledgeMapConcept,
+// addKnowledgeMapEdge, acceptAllKnowledgeMap, confirmKnowledgeMap). Analysis comes from the lecturer-ai feature
+// (Codi.lecturerAI.runKnowledgeMapAnalysis, a simulation stored by the backend); without it the tab shows the real
+// trial state ("Phân tích AI chưa khả dụng").
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { charts } from '../../lib/charts';
 import { Alert, Empty, Html, Icon, SpinnerBlock } from '../../components/ui/primitives';
-import { ls, locked, persist, FieldError } from './teach-api';
+import { ls, locked, findLesson, FieldError, Loading, LoadError } from './teach-api';
 import { rerender, useView } from './view-store';
+import { act, reloadCourse } from './teach-data';
 
 const { fmt } = Codi;
+const toast = (msg, o) => Codi.ui.toast(msg, o);
+const lessonOf = (c, id) => { const f = findLesson(c, id); return f ? f.l : null; };
 
-export const kmapOf = (c) => {
-  const db = Codi.db();
-  if (!db.knowledgeMaps[c.id]) db.knowledgeMaps[c.id] = { status: ls(c).length ? 'ready' : 'empty', updatedAt: new Date().toISOString(), concepts: [], edges: [] };
-  return db.knowledgeMaps[c.id];
-};
+/** Map shape the tab renders, from getKnowledgeMapData. Concept/edge ids are the backend skill ids. */
+const toMap = (d) => ({
+  status: d.course.knowledgeMapStatus, updatedAt: d.course.knowledgeMapGeneratedAt,
+  confirmationUnavailable: !!d.course.confirmationUnavailable, requiresReconfirmation: !!d.course.requiresReconfirmation,
+  concepts: d.concepts.map((k) => ({ id: k.id, name: k.name, review: k.review, lessonIds: k.lessonIds || [] })),
+  edges: d.edges.map((e) => ({ from: e.from, to: e.to, review: e.review })),
+  cycle: d.cycle, defaultOrder: d.defaultOrder,
+});
 const liveIds = (m) => new Set(m.concepts.filter((k) => k.review !== 'declined').map((k) => k.id));
 const activeEdges = (m) => { const live = liveIds(m); return m.edges.filter((e) => e.review !== 'declined' && live.has(e.from) && live.has(e.to)); };
 const kept = (e) => e.review === 'accepted' || e.review === 'edited';
@@ -63,7 +71,7 @@ function topoLessons(c, m) {
   const queue = concepts.filter((k) => !indeg[k.id]).map((k) => k.id); const out = [];
   while (queue.length) { const n = queue.shift(); out.push(n); edges.filter((e) => e.from === n).forEach((e) => { indeg[e.to] -= 1; if (!indeg[e.to]) queue.push(e.to); }); }
   const seen = new Set(); const lessons = [];
-  out.forEach((cid) => { const k = m.concepts.find((x) => x.id === cid); (k.lessonIds || []).forEach((lid) => { if (!seen.has(lid)) { seen.add(lid); const l = Codi.lesson(c, lid); if (l) lessons.push(l); } }); });
+  out.forEach((cid) => { const k = m.concepts.find((x) => x.id === cid); (k.lessonIds || []).forEach((lid) => { if (!seen.has(lid)) { seen.add(lid); const l = lessonOf(c, lid); if (l) lessons.push(l); } }); });
   ls(c).forEach((l) => { if (!seen.has(l.id)) lessons.push(l); });
   return lessons;
 }
@@ -78,6 +86,18 @@ let kmapZoom = 1;
 let kmapChapter = 'all';
 
 const analyser = () => (Codi.lecturerAI && typeof Codi.lecturerAI.runKnowledgeMapAnalysis === 'function' ? Codi.lecturerAI.runKnowledgeMapAnalysis : null);
+
+/** Loads the course map; reload() after every write (the backend owns the review states). */
+function useKmapData(courseId) {
+  const [st, setSt] = useState({ m: null, loading: true, error: null });
+  const load = useCallback(async () => {
+    setSt((x) => ({ ...x, loading: true, error: null }));
+    try { const d = await act('kmap', 'getKnowledgeMapData', courseId); setSt({ m: toMap(d), loading: false, error: null }); }
+    catch (error) { setSt({ m: null, loading: false, error }); }
+  }, [courseId]);
+  useEffect(() => { load(); }, [load]);
+  return { ...st, reload: load };
+}
 
 function RenameBody({ handle, initial, onSave }) {
   const [v, setV] = useState(initial);
@@ -94,12 +114,38 @@ function RenameBody({ handle, initial, onSave }) {
 
 export function KmapTab({ c }) {
   useView();
-  const m = kmapOf(c); const ro = locked(c);
+  const km = useKmapData(c.id);
+  if (!km.m) return km.error ? <LoadError error={km.error} onRetry={km.reload} /> : <Loading rows={4} label="Đang tải bản đồ kiến thức…" />;
+  return <KmapBody c={c} m={km.m} reload={km.reload} />;
+}
+
+function KmapBody({ c, m: stored, reload }) {
+  const ro = locked(c);
+  const [busy, setBusy] = useState(null); // 'analysing' | 'failed' while/after a run in this view
+  const m = busy ? { ...stored, status: busy } : stored;
+  /** Runs a kmap write, then refreshes the map and the course readiness. */
+  const save = async (run, okMessage) => {
+    try {
+      const r = await run();
+      if (r && r.success === false) { toast(r.error || 'Không thể lưu thay đổi.', { type: 'danger' }); return null; }
+      if (okMessage) toast(okMessage, { type: 'success' });
+      return r;
+    } catch (e) {
+      toast((e && e.message) || 'Không thể lưu thay đổi.', { type: 'danger' });
+      return null;
+    } finally {
+      await reload(); reloadCourse(c.id);
+    }
+  };
   const run = analyser();
   const analyse = async () => {
-    if (!run) return;
+    if (!run || busy === 'analysing') return;
+    setBusy('analysing');
     const r = await run(c.id);
-    if (r && r.ok === false && r.error && m.status !== 'failed') Codi.ui.toast(r.error, { type: 'danger' });
+    if (r && r.ok === false) { setBusy('failed'); if (r.error) toast(r.error, { type: 'danger' }); return; }
+    await reload(); reloadCourse(c.id);
+    setBusy(null);
+    toast('Bản đồ kiến thức đã sẵn sàng. Xem lại các đề xuất rồi xác nhận.', { type: 'success' });
   };
   const trialNotice = !run && (
     <Alert type="info" title="Phân tích AI chưa khả dụng" body="Bản thử nghiệm không gọi dịch vụ AI và không tạo bản đồ mới. Nguồn AI và thời điểm tạo đã lưu trước đây chưa được xác minh, không phải bằng chứng đã trích xuất nội dung. Bạn vẫn có thể xem lại, sửa và xác nhận bản đồ hiện có nếu đủ điều kiện. Khi chưa có bản đồ hợp lệ, khoá học chưa thể đáp ứng điều kiện bản đồ để xuất bản." />
@@ -129,14 +175,14 @@ export function KmapTab({ c }) {
   const pending = m.concepts.filter((k) => k.review === 'suggested').length + m.edges.filter((e) => e.review === 'suggested').length;
   const accepted = m.concepts.filter((k) => kept(k)).length + m.edges.filter(kept).length;
   const live = m.concepts.filter((k) => k.review !== 'declined');
-  const staleBlocked = m.status === 'stale';
-  const canConfirm = !ro && !cycle && !pending && live.length > 0 && m.status === 'ready' && ls(c).length > 0;
-  const needsReconfirm = !!m.confirmedSnapshot && m.status === 'ready';
+  const staleBlocked = m.status === 'stale' || m.confirmationUnavailable;
+  const canConfirm = !ro && !cycle && !pending && live.length > 0 && m.status === 'ready' && ls(c).length > 0 && !m.confirmationUnavailable;
+  const needsReconfirm = m.requiresReconfirmation && m.status === 'ready';
 
-  const touch = () => { if (m.status === 'confirmed') m.status = 'ready'; m.updatedAt = new Date().toISOString(); };
-  const setReview = (item, v) => { item.review = v; touch(); persist(); };
+  const isConcept = (item) => item.name !== undefined;
+  const setReview = (item, v) => save(() => act('kmap', 'reviewKnowledgeMapItem', c.id, isConcept(item) ? 'concept' : 'edge',
+    isConcept(item) ? { skillId: item.id, review: v } : { fromSkillId: item.from, toSkillId: item.to, review: v }));
   const acceptAll = async () => {
-    if (Codi.lecturerAI && typeof Codi.lecturerAI.acceptAll === 'function') { await Codi.lecturerAI.acceptAll(c.id); return; }
     const plan = acceptAllPlan(m);
     const r = await Codi.ui.confirm({
       title: 'Chấp nhận tất cả đề xuất?',
@@ -149,37 +195,26 @@ export function KmapTab({ c }) {
       reversible: 'Có thể đổi từng mục sau nếu muốn.', confirmLabel: 'Chấp nhận tất cả',
     });
     if (!r.ok) return;
-    const fresh = acceptAllPlan(m); // recompute on the current map
-    fresh.acceptedConcepts.forEach((k) => { k.review = 'accepted'; });
-    fresh.acceptedEdges.forEach((e) => { e.review = 'accepted'; });
-    touch(); persist();
-    const total = fresh.acceptedConcepts.length + fresh.acceptedEdges.length;
-    Codi.ui.toast(fresh.skippedEdges.length ? `Đã chấp nhận ${total} đề xuất. Có ${fresh.skippedEdges.length} quan hệ tạo vòng lặp cần bạn xử lý riêng.` : `Đã chấp nhận ${total} đề xuất. Kiểm tra lại rồi xác nhận bản đồ.`, { type: fresh.skippedEdges.length ? 'info' : 'success' });
+    // the server recomputes the plan on the current map
+    const res = await save(() => act('kmap', 'acceptAllKnowledgeMap', c.id));
+    if (!res) return;
+    const total = (res.acceptedConceptsCount || 0) + (res.acceptedEdgesCount || 0);
+    toast(res.skippedEdgesCount ? `Đã chấp nhận ${total} đề xuất. Có ${res.skippedEdgesCount} quan hệ tạo vòng lặp cần bạn xử lý riêng.` : `Đã chấp nhận ${total} đề xuất. Kiểm tra lại rồi xác nhận bản đồ.`, { type: res.skippedEdgesCount ? 'info' : 'success' });
   };
   const rename = (k) => Codi.ui.modal({
     title: 'Đổi tên khái niệm', raw: true,
-    body: (h) => <RenameBody handle={h} initial={k.name} onSave={(name) => { k.name = name; k.review = 'edited'; touch(); persist(); Codi.ui.toast('Đã đổi tên khái niệm.', { type: 'success' }); }} />,
+    body: (h) => <RenameBody handle={h} initial={k.name} onSave={(name) => save(() => act('kmap', 'renameKnowledgeMapConcept', c.id, k.id, name), 'Đã đổi tên khái niệm.')} />,
   });
   const addEdge = (e) => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget); const from = fd.get('from'); const to = fd.get('to');
-    if (from === to) { Codi.ui.toast('Một khái niệm không thể cần học trước chính nó.', { type: 'danger' }); return; }
-    if (m.edges.some((x) => x.from === from && x.to === to && x.review !== 'declined')) { Codi.ui.toast('Quan hệ này đã có.', { type: 'warn' }); return; }
-    m.edges.push({ from, to, review: 'accepted' }); touch(); persist();
-    Codi.ui.toast('Đã thêm quan hệ tiên quyết.', { type: 'success' });
+    const fd = new FormData(e.currentTarget); const from = Number(fd.get('from')); const to = Number(fd.get('to'));
+    if (from === to) { toast('Một khái niệm không thể cần học trước chính nó.', { type: 'danger' }); return; }
+    if (m.edges.some((x) => x.from === from && x.to === to && x.review !== 'declined')) { toast('Quan hệ này đã có.', { type: 'warn' }); return; }
+    save(() => act('kmap', 'addKnowledgeMapEdge', c.id, from, to), 'Đã thêm quan hệ tiên quyết.');
   };
   const confirmMap = () => {
     if (!canConfirm || (G && G.mapCycle ? G.mapCycle(m) : findCycle(m))) return;
-    const at = new Date().toISOString();
-    const edges = activeEdges(m).map((e) => ({ from: e.from, to: e.to }));
-    const concepts = live.map((k) => ({ id: k.id, name: k.name }));
-    const lessonLinks = live.flatMap((k) => (k.lessonIds || []).map((lessonId) => ({ conceptId: k.id, lessonId })));
-    m.status = 'confirmed'; m.updatedAt = at;
-    m.confirmedSnapshot = { confirmedAt: at, concepts, prerequisites: edges, lessonLinks };
-    c.concepts = concepts;
-    c.prerequisites = edges;
-    ls(c).forEach((l) => { l.conceptIds = live.filter((k) => (k.lessonIds || []).includes(l.id)).map((k) => k.id); });
-    persist(); Codi.ui.toast('Đã xác nhận bản đồ kiến thức.', { type: 'success' });
+    save(() => act('kmap', 'confirmKnowledgeMap', c.id), 'Đã xác nhận bản đồ kiến thức.');
   };
   const setView = (v) => { kmapView = v; rerender(); };
   const selectNode = (id) => { kmapSelectedNode = id || null; rerender(); };
@@ -187,7 +222,7 @@ export function KmapTab({ c }) {
   const zoom = (d) => { kmapZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((kmapZoom + d) * 100) / 100)); rerender(); };
 
   let statusLine;
-  if (m.status === 'confirmed') statusLine = <Alert type="success" title="Bản đồ kiến thức đã được xác nhận" body={`Bản đồ đang hoạt động chính thức. Lộ trình cá nhân hoá của học viên sẽ sử dụng thứ tự khái niệm này. Cập nhật ${fmt.datetime(m.updatedAt)}.`} />;
+  if (m.status === 'confirmed') statusLine = <Alert type="success" title="Bản đồ kiến thức đã được xác nhận" body={`Bản đồ đang hoạt động chính thức. Lộ trình cá nhân hoá của học viên sẽ sử dụng thứ tự khái niệm này.${m.updatedAt ? ` Cập nhật ${fmt.datetime(m.updatedAt)}.` : ''}`} />;
   else if (staleBlocked) {
     statusLine = run
       ? <Alert type="warn" title="Nội dung đã thay đổi sau khi xác nhận" body="Bản đồ có thể không còn khớp với bài học. Hãy phân tích lại và xác nhận." actions={ro ? null : <button type="button" className="btn btn-secondary btn-sm" onClick={analyse}><Icon name="refresh" className="icon-sm" /> Phân tích lại</button>} />
@@ -219,14 +254,14 @@ export function KmapTab({ c }) {
   const shown = live.filter(inChapter); const shownIds = new Set(shown.map((k) => k.id));
   const graphNodes = shown.map((k) => ({ id: k.id, label: k.name }));
   const graphEdges = activeEdges(m).filter((e) => shownIds.has(e.from) && shownIds.has(e.to)).map((e) => ({ from: e.from, to: e.to }));
-  const selectedConcept = kmapSelectedNode ? m.concepts.find((k) => k.id === kmapSelectedNode) : null;
+  const selectedConcept = kmapSelectedNode ? m.concepts.find((k) => String(k.id) === String(kmapSelectedNode)) : null;
   const nodePanel = (
     <aside className="tc-kmap-panel card">
       {selectedConcept ? <>
         <div className="card-header"><div className="stack-1"><span className="xsmall muted">Chi tiết khái niệm</span><h3 className="small strong">{selectedConcept.name}</h3></div><button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label="Đóng" onClick={() => selectNode('')}><Icon name="x" className="icon-sm" /></button></div>
         <div className="card-body stack-3">
           <div className="stack-1"><span className="xsmall muted">Trạng thái</span><span className={`badge ${reviewOf(selectedConcept.review)[1]}`} style={{ justifySelf: 'start' }}>{reviewOf(selectedConcept.review)[0]}</span></div>
-          <div className="stack-1"><span className="xsmall muted">Bài học liên quan ({(selectedConcept.lessonIds || []).length})</span><ul className="list">{(selectedConcept.lessonIds || []).map((lid) => { const l = Codi.lesson(c, lid); return <li key={lid} className="small">{l ? l.title : ''}</li>; })}</ul></div>
+          <div className="stack-1"><span className="xsmall muted">Bài học liên quan ({(selectedConcept.lessonIds || []).length})</span><ul className="list">{(selectedConcept.lessonIds || []).map((lid) => { const l = lessonOf(c, lid); return <li key={lid} className="small">{l ? l.title : ''}</li>; })}</ul></div>
           {actBtns('concept', selectedConcept)}
         </div>
       </> : <div className="card-body stack-1"><h3 className="small strong">Chưa chọn khái niệm</h3><p className="xsmall muted">Nhấp vào bất kỳ nút nào trên sơ đồ để xem thông tin chi tiết, bài học liên quan và chỉnh sửa.</p></div>}
@@ -269,7 +304,7 @@ export function KmapTab({ c }) {
           <ul className="list">{m.concepts.filter(inChapter).map((k) => (
             <li key={k.id} className={`list-row ${k.review === 'declined' ? 'tc-declined' : ''}`}>
               <div className="list-main"><span className="row" style={{ gap: 8 }}><strong className="small">{k.name}</strong><span className={`badge ${reviewOf(k.review)[1]}`}>{reviewOf(k.review)[0]}</span></span>
-                <span className="xsmall muted">Bài học: {(k.lessonIds || []).map((lid) => (Codi.lesson(c, lid) || {}).title).filter(Boolean).join(', ') || 'chưa gắn bài học'}</span></div>
+                <span className="xsmall muted">Bài học: {(k.lessonIds || []).map((lid) => (lessonOf(c, lid) || {}).title).filter(Boolean).join(', ') || 'chưa gắn bài học'}</span></div>
               {actBtns('concept', k)}</li>
           ))}</ul></section>
         <section className="card"><div className="card-header"><h2 className="tc-h">Quan hệ &quot;cần học trước&quot; ({activeEdges(m).length})</h2></div>
