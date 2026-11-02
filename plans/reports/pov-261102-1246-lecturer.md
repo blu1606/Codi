@@ -18,7 +18,7 @@ Method: Playwright walk at 1366x900 and 390x844 (scripts and screenshots in `…
 | `65dc76a` | Progress: learners get a "Tình trạng" reason list (Chưa bắt đầu học; Không hoạt động N ngày, measured to the data's as-of date; Quiz TB < 60%; Đang chờ trả lời). "Cần hỗ trợ (N)" filter. Row actions: "Trả lời" (deep link to the waiting question), "Nhắn" (in-app notification with a reply-ready draft), "Xem chi tiết" (sheet now starts with the reasons). Course card shows "N học viên cần hỗ trợ". |
 | `39eaf69` | Progress table: row actions kept on one line; dropped the "Gợi ý dùng" column, which read "Chưa ghi nhận" for every learner. The unavailable-data note stays in the panel. Verified: table fits its container, no horizontal overflow at 1366px. |
 
-Gates: `vite build` passes after each commit (0 errors). Final `smoke.js` and `axe.js` on the last build: see Status.
+Gates: `vite build` passes after each commit (0 errors). Final `smoke.js`: 59 ok, 0 FAIL. Final `axe.js`: "no violations".
 
 ## Persona walk: findings
 
