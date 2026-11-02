@@ -26,10 +26,11 @@
  *
  * NAVIGATION  Codi.go(path) (react-router navigate), Codi.path(), Codi.query()
  * AUTH        Codi.requireAuth(intentFn, { reason }) runs now or opens the sign-in modal and runs after success.
- *             Codi.signIn(userId), Codi.signOut()
+ *             Codi.signIn(email, password) and Codi.signOut() go through the backend (Better Auth cookie session).
  * UI          Codi.ui.toast / confirm / modal / sheet … — see src/components/ui/overlay-host.jsx (registered there).
  */
 import { useSyncExternalStore } from 'react';
+import { api } from './api';
 import { fmt } from './format';
 
 const SESSION_KEY = 'codi-rebuild-session';
@@ -72,10 +73,29 @@ function snapshotEntries(state) {
   return out;
 }
 
+// Only the dev scenario is browser-local; who is signed in comes from the backend session cookie.
 function persistSession() {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ currentUserId: Codi.state.currentUserId, scenario: Codi.state.scenario }));
-  } catch { /* storage blocked: session lasts for this tab only */ }
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ scenario: Codi.state.scenario }));
+  } catch { /* storage blocked: scenario lasts for this tab only */ }
+}
+
+// ───────────────────────── backend session (Better Auth) ─────────────────────────
+const ROLE_FROM_SERVER = { ADMIN: 'admin', LECTURER: 'lecturer', LEARNER: 'learner' };
+const primaryRole = (roles) => ['ADMIN', 'LECTURER', 'LEARNER'].map((r) => (roles.includes(r) ? ROLE_FROM_SERVER[r] : null)).find(Boolean) || null;
+
+/** Reads the signed-in user and roles from the backend. Returns { user, roles } with user null when signed out. */
+async function fetchSession() {
+  const session = await api('/api/auth/get-session');
+  if (!session || !session.user) return { user: null, roles: [] };
+  const { roles = [] } = await api('/api/user/roles');
+  return { user: session.user, roles };
+}
+
+function applySession(session) {
+  Codi.session = session;
+  const id = session.user ? session.user.id : null;
+  Codi.state.currentUserId = id && Codi.state.db.users && Codi.state.db.users.some((u) => u.id === id) ? id : null;
 }
 
 function flush() {
@@ -123,20 +143,18 @@ export function loadStore() {
 }
 
 async function loadStoreOnce() {
-  const r = await fetch('/api/snapshot');
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'HTTP ' + r.status);
-  const snap = await r.json();
+  const [snap, auth] = await Promise.all([api('/api/snapshot'), fetchSession()]);
   docCollections = new Set(snap.docCollections || []);
-  let session = {};
-  try { session = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}') || {}; } catch { session = {}; }
+  let local = {};
+  try { local = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}') || {}; } catch { local = {}; }
   Codi.state = {
     carts: {},
     ...snap.slices,
-    currentUserId: session.currentUserId || null,
-    scenario: { ...DEFAULT_SCENARIO, ...(session.scenario || {}) },
+    currentUserId: null,
+    scenario: { ...DEFAULT_SCENARIO, ...(local.scenario || {}) },
     db: snap.db,
   };
-  if (Codi.state.currentUserId && !Codi.state.db.users.some((u) => u.id === Codi.state.currentUserId)) Codi.state.currentUserId = null;
+  applySession(auth);
   lastSaved = snapshotEntries(Codi.state);
   applyTheme();
   emit();
@@ -206,7 +224,8 @@ export const Codi = {
 
   // selectors
   currentUser,
-  role: () => { const u = currentUser(); return u ? u.role : 'guest'; },
+  // The backend roles decide; the legacy record's role is only a fallback while a page still reads Codi.db().
+  role: () => { const u = currentUser(); return u ? primaryRole(Codi.session.roles) || u.role : 'guest'; },
   user: (id) => db().users.find((u) => u.id === id) || null,
   course: (idOrSlug) => db().courses.find((c) => c.id === idOrSlug || c.slug === idOrSlug) || null,
   lessons: (course) => (course ? course.chapters.flatMap((ch) => ch.lessons) : []),
@@ -260,9 +279,34 @@ export const Codi = {
     if (currentUser()) { intent(); return; }
     Codi.openSignIn(intent, opts);
   },
-  signIn(userId) { Codi.set((s) => { s.currentUserId = userId; }); },
-  signOut() {
-    Codi.set((s) => { s.currentUserId = null; });
+  /** Backend session: { user, roles } (Better Auth user, role ids LEARNER|LECTURER|ADMIN). */
+  session: { user: null, roles: [] },
+  /**
+   * Email + password sign-in against the backend (sets the session cookie). Resolves the signed-in user id;
+   * throws ApiError with the server message (401 wrong credentials or a disabled account).
+   */
+  async signIn(email, password) {
+    await api.post('/api/auth/sign-in/email', { email, password, rememberMe: true });
+    const session = await fetchSession();
+    if (!session.user) throw new Error('Không đọc được phiên đăng nhập. Vui lòng thử lại.');
+    Codi.set(() => applySession(session));
+    return session.user.id;
+  },
+  /** Re-reads the backend session (e.g. after another tab signed out). */
+  async refreshSession() {
+    const session = await fetchSession();
+    Codi.set(() => applySession(session));
+    return session;
+  },
+  async signOut({ quiet = false } = {}) {
+    try {
+      await api.post('/api/auth/sign-out', {});
+    } catch (e) {
+      if (!quiet) Codi.ui.toast('Không đăng xuất được trên máy chủ: ' + e.message, { type: 'danger' });
+      return;
+    }
+    Codi.set((s) => { applySession({ user: null, roles: [] }); s.currentUserId = null; });
+    if (quiet) return;
     Codi.ui.closeAll();
     Codi.go('/');
     Codi.ui.toast('Bạn đã đăng xuất.');

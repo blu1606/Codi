@@ -2,7 +2,7 @@
  * In-browser stand-ins for the real app's Better Auth backend (sessions, passwords, email OTP) and the
  * student activity log that feeds the profile heatmap.
  *
- *  Passwords      Codi.state.shellAuth.passwords[userId]  (prototype only; default demo password codi123)
+ *  Passwords      Codi.state.shellAuth.passwords[userId]  (prototype only; default demo password Codi@12345)
  *  Sessions       Codi.db().userSessions  [{ id, userId, userAgent, createdAt }]  — seeded by patches/10-shell.js.
  *                 This browser's session id is kept in localStorage so "Phiên hiện tại" survives reloads.
  *  Activity       Codi.db().studentActivities [{ id, userId, type: 'login', occurredAt }] (seeded + every sign-in),
@@ -11,7 +11,7 @@
  */
 import { Codi } from '../../lib/codi';
 
-export const DEMO_PASSWORD = 'codi123';
+export const DEMO_PASSWORD = 'Codi@12345';
 export const OTP_VALID = '123456';
 export const OTP_EXPIRED = '000000';
 export const OTP_TTL_S = 120;

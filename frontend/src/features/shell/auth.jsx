@@ -13,7 +13,7 @@ import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Avatar, Icon } from '../../components/ui/primitives';
 import { GithubMark, ShellIcon } from './shell-ui';
 import OtpInput from './otp-input';
-import { EMAIL_RE, OTP_MAX_TRIES, checkOtp, checkPassword, setPassword, startSession } from './account-store';
+import { DEMO_PASSWORD, EMAIL_RE, OTP_MAX_TRIES, checkOtp, setPassword, startSession } from './account-store';
 import { safeNext } from './github-onboarding-page';
 
 const DEMO = [['minhanh@codi.vn', 'Học viên'], ['quochuy@codi.vn', 'Giảng viên'], ['giabao@codi.vn', 'Quản trị viên'], ['kimoanh@codi.vn', 'Tài khoản bị vô hiệu hoá']];
@@ -186,7 +186,7 @@ function LoginForm({ view }) {
   const [busy, setBusy] = useState(false);
   const mounted = useMounted();
 
-  const fill = (e) => { setEmail(e); setPw('codi123'); setErrors({}); };
+  const fill = (e) => { setEmail(e); setPw(DEMO_PASSWORD); setErrors({}); };
   const submit = async (ev) => {
     ev.preventDefault();
     if (busy) return;
@@ -198,22 +198,28 @@ function LoginForm({ view }) {
     if (Object.keys(next).length) return;
     setServerError(null);
     setBusy(true);
-    await Codi.wait(500);
-    if (!mounted.current) return;
-    setBusy(false);
-    const u = Codi.db().users.find((x) => x.email.toLowerCase() === addr.toLowerCase());
-    if (!u || !checkPassword(u.id, password)) {
-      const msg = 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.';
+    let userId;
+    try {
+      userId = await Codi.signIn(addr, password);
+    } catch (e) {
+      if (!mounted.current) return;
+      setBusy(false);
+      // Better Auth: 401 INVALID_EMAIL_OR_PASSWORD; a banned account is refused by the session hook (also 401).
+      if (/vô hiệu hoá/i.test(e.message || '')) {
+        setServerError({ title: 'Tài khoản đã bị vô hiệu hoá', body: 'Tài khoản này hiện không thể đăng nhập. Liên hệ hotro@codi.vn nếu bạn cho rằng đây là nhầm lẫn.' });
+        return;
+      }
+      const msg = e.status === 401 ? 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.'
+        : e.status === 429 ? 'Bạn thử quá nhiều lần. Vui lòng đợi một lát rồi thử lại.'
+        : e.message || 'Không đăng nhập được. Vui lòng thử lại.';
       setServerError({ body: msg }); Codi.ui.toast(msg, { type: 'danger' }); return;
     }
-    if (u.status !== 'active') {
-      setServerError({ title: 'Tài khoản đã bị vô hiệu hoá', body: 'Tài khoản này hiện không thể đăng nhập. Liên hệ hotro@codi.vn nếu bạn cho rằng đây là nhầm lẫn.' });
-      return;
-    }
+    if (!mounted.current) return;
+    setBusy(false);
     writeRemembered(remember, addr);
     authView.email = addr;
     Codi.ui.toast('Đăng nhập thành công!', { type: 'success' });
-    completeAuth(u.id);
+    completeAuth(userId);
   };
 
   return (
@@ -243,7 +249,7 @@ function LoginForm({ view }) {
       </div>
       <button type="button" className="btn btn-secondary btn-block" onClick={() => setMode('register')}>Chưa có tài khoản? Tạo tài khoản miễn phí</button>
       <div className="demo-accounts">
-        <span className="xsmall strong">Tài khoản thử nghiệm · mật khẩu codi123</span>
+        <span className="xsmall strong">Tài khoản thử nghiệm · mật khẩu {DEMO_PASSWORD}</span>
         {DEMO.map(([e, l]) => <button key={e} type="button" onClick={() => fill(e)}>{l}: {e}</button>)}
       </div>
     </form>

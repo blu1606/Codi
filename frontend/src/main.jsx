@@ -35,7 +35,7 @@ function Boot() {
           <div className="alert alert-danger" role="alert">
             <div className="alert-body">
               <span className="alert-title">Không kết nối được máy chủ dữ liệu</span>
-              <span>{error}. Hãy chạy <code>npm run db:up</code> rồi <code>npm run server</code>.</span>
+              <span>{error}. Hãy chạy <code>npm run db:up</code> rồi <code>npm start</code>.</span>
               <div className="alert-actions"><button type="button" className="btn btn-primary btn-sm" onClick={load}>Thử lại</button></div>
             </div>
           </div>

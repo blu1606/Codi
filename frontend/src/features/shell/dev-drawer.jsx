@@ -10,6 +10,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Codi, useCodi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
 import { THEME_OPTIONS, useThemeSync } from './theme';
+import { api } from '../../lib/api';
+import { DEMO_PASSWORD } from './account-store';
 
 const SCEN = [
   ['paymentOutcome', 'Kết quả thanh toán', [['success', 'Thành công'], ['slow', 'Chậm (chờ lâu)'], ['expired', 'Mã hết hạn'], ['underpaid', 'Chuyển thiếu tiền'], ['qrfail', 'Không tải được QR'], ['late', 'Chuyển khoản trễ (sau hết hạn)'], ['overpaid', 'Chuyển thừa'], ['unavailable', 'Cổng thanh toán không khả dụng']]],
@@ -43,9 +45,19 @@ export function DevToggle() {
   );
 }
 
-function switchRole(role) {
+// Signs in for real as the seeded account of that role (shared demo password), or signs out for "Khách".
+async function switchRole(role) {
   Codi.ui.closeAll();
-  Codi.set((s) => { s.currentUserId = ROLE_USER[role]; });
+  try {
+    const target = ROLE_USER[role] && Codi.user(ROLE_USER[role]);
+    if (Codi.session.user) await api.post('/api/auth/sign-out', {});
+    if (!target) await Codi.refreshSession();
+    else await Codi.signIn(target.email, DEMO_PASSWORD);
+  } catch (e) {
+    await Codi.refreshSession().catch(() => {});
+    Codi.ui.toast('Không đổi được vai trò: ' + (e && e.message ? e.message : e), { type: 'danger' });
+    return;
+  }
   Codi.go(Codi.homeFor(role));
 }
 
