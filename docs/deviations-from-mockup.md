@@ -216,7 +216,6 @@ User-visible changes:
   (no server data). PDF/slide materials remain a simulated page viewer. Assignment rubrics show as a criteria list.
 - Code runs only in the backend sandbox (JavaScript). The browser runner was removed; the lecturer preview of a
   guided tutorial is read-only.
-- "Hồ sơ năng lực" uses the real GitHub link and analysis routes. Locally, linking only works if the GitHub OAuth app
-  accepts `http://localhost:3001/api/auth/callback/github`, so a learner normally sees the "Kết nối GitHub" state;
-  a saved profile shows the full report computed from the saved analysis (summary, languages, push activity, technologies with evidence, insights, knowledge areas, repos, collection scope) instead of the mockup's canned report; the onboarding step keeps a compact summary.
+- "Hồ sơ năng lực" uses the real GitHub link and analysis routes (linking works locally on port 3001 with
+  Codi's GitHub OAuth app). A saved profile shows the full report computed from the saved analysis (summary, languages, push activity, technologies with evidence, insights, knowledge areas, repos, collection scope) instead of the mockup's canned report; the onboarding step keeps a compact summary.
 - Profile avatars and assignment files are uploaded to R2 through the real routes.
