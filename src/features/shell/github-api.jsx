@@ -8,8 +8,10 @@
  * (rate limit, expired connection, 60 s timeout, generic) keep the previous result; "Chưa đủ dữ liệu để ước tính";
  * stale notice after 90 days; disconnect confirmation. Outcomes are forced with the dev-drawer flag githubAnalysis.
  *
- * Installs Codi.github = { openConnect, stateFor, isConnected, disconnect, contextFor, markLinked, learnerCard }.
- * Persisted in the slice Codi.state.githubAnalysis.byUser[userId] = { linked, username, email, analyzedAt?, result? }.
+ * Installs Codi.github = { openConnect, stateFor, isConnected, disconnect, contextFor, markLinked, learnerCard, onboardingHref }.
+ * Persisted in the slice Codi.state.githubAnalysis.byUser[userId] = { linked, username, email, linkedAt, analyzedAt?, result? }
+ * (stored in Postgres as slice:githubAnalysis). The account onboarding step (./github-onboarding-page.jsx) reuses the
+ * helpers exported below so both entry points read and write the same record.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
@@ -23,26 +25,54 @@ const STALE_MS = 90 * 86400000;
 const WAIT_MS = 3500;
 const TIMEOUT_MS = 60000;
 const store = () => Codi.ensure('githubAnalysis', () => ({ byUser: {} }));
-const profileFor = (email) => GITHUB_PROFILES[email] || fallbackProfile(email);
-const dateLabel = (iso) => { const d = new Date(iso); return Number.isNaN(d.valueOf()) ? String(iso) : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(d); };
-const selectedRepos = (r) => (r.repos || []).filter((x) => !x.fork).length;
+export const profileFor = (email) => GITHUB_PROFILES[email] || fallbackProfile(email);
+export const ONBOARDING_PATH = '/onboarding/github';
+/** Link to the account GitHub step; `next` is where "Để sau" / "Lưu vào hồ sơ" continue to. */
+export const onboardingHref = (next) => `${ONBOARDING_PATH}?next=${encodeURIComponent(next || Codi.path())}`;
+export const dateLabel = (iso) => { const d = new Date(iso); return Number.isNaN(d.valueOf()) ? String(iso) : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(d); };
+export const selectedRepos = (r) => (r.repos || []).filter((x) => !x.fork).length;
 
 // ───────────────────────── state helpers ─────────────────────────
 function entryOf(userId) { return userId ? store().byUser[userId] || null : null; }
 function stateFor(userId) {
   const s = entryOf(userId);
   if (!s) return { connected: false, linked: false, hasProfile: false };
-  return { connected: true, linked: true, hasProfile: !!s.result, username: s.username, analyzedAt: s.analyzedAt || null, result: s.result || null };
+  return { connected: true, linked: true, hasProfile: !!s.result, username: s.username, email: s.email, linkedAt: s.linkedAt || null, analyzedAt: s.analyzedAt || null, result: s.result || null };
 }
+export { stateFor };
 const isConnected = () => !!(entryOf(Codi.state.currentUserId) || {}).result;
 /** Links a GitHub account to a Codi user (sign-in with GitHub or the simulated OAuth below). */
 function markLinked(userId, account) {
   const cur = entryOf(userId);
   if (cur) return;
-  Codi.set(() => { store().byUser[userId] = { linked: true, username: profileFor(account.email).handle, email: account.email }; });
+  Codi.set(() => { store().byUser[userId] = { linked: true, username: profileFor(account.email).handle, email: account.email, linkedAt: new Date().toISOString() }; });
 }
+export { markLinked };
+/** Id of another Codi user that already linked this GitHub account, or null. */
+export function linkedElsewhere(email, userId) {
+  const hit = Object.entries(store().byUser).find(([uid, e]) => uid !== userId && e && String(e.email).toLowerCase() === String(email).toLowerCase());
+  return hit ? hit[0] : null;
+}
+/** Saves a finished analysis on the user's GitHub record (the account must be linked first). */
+export function saveAnalysis(userId, result) {
+  if (!entryOf(userId) || !result) return false;
+  Codi.set(() => { Object.assign(store().byUser[userId], { result, username: result.handle, analyzedAt: new Date().toISOString() }); });
+  return true;
+}
+export const isStale = (iso) => !!iso && Date.now() - Date.parse(iso) > STALE_MS;
 function disconnect(userId) {
   Codi.set(() => { delete store().byUser[userId]; });
+}
+export { disconnect };
+/** The unlink consequence dialog shared by the profile tab and the onboarding step. Resolves true on confirm. */
+export async function confirmUnlinkDialog() {
+  const r = await Codi.ui.confirm({
+    title: 'Ngắt kết nối GitHub?',
+    body: 'Dữ liệu phân tích hiện tại sẽ bị xoá cùng kết nối GitHub. Kết quả kiểm tra và tiến độ học đã đo không thay đổi. Bạn có thể kết nối lại bất kỳ lúc nào. Nếu GitHub là cách đăng nhập duy nhất, hãy đặt mật khẩu trước.',
+    confirmLabel: 'Ngắt kết nối',
+    cancelLabel: 'Huỷ',
+  });
+  return !!(r && r.ok);
 }
 
 // ───────────────────────── panel view state (module, survives navigation) ─────────────────────────
@@ -172,8 +202,7 @@ function finish(uid, outcome) {
     if (hadProfile) patch({ pending: false, note: 'Lượt phân tích mới chưa ghi nhận quan sát công nghệ. Kết quả trước vẫn được giữ lại.' });
     else patch({ pending: false, insufficient: { listed: r.stats.repos, selected: 0 } });
   } else {
-    const result = profileFor(entry.email);
-    Codi.set(() => { Object.assign(store().byUser[uid], { result, username: result.handle, analyzedAt: new Date().toISOString() }); });
+    saveAnalysis(uid, profileFor(entry.email));
     patch({ pending: false, resultOpen: true });
     openSheet();
     return;
@@ -184,13 +213,7 @@ function finish(uid, outcome) {
 async function askDisconnect() {
   const uid = forUser();
   if (!uid || ui.pending || ui.disconnecting) return;
-  const r = await Codi.ui.confirm({
-    title: 'Ngắt kết nối GitHub?',
-    body: 'Dữ liệu phân tích hiện tại sẽ bị xoá cùng kết nối GitHub. Kết quả kiểm tra và tiến độ học đã đo không thay đổi. Bạn có thể kết nối lại bất kỳ lúc nào. Nếu GitHub là cách đăng nhập duy nhất, hãy đặt mật khẩu trước.',
-    confirmLabel: 'Ngắt kết nối',
-    cancelLabel: 'Huỷ',
-  });
-  if (!r.ok) return;
+  if (!(await confirmUnlinkDialog())) return;
   patch({ disconnecting: true, failure: null });
   await Codi.wait(500);
   disconnect(uid);
@@ -208,7 +231,7 @@ function openConnect() {
 
 // ───────────────────────── sheet content ─────────────────────────
 const WAITING_STEPS = ['Đọc hồ sơ công khai', 'Tải danh sách repo công khai', 'Thống kê ngôn ngữ', 'So khớp với khoá học của Codi'];
-const DOMAINS = [
+export const DOMAINS = [
   { key: 'frontend', label: 'Frontend', icon: 'layout' },
   { key: 'backend', label: 'Backend / API', icon: 'server' },
   { key: 'data', label: 'Dữ liệu & AI', icon: 'bar-chart' },
@@ -216,7 +239,7 @@ const DOMAINS = [
   { key: 'testing', label: 'Kiểm thử', icon: 'check-circle' },
 ];
 
-function LanguageBars({ langs, big }) {
+export function LanguageBars({ langs, big }) {
   return (
     <ol className={`gh-langs ${big ? 'is-big' : ''}`} aria-label="Ngôn ngữ trong repo công khai">
       {langs.map((l) => (
@@ -276,7 +299,7 @@ function ConsentForm({ kind, input }) {
   );
 }
 
-function OauthBody({ step, account }) {
+export function OauthBody({ step, account, accounts = GITHUB_ACCOUNTS, onPick = oauthPick }) {
   if (step === 'permission' && account) {
     return (
       <div className="stack-4 gh-perm">
@@ -295,8 +318,8 @@ function OauthBody({ step, account }) {
     <div className="stack-4">
       <div className="gh-perm-head"><span className="gh-gh"><GithubMark className="icon icon-sm" /></span><span>Chọn tài khoản GitHub để liên kết với Codi</span></div>
       <ul className="gh-accounts">
-        {GITHUB_ACCOUNTS.map((a) => (
-          <li key={a.email}><button type="button" className="gh-account" onClick={() => oauthPick(a.email)}>
+        {accounts.map((a) => (
+          <li key={a.email}><button type="button" className="gh-account" onClick={() => onPick(a.email)}>
             <span className="gh-avatar" aria-hidden="true">{a.name.charAt(0)}</span>
             <span className="gh-account-main"><span className="gh-account-name">{a.name}</span><span className="gh-account-email">{a.email}</span></span>
             <Icon name="chevron-right" className="icon-sm" /></button></li>
@@ -522,7 +545,7 @@ export function GithubProfilePanel({ linkError }) {
   const profile = s.result;
   const linked = s.linked;
   const busy = v.pending || v.disconnecting || !!v.oauth;
-  const stale = profile && s.analyzedAt && Date.now() - Date.parse(s.analyzedAt) > STALE_MS;
+  const stale = profile && isStale(s.analyzedAt);
 
   return (
     <div className="stack-6 shell-gh-panel">
@@ -596,7 +619,9 @@ export function GithubLearnerCard() {
   const uid = Codi.state.currentUserId;
   if (!uid || Codi.role() !== 'learner') return null;
   const dismiss = () => { setDismissed(true); try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* hidden for this view only */ } };
-  if (stateFor(uid).linked) {
+  const s = stateFor(uid);
+  // Real card: "connected" means a saved skill profile exists; a bare link without analysis still shows the prompt.
+  if (s.hasProfile) {
     return (
       <Link className="card card-link" to={PROFILE_HREF}><div className="card-body compact row-between">
         <span className="row"><Icon name="link" /><span className="stack-1"><strong className="small">Hồ sơ năng lực</strong><span className="xsmall muted">Ước tính từ GitHub · xem và chỉnh sửa</span></span></span>
@@ -610,7 +635,7 @@ export function GithubLearnerCard() {
       <div className="row-between"><strong>Kết nối GitHub để Codi hiểu bạn nhanh hơn</strong>
         <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label="Ẩn thông báo kết nối GitHub" onClick={dismiss}><Icon name="x" /></button></div>
       <p className="small muted">Codi chỉ đọc repo công khai để gợi ý điểm bắt đầu, ghi nhãn "ước tính từ GitHub". Bài kiểm tra và bài tập vẫn quyết định trình độ của bạn.</p>
-      <div className="row"><Link className="btn btn-secondary btn-sm" to={PROFILE_HREF}>Kết nối GitHub</Link><button type="button" className="btn btn-ghost btn-sm" onClick={dismiss}>Để sau</button></div>
+      <div className="row"><Link className="btn btn-secondary btn-sm" to={onboardingHref('/dashboard')}>{s.linked ? 'Phân tích GitHub' : 'Kết nối GitHub'}</Link><button type="button" className="btn btn-ghost btn-sm" onClick={dismiss}>Để sau</button></div>
     </div></div>
   );
 }
@@ -630,5 +655,5 @@ function contextFor(userId) {
   return parts.join(' ');
 }
 
-Object.assign(Codi, { github: { openConnect, stateFor, isConnected, disconnect, contextFor, markLinked, learnerCard: () => <GithubLearnerCard /> } });
+Object.assign(Codi, { github: { openConnect, stateFor, isConnected, disconnect, contextFor, markLinked, learnerCard: () => <GithubLearnerCard />, onboardingHref } });
 Codi.onReset(() => { clearTimers(); closeSheet(); ui = blank(); uiUser = null; bump(); });

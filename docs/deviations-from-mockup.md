@@ -182,3 +182,9 @@ These belong in `docs/deviations-from-mockup.md`. That file is outside my owners
 ## AI grading assist (stage 3)
 
 - The lecturer's "AI gợi ý điểm và nhận xét" is a saved job per submission (`db.aiGradingJobs`): queued, four named stages with progress, per-criterion partial results, then succeeded, failed (with "Thử lại") or cancelled. Leaving the page and returning resumes it. The mockup showed a single loading line. AI still never saves a grade: "Dùng bản nháp này" only fills the form (rule G5).
+
+## GitHub onboarding (stage 3)
+
+- New accounts get an optional account-level "Kết nối GitHub" step after OTP verification (`/onboarding/github?next=…`); existing accounts reach it from a dashboard prompt and from course onboarding. The real app has no account-level step.
+- The flow shows the analysis result for review before "Lưu vào hồ sơ" saves it; the profile tab still saves directly, as the real app does.
+- A header theme menu (Sáng / Tối / Theo hệ thống) is available to every visitor, guests included.

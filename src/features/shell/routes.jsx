@@ -8,6 +8,7 @@ import { ForgotPasswordPage, ResetPasswordPage } from './password-pages';
 import { SettingsPage } from './settings-page';
 import { ProfilePage } from './profile-page';
 import './github-api';
+import GithubOnboardingPage, { safeNext } from './github-onboarding-page';
 
 const SIGNED_IN = ['learner', 'lecturer', 'admin'];
 
@@ -28,6 +29,8 @@ const routes = [
   { path: '/profile', element: ProfilePage, title: 'Hồ sơ cá nhân', role: SIGNED_IN },
   { path: '/profile/github', element: GithubProfileRedirect, title: 'Hồ sơ năng lực', role: SIGNED_IN },
   { path: '/github/analysis', element: GithubProfileRedirect, title: 'Hồ sơ năng lực', role: SIGNED_IN },
+  // Optional account step after sign-up; also opened from the dashboard card and course onboarding (?next= returns there).
+  { path: '/onboarding/github', element: GithubOnboardingPage, title: 'Kết nối GitHub', role: 'learner', layout: 'focus', exit: { href: () => safeNext(Codi.query().next), label: 'Để sau' } },
 ];
 
 export default routes;

@@ -252,3 +252,8 @@
 .ln-cell-lesson a { color: var(--accent); }
 ul.ln-mastery-grid { list-style: none; padding: 0; }
 .ln-nowrap { flex-wrap: nowrap; }
+
+/* Level step: optional GitHub entry (account step /onboarding/github) */
+.ln-gh-entry { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; }
+.ln-gh-entry > .icon-sm { flex: none; margin-top: 3px; }
+.ln-gh-entry .btn-link { padding: 0 2px; font-size: inherit; }

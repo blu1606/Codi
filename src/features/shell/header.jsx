@@ -1,7 +1,7 @@
 /**
  * Role-aware app header — port of the real app's components/header.tsx, cart-nav-button.tsx, user-menu.tsx,
  * mode-toggle.tsx and notification-menu.tsx (see ./notification-menu.jsx). The focus-layout header lives in
- * src/components/layout/app-layout.jsx; this is the default one.
+ * src/components/layout/app-layout.jsx; this is the default one. Both carry <ThemeToggle> (./theme-toggle.jsx).
  */
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { Codi, ROLE_LABEL, useCodi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
 import { openSignIn } from './auth';
 import NotificationMenu from './notification-menu';
+import ThemeToggle from './theme-toggle';
 import { ShellIcon, UserAvatar } from './shell-ui';
 import { THEME_OPTIONS } from './theme';
 import { endSession } from './account-store';
@@ -131,6 +132,7 @@ export default function Header() {
         {NAV[role].map(([href, label, re]) => <Link key={href} to={href} aria-current={re.test(path) ? 'page' : undefined}>{label}</Link>)}
       </nav>
       <div className="header-actions">
+        <ThemeToggle />
         {role === 'learner' && (
           <Link className="btn btn-ghost btn-icon header-icon-btn" to="/cart" aria-label={`Giỏ hàng, ${cartCount} khoá học`}><Icon name="cart" />{cartCount ? <span className="count-dot" aria-hidden="true">{cartCount > 99 ? '99+' : cartCount}</span> : null}</Link>
         )}

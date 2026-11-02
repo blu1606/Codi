@@ -2,7 +2,9 @@
  * S08–S09 Onboarding ('/learn/:courseId/onboarding'), port of real app/learn/[courseId]/onboarding/*.
  * Goal (one question per screen, choices stay local until the last step; leaving midway offers to keep a draft),
  * start fork, diagnostic (answers saved after each choice, resumable), result (BKT, D16), ready screen.
- * The real app has no GitHub level suggestion in onboarding, so none is shown here.
+ * The real app has no GitHub level suggestion in onboarding, so none is shown here: the level step only offers a quiet
+ * "Kết nối GitHub" entry (account step /onboarding/github, returning to this step) or notes that a saved skill profile
+ * exists. The learner still picks the level and the entry test decides the starting point.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -11,6 +13,30 @@ import { Alert, Icon, Mastery } from '../../components/ui/primitives';
 import { Modal } from '../../components/ui/overlay-host';
 import { GOALS, HOURS, LEVELS, applyObservations, conceptName, generatePath, rec, save } from './learning-store';
 import { courseGuard } from './learning-shared';
+
+/** Level-step GitHub entry. Keeps the unsaved choices as a draft so the learner returns to the same step. */
+function GithubEntry({ c, step, draft }) {
+  const g = Codi.github;
+  const uid = Codi.state.currentUserId;
+  if (!g || !uid || typeof g.stateFor !== 'function' || typeof g.onboardingHref !== 'function') return null;
+  const s = g.stateFor(uid);
+  if (s.hasProfile) {
+    return (
+      <p className="small muted ln-gh-entry"><Icon name="link" className="icon-sm" />
+        <span>Hồ sơ năng lực đã lưu (ước tính từ GitHub). Bạn vẫn tự chọn trình độ; bài kiểm tra đầu vào quyết định điểm bắt đầu. <Link to="/profile?tab=nang-luc">Xem hồ sơ năng lực</Link></span></p>
+    );
+  }
+  const open = () => {
+    const rr = rec(c.id);
+    rr.goalDraft = { ...draft }; rr.goalStep = step;
+    save(false);
+    Codi.go(g.onboardingHref(`/learn/${c.id}/onboarding`));
+  };
+  return (
+    <p className="small muted ln-gh-entry"><Icon name="link" className="icon-sm" />
+      <span>Có code trên GitHub? <button type="button" className="btn-link" onClick={open}>{s.linked ? 'Phân tích GitHub' : 'Kết nối GitHub'}</button> để Codi hiểu bạn nhanh hơn. Không bắt buộc.</span></p>
+  );
+}
 
 const PROMPTS = ['Bạn muốn đạt được gì với khoá học này?', 'Bạn đang ở mức nào với chủ đề này?', 'Mỗi tuần bạn dành được bao nhiêu thời gian?'];
 const KEYS = ['goal', 'level', 'hours'];
@@ -90,6 +116,7 @@ function GoalStep({ c, r }) {
           <span className="choice-body"><span className="choice-title">{t}</span>{s && <span className="choice-desc">{s}</span>}</span>
           {selected === v && <Icon name="check" className="text-accent" />}</label>
       ))}</fieldset>
+      {step === 1 && <GithubEntry c={c} step={step} draft={draft} />}
       <div className="row-between ln-wrap">
         {step > 0 ? <button type="button" className="btn btn-secondary" onClick={() => setStep(step - 1)}>Quay lại</button> : <span />}
         <div className="row ln-wrap" style={{ gap: 'var(--space-2)' }}>

@@ -14,6 +14,7 @@ import { Alert, Avatar, Icon } from '../../components/ui/primitives';
 import { GithubMark, ShellIcon } from './shell-ui';
 import OtpInput from './otp-input';
 import { EMAIL_RE, OTP_MAX_TRIES, checkOtp, checkPassword, setPassword, startSession } from './account-store';
+import { safeNext } from './github-onboarding-page';
 
 const DEMO = [['minhanh@codi.vn', 'Học viên'], ['quochuy@codi.vn', 'Giảng viên'], ['giabao@codi.vn', 'Quản trị viên'], ['kimoanh@codi.vn', 'Tài khoản bị vô hiệu hoá']];
 const REMEMBER_EMAIL_KEY = 'codi_remember_email';
@@ -65,15 +66,27 @@ export function GoogleMark({ className = 'icon google-mark' }) {
 }
 
 // ───────────────────────── actions ─────────────────────────
-/** Signs in, closes the modal and continues: pending intent, ?next=, or the role home. */
-function completeAuth(userId, { delay = 0 } = {}) {
+/**
+ * Signs in, closes the modal and continues: pending intent, ?next=, or the role home.
+ * A brand-new account (`isNew`) first gets the optional "Kết nối GitHub" step, which then continues to the same
+ * destination. A pending intent (e.g. "Thêm vào giỏ" from the gated modal) wins: the learner finishes that action and
+ * finds the GitHub prompt on the dashboard instead.
+ */
+function completeAuth(userId, { delay = 0, isNew = false } = {}) {
   startSession(userId);
   const intent = authIntent; authIntent = null;
   const wasModal = !!authModal;
   if (authModal) authModal.close();
   if (intent) { intent(); return; }
-  if (wasModal) return;
-  const go = () => { const u = Codi.currentUser(); if (u) Codi.go(Codi.query().next || Codi.homeFor(u.role)); };
+  const here = Codi.path() + (window.location.search || '');
+  if (wasModal && !isNew) return;
+  const go = () => {
+    const u = Codi.currentUser();
+    if (!u) return;
+    const next = wasModal ? here : safeNext(Codi.query().next);
+    if (isNew && u.role === 'learner' && Codi.github && Codi.github.onboardingHref) Codi.go(Codi.github.onboardingHref(next));
+    else Codi.go(next);
+  };
   if (delay) setTimeout(go, delay); else go();
 }
 
@@ -109,6 +122,7 @@ function socialAllow() {
     refreshAuth(); return;
   }
   authView.error = null; authView.socialPick = null;
+  const isNew = !u;
   if (!u) {
     const now = new Date().toISOString();
     u = { id: 'usr-new-' + Date.now().toString(36), name: pick.name, email: pick.email, role: 'learner', status: 'active', authProvider: provider, emailVerified: true, image: null, createdAt: now, lastActive: now };
@@ -119,7 +133,7 @@ function socialAllow() {
   // Signing in with GitHub links that GitHub account to the Codi account (Better Auth social account).
   if (provider === 'github' && Codi.github && Codi.github.markLinked) Codi.github.markLinked(u.id, pick);
   Codi.ui.toast('Đăng nhập thành công!', { type: 'success' });
-  completeAuth(u.id);
+  completeAuth(u.id, { isNew });
 }
 
 const FieldError = ({ msg, id }) => (msg ? <p className="field-error" id={id}><Icon name="alert-circle" className="icon-sm" /><span>{msg}</span></p> : null);
@@ -320,7 +334,7 @@ function OtpStep({ view }) {
     Codi.set((s) => { s.db.users.push(user); }, { render: false });
     setPassword(id, pendingPassword); pendingPassword = '';
     Codi.ui.toast('Xác thực email thành công! Đang chuyển hướng vào hệ thống...', { type: 'success' });
-    completeAuth(id, { delay: 1000 });
+    completeAuth(id, { delay: 1000, isNew: true });
   };
   const resend = async () => {
     await Codi.wait(500);

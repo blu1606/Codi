@@ -1318,3 +1318,43 @@ html[data-theme="dark"] .toast.toast-warn { background: #3a2a0b; }
 /* Dark mode: alert text and danger button foregrounds (the light values are hard-coded above) */
 html[data-theme="dark"] .alert-info, html[data-theme="dark"] .alert-success, html[data-theme="dark"] .alert-warn, html[data-theme="dark"] .alert-danger { color: var(--fg); border-color: var(--border-strong); }
 html[data-theme="dark"] .btn-danger { color: #0f172a; }
+
+/* ======================== GITHUB ONBOARDING + THEME TOGGLE (src/features/shell) ======================== */
+/* Header theme control (theme-toggle.jsx) */
+.shell-theme-anchor { position: relative; }
+.shell-theme-pop { width: 220px; }
+.shell-theme-pop .menu-item:focus-visible { outline: none; background: var(--subtle); box-shadow: var(--focus-ring); }
+
+/* Account step "Kết nối GitHub" (github-onboarding-page.jsx) */
+.shell-ghob .stepper { margin: 0; }
+.shell-ghob-lede { color: var(--muted); max-width: 62ch; text-wrap: pretty; }
+.shell-ghob h1 { text-wrap: balance; }
+.shell-ghob-reads { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.shell-ghob-reads .gh-consent-list { font-size: var(--text-sm); gap: var(--space-1); }
+.shell-ghob-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-top: var(--space-2); }
+.shell-ghob-num { font-variant-numeric: tabular-nums; }
+.shell-ghob-headline { margin: 0; padding-top: var(--space-3); border-top: 1px solid var(--border); font-size: var(--text-lg); line-height: 1.45; max-width: 60ch; text-wrap: pretty; }
+.shell-ghob-facts { display: grid; gap: var(--space-2); margin: 0; }
+.shell-ghob-facts > div { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: var(--space-3); align-items: baseline; }
+.shell-ghob-facts dt { font-size: var(--text-sm); color: var(--muted); }
+.shell-ghob-facts dd { margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.shell-ghob-facts dd .badge { margin-left: 4px; vertical-align: 1px; }
+@media (max-width: 480px) { .shell-ghob-facts > div { grid-template-columns: 1fr; gap: 2px; } }
+
+.shell-ghob-analysing .progress { height: 6px; }
+.shell-ghob-analysing .progress > span { transition: width 700ms var(--ease-out); }
+.shell-ghob-stages { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.shell-ghob-stages li { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-1); font-size: var(--text-sm); color: var(--faint); transition: color var(--motion-base) var(--ease-out); }
+.shell-ghob-stages li.is-done { color: var(--muted); }
+.shell-ghob-stages li.is-current { color: var(--fg); font-weight: 600; }
+.shell-ghob-stage-mark { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--border-strong); color: var(--accent-on); }
+.shell-ghob-stage-mark .icon-sm { width: 12px; height: 12px; }
+.shell-ghob-stages li.is-done .shell-ghob-stage-mark { background: var(--accent); border-color: var(--accent); }
+.shell-ghob-stages li.is-current .shell-ghob-stage-mark { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); animation: shell-pulse 1.6s var(--ease-out) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .shell-ghob-stages li.is-current .shell-ghob-stage-mark { animation: none; }
+  .shell-ghob-analysing .progress > span, .shell-ghob-stages li { transition: none; }
+}
+html[data-theme="dark"] .gh-mini-chip.is-stop-2 { background: color-mix(in oklab, #2563eb, transparent 78%); color: #bfdbfe; }
+html[data-theme="dark"] .gh-mini-chip.is-stop-3 { background: color-mix(in oklab, var(--success), transparent 78%); color: #bbf7d0; }
+/* ======================== END GITHUB ONBOARDING + THEME TOGGLE ======================== */

@@ -5,6 +5,7 @@ import { Icon } from '../ui/primitives';
 import { OverlayHost } from '../ui/overlay-host';
 import Header from '../../features/shell/header';
 import DevDrawer from '../../features/shell/dev-drawer';
+import ThemeToggle from '../../features/shell/theme-toggle';
 
 /** The route definition matching the current URL (static segments outrank params, like the mockup router). */
 export function useCurrentRoute() {
@@ -20,6 +21,7 @@ function FocusHeader({ route }) {
     <div className="app-header-inner">
       <Link className="logo" to="/"><span className="logo-mark">C</span>Codi</Link>
       <div className="header-actions">
+        <ThemeToggle />
         <Link className="btn btn-ghost" to={typeof exit.href === 'function' ? exit.href() : exit.href}><Icon name="x" /> {exit.label}</Link>
       </div>
     </div>

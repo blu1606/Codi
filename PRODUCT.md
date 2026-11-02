@@ -33,6 +33,8 @@ use case and never applies an adjustment silently.
 
 ## Operating Context
 
+Primary scene: a course-project demo projected to examiners (laptop 1366–1920 px, viewed from a distance), so
+text, status and the next action must read from afar; mobile must still work (user decision 2026-11-02).
 Payment is Vietnamese bank transfer only (VietQR, transfer content `CODI#####`, confirmed asynchronously). UI language
 is Vietnamese; prices in VND. A prototype scenario drawer switches role and forces edge states (payment
 expired/underpaid/slow/QR fail, AI failure, rate limit, knowledge-map cycle) for demos.
@@ -48,13 +50,17 @@ expired/underpaid/slow/QR fail, AI failure, rate limit, knowledge-map cycle) for
 
 ## Brand Commitments
 
-Name "Codi". Design tokens in `../Codi/docs/mockup/DESIGN-TOKENS.md` are binding: deep cyan-teal accent, Be Vietnam
-Pro body, Lexend headings, JetBrains Mono code, 5-stop mastery scale always paired with text, light + dark mode.
+Name "Codi". Kept through the 2026-11-02 redesign (user decision): deep cyan-teal accent, Be Vietnam Pro body,
+Lexend headings, JetBrains Mono code, 5-stop mastery scale always paired with text, light + dark mode. Layouts
+and composition are open to redesign; the design thinking of the video-preflight project is the
+user's reference (summary: `plans/reports/design-reference-video-preflight-261102-1114.md`).
 Tone: friendly, instructive Vietnamese. No `uppercase` on Vietnamese text.
 
 ## Evidence on Hand
 
-Seed data (fictional sample content) from `../Codi/docs/mockup/js/data.js`. No real testimonials, customers or
+Seed data (fictional sample content) from `../Codi/docs/mockup/js/data.js`; the JavaScript course carries real
+content (F8 videos, javascript.info Vietnamese readings, CC BY-NC). Course and avatar imagery: real photographs
+from free-licence stock (Unsplash/Pexels), credited (user decision 2026-11-02). No real testimonials, customers or
 metrics exist; do not fabricate any.
 
 ## Product Principles

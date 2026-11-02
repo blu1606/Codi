@@ -61,7 +61,7 @@ export default function DashboardPage() {
       <div className="page stack-6">{head}{errorAlert}<div className="card">
         <Empty icon="book-open" title="Bàn làm việc của bạn đang trống" body="Chọn một khoá học để bắt đầu. Codi sẽ xếp lộ trình riêng cho bạn sau bài kiểm tra đầu vào."
           actions={<><Link className="btn btn-primary" to="/courses">Khám phá khoá học</Link><Link className="btn btn-secondary" to="/ai"><Icon name="sparkles" /> Khám phá lộ trình cùng AI</Link></>} />
-      </div></div>
+      </div>{Codi.github && typeof Codi.github.learnerCard === 'function' ? Codi.github.learnerCard() : null}</div>
     );
   }
 
