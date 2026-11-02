@@ -1,5 +1,6 @@
 /**
- * AI grading-assist jobs (simulated runner), stored in Codi.db().aiGradingJobs and synced to Postgres by the store.
+ * AI grading-assist jobs (simulated runner; Codi's getAiGradingDraft is disabled). Jobs are browser-local
+ * (localStorage 'codi-ai-grading-jobs'); the submission and rubric come from the grading page via registerSubmission().
  *
  * Job: { id, submissionId, lecturerId, status: 'queued'|'running'|'succeeded'|'failed'|'cancelled', stage, progress,
  *        createdAt, startedAt, finishedAt, error: { code: 'error'|'limit'|'missing', message } | null,
@@ -40,13 +41,21 @@ const ms = (iso) => (iso ? new Date(iso).getTime() : NaN);
 const iso = (t) => new Date(t).toISOString();
 const flag = () => (Codi.state.scenario && Codi.state.scenario.aiAssistant) || 'ok';
 
-/** The collection, created lazily when the seed predates it. Never call during render without a store write. */
-function jobsMut() {
-  const db = Codi.db();
-  if (!Array.isArray(db.aiGradingJobs)) db.aiGradingJobs = [];
-  return db.aiGradingJobs;
+const STORE_KEY = 'codi-ai-grading-jobs';
+let jobs = (() => { try { const v = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } })();
+const jobsMut = () => jobs;
+const jobsRead = () => jobs;
+/** Persists the jobs locally and re-renders the subscribed screens. */
+function commit() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(jobs.slice(-200))); } catch { /* storage full or disabled */ }
+  if (Codi.rerender) Codi.rerender();
 }
-const jobsRead = () => { const l = Codi.db() && Codi.db().aiGradingJobs; return Array.isArray(l) ? l : []; };
+// Submissions the grading page shows: { [id]: { sub: { id, maxScore, link, fileName, note }, assignment: { rubric[] } } }
+const registry = new Map();
+/** Called by the grading card so a job can read the submission it grades. */
+export function registerSubmission(sub, assignment) { if (sub && sub.id != null) registry.set(sub.id, { sub, assignment: assignment || { rubric: [] } }); }
+const currentUser = () => (Codi.session && Codi.session.user) || null;
+const canGrade = () => { const roles = (Codi.session && Codi.session.roles) || []; return roles.includes('LECTURER') || roles.includes('ADMIN'); };
 
 /** Latest job for a submission (any status), or null. */
 export function latestJob(submissionId) {
@@ -81,8 +90,8 @@ export function liveProgress(job, now = Date.now()) {
 }
 
 function assignmentOf(sub) {
-  const l = Codi.lesson(Codi.course(sub.courseId), sub.lessonId);
-  return (l && l.assignment) || { rubric: [] };
+  const r = registry.get(sub.id);
+  return (r && r.assignment) || { rubric: [] };
 }
 function fail(j, code, now) {
   Object.assign(j, { status: 'failed', finishedAt: iso(now), error: { code, message: ERRORS[code] || ERRORS.error }, result: null });
@@ -106,7 +115,7 @@ function advance(j, now) {
     return true;
   }
   if (elapsed >= TOTAL_MS && flag() !== 'thinking') {
-    const sub = (Codi.db().submissions || []).find((s) => s.id === j.submissionId);
+    const sub = (registry.get(j.submissionId) || {}).sub;
     if (!sub) { fail(j, 'missing', now); return true; }
     try {
       const result = gradingResult(sub, assignmentOf(sub));
@@ -128,7 +137,7 @@ function tick() {
   const active = jobsRead().filter(isActive);
   let dirty = false;
   active.forEach((j) => { if (advance(j, now)) dirty = true; });
-  if (dirty) Codi.set(() => {}); // jobs were mutated in place above; this re-renders and syncs them
+  if (dirty) commit(); // jobs were mutated in place above
   if (!jobsRead().some(isActive)) { clearInterval(timer); timer = null; }
 }
 /** Starts the shared ticker when a job is active (idempotent). Safe to call from effects. */
@@ -140,9 +149,9 @@ export function ensureRunner() {
 
 /** Queues a job for the submission, or returns the active one (one active job per submission). */
 export function startJob(submissionId) {
-  const user = Codi.currentUser();
-  if (!user || (user.role !== 'lecturer' && user.role !== 'admin')) return { ok: false, error: 'Bạn không có quyền dùng AI chấm bài.' };
-  const sub = (Codi.db().submissions || []).find((s) => s.id === submissionId);
+  const user = currentUser();
+  if (!user || !canGrade()) return { ok: false, error: 'Bạn không có quyền dùng AI chấm bài.' };
+  const sub = (registry.get(submissionId) || {}).sub;
   if (!sub) return { ok: false, error: ERRORS.missing };
   const existing = activeJob(submissionId);
   if (existing) { ensureRunner(); return { ok: true, job: existing }; }
@@ -151,7 +160,7 @@ export function startJob(submissionId) {
     createdAt: iso(Date.now()), startedAt: null, finishedAt: null, error: null, result: null,
     appliedAt: null, appliedBy: null, dismissedAt: null,
   };
-  Codi.set(() => { jobsMut().push(job); });
+  jobsMut().push(job); commit();
   ensureRunner();
   return { ok: true, job };
 }
@@ -160,7 +169,7 @@ function update(jobId, fn) {
   const j = jobsRead().find((x) => x.id === jobId);
   if (!j) return false;
   let ok = false;
-  Codi.set(() => { ok = fn(j) !== false; });
+  ok = fn(j) !== false; commit();
   return ok;
 }
 
@@ -175,7 +184,7 @@ export const cancelJob = (jobId) => update(jobId, (j) => {
 /** Marks a succeeded job as used for the form (never saves a grade). */
 export const markApplied = (jobId) => update(jobId, (j) => {
   if (j.status !== 'succeeded') return false;
-  const user = Codi.currentUser();
+  const user = currentUser();
   Object.assign(j, { appliedAt: iso(Date.now()), appliedBy: user ? user.id : null });
   return true;
 });

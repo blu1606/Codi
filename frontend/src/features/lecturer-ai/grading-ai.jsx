@@ -2,7 +2,7 @@
  * AI grading assist for assignment submissions (simulated job, see ./grading-jobs.js).
  * The real app shows a disabled "AI gợi ý điểm và nhận xét" button with a "Sắp có" pill and its getAiGradingDraft
  * action always fails; the product owner kept a working simulation, now as a persisted job per submission
- * (Codi.db().aiGradingJobs) with named stages, live progress, cancel, retry and a reviewable result.
+ * (browser-local, see grading-jobs.js) with named stages, live progress, cancel, retry and a reviewable result.
  * Rule G5: the AI never sets a grade. "Dùng bản nháp này" only fills the caller's form; the lecturer saves.
  * Copy for the error / limit states comes from docs/mockup/js/lecturer.js (tc-grade-ai).
  *
@@ -24,7 +24,7 @@ import { Alert, Icon } from '../../components/ui/primitives';
 import { gradingResult, evidenceOf, confidenceLabel } from './grading-draft-logic';
 import {
   STAGES, QUEUE_MS, ERRORS, isActive, latestJob, liveProgress, ensureRunner,
-  startJob, cancelJob, dismissJob, markApplied, badgeStatus,
+  startJob, cancelJob, dismissJob, markApplied, badgeStatus, registerSubmission,
 } from './grading-jobs';
 import './lecturer-ai.css';
 
@@ -306,6 +306,7 @@ function GradingJobCard({ submission, assignment, disabled, onApply }) {
 /** Codi.lecturerAI.gradingDraft(props) → element (state follows the submission's stored job). */
 export function gradingDraft(props) {
   if (!props || !props.submission) return null;
+  registerSubmission(props.submission, props.assignment);
   return <GradingJobCard key={props.submission.id} {...props} />;
 }
 
