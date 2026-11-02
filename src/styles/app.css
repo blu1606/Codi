@@ -295,6 +295,7 @@ hr, .divider { border: 0; border-top: 1px solid var(--border); margin: var(--spa
 .main-nav a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
 .header-actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 .header-icon-btn { position: relative; }
+@media (max-width: 480px) { .header-actions { gap: 0; } .header-icon-btn { min-width: 44px; padding-inline: 10px; } }
 .count-dot {
   position: absolute; top: 4px; right: 2px; min-width: 18px; height: 18px; padding: 0 5px;
   border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-on);
