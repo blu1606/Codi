@@ -188,3 +188,5 @@ These belong in `docs/deviations-from-mockup.md`. That file is outside my owners
 - New accounts get an optional account-level "Kết nối GitHub" step after OTP verification (`/onboarding/github?next=…`); existing accounts reach it from a dashboard prompt and from course onboarding. The real app has no account-level step.
 - The flow shows the analysis result for review before "Lưu vào hồ sơ" saves it; the profile tab still saves directly, as the real app does.
 - A header theme menu (Sáng / Tối / Theo hệ thống) is available to every visitor, guests included.
+- The lesson page is a split pane (material left, work right). The AI tutor and the private Q&A are tabs in the work pane instead of a floating button and docked side panels (redesign decision, 2026-11-02).
+- The course path page draws the AI path as a transit diagram (chapters as lines, lessons as stations); the old list/map toggle is replaced by it, and the knowledge map is a separate link.

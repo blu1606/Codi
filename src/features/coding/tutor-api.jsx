@@ -11,6 +11,9 @@
  *   Codi.tutor.explainError(courseId, lessonId, testId)   opens the panel and asks why that test failed
  *   Codi.tutor.explainRunError(courseId, lessonId)        opens the panel and asks about the last syntax/runtime/timeout error
  *   Codi.tutor.launcher(courseId, lessonId) → element     round AI button + compact popup (real TutorLauncher)
+ *   Codi.tutor.embed(courseId, lessonId, opts?) → element  the same thread as a non-floating panel inside the host's
+ *       own scroll area (mark the scroller with data-tutor-scroll). While it is mounted, open()/explainError()/
+ *       explainRunError() for that lesson go to it and call opts.onActivate() so the host can show it (lesson tab).
  *   Codi.tutor.rules()                                     "Lưu ý khi dùng trợ lý AI" dialog
  *   Codi.tutor.threads(courseId, userId?) → [{lessonId, lessonTitle, firstQuestion, lastAt, messageCount}] newest first
  *   Codi.tutor.pageHref(courseId, lessonId?) → '/learn/:courseId/tutor[?lesson=…]'
@@ -612,7 +615,7 @@ export function TutorPanel({ p, onPickLesson, placeholder }) {
 
   // Keep the log scrolled to the end after every repaint.
   useLayoutEffect(() => {
-    const scroller = rootRef.current && rootRef.current.closest('.sheet-body, .tutor-page-scroll');
+    const scroller = rootRef.current && rootRef.current.closest('.sheet-body, .tutor-page-scroll, [data-tutor-scroll]');
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
   }, [v]);
   // Re-focus the composer when it becomes enabled again, if the learner was typing there.
@@ -640,7 +643,7 @@ export function TutorPanel({ p, onPickLesson, placeholder }) {
   const empty = p.loaded && !log.length && !busy && !p.failure;
 
   return (
-    <div className={`ai-panel tutor ${p.variant === 'page' ? 'is-page' : ''}`.trim()} ref={rootRef}>
+    <div className={`ai-panel tutor ${p.variant === 'page' ? 'is-page' : p.variant === 'embed' ? 'is-embed' : ''}`.trim()} ref={rootRef}>
       <div className="tutor-bar">
         <ul className="tutor-chips" aria-label="Ngữ cảnh gửi kèm câu hỏi">
           {chips.map((c) => (
@@ -792,6 +795,28 @@ function TutorLauncher({ courseId, lessonId }) {
   );
 }
 
+// ───────────────────────── embedded panel (lesson page tab) ─────────────────────────
+// While a lesson page shows the tutor inside its own tab, every open() for that lesson (explain error, selection
+// toolbar, "Hỏi AI trợ lý") lands in that tab instead of a docked sheet: the host is asked to show the tab.
+let embedded = null; // { p, activate, handle }
+function TutorEmbed({ courseId, lessonId, onActivate }) {
+  const [p] = useState(() => session(courseId, lessonId, 'embed'));
+  const activate = useRef(onActivate);
+  activate.current = onActivate;
+  useEffect(() => {
+    const host = {
+      p,
+      activate: () => { if (typeof activate.current === 'function') activate.current(); },
+      handle: { embedded: true, close() { /* the tab belongs to the page; nothing to close */ } },
+    };
+    embedded = host;
+    load(p);
+    return () => { p.current = null; p.busy = false; if (embedded === host) embedded = null; };
+  }, [p]);
+  return <TutorPanel p={p} />;
+}
+const focusComposer = (id) => setTimeout(() => { const q = document.getElementById(id); if (q && !q.disabled && wide()) q.focus(); }, LOAD_MS + 50);
+
 // ───────────────────────── public API ─────────────────────────
 function pageHref(courseId, lessonId) {
   return `/learn/${encodeURIComponent(courseId)}/tutor${lessonId ? `?lesson=${encodeURIComponent(lessonId)}` : ''}`;
@@ -801,6 +826,15 @@ const tutor = {
     const c = Codi.course(courseId); const l = c && Codi.lesson(c, lessonId);
     if (!l) return null;
     ctx = ctx || {};
+    if (embedded && embedded.p.courseId === c.id && embedded.p.lessonId === lessonId) {
+      const p = embedded.p;
+      p.ctx = { selection: ctx.selection || p.ctx.selection, testId: ctx.testId || p.ctx.testId }; p.removed = {};
+      refresh();
+      embedded.activate();
+      if (ctx.ask) ask(p, ctx.ask);
+      else focusComposer('tutor-q-embed');
+      return embedded.handle;
+    }
     if (panel && panel.handle && panel.lessonId === lessonId) {
       // already open on this lesson: add the new context, removed chips come back
       panel.ctx = { selection: ctx.selection || panel.ctx.selection, testId: ctx.testId || panel.ctx.testId }; panel.removed = {};
@@ -830,6 +864,9 @@ const tutor = {
     tutor.open(courseId, lessonId, { ask: err ? `Code của mình báo lỗi “${err.slice(0, 80)}”. Lỗi này nghĩa là gì và mình nên xem chỗ nào?` : 'Giải thích giúp mình lỗi ở lần chạy gần nhất?' });
   },
   launcher(courseId, lessonId) { return <TutorLauncher key={`${courseId}:${lessonId}`} courseId={courseId} lessonId={lessonId} />; },
+  embed(courseId, lessonId, opts) {
+    return <TutorEmbed key={`${courseId}:${lessonId}`} courseId={courseId} lessonId={lessonId} onActivate={opts && opts.onActivate} />;
+  },
   rules,
   threads: threadsFor,
   pageHref,

@@ -115,10 +115,10 @@ function YouTubeFrame({ videoId, title, startSeconds, onTracked, onUntracked, on
     };
   }, []);
   return (
-    <div className="ln-yt">
+    <div className="ln-frame"><div className="ln-yt">
       <iframe ref={frame} src={src} title={title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         referrerPolicy="strict-origin-when-cross-origin" allowFullScreen onLoad={onLoaded} />
-    </div>
+    </div></div>
   );
 }
 
@@ -170,13 +170,21 @@ function SimulatedVideo({ c, l, m, persist }) {
     setPlaying(true);
   };
   const pct = r.video[m.id] || 0;
+  // No real video URL: a poster with the title, length and a clear play control (never an empty dark box).
   return (
     <section className="stack-3" aria-label={m.title}>
-      <div className="ln-media ln-video">
-        <div className="ln-video-screen"><span className="ln-video-title">{m.title}</span>
-          <button type="button" className="ln-play" onClick={toggle} aria-label={playing ? 'Tạm dừng' : 'Phát video'}><Icon name={playing ? 'pause' : 'play'} className="icon-lg" /></button></div>
-        <div className="ln-video-bar"><div className="progress od-fill" role="progressbar" aria-label="Tiến độ video" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: pct + '%' }} /></div>
-          <span className="xsmall mono od-nowrap">{mmss((total * pct) / 100)} / {mmss(total)}</span></div>
+      <div className={`ln-frame ln-video ${playing ? 'is-playing' : ''}`.trim()}>
+        <div className="ln-video-screen">
+          <div className="ln-poster">
+            <button type="button" className="ln-play" onClick={toggle} aria-label={playing ? 'Tạm dừng' : 'Phát video'}><Icon name={playing ? 'pause' : 'play'} className="icon-lg" /></button>
+            <span className="ln-poster-title">{m.title}</span>
+            <span className="ln-poster-meta">Video · {Codi.fmt.duration(Math.max(1, Math.round(total / 60)))}{pct > 0 && pct < 100 ? ` · đã xem ${Math.round(pct)}%` : pct >= 100 ? ' · đã xem hết' : ''}</span>
+          </div>
+          <div className="ln-video-bar">
+            <span className="ln-timecode">{mmss((total * pct) / 100)} / {mmss(total)}</span>
+            <div className="ln-track" role="progressbar" aria-label="Tiến độ video" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: pct + '%' }} /></div>
+          </div>
+        </div>
       </div>
       <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{startPos.current > 0 ? ` Tiếp tục từ giây ${startPos.current}.` : ''}</p>
     </section>

@@ -25,9 +25,14 @@
  *   available(language) → boolean           true when the sandbox can run that language (JavaScript only)
  *   highlight(code, language) → string      escaped HTML with tk-* spans (for <Html>/dangerouslySetInnerHTML)
  *   codeBlock(code, language) → element     read-only highlighted <pre class="cp-code-block">
- *   view(course, lesson, opts?{preview}) → element   learner workspace: challenge (3 columns) or guided tutorial.
+ *   view(course, lesson, opts?{preview, part}) → element   learner workspace: challenge (3 columns) or guided tutorial.
  *                                           preview: true → stateless (lecturer preview): the attempt lives in memory
  *                                           only, nothing is written to codeAttempts, AI tutor buttons are hidden
+ *                                           part: 'all' (default) | 'brief' (requirements or tutorial guide + test
+ *                                           results) | 'work' (status, editor, console, pinned Chạy / Nộp bài) — the
+ *                                           split lesson page renders brief and work in separate panes.
+ *                                           onContinue: optional fn for the "Tiếp tục" button after passing (default:
+ *                                           scroll to #checklist)
  *   status(lesson) → tutorial {kind, done, step, total} | challenge {kind, done, passedCount, total, submits,
  *                    solutionViewed, score}
  *   score(lesson) → 0..100                  mastery evidence (viewing the solution before passing caps at 70)
@@ -540,7 +545,7 @@ function LoadError({ message, kind }) {
 }
 
 // ───────────────────────── challenge workspace ─────────────────────────
-function ChallengeView({ c, l, preview }) {
+function ChallengeView({ c, l, preview, part = 'all', onContinue }) {
   useCodi(); useViewState();
   useEffect(() => { restoreFocus(); });
   const cd = l.code; const key = `${preview ? 'chp' : 'ch'}:${c.id}:${l.id}`;
@@ -569,75 +574,143 @@ function ChallengeView({ c, l, preview }) {
   const score = latestScore(e);
   const failure = failures[key];
   const tabs = [['tests', 'Kết quả kiểm thử'], ['console', 'Console']];
-  const scrollToChecklist = () => { const el = document.getElementById('checklist') || document.querySelector('.ln-checklist, [data-checklist]'); if (el) el.scrollIntoView({ behavior: 'smooth' }); };
+  const scrollToChecklist = () => { if (typeof onContinue === 'function') { onContinue(); return; } const el = document.getElementById('checklist') || document.querySelector('.ln-checklist, [data-checklist]'); if (el) el.scrollIntoView({ behavior: 'smooth' }); };
   const focusEditor = () => { const ta = document.querySelector(`[data-cp-input="${key}"]`); if (ta) ta.focus(); };
 
+  const statusbar = (
+    <div className="cp-statusbar">
+      <div className="cp-status" role="status">
+        <span className={`badge ${e.passed && !busy ? 'badge-success' : 'badge-neutral'}`}>
+          {e.passed && !busy ? <Icon name="check-circle" /> : null}
+          {busy ? 'Đang chạy…' : e.passed ? `Đã đạt tất cả test${e.solutionViewed ? ' · đã xem lời giải' : ''}` : phaseLabel(r)}
+        </span>
+        <span className="small muted">Đã nộp {e.submits || 0} lần</span>
+        {score !== null ? <span className="small muted">Điểm lần nộp gần nhất: <strong className="cp-num">{score}</strong></span> : null}
+      </div>
+    </div>
+  );
+  const sandboxAlert = !can ? <Alert type="info" title="Sandbox chưa sẵn sàng" body={`Dịch vụ chạy ${LANG[cd.language] || cd.language} chưa sẵn sàng. Bạn vẫn có thể đọc yêu cầu và lưu nháp.`} /> : null;
+  const instr = (
+    <div className="cp-col cp-instr">
+      <h2 className="cp-h">Yêu cầu</h2>
+      <ol className="cp-steps">
+        {(cd.instructions && cd.instructions.length ? cd.instructions : ['Hoàn thành hàm để đạt tất cả kiểm thử.']).map((s, i) => (
+          <li key={i} className={stepDone(i) ? 'is-done' : ''}>
+            <span className="cp-step-icon"><Icon name={stepDone(i) ? 'check-circle' : 'circle'} className="icon-sm" /></span>
+            <div className="cp-step-body"><span className="cp-step-n">Bước {i + 1}<span className="sr-only">{stepDone(i) ? ' — đã đạt' : ' — chưa đạt'}</span></span><Md text={s} /></div>
+          </li>
+        ))}
+      </ol>
+      <div className="cp-hints stack-2">
+        <h3 className="cp-h3"><Icon name="lightbulb" className="icon-sm" /> Bí rồi? Xem gợi ý</h3>
+        {shownHints.map((h, i) => <details key={i} className="cp-hint"><summary>Gợi ý {i + 1}</summary><Md text={h} /></details>)}
+        {lockedHints > 0 ? <p className="cp-hint-locked"><Icon name="lock" className="icon-sm" /> Còn {lockedHints} gợi ý mở dần sau mỗi lần nộp chưa đạt.</p> : null}
+      </div>
+      <details className="cp-solution">
+        <summary className="cp-solution-summary"><Icon name="eye" className="icon-sm" /> Lời giải</summary>
+        <div className="stack-2 cp-solution-body">
+          {solOpen && (e.passed || e.solutionViewed) ? (
+            <>{codeBlock(cd.solution, cd.language)}<p className="xsmall muted">Bạn vẫn cần tự nộp code đạt tất cả test để hoàn thành bài.</p></>
+          ) : solOpen ? (
+            <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => solutionAction(key)}>Xem lời giải</button>
+          ) : (
+            <p className="small muted">Lời giải mở khi bạn đạt tất cả test hoặc sau 3 lần nộp chạy xong nhưng chưa đạt.</p>
+          )}
+        </div>
+      </details>
+    </div>
+  );
+  const codeEditor = editor({
+    id: `cp-ed-${l.id}`, key, value: code, fileName: cd.fileName, language: cd.language, label: 'Code bài làm', minRows: 18, maxRows: 26,
+    readonly: busy, errorLine: r ? r.line : null,
+    barExtra: (
+      <span className="cp-bar-tools">
+        <span className="cp-lang" role="status">{saving[key] ? 'Đang lưu nháp…' : 'Đã lưu nháp'}</span>
+        <button type="button" className="btn btn-ghost btn-sm cp-bar-btn" data-cp-format="" disabled={busy || !can} title="Định dạng code (Shift+Alt+F)" aria-label="Định dạng code" onClick={() => formatAction(key)}><Icon name="code" className="icon-sm" /><span className="cp-bar-label">Định dạng code</span></button>
+        <button type="button" className="btn btn-ghost btn-sm cp-bar-btn" disabled={busy} title="Khôi phục code ban đầu" aria-label="Đặt lại" onClick={() => resetAction(key)}><Icon name="rotate-ccw" className="icon-sm" /><span className="cp-bar-label">Đặt lại</span></button>
+      </span>
+    ),
+  });
+  const actions = (
+    <div className="cp-actions">
+      <button type="button" className="btn btn-primary" data-action="cp-run" data-cp-run="" data-mode="run" disabled={busy || !can} aria-busy={busy ? 'true' : undefined} onClick={() => runAction(key, 'run')}>
+        {busy ? null : <Icon name="play" className="icon-sm" />} Chạy <kbd className="cp-kbd">Ctrl/⌘ ↵</kbd>
+      </button>
+      <button type="button" className="btn btn-primary" data-action="cp-run" data-mode="submit" disabled={busy || !can} onClick={() => runAction(key, 'submit')}><Icon name="check" className="icon-sm" /> Nộp bài</button>
+      <span className="xsmall muted">{visible.length} test mẫu · Chấm toàn bộ khi nộp</span>
+    </div>
+  );
+  const meta = (
+    <div className="cp-meta xsmall muted">
+      <p>Chỉ lần nộp gần nhất được tính.</p>
+      <details className="cp-keys"><summary>Phím tắt</summary><p>Tab: thụt lề · Esc rồi Tab: rời editor · Shift+Alt+F: định dạng</p></details>
+    </div>
+  );
+  const busyLine = <p className="row muted cp-busy"><Icon name="loader" className="icon-sm cp-spin" /> Đang chạy kiểm thử…</p>;
+  const testsBody = (
+    <div className="stack-3">
+      <div className="cp-tests-head">
+        <p className="small"><strong>{r ? `${outs.filter((o) => o.pass).length}/${outs.length} bài kiểm thử đạt` : 'Bấm Chạy để thử với test mẫu, hoặc Nộp bài để chấm toàn bộ.'}</strong></p>
+        {r ? (
+          <div className="cp-filter-tabs" aria-label="Lọc kiểm thử">
+            {[['all', 'Tất cả'], ['pass', 'Đạt'], ['fail', 'Chưa đạt']].map(([t, label]) => (
+              <button key={t} type="button" aria-pressed={f === t} className={`cp-filter-tab ${f === t ? 'is-active' : ''}`} onClick={() => filterAction(key, t)}>{label}</button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <ul className="cp-tests">{shownTests.map((t) => testRow(t, oc(t.id), aiCtx))}</ul>
+      {r && r.mode === 'submit' && hidden.length
+        ? <p className={`cp-hidden-sum ${hiddenOuts.every((o) => o.pass) ? 'is-pass' : 'is-fail'}`}><Icon name={hiddenOuts.every((o) => o.pass) ? 'check-circle' : 'x-circle'} className="icon-sm" /> Test ẩn: {hiddenOuts.filter((o) => o.pass).length}/{hidden.length} đạt</p>
+        : <p className="xsmall muted"><Icon name="lock" className="icon-sm" /> Test ẩn chỉ chạy khi nộp bài.</p>}
+    </div>
+  );
+  const passedAlert = e.passed && !busy ? (
+    <Alert type="success" title="Đã đạt tất cả test!" body={`Bạn đã nộp ${e.submits} lần. Giờ có thể hoàn thành bài học.`}
+      actions={<><button type="button" className="btn btn-primary btn-sm" onClick={scrollToChecklist}>Tiếp tục</button><button type="button" className="btn btn-secondary btn-sm" onClick={focusEditor}>Xem lại code</button></>} />
+  ) : null;
+
+  // Split lesson layout: the brief (requirements, hints, solution, test results) and the work (editor, console,
+  // run/submit) render in separate panes. Both read the same attempt and view state.
+  if (part === 'brief') {
+    return (
+      <section className="cp-challenge cp-part-brief" aria-label="Yêu cầu bài code">
+        {instr}
+        <section className="cp-panel cp-tests-panel" aria-label="Kết quả kiểm thử" aria-live="polite">
+          <h3 className="cp-h3"><Icon name="check-circle" className="icon-sm" /> Kết quả kiểm thử</h3>
+          {busy ? busyLine : testsBody}
+        </section>
+      </section>
+    );
+  }
+  if (part === 'work') {
+    return (
+      <section className="cp-challenge cp-part-work" data-cp-workspace={key} aria-label="Bài code">
+        {statusbar}
+        <FailureAlert f={failure} busy={busy} />
+        {sandboxAlert}
+        {codeEditor}
+        {meta}
+        <section className="cp-panel cp-console" aria-label="Console">
+          <h3 className="cp-h3"><Icon name="terminal" className="icon-sm" /> Console</h3>
+          <div aria-live="polite">{busy ? busyLine : consoleView(r, aiCtx)}</div>
+        </section>
+        {passedAlert}
+        <div className="cp-dock">{actions}</div>
+      </section>
+    );
+  }
   return (
     <section className="cp-challenge" data-cp-workspace={key} aria-label="Bài code">
-      <div className="cp-statusbar">
-        <div className="cp-status" role="status">
-          <span className={`badge ${e.passed && !busy ? 'badge-success' : 'badge-neutral'}`}>
-            {e.passed && !busy ? <Icon name="check-circle" /> : null}
-            {busy ? 'Đang chạy…' : e.passed ? `Đã đạt tất cả test${e.solutionViewed ? ' · đã xem lời giải' : ''}` : phaseLabel(r)}
-          </span>
-          <span className="small muted">Đã nộp {e.submits || 0} lần</span>
-          {score !== null ? <span className="small muted">Điểm lần nộp gần nhất: <strong className="cp-num">{score}</strong></span> : null}
-        </div>
-      </div>
+      {statusbar}
       <FailureAlert f={failure} busy={busy} />
-      {!can ? <Alert type="info" title="Sandbox chưa sẵn sàng" body={`Dịch vụ chạy ${LANG[cd.language] || cd.language} chưa sẵn sàng. Bạn vẫn có thể đọc yêu cầu và lưu nháp.`} /> : null}
+      {sandboxAlert}
       <div className="cp-grid">
-        <div className="cp-col cp-instr">
-          <h2 className="cp-h">Yêu cầu</h2>
-          <ol className="cp-steps">
-            {(cd.instructions && cd.instructions.length ? cd.instructions : ['Hoàn thành hàm để đạt tất cả kiểm thử.']).map((s, i) => (
-              <li key={i} className={stepDone(i) ? 'is-done' : ''}>
-                <span className="cp-step-icon"><Icon name={stepDone(i) ? 'check-circle' : 'circle'} className="icon-sm" /></span>
-                <div className="cp-step-body"><span className="cp-step-n">Bước {i + 1}<span className="sr-only">{stepDone(i) ? ' — đã đạt' : ' — chưa đạt'}</span></span><Md text={s} /></div>
-              </li>
-            ))}
-          </ol>
-          <div className="cp-hints stack-2">
-            <h3 className="cp-h3"><Icon name="lightbulb" className="icon-sm" /> Bí rồi? Xem gợi ý</h3>
-            {shownHints.map((h, i) => <details key={i} className="cp-hint"><summary>Gợi ý {i + 1}</summary><Md text={h} /></details>)}
-            {lockedHints > 0 ? <p className="cp-hint-locked"><Icon name="lock" className="icon-sm" /> Còn {lockedHints} gợi ý mở dần sau mỗi lần nộp chưa đạt.</p> : null}
-          </div>
-          <details className="cp-solution">
-            <summary className="cp-solution-summary"><Icon name="eye" className="icon-sm" /> Lời giải</summary>
-            <div className="stack-2 cp-solution-body">
-              {solOpen && (e.passed || e.solutionViewed) ? (
-                <>{codeBlock(cd.solution, cd.language)}<p className="xsmall muted">Bạn vẫn cần tự nộp code đạt tất cả test để hoàn thành bài.</p></>
-              ) : solOpen ? (
-                <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => solutionAction(key)}>Xem lời giải</button>
-              ) : (
-                <p className="small muted">Lời giải mở khi bạn đạt tất cả test hoặc sau 3 lần nộp chạy xong nhưng chưa đạt.</p>
-              )}
-            </div>
-          </details>
-        </div>
+        {instr}
         <div className="cp-col cp-code">
-          {editor({
-            id: `cp-ed-${l.id}`, key, value: code, fileName: cd.fileName, language: cd.language, label: 'Code bài làm', minRows: 18, maxRows: 26,
-            readonly: busy, errorLine: r ? r.line : null,
-            barExtra: (
-              <span className="cp-bar-tools">
-                <span className="cp-lang" role="status">{saving[key] ? 'Đang lưu nháp…' : 'Đã lưu nháp'}</span>
-                <button type="button" className="btn btn-ghost btn-sm cp-bar-btn" data-cp-format="" disabled={busy || !can} title="Định dạng code (Shift+Alt+F)" aria-label="Định dạng code" onClick={() => formatAction(key)}><Icon name="code" className="icon-sm" /><span className="cp-bar-label">Định dạng code</span></button>
-                <button type="button" className="btn btn-ghost btn-sm cp-bar-btn" disabled={busy} title="Khôi phục code ban đầu" aria-label="Đặt lại" onClick={() => resetAction(key)}><Icon name="rotate-ccw" className="icon-sm" /><span className="cp-bar-label">Đặt lại</span></button>
-              </span>
-            ),
-          })}
-          <div className="cp-actions">
-            <button type="button" className="btn btn-primary" data-action="cp-run" data-cp-run="" data-mode="run" disabled={busy || !can} aria-busy={busy ? 'true' : undefined} onClick={() => runAction(key, 'run')}>
-              {busy ? null : <Icon name="play" className="icon-sm" />} Chạy <kbd className="cp-kbd">Ctrl/⌘ ↵</kbd>
-            </button>
-            <button type="button" className="btn btn-primary" data-action="cp-run" data-mode="submit" disabled={busy || !can} onClick={() => runAction(key, 'submit')}><Icon name="check" className="icon-sm" /> Nộp bài</button>
-            <span className="xsmall muted">{visible.length} test mẫu · Chấm toàn bộ khi nộp</span>
-          </div>
-          <div className="cp-meta xsmall muted">
-            <p>Chỉ lần nộp gần nhất được tính.</p>
-            <details className="cp-keys"><summary>Phím tắt</summary><p>Tab: thụt lề · Esc rồi Tab: rời editor · Shift+Alt+F: định dạng</p></details>
-          </div>
+          {codeEditor}
+          {actions}
+          {meta}
         </div>
         <div className="cp-col cp-out">
           <section className="cp-panel cp-out-panel" aria-label="Đầu ra">
@@ -647,40 +720,18 @@ function ChallengeView({ c, l, preview }) {
               ))}
             </div>
             <div role="tabpanel" id={`cp-out-${l.id}-${tab}`} aria-labelledby={`cp-tab-${l.id}-${tab}`} className={`cp-out-body ${tab === 'console' ? 'cp-console' : ''}`.trim()} aria-live="polite">
-              {busy ? <p className="row muted cp-busy"><Icon name="loader" className="icon-sm cp-spin" /> Đang chạy kiểm thử…</p>
-                : tab === 'console' ? consoleView(r, aiCtx)
-                  : (
-                    <div className="stack-3">
-                      <div className="cp-tests-head">
-                        <p className="small"><strong>{r ? `${outs.filter((o) => o.pass).length}/${outs.length} bài kiểm thử đạt` : 'Bấm Chạy để thử với test mẫu, hoặc Nộp bài để chấm toàn bộ.'}</strong></p>
-                        {r ? (
-                          <div className="cp-filter-tabs" aria-label="Lọc kiểm thử">
-                            {[['all', 'Tất cả'], ['pass', 'Đạt'], ['fail', 'Chưa đạt']].map(([t, label]) => (
-                              <button key={t} type="button" aria-pressed={f === t} className={`cp-filter-tab ${f === t ? 'is-active' : ''}`} onClick={() => filterAction(key, t)}>{label}</button>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                      <ul className="cp-tests">{shownTests.map((t) => testRow(t, oc(t.id), aiCtx))}</ul>
-                      {r && r.mode === 'submit' && hidden.length
-                        ? <p className={`cp-hidden-sum ${hiddenOuts.every((o) => o.pass) ? 'is-pass' : 'is-fail'}`}><Icon name={hiddenOuts.every((o) => o.pass) ? 'check-circle' : 'x-circle'} className="icon-sm" /> Test ẩn: {hiddenOuts.filter((o) => o.pass).length}/{hidden.length} đạt</p>
-                        : <p className="xsmall muted"><Icon name="lock" className="icon-sm" /> Test ẩn chỉ chạy khi nộp bài.</p>}
-                    </div>
-                  )}
+              {busy ? busyLine : tab === 'console' ? consoleView(r, aiCtx) : testsBody}
             </div>
           </section>
         </div>
       </div>
-      {e.passed && !busy ? (
-        <Alert type="success" title="Đã đạt tất cả test!" body={`Bạn đã nộp ${e.submits} lần. Giờ có thể hoàn thành bài học.`}
-          actions={<><button type="button" className="btn btn-primary btn-sm" onClick={scrollToChecklist}>Tiếp tục</button><button type="button" className="btn btn-secondary btn-sm" onClick={focusEditor}>Xem lại code</button></>} />
-      ) : null}
+      {passedAlert}
     </section>
   );
 }
 
 // ───────────────────────── tutorial workspace (Replit-style) ─────────────────────────
-function TutorialView({ c, l, preview }) {
+function TutorialView({ c, l, preview, part = 'all' }) {
   useCodi(); useViewState();
   useEffect(() => { restoreFocus(); });
   const cd = l.code; const steps = cd.steps || [];
@@ -702,10 +753,17 @@ function TutorialView({ c, l, preview }) {
     if (err) Codi.tutor.explainRunError(c.id, l.id);
     else Codi.tutor.open(c.id, l.id, { testId: failed && failed.id, ask: `Giải thích giúp mình vì sao “${failed ? failed.name : ''}” chưa đạt?` });
   };
-  return (
-    <section className="cp-tutorial stack-3" data-cp-workspace={key} aria-label="Hướng dẫn code">
-      <FailureAlert f={failure} busy={busy} />
-      <div className="cp-tut-grid">
+  const tutActions = (
+              <div className="cp-actions">
+                <button type="button" className="btn btn-primary" data-action="cp-run" data-cp-run="" data-mode={s.tests ? 'submit' : 'run'} disabled={busy || !can} aria-busy={busy ? 'true' : undefined} onClick={() => runAction(key, 'run')}>
+                  {busy ? null : <Icon name="play" className="icon-sm" />} Chạy <kbd className="cp-kbd">Ctrl/⌘ ↵</kbd>
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" data-cp-format="" disabled={busy || !can} aria-label="Định dạng code" title="Định dạng code (Shift+Alt+F)" onClick={() => formatAction(key)}><Icon name="code" className="icon-sm" /> Định dạng</button>
+                <button type="button" className="btn btn-ghost btn-sm" disabled={busy} aria-label="Khôi phục code ban đầu" onClick={() => resetAction(key)}><Icon name="rotate-ccw" className="icon-sm" /> Đặt lại</button>
+                <span className="xsmall muted" role="status">{saving[key] ? 'Chưa lưu nháp' : 'Đã lưu nháp'}</span>
+              </div>
+  );
+  const guide = (
         <div className="cp-tut-guide">
           <div className="cp-tut-head">
             <button type="button" className="btn btn-ghost btn-sm" disabled={busy} aria-expanded={String(!!tocOpen[tKey])} aria-controls={`cp-toc-${l.id}`} onClick={() => tocAction(tKey)}><Icon name="list" className="icon-sm" /> Mục lục</button>
@@ -742,6 +800,8 @@ function TutorialView({ c, l, preview }) {
               : <span className="badge badge-success"><Icon name="check-circle" />Đã đi hết hướng dẫn</span>}
           </div>
         </div>
+  );
+  const work = (
         <div className="cp-tut-work">
           {gated ? (
             <div className="cp-gate-pane"><Icon name="eye-off" className="icon-lg" /><p>Code lời giải đang được ẩn.</p><p className="small">Chọn “Hiện lời giải” khi bạn đã sẵn sàng.</p></div>
@@ -749,14 +809,7 @@ function TutorialView({ c, l, preview }) {
             <>
               {!can ? <Alert type="info" title="Sandbox chưa sẵn sàng" body="Bạn vẫn có thể đọc hướng dẫn và lưu nháp." /> : null}
               {editor({ id: `cp-tu-${l.id}-${i}`, key, value: code, fileName: cd.fileName, language: cd.language, label: 'Code hướng dẫn', minRows: 12, maxRows: 18, readonly: busy, errorLine: r ? r.line : null })}
-              <div className="cp-actions">
-                <button type="button" className="btn btn-primary" data-action="cp-run" data-cp-run="" data-mode={s.tests ? 'submit' : 'run'} disabled={busy || !can} aria-busy={busy ? 'true' : undefined} onClick={() => runAction(key, 'run')}>
-                  {busy ? null : <Icon name="play" className="icon-sm" />} Chạy <kbd className="cp-kbd">Ctrl/⌘ ↵</kbd>
-                </button>
-                <button type="button" className="btn btn-ghost btn-sm" data-cp-format="" disabled={busy || !can} aria-label="Định dạng code" title="Định dạng code (Shift+Alt+F)" onClick={() => formatAction(key)}><Icon name="code" className="icon-sm" /> Định dạng</button>
-                <button type="button" className="btn btn-ghost btn-sm" disabled={busy} aria-label="Khôi phục code ban đầu" onClick={() => resetAction(key)}><Icon name="rotate-ccw" className="icon-sm" /> Đặt lại</button>
-                <span className="xsmall muted" role="status">{saving[key] ? 'Chưa lưu nháp' : 'Đã lưu nháp'}</span>
-              </div>
+              {part === 'work' ? null : tutActions}
               <section className="cp-panel cp-console" aria-label="Console">
                 <h3 className="cp-h3"><Icon name="terminal" className="icon-sm" /> Console</h3>
                 <div className="cp-console-lines" role="log" aria-live="polite" aria-busy={busy}>
@@ -777,19 +830,32 @@ function TutorialView({ c, l, preview }) {
                   ) : <p className="cp-console-empty">Bấm <strong>Chạy</strong> để xem kết quả ở đây.</p>}
                 </div>
               </section>
+              {part === 'work' ? <div className="cp-dock">{tutActions}</div> : null}
             </>
           )}
         </div>
+  );
+  if (part === 'brief') return <section className="cp-tutorial cp-part-brief" aria-label="Hướng dẫn code">{guide}</section>;
+  if (part === 'work') return <section className="cp-tutorial cp-part-work stack-3" data-cp-workspace={key} aria-label="Code hướng dẫn"><FailureAlert f={failure} busy={busy} />{work}</section>;
+  return (
+    <section className="cp-tutorial stack-3" data-cp-workspace={key} aria-label="Hướng dẫn code">
+      <FailureAlert f={failure} busy={busy} />
+      <div className="cp-tut-grid">
+        {guide}
+        {work}
       </div>
     </section>
   );
 }
 
 // opts.preview: stateless workspace (lecturer preview). The attempt stays in memory; no codeAttempts writes, no tutor.
+// opts.part: 'all' (default, one workspace) | 'brief' (requirements / tutorial guide + test results) | 'work' (editor,
+// console, run/submit). The split lesson layout renders 'brief' and 'work' in two panes over the same attempt.
 function view(c, l, opts) {
   const preview = !!(opts && opts.preview);
-  const k = `${preview ? 'p:' : ''}${c.id}:${l.id}`;
-  return l.code.kind === 'tutorial' ? <TutorialView key={`tu:${k}`} c={c} l={l} preview={preview} /> : <ChallengeView key={`ch:${k}`} c={c} l={l} preview={preview} />;
+  const part = (opts && (opts.part === 'brief' || opts.part === 'work') && opts.part) || 'all';
+  const k = `${preview ? 'p:' : ''}${c.id}:${l.id}:${part}`;
+  return l.code.kind === 'tutorial' ? <TutorialView key={`tu:${k}`} c={c} l={l} preview={preview} part={part} /> : <ChallengeView key={`ch:${k}`} c={c} l={l} preview={preview} part={part} onContinue={opts && opts.onContinue} />;
 }
 
 // ───────────────────────── lecturer helpers ─────────────────────────

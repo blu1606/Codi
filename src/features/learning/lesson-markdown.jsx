@@ -2,7 +2,7 @@
  * Lesson body authored by lecturers (port of real components/lesson-markdown.tsx).
  * Static markdown: raw HTML is escaped (never parsed), links open in a new tab with rel="noopener noreferrer",
  * only http(s), mailto and same-site links are kept, and single line breaks of plain-text bodies are preserved.
- * Supported: # headings, fenced code, `inline code`, **bold**, *italic*, [links](url), - / 1. lists, > quotes.
+ * Supported: # headings, --- rules, fenced code, `inline code`, **bold**, *italic*, [links](url), - / 1. lists, > quotes.
  */
 import { esc } from '../../components/ui/primitives';
 
@@ -47,6 +47,7 @@ export function lessonMarkdownToHtml(source) {
       out.push(`<pre tabindex="0"${fence[1] ? ` data-lang="${esc(fence[1])}"` : ''}><code>${esc(code.join('\n'))}</code></pre>`);
       continue;
     }
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flushAll(); out.push('<hr>'); continue; }
     const heading = line.match(/^(#{1,4})\s+(.*)$/);
     if (heading) { flushAll(); const level = Math.min(4, heading[1].length + 1); out.push(`<h${level}>${inline(heading[2])}</h${level}>`); continue; }
     const ul = line.match(/^\s*[-*+]\s+(.*)$/); const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);

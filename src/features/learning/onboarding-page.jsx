@@ -147,21 +147,26 @@ function StartFork({ c, r }) {
   return (
     <div className="page page-focus stack-6">
       <div className="stack-2"><h1>Bạn muốn học như thế nào?</h1><p className="muted">Hai cách bắt đầu — chọn một và bạn có thể thay đổi sau.</p></div>
-      <div className="grid-2 stack-3">
+      {/* Both cards share one structure: the badge sits out of flow, the note + button sit on a common bottom line. */}
+      <div className="grid-2 choice-fork">
         <div className="choice-card">
           <span className="choice-card-icon"><Icon name="list" /></span>
           <span className="choice-card-title">Học từ bài 1</span>
           <span className="choice-card-desc">Học theo thứ tự mặc định của giảng viên. Bạn có thể làm bài kiểm tra đầu vào bất cứ lúc nào để Codi cá nhân hoá lộ trình.</span>
-          <span className="choice-card-note">Tất cả bài đều mở, cần tiên quyết</span>
-          <button type="button" className="btn btn-secondary" onClick={chooseDefault}>Học từ bài 1</button>
+          <div className="choice-card-foot">
+            <span className="choice-card-note">Tất cả bài đều mở, cần tiên quyết</span>
+            <button type="button" className="btn btn-secondary" onClick={chooseDefault}>Học từ bài 1</button>
+          </div>
         </div>
         <div className="choice-card is-recommended">
-          <span className="badge badge-accent" style={{ alignSelf: 'start' }}>Khuyến nghị</span>
+          <span className="badge badge-accent choice-card-badge">Khuyến nghị</span>
           <span className="choice-card-icon"><Icon name="sparkles" /></span>
           <span className="choice-card-title">Tìm điểm bắt đầu của tôi</span>
           <span className="choice-card-desc">~10 phút, giúp bỏ qua phần bạn đã biết.</span>
-          <span className="choice-card-note">Codi xếp lộ trình riêng cho bạn</span>
-          <button type="button" className="btn btn-primary" onClick={chooseDiagnostic}>Tìm điểm bắt đầu của tôi</button>
+          <div className="choice-card-foot">
+            <span className="choice-card-note">Codi xếp lộ trình riêng cho bạn</span>
+            <button type="button" className="btn btn-primary" onClick={chooseDiagnostic}>Tìm điểm bắt đầu của tôi</button>
+          </div>
         </div>
       </div>
     </div>

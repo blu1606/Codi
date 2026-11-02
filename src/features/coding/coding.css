@@ -142,6 +142,24 @@ dl.cp-test-detail { display: grid; gap: var(--space-2); margin: 0; }
   .tutor-page-head, .tutor-page-scroll { padding-left: var(--space-4); padding-right: var(--space-4); }
   .ai-panel.tutor.is-page .ai-panel-composer { margin: 0 calc(-1 * var(--space-4)); padding-left: var(--space-4); padding-right: var(--space-4); }
 }
+/* ───────────── Split lesson page: view(c, l, {part}) ───────────── */
+/* brief (left pane): requirements or tutorial guide + test results, flat on the pane */
+.cp-part-brief { display: grid; gap: var(--space-4); }
+.cp-part-brief .cp-tut-guide { position: static; padding: 0; border: 0; }
+.cp-tests-panel { gap: var(--space-3); }
+/* work (right pane): status, editor, console; Chạy / Nộp bài pinned to the bottom of the scroller */
+.cp-part-work { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.cp-part-work .cp-tut-work { flex: 1 0 auto; display: flex; flex-direction: column; gap: var(--space-4); }
+.cp-part-work .cp-console-lines { max-height: 220px; }
+.cp-dock { position: sticky; bottom: 0; z-index: 2; margin-top: auto; padding: var(--space-3) 0; background: var(--surface); border-top: 1px solid var(--border); }
+.cp-dock .cp-actions { margin-top: 0; padding-top: 0; border-top: 0; }
+
+/* embedded tutor (lesson page tab): the host scroller holds the thread; the composer is pinned to its bottom */
+.ai-panel.tutor.is-embed { --tutor-pad: var(--space-6); padding: var(--space-5) var(--tutor-pad) 0; min-height: 0; }
+.ai-panel.tutor.is-embed .ai-panel-composer { bottom: 0; margin: auto calc(-1 * var(--tutor-pad)) 0; padding: var(--space-3) var(--tutor-pad) var(--space-4); }
+@media (max-width: 1279px) { .ai-panel.tutor.is-embed { --tutor-pad: var(--space-5); } }
+@media (max-width: 1023px) { .ai-panel.tutor.is-embed { --tutor-pad: var(--space-4); } }
+
 @media (prefers-reduced-motion: reduce) {
   .cp-spin { animation: none; }
   .cp-test-chevron, .cp-filter-tab { transition: none; }

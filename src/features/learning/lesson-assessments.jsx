@@ -20,7 +20,7 @@ import {
 const scrollToId = (id) => { const t = document.getElementById(id); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
 // ───────────────────────── quiz ─────────────────────────
-export function QuizSection({ c, r, l }) {
+export function QuizSection({ c, r, l, bare = false, onContinue }) {
   const qz = l.quiz;
   const st = r.quiz[l.id] || null;
   const pass = qz.passingScore != null ? qz.passingScore : 70;
@@ -96,7 +96,7 @@ export function QuizSection({ c, r, l }) {
   if (unavailable) {
     body = <Alert type="info" body={unavailable} />;
   } else if (!st || (!st.submitted && st.status !== 'draft')) {
-    body = <div><button type="button" className="btn btn-primary" onClick={() => startAttempt('open')} disabled={busy} aria-busy={busy || undefined}>Làm quiz</button></div>;
+    body = <div className="ln-dock"><button type="button" className="btn btn-primary" onClick={() => startAttempt('open')} disabled={busy} aria-busy={busy || undefined}>Làm quiz</button></div>;
   } else if (st.status !== 'draft' && st.submitted) {
     const hasDetail = Object.keys(st.answers || {}).length > 0;
     body = (
@@ -127,9 +127,9 @@ export function QuizSection({ c, r, l }) {
             );
           })}</ol>
         </details>
-        <div className="row">
+        <div className="row ln-dock">
           <button type="button" className="btn btn-secondary" onClick={() => startAttempt('retake')} disabled={busy} aria-busy={busy || undefined}><Icon name="rotate-ccw" className="icon-sm" /> Làm lại</button>
-          <a className="btn btn-ghost" href="#checklist" onClick={(e) => { e.preventDefault(); scrollToId('checklist'); }}>Tiếp tục</a>
+          <a className="btn btn-ghost" href="#checklist" onClick={(e) => { e.preventDefault(); if (onContinue) onContinue(); else scrollToId('checklist'); }}>Tiếp tục</a>
         </div>
       </>
     );
@@ -153,7 +153,7 @@ export function QuizSection({ c, r, l }) {
               <label key={k} className={`choice ${a === k ? 'is-selected' : ''}`}><input type="radio" name={`quiz-${l.id}-${q.id}`} value={k} checked={a === k} onChange={() => answer(q, k)} /><span className="choice-body"><span className="choice-title">{o}</span></span></label>
             ))}</div>
           </fieldset>
-          <div className="row-between">
+          <div className="row-between ln-dock">
             <button type="button" className="btn btn-ghost" onClick={() => setIndex(i - 1)} disabled={busy || i === 0}><Icon name="arrow-left" /> Câu trước</button>
             {i < questions.length - 1
               ? <button type="button" className="btn btn-secondary" onClick={() => setIndex(i + 1)} disabled={busy}>Câu tiếp <Icon name="arrow-right" /></button>
@@ -163,14 +163,17 @@ export function QuizSection({ c, r, l }) {
       );
     }
   }
-  return (
-    <section className="card" id="quiz" aria-busy={busy || undefined}><div className="card-body stack-4">
+  const inner = (
+    <>
       {head}
       {qz.instructions && <p className="small">{qz.instructions}</p>}
       {error && <Alert type="danger" body={error} />}
       {body}
-    </div></section>
+    </>
   );
+  // bare: rendered inside the lesson page's task tab (no card); the action row is pinned to the tab's bottom.
+  if (bare) return <section className="ln-task" id="quiz" aria-label={qz.title || 'Quiz cuối bài'} aria-busy={busy || undefined}>{inner}</section>;
+  return <section className="card" id="quiz" aria-busy={busy || undefined}><div className="card-body stack-4">{inner}</div></section>;
 }
 
 // ───────────────────────── assignment ─────────────────────────
@@ -186,7 +189,7 @@ function SubmissionContent({ sub }) {
   );
 }
 
-export function AssignmentSection({ c, r, l }) {
+export function AssignmentSection({ c, r, l, bare = false }) {
   const a = l.assignment;
   const sub = mySubmission(l.id);
   const format = submissionFormat(a);
@@ -348,14 +351,14 @@ export function AssignmentSection({ c, r, l }) {
       <div className="stack-3">
         <Alert type="info" title="Đã nộp — chờ chấm" body={`${sub.submittedAt ? `Nộp lúc ${Codi.fmt.datetime(sub.submittedAt)}. ` : ''}Bạn đã có thể hoàn thành bài học; điểm sẽ có sau khi giảng viên chấm.`} />
         <SubmissionContent sub={sub} />
-        <div><button type="button" className="btn btn-secondary btn-sm" onClick={openResubmit} disabled={busy} aria-busy={busy || undefined}>Nộp lại (trước khi được chấm)</button></div>
+        <div className="ln-dock"><button type="button" className="btn btn-secondary btn-sm" onClick={openResubmit} disabled={busy} aria-busy={busy || undefined}>Nộp lại (trước khi được chấm)</button></div>
       </div>
     );
   } else {
     const fileOk = format === 'file' || format === 'file_or_link';
     const linkOk = format === 'link' || format === 'file_or_link';
     content = (
-      <form className="stack-4" noValidate onSubmit={submit}>
+      <form className={`stack-4 ${bare ? "ln-task-fill" : ""}`.trim()} noValidate onSubmit={submit}>
         {sub && sub.status === 'pending' && <Alert type="info" body="Bài đã nộp vẫn được giữ cho đến khi bạn nộp lại." />}
         {fileOk && (
           <div className="field"><label htmlFor={`as-file-${l.id}`}>Tệp bài làm{format === 'file' ? ' (bắt buộc)' : ''}</label>
@@ -381,16 +384,16 @@ export function AssignmentSection({ c, r, l }) {
           <textarea id={`as-note-${l.id}`} rows={4} maxLength={10000} value={fields.note} disabled={busy} onChange={(e) => update({ ...fields, note: e.target.value })} />
           <span className="field-help" role="status">{saved}</span></div>
         {error && <Alert type="danger" body={error} />}
-        <div className="row">
+        <div className="ln-dock stack-2"><div className="row">
           <button className="btn btn-primary" type="submit" disabled={busy || !ready || !!linkError} aria-busy={busy || undefined}><Icon name="upload" className="icon-sm" /> {busy ? 'Đang gửi…' : 'Nộp bài tập'}</button>
           {sub && sub.status === 'pending' && <button type="button" className="btn btn-ghost" onClick={cancelResubmit} disabled={busy}>Huỷ nộp lại</button>}
         </div>
-        {!ready && <p className="small muted">Cần {format === 'file' ? 'tệp bài làm' : format === 'link' ? 'đường dẫn' : format === 'text' ? 'bài làm' : 'tệp hoặc đường dẫn'} trước khi nộp.</p>}
+        {!ready && <p className="small muted">Cần {format === 'file' ? 'tệp bài làm' : format === 'link' ? 'đường dẫn' : format === 'text' ? 'bài làm' : 'tệp hoặc đường dẫn'} trước khi nộp.</p>}</div>
       </form>
     );
   }
-  return (
-    <section className="card" id="assignment" aria-busy={busy || undefined}><div className="card-body stack-4">
+  const inner = (
+    <>
       <h2 className="ln-h">{a.title || 'Bài tập'}</h2>
       {a.instructions && <div className="panel stack-1"><span className="xsmall muted">Yêu cầu</span><p className="small ln-pre">{a.instructions}</p></div>}
       <p className="small muted">Thang điểm {maxScore} · điểm đạt {passPct}%{a.dueDays ? ` · hạn nộp ${a.dueDays} ngày sau khi mở bài` : ''}</p>
@@ -403,6 +406,8 @@ export function AssignmentSection({ c, r, l }) {
       )}
       {error && !editing && <Alert type="danger" body={error} />}
       {content}
-    </div></section>
+    </>
   );
+  if (bare) return <section className="ln-task" id="assignment" aria-label={a.title || 'Bài tập'} aria-busy={busy || undefined}>{inner}</section>;
+  return <section className="card" id="assignment" aria-busy={busy || undefined}><div className="card-body stack-4">{inner}</div></section>;
 }
