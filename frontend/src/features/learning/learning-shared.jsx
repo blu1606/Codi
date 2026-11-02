@@ -1,173 +1,201 @@
-/** Shared pieces of the learning loop: guards, path-update notice, adaptive offer, completion + review (S14). */
+/**
+ * Shared pieces of the learning loop: load guards, diagnostic card, path-update notice, adaptive offer, completion +
+ * course review (S14). All writes go to the backend (path / onboarding / overview commands).
+ */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
-import { Empty, Icon, Stars } from '../../components/ui/primitives';
-import {
-  STATUS, TYPE_LABEL, applyOffer, conceptName, isCourseComplete, offerChoices, rec, save, uid,
-} from './learning-store';
+import { Alert, Empty, Icon, SpinnerBlock, Stars } from '../../components/ui/primitives';
+import { STATUS, TYPE_LABEL, errorText, postOnboarding, postPath } from './learning-store';
 
 export function StatusBadge({ st }) {
   return <span className={`badge ${STATUS[st][1]}`}><Icon name={STATUS[st][2]} />{STATUS[st][0]}</span>;
 }
 
-export function NotEnrolled({ c }) {
+export function NotEnrolled({ courseId, message }) {
+  const legacy = Codi.course(courseId);
   return (
     <div className="page page-narrow">
-      <Empty icon="lock" title="Bạn chưa sở hữu khoá học này" body="Mua hoặc đăng ký khoá học để bắt đầu học." actions={<Link className="btn btn-primary" to={`/courses/${c.slug}`}>Xem khoá học</Link>} />
+      <Empty icon="lock" title="Bạn chưa sở hữu khoá học này" body={message || 'Mua hoặc đăng ký khoá học để bắt đầu học.'}
+        actions={<Link className="btn btn-primary" to={legacy ? `/courses/${legacy.slug}` : '/courses'}>Xem khoá học</Link>} />
     </div>
   );
 }
 
-export function NotFound() {
+export function NotFound({ title = 'Không tìm thấy khoá học' }) {
   return (
     <div className="page page-narrow">
-      <Empty icon="map" title="Không tìm thấy khoá học" actions={<Link className="btn btn-primary" to="/dashboard">Về bàn làm việc</Link>} />
+      <Empty icon="map" title={title} actions={<Link className="btn btn-primary" to="/dashboard">Về bàn làm việc</Link>} />
     </div>
   );
 }
 
-/** Returns a guard element (not found / not enrolled) or null when the learner may open the course. */
-export function courseGuard(c) {
-  if (!c) return <NotFound />;
-  if (!Codi.isEnrolled(c.id)) return <NotEnrolled c={c} />;
-  return null;
+/** Page state while a learn endpoint loads or after it failed (403 not enrolled, 404 missing, other errors). */
+export function LoadState({ loading, error, courseId, onRetry, text = 'Đang tải lộ trình…', notFoundTitle }) {
+  if (loading) return <div className="page page-narrow"><SpinnerBlock text={text} /></div>;
+  if (!error) return null;
+  if (error.status === 403) return <NotEnrolled courseId={courseId} message={error.message} />;
+  if (error.status === 404 || error.status === 400) return <NotFound title={notFoundTitle} />;
+  return (
+    <div className="page page-narrow">
+      <Alert type="danger" title="Chưa thể tải dữ liệu học tập" body={errorText(error, 'Không thể tải dữ liệu học tập. Vui lòng thử lại.')}
+        actions={onRetry ? <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>Thử lại</button> : null} />
+    </div>
+  );
+}
+
+/** Opens the onboarding at the entry test (POST diagnostic-retake), then navigates there. */
+export async function takeDiagnostic(courseId) {
+  try {
+    await postOnboarding(courseId, { type: 'diagnostic-retake' });
+    Codi.go(`/learn/${courseId}/onboarding`);
+  } catch (e) {
+    Codi.ui.toast(errorText(e, 'Không thể mở bài kiểm tra đầu vào.'), { type: 'danger' });
+  }
 }
 
 /** Diagnostic suggestion shown when the learner skipped the entry test (dashboard + path). */
-export function DiagCard({ c }) {
+export function DiagCard({ courseId, title, onChange }) {
+  const [busy, setBusy] = useState(false);
   // Real dashboard: dismissing shows an undo toast.
-  const dismiss = () => {
-    const r = rec(c.id); r.diag.diagCardDismissed = true; save();
-    Codi.ui.toast('Đã ẩn thông báo cá nhân hoá lộ trình.', { action: { label: 'Hoàn tác', onClick: () => { rec(c.id).diag.diagCardDismissed = false; save(); } } });
-  };
-  const take = () => {
-    const r = rec(c.id);
-    r.diag = { status: 'intro', index: 0, answers: {}, diagCardDismissed: r.diag.diagCardDismissed };
-    save(false);
-    Codi.go('/learn/' + c.id + '/onboarding?view=intro');
+  const dismiss = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await api.post('/api/learner/overview', { type: 'dismiss-diagnostic', courseId });
+      if (onChange) onChange();
+      const restore = async () => {
+        try {
+          await api.post('/api/learner/overview', { type: 'restore-diagnostic', courseId, dismissedAt: res.dismissedAt });
+          if (onChange) onChange();
+        } catch (e) { Codi.ui.toast(errorText(e, 'Chưa thể hoàn tác.'), { type: 'danger' }); }
+      };
+      Codi.ui.toast('Đã ẩn thông báo cá nhân hoá lộ trình.', res && res.dismissedAt ? { action: { label: 'Hoàn tác', onClick: restore } } : undefined);
+    } catch (e) {
+      Codi.ui.toast(errorText(e, 'Chưa thể ẩn thông báo.'), { type: 'danger' });
+    } finally { setBusy(false); }
   };
   return (
     <section className="card"><div className="card-body stack-3" role="status">
       <div className="row-between"><strong>Cá nhân hoá lộ trình — làm bài kiểm tra đầu vào (~10 phút)</strong>
-        <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={dismiss} aria-label={`Ẩn thông báo cá nhân hoá ${c.title}`}><Icon name="x" className="icon-sm" /></button></div>
+        <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={dismiss} disabled={busy} aria-label={`Ẩn thông báo cá nhân hoá ${title}`}><Icon name="x" className="icon-sm" /></button></div>
       <p className="small muted">Giúp Codi bỏ qua phần bạn đã biết và tập trung vào phần còn thiếu.</p>
-      <button type="button" className="btn btn-secondary btn-sm" onClick={take}>Làm bài kiểm tra đầu vào</button>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => takeDiagnostic(courseId)}>Làm bài kiểm tra đầu vào</button>
     </div></section>
   );
 }
-export const showDiagCard = (r) => r.pathSource === 'default' && r.pathStatus === 'ready' && r.diag.status === 'skipped' && !r.diag.diagCardDismissed;
 
 const UPDATE_ICONS = { 'moved-up': 'arrow-up', 'now-skippable': 'skip-forward', unlocked: 'unlock' };
-export function UpdateNotice({ c, r, inPlayer }) {
-  const u = r.lastUpdate;
+/** Path update after a completion (CoursePathView.update). rows: path rows; onView: replaces the path view. */
+export function UpdateNotice({ courseId, view, rows, inPlayer, onView }) {
+  const u = view && view.update;
   if (!u) return null;
-  const done = Codi.lesson(c, u.afterLessonId);
-  const next = u.nextLessonId ? Codi.lesson(c, u.nextLessonId) : null;
-  const dismiss = () => { rec(c.id).lastUpdate = null; save(); };
+  const done = rows.find((x) => x.id === u.afterLessonId);
+  const next = view.currentLessonId ? rows.find((x) => x.id === view.currentLessonId) : null;
+  const dismiss = async () => {
+    try { onView(await postPath(courseId, { type: 'dismiss-update', pathId: view.pathId })); }
+    catch (e) { Codi.ui.toast(errorText(e, 'Chưa thể ẩn thông báo.'), { type: 'danger' }); }
+  };
   return (
     <section className="card ln-update" aria-live="polite"><div className="card-body stack-3">
       <div className="row-between"><span className="row strong"><Icon name="check-circle" className="text-success" /> Đã hoàn thành: {done ? done.title : ''}</span>
         <button type="button" className="btn btn-ghost btn-sm" onClick={dismiss}>Ẩn thông báo</button></div>
       <div className="stack-2"><strong>Lộ trình đã được cập nhật</strong>
-        <ul className="list ln-changes">{u.changes.map((ch, i) => <li key={i}><Icon name={UPDATE_ICONS[ch.type] || 'info'} className="icon-sm" /><span>{ch.text}</span></li>)}</ul>
-        {inPlayer && <Link className="small" to={`/learn/${c.id}`}>Xem lộ trình đầy đủ</Link>}
+        {u.message && <p className="small muted">{u.message}</p>}
+        {u.changes.length > 0 && <ul className="list ln-changes">{u.changes.map((ch, i) => <li key={i}><Icon name={UPDATE_ICONS[ch.type] || 'info'} className="icon-sm" /><span>{ch.text}</span></li>)}</ul>}
+        {inPlayer && <Link className="small" to={`/learn/${courseId}`}>Xem lộ trình đầy đủ</Link>}
       </div>
       {next ? (
-        <div className="panel row-between"><div className="stack-1"><span className="xsmall muted">Bài tiếp theo</span><strong>{next.title}</strong><span className="xsmall muted">{TYPE_LABEL[next.type]} · {Codi.fmt.duration(next.durationMin)}</span></div><Link className="btn btn-primary" to={`/learn/${c.id}/${next.id}`}>Học tiếp</Link></div>
-      ) : isCourseComplete(c, r) ? (
-        <div className="panel row-between"><strong>Bạn đã hoàn thành khoá học</strong><Link className="btn btn-primary" to={`/learn/${c.id}`}>Xem tổng kết</Link></div>
+        <div className="panel row-between"><div className="stack-1"><span className="xsmall muted">Bài tiếp theo</span><strong>{next.title}</strong><span className="xsmall muted">{TYPE_LABEL[next.kind] || TYPE_LABEL.reading} · {Codi.fmt.duration(next.durationMin)}</span></div><Link className="btn btn-primary" to={`/learn/${courseId}/${next.id}`}>Học tiếp</Link></div>
+      ) : view.complete ? (
+        <div className="panel row-between"><strong>Bạn đã hoàn thành khoá học</strong><Link className="btn btn-primary" to={`/learn/${courseId}`}>Xem tổng kết</Link></div>
       ) : null}
     </div></section>
   );
 }
 
-function ReviewBlock({ c }) {
-  const mine = Codi.db().reviews.find((x) => x.courseId === c.id && x.userId === uid());
-  if (mine) {
-    return <div className="row"><Stars n={mine.stars} /><span className="small muted">Bạn đã đánh giá {mine.stars}/5</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => openReview(c.id, mine.stars)}>Sửa đánh giá</button></div>;
+function ReviewBlock({ courseId, title, review, onSaved }) {
+  if (review) {
+    return <div className="row"><Stars n={review.rating} /><span className="small muted">Bạn đã đánh giá {review.rating}/5</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => openReview({ courseId, title, review, onSaved })}>Sửa đánh giá</button></div>;
   }
   return (
     <div className="stack-2"><span className="small">Bạn thấy khoá học thế nào?</span>
-      <div className="star-input" role="group" aria-label="Chọn số sao">{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" onClick={() => openReview(c.id, n)} aria-label={`${n} sao`}><Icon name="star" /></button>)}</div></div>
+      <div className="star-input" role="group" aria-label="Chọn số sao">{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" onClick={() => openReview({ courseId, title, review, stars: n, onSaved })} aria-label={`${n} sao`}><Icon name="star" /></button>)}</div></div>
   );
 }
 
-export function CompletionCard({ c }) {
-  const next = Codi.db().courses.find((x) => x.status === 'published' && !Codi.isEnrolled(x.id) && x.id !== c.id);
+/** view: CoursePathView (review + recommendation come from the backend). */
+export function CompletionCard({ view, onView }) {
+  const c = view.course;
+  const next = view.recommendation;
   return (
     <section className="card ln-complete"><div className="card-body stack-4">
       <div className="row"><Icon name="graduation-cap" className="icon-lg text-success" /><div className="stack-1"><h2>Chúc mừng! Bạn đã hoàn thành khoá học</h2><p className="small muted">{c.title}</p></div></div>
-      <ReviewBlock c={c} />
+      <ReviewBlock courseId={c.id} title={c.title} review={view.review} onSaved={onView} />
       {next && <div className="panel row-between"><div className="stack-1"><span className="xsmall muted">Khoá học gợi ý tiếp theo</span><strong>{next.title}</strong></div><Link className="btn btn-secondary" to={`/courses/${next.slug}`}>Xem khoá học</Link></div>}
     </div></section>
   );
 }
 
-function undoOffer(courseId, at) {
-  const r = rec(courseId); const a = r.adjustment;
-  if (!a || a.at !== at) return;
-  r.order = a.before.order; r.skippable = a.before.skippable; r.offer = a.offer; r.adjustment = null; r.highlight = [];
-  save();
-  Codi.ui.toast('Đã hoàn tác. Lộ trình trở về như trước.');
-}
-
-// Non-blocking offer after a completion: an insight plus the options that apply right now (decisions 66–67).
-export function OfferCard({ c, r, onViewPath }) {
-  if (!r.offer) return null;
-  const ch = offerChoices(c, r); const off = r.offer;
-  const names = (ids) => ids.map((k) => conceptName(c, k)).join(', ');
-  const titles = (ids) => ids.map((id) => Codi.lesson(c, id).title).join(', ');
-  const lines = [];
-  if (off.strong.length) lines.push(`Codi thấy bạn đã nắm vững ${names(off.strong)}.`);
-  if (off.weak.length) lines.push(`Bạn còn chưa chắc về ${names(off.weak)}.`);
-  if (!lines.length) lines.push('Codi chưa có đủ kết quả quiz hoặc bài code để đánh giá bài này.');
-  const options = [
-    ['skip', 'Bỏ qua bài đã vững', ch.skip, `${ch.skip.length} bài mà mọi khái niệm đã Thành thạo: ${titles(ch.skip)}`],
-    ['practice', 'Luyện thêm', ch.practice, `Đưa ${ch.practice.length} bài về ${names(off.weak)} lên ngay sau bài này: ${titles(ch.practice)}`],
-    ['harder', 'Nâng độ khó', ch.harder, `Đưa ${ch.harder.length} bài thử thách đã đủ tiên quyết lên trước: ${titles(ch.harder)}`],
-  ].filter((o) => o[2].length);
-  const apply = (kind) => {
-    const rr = rec(c.id);
-    const ids = applyOffer(c, rr, kind);
-    save();
-    if (!ids) return;
-    const msg = { skip: `Đã đánh dấu ${ids.length} bài có thể bỏ qua.`, practice: `Đã đưa ${ids.length} bài luyện thêm lên sau bài vừa học.`, harder: `Đã đưa ${ids.length} bài thử thách lên trước.` }[kind];
-    const at = rr.adjustment.at;
-    Codi.ui.toast(msg, { type: 'success', action: { label: 'Hoàn tác', onClick: () => undoOffer(c.id, at) } });
+/**
+ * Non-blocking offer right after a completion (AdjustmentOffer from POST complete): an insight plus the options that
+ * apply now. Applying writes the adjusted path; the toast offers "Hoàn tác" (undo-adjust).
+ */
+export function OfferCard({ courseId, offer, onView, onDone, onViewPath }) {
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState(null);
+  if (!offer) return null;
+  const options = offer.options.filter((o) => o.type !== 'keep');
+  const apply = async (option) => {
+    if (busy) return;
+    setBusy(option); setError(null);
+    try {
+      const path = await postPath(courseId, { type: 'adjust', afterLessonId: offer.afterLessonId, option });
+      onView(path);
+      onDone();
+      const undo = async () => {
+        try { onView(await postPath(courseId, { type: 'undo-adjust', pathId: path.pathId })); Codi.ui.toast('Đã hoàn tác. Lộ trình trở về như trước.'); }
+        catch (e) { Codi.ui.toast(errorText(e, 'Chưa thể hoàn tác.'), { type: 'danger' }); }
+      };
+      Codi.ui.toast('Đã cập nhật lộ trình.', { type: 'success', action: { label: 'Hoàn tác', onClick: undo } });
+    } catch (e) {
+      setError(errorText(e, 'Chưa thể cập nhật lộ trình.'));
+    } finally { setBusy(null); }
   };
-  const keep = () => { rec(c.id).offer = null; save(); };
   return (
     <section className="card ln-offer" aria-live="polite"><div className="card-body stack-3">
       <div className="row"><Icon name="sparkles" className="icon-sm" /><strong>Codi gợi ý điều chỉnh lộ trình</strong></div>
-      <p className="small">{lines.join(' ')}</p>
-      <ul className="list ln-offer-list">{options.map(([kind, label, , hint]) => (
-        <li key={kind} className="panel row-between">
-          <div className="stack-1 od-fill"><strong className="small">{label}</strong><span className="xsmall muted">{hint}</span></div>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => apply(kind)}>Áp dụng</button></li>
-      ))}</ul>
-      <div className="row-between"><span className="xsmall muted">Áp dụng xong, bạn có thể hoàn tác ngay từ thông báo.</span><div className="row" style={{ gap: 4 }}>{onViewPath && <button type="button" className="btn btn-ghost btn-sm" onClick={onViewPath}>Xem lộ trình</button>}<button type="button" className="btn btn-ghost btn-sm" onClick={keep}>Giữ nguyên lộ trình</button></div></div>
+      <p className="small">{offer.insight}</p>
+      {error && <Alert type="danger" body={error} />}
+      {options.length > 0 && <ul className="list ln-offer-list">{options.map((o) => (
+        <li key={o.type} className="panel row-between">
+          <div className="stack-1 od-fill"><strong className="small">{o.label}</strong><span className="xsmall muted">{o.description}</span></div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => apply(o.type)} disabled={!!busy} aria-busy={busy === o.type || undefined}>Áp dụng</button></li>
+      ))}</ul>}
+      <div className="row-between"><span className="xsmall muted">Áp dụng xong, bạn có thể hoàn tác ngay từ thông báo.</span><div className="row" style={{ gap: 4 }}>{onViewPath && <button type="button" className="btn btn-ghost btn-sm" onClick={onViewPath}>Xem lộ trình</button>}<button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>Giữ nguyên lộ trình</button></div></div>
     </div></section>
   );
 }
 
 // ───────────────────────── review (S14) ─────────────────────────
-function ReviewDialog({ courseId, initialStars, handle }) {
-  const c = Codi.course(courseId);
-  const mine = Codi.db().reviews.find((x) => x.courseId === courseId && x.userId === uid());
-  const [val, setVal] = useState(initialStars || (mine ? mine.stars : 0));
-  const [text, setText] = useState(mine ? mine.text || '' : '');
-  const submit = () => {
-    if (!val) return;
-    const t = text.trim();
-    Codi.set((st) => {
-      if (mine) { mine.stars = val; mine.text = t; }
-      else st.db.reviews.push({ id: Codi.uid('rv'), courseId, userId: uid(), stars: val, text: t, createdAt: new Date().toISOString(), reply: null });
-      const rs = st.db.reviews.filter((x) => x.courseId === courseId);
-      c.ratingCount = Math.max(c.ratingCount || 0, rs.length);
-    });
-    handle.close();
-    Codi.ui.toast(mine ? 'Đã cập nhật đánh giá.' : 'Cảm ơn bạn! Đánh giá đã hiển thị trên trang khoá học.', { type: 'success' });
+function ReviewDialog({ courseId, review, initialStars, onSaved, handle }) {
+  const [val, setVal] = useState(initialStars || (review ? review.rating : 0));
+  const [text, setText] = useState(review ? review.text || '' : '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async () => {
+    if (!val || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const path = await postPath(courseId, { type: 'review', rating: val, text: text.trim() });
+      if (onSaved) onSaved(path);
+      handle.close();
+      Codi.ui.toast(review ? 'Đã cập nhật đánh giá.' : 'Cảm ơn bạn! Đánh giá đã hiển thị trên trang khoá học.', { type: 'success' });
+    } catch (e) {
+      setError(errorText(e, 'Chưa thể lưu đánh giá. Vui lòng thử lại.'));
+      setBusy(false);
+    }
   };
   return (
     <>
@@ -178,24 +206,23 @@ function ReviewDialog({ courseId, initialStars, handle }) {
               <button key={n} type="button" role="radio" aria-checked={val === n} className={n <= val ? 'on' : ''} onClick={() => setVal(n)} aria-label={`${n} sao`}><Icon name={n <= val ? 'star-filled' : 'star'} /></button>
             ))}</div>
             {!val && <span className="field-help">Chọn số sao để gửi đánh giá.</span>}</div>
-          <div className="field"><label htmlFor="rv-text">Nhận xét <span className="muted">(không bắt buộc)</span></label><textarea id="rv-text" rows={4} value={text} onChange={(e) => setText(e.target.value)} /></div>
+          <div className="field"><label htmlFor="rv-text">Nhận xét <span className="muted">(không bắt buộc)</span></label><textarea id="rv-text" rows={4} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} /></div>
+          {error && <Alert type="danger" body={error} />}
         </form>
       </div>
       <div className="dialog-footer">
         <button type="button" className="btn btn-ghost" data-close>Huỷ</button>
-        <button type="button" className="btn btn-primary" disabled={!val} onClick={submit}>{mine ? 'Lưu thay đổi' : 'Gửi đánh giá'}</button>
+        <button type="button" className="btn btn-primary" disabled={!val || busy} aria-busy={busy || undefined} onClick={submit}>{review ? 'Lưu thay đổi' : 'Gửi đánh giá'}</button>
       </div>
     </>
   );
 }
 
-export function openReview(courseId, stars) {
-  const c = Codi.course(courseId);
-  if (!c) return;
-  const mine = Codi.db().reviews.find((x) => x.courseId === courseId && x.userId === uid());
+/** { courseId, title, review: {rating,text}|null, stars?, onSaved(pathView) } */
+export function openReview({ courseId, title, review, stars, onSaved }) {
   Codi.ui.modal({
-    title: mine ? 'Sửa đánh giá' : `Đánh giá "${c.title}"`,
+    title: review ? 'Sửa đánh giá' : `Đánh giá "${title}"`,
     raw: true,
-    body: (h) => <ReviewDialog courseId={courseId} initialStars={stars} handle={h} />,
+    body: (h) => <ReviewDialog courseId={courseId} review={review} initialStars={stars} onSaved={onSaved} handle={h} />,
   });
 }

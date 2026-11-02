@@ -1,132 +1,142 @@
-/** S12 Learner dashboard ('/dashboard'). Focus row with the one "Học tiếp", the departure board, what changed, the week's goal and courses. */
+/**
+ * S12 Learner dashboard ('/dashboard'). Focus row with the one "Học tiếp", the departure board, what changed, the
+ * week's goal and courses. Data: GET /api/learner/overview, plus GET /api/learn/:courseId/path for each active course
+ * with a path (departures, chapter lines and path updates).
+ */
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Codi, useCodi } from '../../lib/codi';
-import { Alert, Empty, Icon, Progress, Thumb } from '../../components/ui/primitives';
-import { currentLessonId, enrolledCoursesOf, isCourseComplete, goalLabel, rec } from './learning-store';
-import { DiagCard, showDiagCard } from './learning-shared';
-import { roundMinutes, secondsByDate, streakDays, today, weekDates } from './study-time';
-import { useSyncError } from './use-sync-error';
-import { buildDepartures, courseRows, DashBoard, DashFocus } from './dashboard-board';
+import { api } from '../../lib/api';
+import { Codi } from '../../lib/codi';
+import { useApi } from '../../lib/use-api';
+import { Alert, Empty, Icon, Progress, SpinnerBlock, Thumb } from '../../components/ui/primitives';
+import { errorText, goalLabel, learnBase, levelLabel, pathCourse, pathRows, publishOverview } from './learning-store';
+import { DiagCard } from './learning-shared';
+import { buildDepartures, DashBoard, DashFocus } from './dashboard-board';
 import { DashChanges, DashGoal } from './dashboard-side';
 import './dashboard-page.css';
 
-export default function DashboardPage() {
-  useCodi();
-  const [syncError, retrySync, retrying] = useSyncError();
-  const u = Codi.currentUser();
-  const enrolled = enrolledCoursesOf(u.id);
-  const subs = Codi.db().submissions.filter((s) => s.userId === u.id);
-  const pendingSubs = subs.filter((s) => s.status === 'pending');
-  const graded = subs.filter((s) => s.status === 'graded').sort((a, b) => (a.gradedAt < b.gradedAt ? 1 : -1));
-  const answered = Codi.db().questions.filter((q) => q.userId === u.id && q.status === 'answered');
-  const items = enrolled.map((c) => ({ c, p: Codi.courseProgress(c.id), r: rec(c.id) }));
-  // "Active" follows the path page: a course is done when its required lessons are, skippable ones aside.
-  const active = items.filter((x) => !isCourseComplete(x.c, x.r));
-  const cont = active.slice().sort((a, b) => String(b.r.lastActive || '').localeCompare(String(a.r.lastActive || '')))[0];
-  const leadId = cont ? cont.c.id : null;
-  const departures = buildDepartures(cont ? [cont, ...active.filter((x) => x !== cont)] : [], leadId);
-  const errorAlert = syncError && (
-    <Alert type="danger" title="Chưa thể tải hoặc cập nhật dữ liệu học tập" body="Không thể tải dữ liệu học tập. Vui lòng thử lại."
-      actions={<button type="button" className="btn btn-secondary btn-sm" onClick={retrySync} disabled={retrying} aria-busy={retrying || undefined}>Thử lại</button>} />
-  );
+const hasPath = (course) => course.pathStatus === 'ready' || course.pathStatus === 'failed';
+const thumbOf = (course) => ({ id: course.id, title: course.title, coverImageUrl: course.cover });
 
+/** Path views of the given courses (id → view); a course whose path fails to load is left out. */
+function usePaths(ids) {
+  const key = ids.join('|');
+  const [paths, setPaths] = useState(null);
+  useEffect(() => {
+    if (!key) { setPaths({}); return undefined; }
+    let live = true;
+    setPaths(null);
+    Promise.all(key.split('|').map((id) => api.get(`${learnBase(id)}/path`).then((v) => [id, v]).catch(() => null)))
+      .then((pairs) => { if (live) setPaths(Object.fromEntries(pairs.filter(Boolean))); });
+    return () => { live = false; };
+  }, [key]);
+  return paths;
+}
+
+export default function DashboardPage() {
+  const { data, loading, error, reload } = useApi('/api/learner/overview');
+  useEffect(() => { if (data) publishOverview(data); }, [data]);
+  const courses = data ? data.courses : [];
+  const active = courses.filter((x) => !x.complete);
+  const paths = usePaths(active.filter(hasPath).map((x) => x.id));
+
+  const name = (data && data.name) || (Codi.currentUser() || {}).name || '';
   const head = (
-    <div className="page-header"><div><h1>Bàn làm việc</h1><p className="muted">Chào mừng trở lại, {u.name}!</p></div>
+    <div className="page-header"><div><h1>Bàn làm việc</h1><p className="muted">Chào mừng trở lại, {name}!</p></div>
       <div className="row"><Link className="btn btn-secondary" to="/progress"><Icon name="graduation-cap" className="icon-sm" /> Tiến độ & kết quả</Link><Link className="btn btn-ghost" to="/ai"><Icon name="sparkles" className="icon-sm" /> Hỏi AI Codi</Link></div></div>
   );
-  if (!enrolled.length) {
+  if (error && !data) {
     return (
-      <div className="page stack-6">{head}{errorAlert}<div className="card">
+      <div className="page stack-6">{head}
+        <Alert type="danger" title="Chưa thể tải hoặc cập nhật dữ liệu học tập" body={errorText(error, 'Không thể tải dữ liệu học tập. Vui lòng thử lại.')}
+          actions={<button type="button" className="btn btn-secondary btn-sm" onClick={reload} disabled={loading} aria-busy={loading || undefined}>Thử lại</button>} />
+      </div>
+    );
+  }
+  if (!data || paths === null) return <div className="page stack-6">{head}<SpinnerBlock text="Đang tải bàn làm việc…" /></div>;
+  if (!courses.length) {
+    return (
+      <div className="page stack-6">{head}<div className="card">
         <Empty icon="book-open" title="Bàn làm việc của bạn đang trống" body="Chọn một khoá học để bắt đầu. Codi sẽ xếp lộ trình riêng cho bạn sau bài kiểm tra đầu vào."
           actions={<><Link className="btn btn-primary" to="/courses">Khám phá khoá học</Link><Link className="btn btn-secondary" to="/ai"><Icon name="sparkles" /> Khám phá lộ trình cùng AI</Link></>} />
       </div></div>
     );
   }
 
-  // Focus: the same current lesson the path page's "Học tiếp" opens (currentLessonId, path order, skippable-aware).
+  // Per course: the path rows (empty until a path exists) and the course shape the transit lines need.
+  const info = (course) => {
+    const view = paths[course.id];
+    const rows = view ? pathRows(view) : [];
+    return { course, view, rows, c: { ...pathCourse(view, rows), id: course.id, title: course.title, coverImageUrl: course.cover }, cur: view ? view.currentLessonId : null };
+  };
+  const cont = active.find((x) => x.id === data.continueCourseId) || active[0] || null;
+  const leadId = cont ? cont.id : null;
+  const ordered = cont ? [cont, ...active.filter((x) => x !== cont)] : [];
+  const departures = buildDepartures(ordered.map(info), leadId);
+
+  // Focus: the same current lesson the path page's "Học tiếp" opens.
   let focus = { complete: true };
   if (cont) {
-    const { c, p, r } = cont;
-    const rows = courseRows(c, r);
-    const row = rows.find((x) => x.id === currentLessonId(c, r)) || null;
-    focus = { c, r, status: r.pathStatus, row, number: row ? rows.indexOf(row) + 1 : 0, done: p.done, total: p.total, pct: p.pct };
+    const { c, rows, cur } = info(cont);
+    const row = rows.find((x) => x.id === cur) || null;
+    focus = { c, goal: cont.goal, status: cont.pathStatus, row, number: row ? rows.indexOf(row) + 1 : 0, done: cont.done, total: cont.total, pct: cont.percent };
   }
 
-  // What changed: lessons that moved on the path (r.lastUpdate), graded work and answered questions.
-  const pathChanges = items.flatMap(({ c, r }) => (r.lastUpdate ? r.lastUpdate.changes.map((ch) => ({ courseId: c.id, course: c.title, text: ch.text })) : []));
-  const latest = graded[0];
-  const latestLesson = latest ? Codi.lesson(Codi.course(latest.courseId), latest.lessonId) : null;
+  // What changed: lessons that moved on the path (path updates), graded work and answered questions.
+  const pathChanges = active.flatMap((course) => {
+    const view = paths[course.id];
+    return view && view.update ? view.update.changes.map((ch) => ({ courseId: course.id, course: course.title, text: ch.text })) : [];
+  });
 
-  const goalInfo = weeklyGoalInfo(u.id);
-  const minutesWeek = minutesThisWeek(u.id);
-  const goalPct = (minutesWeek / (goalInfo.hours * 60)) * 100;
-  const streak = streakDays(u.id);
-  const badges = skillBadges(u.id);
-
-  const recs = Codi.db().courses.filter((c) => c.status === 'published' && Codi.ownership(c.id) !== 'owned').slice(0, 3);
+  const w = data.weekly;
+  const goalInfo = { minutes: w.goalMinutes, hasGoal: !w.assumed, courseId: w.assumed ? null : w.courseId };
+  const goalPct = w.goalMinutes ? (w.minutes / w.goalMinutes) * 100 : 0;
+  const badges = courses.flatMap((course) => (course.skills || []).filter((k) => k.level >= 3).map((k) => ({ ...k, course: course.title })));
+  const diagCourse = cont && cont.showDiagnostic ? cont : null;
 
   return (
     <div className="page db-page stack-8">
       {head}
-      {errorAlert}
+      {error && <Alert type="danger" title="Chưa thể tải hoặc cập nhật dữ liệu học tập" body={errorText(error, 'Không thể tải dữ liệu học tập. Vui lòng thử lại.')}
+        actions={<button type="button" className="btn btn-secondary btn-sm" onClick={reload} disabled={loading} aria-busy={loading || undefined}>Thử lại</button>} />}
       <DashFocus focus={focus} />
       <div className="db-grid">
         <DashBoard departures={departures} leadId={leadId} />
-        <DashChanges pending={pendingSubs.length} answered={answered.length} pathChanges={pathChanges} latest={latest} latestLesson={latestLesson} />
+        <DashChanges pending={data.stats.pending} answered={data.stats.answered} pathChanges={pathChanges} latest={data.latestFeedback} />
       </div>
-      <DashGoal minutesWeek={minutesWeek} goalInfo={goalInfo} goalPct={goalPct} streak={streak} badges={badges} />
-      {cont && showDiagCard(cont.r) && <DiagCard c={cont.c} />}
+      <DashGoal minutesWeek={w.minutes} goalInfo={goalInfo} goalPct={goalPct} streak={w.streak} badges={badges} />
+      {diagCourse && <DiagCard courseId={diagCourse.id} title={diagCourse.title} onChange={reload} />}
       <section className="db-courses-section" aria-labelledby="dash-mine">
         <div className="section-title"><h2 id="dash-mine" className="db-h2">Khoá học của tôi</h2><Link className="db-link" to="/courses">Tìm thêm khoá học</Link></div>
-        <ul className="db-courses">{items.map(({ c, p, r }) => (
-          <li key={c.id} className="db-course">
-            <Thumb course={c} small />
-            <div className="db-course-body">
-              <Link className="db-course-title" to={`/learn/${c.id}`}>{c.title}</Link>
-              {r.pathStatus === 'none' ? <span className="db-course-meta">Chưa thiết lập lộ trình</span>
-                : <><Progress pct={p.pct} label={`Tiến độ khoá ${c.title}`} /><span className="db-course-meta"><span className="db-mono">{p.done}/{p.total}</span> bài · {p.completed ? 'Đã hoàn thành' : goalLabel(r.goal)}</span></>}
-              {c.status === 'hidden' && <span className="db-course-meta">Khoá học tạm ẩn — bạn vẫn có thể tiếp tục học.</span>}
-            </div>
-            <Link className="btn btn-secondary btn-sm" to={`/learn/${c.id}${r.pathStatus === 'none' ? '/onboarding' : ''}`}>{r.pathStatus === 'none' ? 'Bắt đầu' : p.completed ? 'Xem lại' : 'Mở lộ trình'}</Link>
-          </li>
-        ))}</ul>
+        <ul className="db-courses">{courses.map((course) => {
+          const none = course.pathStatus === 'none';
+          return (
+            <li key={course.id} className="db-course">
+              <Thumb course={thumbOf(course)} small />
+              <div className="db-course-body">
+                <Link className="db-course-title" to={`/learn/${course.id}`}>{course.title}</Link>
+                {none ? <span className="db-course-meta">Chưa thiết lập lộ trình</span>
+                  : <><Progress pct={course.percent} label={`Tiến độ khoá ${course.title}`} /><span className="db-course-meta"><span className="db-mono">{course.done}/{course.total}</span> bài · {course.complete ? 'Đã hoàn thành' : goalLabel(course.goal)}</span></>}
+                {course.hidden && <span className="db-course-meta">Khoá học tạm ẩn — bạn vẫn có thể tiếp tục học.</span>}
+              </div>
+              <Link className="btn btn-secondary btn-sm" to={`/learn/${course.id}${none ? '/onboarding' : ''}`}>{none ? 'Bắt đầu' : course.complete ? 'Xem lại' : 'Mở lộ trình'}</Link>
+            </li>
+          );
+        })}</ul>
       </section>
-      {recs.length > 0 && (
+      {data.recommendations.length > 0 && (
         <section className="db-recs-section" aria-labelledby="dash-recs">
           <div className="section-title"><h2 id="dash-recs" className="db-h2">Gợi ý cho bạn</h2><Link className="db-link" to="/ai">Hỏi AI Codi</Link></div>
-          <div className="db-recs">{recs.map((c) => (
-            <Link key={c.id} className="db-rec" to={`/courses/${c.slug}`}>
-              <Thumb course={c} />
-              <span className="db-rec-title">{c.title}</span>
-              <span className="db-rec-meta">{Codi.levelLabel(c.level)} · {Codi.lessons(c).length} bài</span>
-              <span className="price">{c.price ? Codi.fmt.vnd(c.price) : 'Miễn phí'}</span>
+          <div className="db-recs">{data.recommendations.slice(0, 3).map((rc) => (
+            <Link key={rc.id} className="db-rec" to={`/courses/${rc.slug}`}>
+              <Thumb course={thumbOf(rc)} />
+              <span className="db-rec-title">{rc.title}</span>
+              <span className="db-rec-meta">{levelLabel(rc.level)}</span>
+              <span className="price">{rc.price ? Codi.fmt.vnd(rc.price) : 'Miễn phí'}</span>
             </Link>
           ))}</div>
         </section>
       )}
     </div>
   );
-}
-
-// Weekly goal (real learner-overview): the first enrolled course with a goal; otherwise 5 h/week, labelled "Mặc định".
-function weeklyGoalInfo(userId) {
-  for (const c of enrolledCoursesOf(userId)) {
-    const r = rec(c.id);
-    if (r && r.goal && r.goal.hours) return { hours: r.goal.hours, hasGoal: true, courseId: c.id };
-  }
-  return { hours: 5, hasGoal: false, courseId: null };
-}
-// Concepts at mastery level 3 or above, across enrolled courses.
-function skillBadges(userId) {
-  const skills = [];
-  enrolledCoursesOf(userId).forEach((c) => {
-    const r = rec(c.id);
-    (c.concepts || []).forEach((k) => { const lv = (r && r.mastery[k.id]) || 0; if (lv >= 3) skills.push({ ...k, level: lv, course: c.title }); });
-  });
-  return skills;
-}
-// Minutes studied in this Vietnam calendar week (Monday to Sunday, GMT+7).
-function minutesThisWeek(userId) {
-  const byDate = secondsByDate(userId);
-  return roundMinutes(weekDates(today()).reduce((s, d) => s + (byDate.get(d) || 0), 0));
 }

@@ -3,16 +3,15 @@
  *
  * - YouTube URL: privacy-enhanced embed with the IFrame Player API; position saved on pause, every 10 s while
  *   playing, on end and when the page hides. Blocked API → "Không theo dõi được tiến độ video" (still watchable).
- * - Video without a URL: the prototype's simulated player (same 90% rule and saved position).
+ * - Video without a URL: a simulated player (same 90% rule and saved position).
  * - PDF/slide: simulated pages (pdf.js is not bundled); every page must be seen to count as studied (real
  *   recordPdfPage), with the page text view and the "Mở PDF trong trình duyệt" escape hatch when a URL exists.
- * - Scenario materials = 'error' shows the real failure state with "Thử lại".
- * Progress writes go through persistNow(); a failed write shows "Chưa lưu được tiến độ tài liệu" + "Thử lưu lại".
+ * Progress writes are lesson commands ({type:'video'|'pdf-page'}) sent through `save`; a failed write shows
+ * "Chưa lưu được tiến độ tài liệu" + "Thử lưu lại". The server decides "studied" (90% watched, every page seen).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
-import { persistNow, rec, recordPdfPage, save, videoStudied } from './learning-store';
 
 // ───────────────────────── YouTube helpers (real lib/youtube.ts) ─────────────────────────
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -122,15 +121,6 @@ function YouTubeFrame({ videoId, title, startSeconds, onTracked, onUntracked, on
   );
 }
 
-// ───────────────────────── study marking ─────────────────────────
-export function markStudied(courseId, lessonId, { toast = true } = {}) {
-  const r = rec(courseId);
-  if (r.studied.includes(lessonId)) return;
-  r.studied.push(lessonId);
-  save();
-  if (toast) Codi.ui.toast('Đã đánh dấu học xong nội dung.', { type: 'success' });
-}
-
 function SaveWarning({ onRetry, busy }) {
   return (
     <Alert type="warn" title="Chưa lưu được tiến độ tài liệu" body="Bạn có thể tiếp tục học và thử lưu lại."
@@ -139,65 +129,58 @@ function SaveWarning({ onRetry, busy }) {
 }
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const clock = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-const pdfPageTotal = (m) => Math.max(1, Math.min(2000, Number(m.pages) || 8));
+// The backend stores the page count with the progress; a PDF never opened here starts with the prototype's 8 pages.
+const pdfPageTotal = (m, prog) => Math.max(1, Math.min(2000, Number(m.pages) || (prog && prog.pageCount) || 8));
 
 /**
  * Short progress readout for the selected material ("04:00/18:00", "PDF 3/12"), or null when there is nothing
- * reported yet. Video: the position the player last saved; PDF/slide: pages seen out of the total.
+ * reported yet. media: LessonPlayerView.media ({[materialId]: {seconds?, pages?, pageCount?, lastPage?}}).
  */
-export function materialProgress(r, l, m) {
-  if (!r || !m) return null;
+export function materialProgress(media, m) {
+  if (!m) return null;
+  const p = (media || {})[m.id];
   if (m.type === 'video') {
-    if (m.url) {
-      const pos = r.videoPos[m.id];
-      if (!Number.isFinite(pos)) return null;
-      return m.durationSeconds > 0 ? `${clock(pos)}/${clock(m.durationSeconds)}` : clock(pos);
-    }
-    const pct = r.video[m.id];
-    const total = m.durationSeconds || (l.durationMin || 0) * 60;
-    if (!Number.isFinite(pct) || !total) return null;
-    return `${clock((total * pct) / 100)}/${clock(total)}`;
+    const pos = p && p.seconds;
+    if (!Number.isFinite(pos)) return null;
+    return m.durationSeconds > 0 ? `${clock(pos)}/${clock(m.durationSeconds)}` : clock(pos);
   }
   if (m.type === 'pdf' || m.type === 'slide') {
-    const total = pdfPageTotal(m);
-    const prog = r.pdf[m.id];
-    const seen = prog && prog.pageCount === total ? (prog.pages || []).length : 0;
+    const total = pdfPageTotal(m, p);
+    const seen = p && p.pageCount === total ? (p.pages || []).length : 0;
     return `${m.type === 'slide' ? 'Slide' : 'PDF'} ${seen}/${total}`;
   }
   return null;
 }
 
-// ───────────────────────── simulated video ─────────────────────────
-function SimulatedVideo({ c, l, m, persist }) {
-  const r = rec(c.id);
-  const total = m.durationSeconds || (l.durationMin || 0) * 60;
+// ───────────────────────── simulated video (material without a URL) ─────────────────────────
+function SimulatedVideo({ m, progress, lessonMin, save }) {
+  const total = m.durationSeconds || (lessonMin || 0) * 60;
   const [playing, setPlaying] = useState(false);
-  const startPos = useRef(Math.round((total * (r.video[m.id] || 0)) / 100));
+  const [pos, setPos] = useState(() => Math.min(total, (progress && progress.seconds) || 0));
+  const posRef = useRef(pos);
+  posRef.current = pos;
+  const startPos = useRef(pos);
   const lastSaved = useRef(Date.now());
+  const send = useCallback((ended) => save({ type: 'video', materialId: m.id, seconds: Math.floor(posRef.current), ended: !!ended }), [m.id, save]);
   useEffect(() => {
-    if (!playing) return undefined;
+    if (!playing || !total) return undefined;
     const t = setInterval(() => {
-      const rr = rec(c.id);
-      rr.video[m.id] = Math.min(100, (rr.video[m.id] || 0) + 4);
-      const seconds = (total * rr.video[m.id]) / 100;
-      const ended = rr.video[m.id] >= 100;
-      if (videoStudied(seconds, total, ended) && !rr.studied.includes(l.id)) markStudied(c.id, l.id, { toast: false });
-      save();
-      if (ended) { setPlaying(false); persist(); return; }
-      if (Date.now() - lastSaved.current >= 10000) { lastSaved.current = Date.now(); persist(); }
+      const next = Math.min(total, posRef.current + total * 0.04);
+      posRef.current = next; setPos(next);
+      if (next >= total) { setPlaying(false); send(true); return; }
+      if (Date.now() - lastSaved.current >= 10000) { lastSaved.current = Date.now(); send(false); }
     }, 400);
     return () => clearInterval(t);
-  }, [playing, c.id, l.id, m.id, total, persist]);
+  }, [playing, total, send]);
   // Leaving the lesson pauses and saves, like the real pagehide/unmount save.
-  useEffect(() => () => { persist(); }, [persist]);
+  useEffect(() => () => { if (posRef.current > 0) send(false); }, [send]);
   const toggle = () => {
-    if (playing) { setPlaying(false); persist(); return; }
-    const rr = rec(c.id);
-    if ((rr.video[m.id] || 0) >= 100) rr.video[m.id] = 0;
+    if (playing) { setPlaying(false); send(false); return; }
+    if (posRef.current >= total) { posRef.current = 0; setPos(0); }
     lastSaved.current = Date.now();
     setPlaying(true);
   };
-  const pct = r.video[m.id] || 0;
+  const pct = total ? (pos / total) * 100 : 0;
   // No real video URL: a poster with the title, length and a clear play control (never an empty dark box).
   return (
     <section className="stack-3" aria-label={m.title}>
@@ -209,22 +192,21 @@ function SimulatedVideo({ c, l, m, persist }) {
             <span className="ln-poster-meta">Video · {Codi.fmt.duration(Math.max(1, Math.round(total / 60)))}{pct > 0 && pct < 100 ? ` · đã xem ${Math.round(pct)}%` : pct >= 100 ? ' · đã xem hết' : ''}</span>
           </div>
           <div className="ln-video-bar">
-            <span className="ln-timecode">{mmss((total * pct) / 100)} / {mmss(total)}</span>
+            <span className="ln-timecode">{mmss(pos)} / {mmss(total)}</span>
             <div className="ln-track" role="progressbar" aria-label="Tiến độ video" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: pct + '%' }} /></div>
           </div>
         </div>
       </div>
-      <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{startPos.current > 0 ? ` Tiếp tục từ giây ${startPos.current}.` : ''}</p>
+      <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{startPos.current > 0 ? ` Tiếp tục từ giây ${Math.floor(startPos.current)}.` : ''}</p>
     </section>
   );
 }
 
 // ───────────────────────── YouTube material ─────────────────────────
-function YouTubeMaterial({ c, l, m, videoId, persist, onFail }) {
-  const r = rec(c.id);
+function YouTubeMaterial({ m, videoId, progress, save, onFail }) {
   const [status, setStatus] = useState('loading');
   const [untracked, setUntracked] = useState(false);
-  const saved = useRef(Math.floor(r.videoPos[m.id] || 0));
+  const saved = useRef(Math.floor((progress && progress.seconds) || 0));
   const signature = useRef(null);
   useEffect(() => {
     if (status !== 'loading') return undefined;
@@ -233,17 +215,14 @@ function YouTubeMaterial({ c, l, m, videoId, persist, onFail }) {
   }, [status, onFail]);
   const onPosition = useCallback((position, ended, duration) => {
     if (!Number.isFinite(position)) return;
-    const seconds = Math.max(0, Math.floor(position));
+    let seconds = Math.max(0, Math.floor(position));
+    const dur = Number.isFinite(duration) && duration > 0 ? duration : m.durationSeconds;
+    if (dur) seconds = Math.min(seconds, Math.floor(dur));
     const key = `${seconds}:${ended}`;
     if (signature.current === key || (signature.current === `${seconds}:true` && !ended)) return;
     signature.current = key;
-    const rr = rec(c.id);
-    const dur = Number.isFinite(duration) && duration > 0 ? duration : m.durationSeconds;
-    rr.videoPos[m.id] = dur ? Math.min(seconds, dur) : seconds;
-    if (videoStudied(rr.videoPos[m.id], dur, ended) && !rr.studied.includes(l.id)) markStudied(c.id, l.id, { toast: false });
-    else save(); // re-render so the lesson bar's progress readout shows the reported position
-    persist();
-  }, [c.id, l.id, m.id, m.durationSeconds, persist]);
+    save({ type: 'video', materialId: m.id, seconds, ended: !!ended });
+  }, [m.id, m.durationSeconds, save]);
   return (
     <section className="stack-3" aria-label={m.title}>
       {status === 'loading' && <p className="row small muted" role="status"><Icon name="loader" className="icon-sm ln-spin" /> Đang tải video…</p>}
@@ -259,24 +238,14 @@ function YouTubeMaterial({ c, l, m, videoId, persist, onFail }) {
 
 // ───────────────────────── simulated PDF ─────────────────────────
 const pageCaption = (page, total) => (page === 1 ? 'Mục tiêu bài học' : page === total ? 'Tóm tắt và bài tập về nhà' : 'Nội dung chính · phần ' + (page - 1));
-function PdfMaterial({ c, l, m, persist }) {
-  const total = pdfPageTotal(m);
-  const r = rec(c.id);
-  const prog = r.pdf[m.id];
-  const page = Math.min(total, (prog && prog.lastPage) || 1);
-  const seen = prog && prog.pageCount === total ? prog.pages || [] : [];
-  const texts = Array.isArray(m.pageTexts) ? m.pageTexts : null;
-  const view = useCallback((p) => {
-    const rr = rec(c.id);
-    const res = recordPdfPage(rr.pdf[m.id], p, total);
-    rr.pdf[m.id] = res.progress;
-    if (res.studied && !rr.studied.includes(l.id)) markStudied(c.id, l.id, { toast: false });
-    else save();
-    persist();
-  }, [c.id, l.id, m.id, total, persist]);
+function PdfMaterial({ m, progress, save }) {
+  const total = pdfPageTotal(m, progress);
+  const page = Math.min(total, (progress && progress.lastPage) || 1);
+  const seen = progress && progress.pageCount === total ? progress.pages || [] : [];
+  const view = useCallback((p) => save({ type: 'pdf-page', materialId: m.id, page: p, pages: total }), [m.id, total, save]);
   // Opening the material records the page on screen, like the real render of the current page.
   useEffect(() => { if (!seen.includes(page)) view(page); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const text = texts && texts[page - 1] ? texts[page - 1] : `${m.title}. ${pageCaption(page, total)}.`;
+  const text = `${m.title}. ${pageCaption(page, total)}.`;
   return (
     <section className="stack-3" aria-label={m.title}>
       <div className="ln-media ln-pdf">
@@ -295,44 +264,48 @@ function PdfMaterial({ c, l, m, persist }) {
 }
 
 // ───────────────────────── one material ─────────────────────────
-export function MaterialView({ c, l, m }) {
+/**
+ * m: LessonMaterial {id, type, title, url, durationSeconds}; progress: media[m.id]; lessonMin: lesson length.
+ * save(command) → Promise: sends a video / pdf-page command; a rejection shows the save warning.
+ */
+export function MaterialView({ m, progress, lessonMin, save }) {
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [saving, setSaving] = useState(false);
-  const persist = useCallback(async () => {
-    const ok = await persistNow();
-    setSaveError(!ok);
-  }, []);
-  const retrySave = async () => { setSaving(true); await persist(); setSaving(false); };
+  const last = useRef(null);
+  const persist = useCallback(async (command) => {
+    last.current = command;
+    try { await save(command); setSaveError(false); } catch { setSaveError(true); }
+  }, [save]);
+  const retrySave = async () => { if (!last.current) return; setSaving(true); await persist(last.current); setSaving(false); };
   const onFail = useCallback(() => setFailed(true), []);
-  const scenarioError = Codi.state.scenario.materials === 'error';
   const videoId = m.type === 'video' && m.url ? youtubeVideoId(m.url) : null;
   // A URL that is neither YouTube nor a simulated material cannot be played here.
   const unplayable = m.type === 'video' && m.url && !videoId;
 
-  if (scenarioError || failed || unplayable) {
+  if (failed || unplayable) {
     const retry = () => {
       setRetrying(true);
-      // Prototype latency: the retry re-reads the forced scenario after a visible attempt.
-      setTimeout(() => { setRetrying(false); setFailed(false); setAttempt((n) => n + 1); }, 900);
+      setTimeout(() => { setRetrying(false); setFailed(false); setAttempt((n) => n + 1); }, 300);
     };
     return (
       <Alert type="warn" title="Chưa tải được tài liệu" body="Vui lòng thử lại. Bạn có thể đọc phần tóm tắt bài học trong lúc chờ."
         actions={<>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={retry} disabled={retrying} aria-busy={retrying || undefined}><Icon name="refresh" className="icon-sm" /> Thử lại</button>
+          {!unplayable && <button type="button" className="btn btn-secondary btn-sm" onClick={retry} disabled={retrying} aria-busy={retrying || undefined}><Icon name="refresh" className="icon-sm" /> Thử lại</button>}
           {videoId && <a className="btn btn-ghost btn-sm" href={youtubeWatchUrl(videoId)} target="_blank" rel="noopener noreferrer">Mở video trên YouTube <Icon name="external-link" className="icon-sm" /></a>}
+          {unplayable && <a className="btn btn-ghost btn-sm" href={m.url} target="_blank" rel="noopener noreferrer">Mở tài liệu <Icon name="external-link" className="icon-sm" /></a>}
         </>} />
     );
   }
   let body = null;
   if (m.type === 'video') {
     body = videoId
-      ? <YouTubeMaterial key={attempt} c={c} l={l} m={m} videoId={videoId} persist={persist} onFail={onFail} />
-      : <SimulatedVideo key={attempt} c={c} l={l} m={m} persist={persist} />;
+      ? <YouTubeMaterial key={attempt} m={m} videoId={videoId} progress={progress} save={persist} onFail={onFail} />
+      : <SimulatedVideo key={attempt} m={m} progress={progress} lessonMin={lessonMin} save={persist} />;
   } else if (m.type === 'pdf' || m.type === 'slide') {
-    body = <PdfMaterial key={attempt} c={c} l={l} m={m} persist={persist} />;
+    body = <PdfMaterial key={attempt} m={m} progress={progress} save={persist} />;
   } else if (m.url) {
     body = (
       <div className="card"><div className="card-body stack-3"><h3 className="ln-h">{m.title}</h3>

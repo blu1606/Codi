@@ -1,35 +1,15 @@
 /**
  * Personal path views (port of real components/learning-path/{lesson-path,path-map,prerequisite-advice}.tsx),
  * redrawn for the transit-diagram path page: next departures, line alerts and the lesson table grouped by line.
- * Rows come from pathRows(); every state is named in text, so colour is never the only signal.
+ * Rows come from pathRows() in learning-store (CoursePathView.rows); every state is named in text, so colour is never the only signal.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { Icon, Mastery } from '../../components/ui/primitives';
 import { Modal } from '../../components/ui/overlay-host';
-import {
-  STATUS, TYPE_ICON, TYPE_LABEL, conceptName, currentLessonId, lessonStatus, lockInfo, orderOf, reasonFor,
-} from './learning-store';
+import { STATUS, TYPE_ICON, TYPE_LABEL } from './learning-store';
 
-const kindOf = (l) => (l.code ? (l.code.kind === 'tutorial' ? 'tutorial' : 'code') : l.type);
-/** One row per lesson in path order (real CoursePathView.rows). */
-export function pathRows(c, r) {
-  const cur = currentLessonId(c, r);
-  return orderOf(c, r).map((id) => {
-    const l = Codi.lesson(c, id);
-    if (!l) return null;
-    const status = lessonStatus(c, r, l, cur);
-    const lock = status === 'done' ? null : lockInfo(c, r, l);
-    const ch = Codi.chapterOf(c, id);
-    return {
-      id, title: l.title, chapterTitle: ch ? ch.title : '', kind: kindOf(l), durationMin: l.durationMin, status,
-      lock: lock ? { concept: lock.concept, lessonId: lock.lesson.id, lessonTitle: lock.lesson.title } : null,
-      reason: reasonFor(c, r, id),
-      mastery: l.conceptIds.map((k) => ({ id: k, name: conceptName(c, k), level: r.mastery[k] || 0 })),
-    };
-  }).filter(Boolean);
-}
 export const lessonUrl = (c, id) => `/learn/${c.id}/${id}`;
 export const kindLabel = (row) => TYPE_LABEL[row.kind] || TYPE_LABEL.reading;
 export const kindIcon = (row) => TYPE_ICON[row.kind] || 'file-text';
@@ -121,13 +101,13 @@ export function Departures({ c, r, rows, lines, currentId, onOpen }) {
                 {isCur && <span className="pt-here">Bạn đang ở đây</span>}
                 {row.status === 'skippable' && <span className="badge badge-neutral">Có thể bỏ qua</span>}
               </p>
-              <p className="pt-dep-why small">{ai && <span className="pt-sim">Mô phỏng</span>}<span>{row.reason}</span></p>
+              <p className="pt-dep-why small"><span>{row.reason}</span></p>
             </li>
           );
         })}</ol>
       ) : <p className="pt-empty small muted">Bạn đã học hết các bài trên lộ trình.</p>}
       <p className="pt-note xsmall muted"><Icon name="sparkles" className="icon-sm" /><span>{ai
-        ? 'AI xếp theo kết quả của bạn, luôn tôn trọng bài học tiên quyết. Lý do ở mỗi bài là phần mô phỏng.'
+        ? 'AI xếp theo kết quả của bạn, luôn tôn trọng bài học tiên quyết.'
         : 'Đây là thứ tự mặc định của khoá học, chưa được cá nhân hoá theo kết quả của bạn.'}</span></p>
     </section>
   );

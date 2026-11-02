@@ -1,29 +1,23 @@
 /**
- * Dashboard departure board and focus row. Rows come from the same helpers as the course path page
- * (pathRows, nextDepartures, currentLessonId), so "Học tiếp" and the next departures match what the path shows.
+ * Dashboard departure board and focus row. Rows come from each course's CoursePathView (the same rows the path page
+ * draws), so "Học tiếp" and the next departures match what the path shows.
  */
 import { Link } from 'react-router-dom';
 import { Icon, Progress, Thumb } from '../../components/ui/primitives';
-import { currentLessonId, goalLabel } from './learning-store';
-import { buildLines, kindIcon, kindLabel, nextDepartures, pathRows } from './path-views';
-
-/** Path rows for a course, or none while the path is being generated or not set up. */
-export function courseRows(c, r) {
-  return r.pathStatus === 'ready' || r.pathStatus === 'failed' ? pathRows(c, r) : [];
-}
+import { goalLabel } from './learning-store';
+import { buildLines, kindIcon, kindLabel, nextDepartures } from './path-views';
 
 /**
- * Departures across the learner's active courses. The course in progress (leadId) contributes its next three
- * departures, as on the path page; other courses contribute their next one. Capped at six rows.
+ * Departures across the learner's active courses ([{ c, rows, cur }], c from pathCourse). The course in progress
+ * (leadId) contributes its next three departures, as on the path page; other courses contribute their next one.
+ * Capped at six rows.
  */
 export function buildDepartures(active, leadId) {
   const out = [];
-  active.forEach(({ c, r }) => {
-    const rows = courseRows(c, r);
+  active.forEach(({ c, rows, cur }) => {
     if (!rows.length) return;
     const lines = buildLines(c, rows);
     const lineOf = new Map(lines.flatMap((line) => line.stations.map((s) => [s.row.id, line])));
-    const cur = currentLessonId(c, r);
     const count = c.id === leadId ? 3 : 1;
     nextDepartures(rows, count).forEach((row) => {
       out.push({ c, row, line: lineOf.get(row.id) || null, number: rows.indexOf(row) + 1, isCur: row.id === cur });
@@ -33,7 +27,7 @@ export function buildDepartures(active, leadId) {
 }
 
 export function DashFocus({ focus }) {
-  const { c, r, status, row, number, complete, done, total, pct } = focus;
+  const { c, goal, status, row, number, complete, done, total, pct } = focus;
   if (complete) {
     return (
       <section className="db-focus db-focus-done" aria-labelledby="db-focus-h">
@@ -74,7 +68,7 @@ export function DashFocus({ focus }) {
         {status !== 'none' && (
           <div className="db-focus-progress">
             <Progress pct={pct} label={`Tiến độ khoá ${c.title}`} />
-            <span className="small muted"><span className="db-mono">{done}/{total}</span> bài đã học · {goalLabel(r.goal)}</span>
+            <span className="small muted"><span className="db-mono">{done}/{total}</span> bài đã học · {goalLabel(goal)}</span>
           </div>
         )}
       </div>

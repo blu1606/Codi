@@ -4,7 +4,7 @@ import { Icon, Mastery, Progress } from '../../components/ui/primitives';
 import { scoreText } from './learning-store';
 import { editGoal } from './path-page';
 
-export function DashChanges({ pending, answered, pathChanges, latest, latestLesson }) {
+export function DashChanges({ pending, answered, pathChanges, latest }) {
   const none = !pending && !answered && !pathChanges.length && !latest;
   return (
     <aside className="db-changes" aria-labelledby="db-changes-h">
@@ -31,8 +31,8 @@ export function DashChanges({ pending, answered, pathChanges, latest, latestLess
       {latest && (
         <div className="db-section">
           <h3 className="db-h3">Nhận xét mới nhất</h3>
-          <p className="db-feedback-lesson">{(latestLesson || {}).title} · <span className="db-mono">{scoreText(latest.score)}/{latest.maxScore}</span></p>
-          <p className="db-feedback-text">{latest.feedback}</p>
+          <p className="db-feedback-lesson">{latest.lessonTitle} · <span className="db-mono">{scoreText(latest.score)}/{latest.maxScore}</span></p>
+          <p className="db-feedback-text">{latest.text}</p>
           <Link className="small" to="/progress">Xem tất cả nhận xét</Link>
         </div>
       )}
@@ -53,7 +53,7 @@ export function DashGoal({ minutesWeek, goalInfo, goalPct, streak, badges }) {
           </div>
         </div>
         <Progress pct={Math.min(100, goalPct)} label="Mục tiêu học tuần này" />
-        <p className="small"><span className="db-mono">{minutesWeek}</span> / <span className="db-mono">{goalInfo.hours * 60}</span> phút · {Math.round(goalPct)}% tuần này</p>
+        <p className="small"><span className="db-mono">{minutesWeek}</span> / <span className="db-mono">{goalInfo.minutes}</span> phút · {Math.round(goalPct)}% tuần này</p>
       </div>
       {streak > 0 && <div className="db-streak"><span className="db-streak-num db-mono">{streak}</span><span>ngày liên tiếp</span></div>}
       {badges.length > 0 && (

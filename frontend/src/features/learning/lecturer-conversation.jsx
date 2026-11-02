@@ -1,56 +1,44 @@
 /**
  * Learner side of a private conversation with the lecturer (real lib/lesson-qa-service.ts
  * getLearnerLessonConversation / postLearnerConversationReply, and the summary row in the tutor panel).
- *
- * Shows the learner's latest conversation for this lesson from db.conversations (shape kept: messages
- * [{ from:'learner'|'lecturer', text, at }], status 'open'|'resolved'). The learner may reply while it is open
- * (10-character minimum); a resolved conversation is read-only with the real message. Creating a conversation stays
- * in the AI tutor's "Hỏi riêng giảng viên" dialog (coding feature).
+ * Data: GET/POST /api/learn/:courseId/lessons/:lessonId/conversations (loaded by the Hỏi đáp panel, passed in here).
+ * The learner may reply while it is open (10-character minimum); a resolved conversation is read-only. Creating a
+ * conversation stays in the AI tutor's "Hỏi riêng giảng viên" dialog (coding feature).
  */
 import { useState } from 'react';
-import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
+import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
-import { persistNow, uid } from './learning-store';
+import { errorText, lessonBase } from './learning-store';
 
 const MIN = 10;
 
-export function learnerConversation(courseId, lessonId) {
-  return (Codi.db().conversations || [])
-    .filter((x) => x.courseId === courseId && x.lessonId === lessonId && x.learnerId === uid())
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0] || null;
-}
-
-export function LecturerConversation({ courseId, lessonId }) {
-  useCodi();
-  const conv = learnerConversation(courseId, lessonId);
+/** conv: LearnerConversationView | null; onReply(message) appends the stored reply. */
+export function LecturerConversation({ courseId, lessonId, conv, onReply }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   if (!conv) return null;
   const messages = conv.messages || [];
-  const replied = messages.some((m) => m.from === 'lecturer');
+  const replied = messages.some((m) => m.isLecturer);
   const resolved = conv.status === 'resolved';
   const status = resolved ? 'Đã giải quyết' : replied ? 'Đã có trả lời' : 'Đang chờ trả lời';
-  const lecturer = Codi.user(conv.lecturerId) || { name: 'Giảng viên' };
+  const lecturerName = conv.lecturerName || 'Giảng viên';
   const send = async (e) => {
     e.preventDefault();
     if (busy) return;
     const t = text.trim();
     if (t.length < MIN) { setError('Câu hỏi cần ít nhất 10 ký tự để giảng viên hiểu rõ.'); return; }
-    if (conv.status !== 'open') { setError('Cuộc trao đổi đã được giải quyết. Vui lòng liên hệ giảng viên nếu cần mở lại.'); return; }
+    if (resolved) { setError('Cuộc trao đổi đã được giải quyết. Vui lòng liên hệ giảng viên nếu cần mở lại.'); return; }
     setBusy(true); setError(null);
-    const msg = { from: 'learner', text: t, at: new Date().toISOString() };
-    Codi.set(() => { conv.messages = [...messages, msg]; conv.updatedAt = msg.at; });
-    if (conv.lecturerId) Codi.notify(conv.lecturerId, { title: 'Phản hồi mới từ học viên', body: t.slice(0, 120), link: '/teach/questions' });
-    const ok = await persistNow();
-    setBusy(false);
-    if (!ok) {
-      Codi.set(() => { conv.messages = conv.messages.filter((m) => m !== msg); });
-      setError('Không thể gửi tin nhắn.');
-      return;
-    }
-    setText(''); // the reply now shows in the thread
+    try {
+      const res = await api.post(`${lessonBase(courseId, lessonId)}/conversations`, { conversationId: conv.id, text: t });
+      onReply(res.reply);
+      setText(''); // the reply now shows in the thread
+    } catch (err) {
+      setError(errorText(err, 'Không thể gửi tin nhắn.'));
+    } finally { setBusy(false); }
   };
   return (
     <section className="card ln-conv" aria-label="Câu hỏi riêng cho giảng viên">
@@ -60,14 +48,14 @@ export function LecturerConversation({ courseId, lessonId }) {
         <Icon name={open ? 'chevron-down' : 'chevron-right'} className="icon-sm" />
       </button>
       {!open && (
-        <p className="ln-conv-summary small muted">{[...messages].reverse().find((m) => m.from === 'lecturer')?.text || 'Bạn sẽ nhận thông báo khi giảng viên trả lời.'}</p>
+        <p className="ln-conv-summary small muted">{[...messages].reverse().find((m) => m.isLecturer)?.text || 'Bạn sẽ nhận thông báo khi giảng viên trả lời.'}</p>
       )}
       {open && (
         <div className="card-body stack-3">
-          <p className="xsmall muted">Chỉ bạn và {lecturer.name} xem được cuộc trao đổi này.</p>
-          <ol className="ln-conv-thread">{messages.map((m, i) => (
-            <li key={i} className={m.from === 'lecturer' ? 'is-lecturer' : 'is-learner'}>
-              <span className="xsmall row"><strong>{m.from === 'lecturer' ? lecturer.name : 'Bạn'}</strong>{m.from === 'lecturer' && <span className="badge badge-accent">Giảng viên</span>}<span className="muted">{Codi.fmt.relative(m.at)}</span></span>
+          <p className="xsmall muted">Chỉ bạn và {lecturerName} xem được cuộc trao đổi này.</p>
+          <ol className="ln-conv-thread">{messages.map((m) => (
+            <li key={m.id} className={m.isLecturer ? 'is-lecturer' : 'is-learner'}>
+              <span className="xsmall row"><strong>{m.isLecturer ? lecturerName : 'Bạn'}</strong>{m.isLecturer && <span className="badge badge-accent">Giảng viên</span>}<span className="muted">{Codi.fmt.relative(m.at)}</span></span>
               <p className="small ln-pre">{m.text}</p>
             </li>
           ))}</ol>
