@@ -11,6 +11,9 @@
  * the analysis needs the GitHub budget + OpenAI keys (docs/getting-started.md); without them the backend's own error
  * is shown, never a simulated result.
  *
+ * The profile tab renders the full report from ./github-report.jsx (port of github-profile-result.tsx and
+ * friends); the onboarding step keeps the compact <ProfileSummary>.
+ *
  * Installs Codi.github = { openConnect, stateFor, isConnected, onboardingHref, learnerCard }.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -19,6 +22,7 @@ import { Codi, useCodi } from '../../lib/codi';
 import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { GithubMark } from './shell-ui';
+import { PendingChecklist, ProfileReport } from './github-report';
 
 export const PROFILE_HREF = '/profile?tab=nang-luc';
 export const ONBOARDING_PATH = '/onboarding/github';
@@ -75,14 +79,20 @@ export async function connectGithub(returnTo) {
   window.location.assign(res.url);
 }
 
-/** Runs the analysis after explicit consent. Resolves the saved profile; throws ApiError with the server message. */
+/**
+ * Runs the analysis after explicit consent. Resolves the returned profile; throws ApiError with the server message.
+ * A run with no technology observations is not published by the server, so it never replaces an observed result.
+ */
 export async function analyseGithub() {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     const res = await api('/api/github-profile', { method: 'POST', body: { consentVersion: CONSENT_VERSION }, signal: ctrl.signal });
-    set({ linked: true, profile: (res && res.profile) || null });
-    return res && res.profile;
+    const latest = (res && res.profile) || null;
+    if (!latest || latest.version !== 1) throw new Error('Chưa tạo được hồ sơ năng lực. Không thể đọc phản hồi máy chủ. Bạn có thể thử lại.');
+    const keepPrevious = latest.observationAvailability === 'none_observed' && gh.profile && gh.profile.observationAvailability === 'observed';
+    set(keepPrevious ? { linked: true } : { linked: true, profile: latest });
+    return latest;
   } catch (e) {
     if (ctrl.signal.aborted) throw new Error('Đã hết thời gian chờ 60 giây. Chưa xác nhận được kết quả; yêu cầu trên máy chủ có thể vẫn đang hoàn tất. Không tự thử lại.');
     throw e;
@@ -126,7 +136,7 @@ export function ReadsList() {
 
 const techName = (id) => { const raw = String(id || '').split(':').slice(1).join(':'); try { return decodeURIComponent(raw) || id; } catch { return raw || id; } };
 
-/** Compact view of a saved profile (real GithubProfileProjection v1): technologies with usage, observed facts. */
+/** Compact view of a saved profile for the onboarding step (real GithubProfileProjection v1): technologies with usage, observed facts. */
 export function ProfileSummary({ profile }) {
   const techs = (profile.technologies || []).slice(0, 12);
   const facts = (profile.factualSummary || []).slice(0, 6);
@@ -170,22 +180,69 @@ export function useGithubAction() {
   return [busy, failure, run, setFailure];
 }
 
+/** Alert title for a failed action, by the server's error code (real github-profile-panel.tsx + budget/not-ready). */
+function failureTitle(info) {
+  if (!info) return 'Chưa hoàn tất thao tác GitHub';
+  if (info.action === 'unlink') return 'Chưa ngắt kết nối được GitHub';
+  if (info.action === 'link') return 'Chưa kết nối được GitHub';
+  if (info.code === 'rate_limited') return 'GitHub đang giới hạn lượt đọc';
+  if (info.code === 'connection_expired') return 'Kết nối GitHub đã hết hiệu lực';
+  if (info.diagnostics && info.diagnostics.category === 'reservation_denied') return 'Đã hết hạn mức phân tích';
+  if (info.code === 'not_ready') return 'Phân tích GitHub chưa được bật';
+  if (info.code === 'active_request') return 'Một lượt phân tích đang chạy';
+  return 'Chưa tạo được hồ sơ năng lực';
+}
+
+/** Server error body → the fields the failure alert uses; nothing else is kept. */
+const failureInfo = (action, e) => {
+  const b = e && e.body && typeof e.body === 'object' ? e.body : {};
+  return {
+    action,
+    code: typeof b.code === 'string' ? b.code : null,
+    retryAt: typeof b.retryAt === 'string' ? b.retryAt : null,
+    diagnostics: b.diagnostics && typeof b.diagnostics === 'object' ? b.diagnostics : null,
+  };
+};
+
 export function GithubProfilePanel({ linkError }) {
   useCodi();
   const s = useGithub();
   const [busy, failure, run, setFailure] = useGithubAction();
   const [consent, setConsent] = useState(false);
-  useEffect(() => { if (linkError) setFailure(LINK_ERRORS[linkError] || LINK_ERRORS.failed); }, [linkError]);
+  const [info, setInfo] = useState(null);
+  const [note, setNote] = useState('');
+  useEffect(() => { if (linkError) { setInfo({ action: 'link' }); setFailure(LINK_ERRORS[linkError] || LINK_ERRORS.failed); } }, [linkError]);
   if (!Codi.state.currentUserId) return null;
   if (s.status === 'loading' && !s.profile) return <p className="small muted" role="status">Đang tải hồ sơ năng lực…</p>;
   if (s.status === 'error') {
     return <Alert type="danger" title="Chưa tải được hồ sơ năng lực" body={s.error} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => loadGithub(true)}>Thử lại</button>} />;
   }
   const { profile, linked } = s;
-  const connect = () => run('link', () => connectGithub(PROFILE_HREF), 'Không thể mở kết nối GitHub. Bạn có thể thử lại sau.');
-  const analyse = () => { setConsent(false); run('analyse', analyseGithub, 'Chưa tạo được hồ sơ năng lực. Bạn có thể thử lại.'); };
-  const unlink = async () => { if (await confirmUnlinkDialog()) run('unlink', disconnectGithub, 'Chưa ngắt kết nối được GitHub.'); };
+  // Each action records which step failed and the server's code so the alert can name the state.
+  const act = (name, fn, fallback) => {
+    setInfo(null); setNote('');
+    return run(name, async () => { try { return await fn(); } catch (e) { setInfo(failureInfo(name, e)); throw e; } }, fallback);
+  };
+  const connect = () => act('link', () => connectGithub(PROFILE_HREF), 'Không thể mở kết nối GitHub. Bạn có thể thử lại sau.');
+  const analyse = () => {
+    setConsent(false);
+    const hadObserved = !!(profile && profile.observationAvailability === 'observed');
+    act('analyse', async () => {
+      const latest = await analyseGithub();
+      if (latest.observationAvailability === 'none_observed' && hadObserved) setNote('Lượt phân tích mới chưa ghi nhận quan sát công nghệ. Kết quả trước vẫn được giữ lại.');
+    }, 'Chưa tạo được hồ sơ năng lực. Bạn có thể thử lại.');
+  };
+  const later = () => { setConsent(false); setNote('Bạn đã chọn Để sau. Không bắt đầu phân tích.'); };
+  const unlink = async () => {
+    if (!(await confirmUnlinkDialog())) return;
+    if (await act('unlink', disconnectGithub, 'Chưa ngắt kết nối được GitHub.')) setNote('Đã ngắt kết nối GitHub.');
+  };
   const login = profile && profile.identity ? profile.identity.login : null;
+  // A run without technology observations is returned but never saved by the server: show it as temporary only.
+  const insufficient = profile && profile.observationAvailability === 'none_observed' ? profile : null;
+  const saved = insufficient ? null : profile;
+  const needsLink = !!info && (info.code === 'github_not_linked' || info.code === 'connection_expired');
+  const budgetOut = !!info && !!info.diagnostics && info.diagnostics.category === 'reservation_denied';
 
   return (
     <div className="stack-6 shell-gh-panel">
@@ -195,14 +252,14 @@ export function GithubProfilePanel({ linkError }) {
           <div className="stack-1" style={{ minWidth: 0 }}>
             <h2 style={{ margin: 0, overflowWrap: 'anywhere' }}>{login ? `@${login}` : 'Phân tích GitHub'}</h2>
             <p className="small muted" style={{ margin: 0 }}>
-              {profile ? `Phân tích lúc ${dateLabel(profile.collectedAt)}`
+              {saved ? `Phân tích lúc ${dateLabel(saved.collectedAt)} · ${saved.limitations.coverage.selected} repo được chọn`
                 : linked ? 'GitHub đã kết nối. Chưa có hồ sơ năng lực đã lưu.' : 'Kết nối GitHub để Codi hiểu kỹ năng của bạn từ repo công khai.'}
             </p>
           </div>
         </div>
         {linked && (
-          <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} onClick={() => setConsent(true)}><Icon name="rotate-ccw" className="icon-sm" /> {profile ? 'Phân tích lại' : 'Phân tích GitHub'}</button>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} onClick={() => setConsent(true)}><Icon name="rotate-ccw" className="icon-sm" /> {saved ? 'Phân tích lại' : 'Phân tích GitHub'}</button>
             <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={unlink}><Icon name="x" className="icon-sm" /> Ngắt kết nối</button>
           </div>
         )}
@@ -219,26 +276,48 @@ export function GithubProfilePanel({ linkError }) {
       {consent && (
         <div className="card"><div className="card-body stack-3">
           <h3 className="small strong" style={{ margin: 0 }}>Cho phép Codi phân tích GitHub?</h3>
+          <p className="small muted" style={{ margin: 0 }}>Chỉ phân tích tài khoản GitHub được máy chủ xác nhận đã liên kết với tài khoản Codi của bạn.</p>
           <ReadsList />
           <p className="xsmall muted" style={{ margin: 0 }}>Yêu cầu này có thể mất đến 60 giây. Trang không tự phân tích hoặc tự thử lại.</p>
           <div className="row" style={{ gap: 8 }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={analyse}>Tôi đồng ý · Phân tích</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConsent(false)}>Để sau</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={later}>Để sau</button>
           </div>
         </div></div>
       )}
 
-      {profile && isStale(profile.collectedAt) && <p className="small muted" role="status">Hồ sơ phân tích hơn 90 ngày trước. Phân tích lại để cập nhật bằng chứng.</p>}
-      {busy === 'analyse' && <p className="small muted" role="status">Đang phân tích GitHub…{profile ? ' Kết quả trước vẫn hiển thị bên dưới.' : ''}</p>}
+      {saved && isStale(saved.collectedAt) && <p className="small muted" role="status">Hồ sơ phân tích hơn 90 ngày trước. Phân tích lại để cập nhật bằng chứng.</p>}
+      {busy === 'analyse' && saved && <p className="small shell-ghr-rerun" role="status">Đang phân tích lại. Kết quả trước vẫn hiển thị bên dưới; chưa được thay thế.</p>}
+      {busy === 'analyse' && <PendingChecklist hasPrevious={!!saved} />}
       {busy === 'unlink' && <p className="small" role="status">Đang ngắt kết nối GitHub…</p>}
+      {note && <p className="small" role="status">{note}</p>}
       {failure && (
-        <Alert type="danger" title="Chưa hoàn tất thao tác GitHub">
-          <span style={{ display: 'block' }}>{failure}</span>
-          {profile && <span style={{ display: 'block' }}>Kết quả trước vẫn hiển thị bên dưới; chưa được thay thế.</span>}
+        <Alert type="danger" title={failureTitle(info)}>
+          <span style={{ display: 'block', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{failure}</span>
+          {budgetOut && <span style={{ display: 'block' }}>Hạn mức chi phí phân tích của lượt chạy này đã dùng hết. Codi không tự thử lại; hãy thử lại khi hạn mức được cấp thêm.</span>}
+          {info && info.retryAt && <span style={{ display: 'block' }}>Có thể thử lại sau {dateLabel(info.retryAt)}. Codi không tự thử lại.</span>}
+          {needsLink && (
+            <span className="stack-2" style={{ display: 'grid', marginTop: 8 }}>
+              <span>Cần liên kết tài khoản GitHub với phiên Codi hiện tại trước khi phân tích.</span>
+              <span><button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} onClick={connect}>{info.code === 'connection_expired' ? 'Kết nối lại GitHub' : 'Kết nối GitHub'}</button></span>
+            </span>
+          )}
+          {saved && <span style={{ display: 'block' }}>Kết quả trước vẫn hiển thị bên dưới; chưa được thay thế.</span>}
         </Alert>
       )}
 
-      {profile && <div className="card"><div className="card-body"><ProfileSummary profile={profile} /></div></div>}
+      {saved && <ProfileReport profile={saved} />}
+      {insufficient && (
+        <Alert type="info" title="Chưa đủ dữ liệu để ước tính">
+          <span style={{ display: 'block' }}>Kết quả tạm thời, không phải hồ sơ đã lưu. Lượt phân tích này chưa ghi nhận quan sát công nghệ.</span>
+          <span style={{ display: 'block' }}>
+            Đã liệt kê {insufficient.limitations.coverage.listed} repo; chọn {insufficient.limitations.coverage.selected} repo.{' '}
+            {insufficient.collectionStatus === 'partial' || !insufficient.limitations.listingComplete ? 'Phạm vi thu thập chưa đầy đủ.' : 'Chỉ phản ánh phạm vi đã thu thập.'}
+          </span>
+          <span style={{ display: 'block' }}>Thiếu dữ liệu không có nghĩa là năng lực yếu. Kết quả này không được lưu để khôi phục sau khi tải lại trang.</span>
+          <span style={{ display: 'block' }}>Bạn có thể phân tích lại sau khi bổ sung code công khai hoặc làm bài kiểm tra đầu vào trong khoá học của mình.</span>
+        </Alert>
+      )}
     </div>
   );
 }

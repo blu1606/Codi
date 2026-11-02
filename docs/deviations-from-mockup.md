@@ -218,5 +218,5 @@ User-visible changes:
   guided tutorial is read-only.
 - "Hồ sơ năng lực" uses the real GitHub link and analysis routes. Locally, linking only works if the GitHub OAuth app
   accepts `http://localhost:3001/api/auth/callback/github`, so a learner normally sees the "Kết nối GitHub" state;
-  a saved profile shows a compact summary (technologies, observed facts) instead of the mockup's canned report.
+  a saved profile shows the full report computed from the saved analysis (summary, languages, push activity, technologies with evidence, insights, knowledge areas, repos, collection scope) instead of the mockup's canned report; the onboarding step keeps a compact summary.
 - Profile avatars and assignment files are uploaded to R2 through the real routes.
