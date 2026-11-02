@@ -268,7 +268,7 @@ function GradingJobCard({ submission, assignment, disabled, onApply }) {
     const full = res.assessed === res.criteria;
     return (
       <section className="lai-job lai-grade-draft" aria-label="Bản nháp AI gợi ý">
-        <CardHeader title="Bản nháp AI gợi ý" badge={<span className="badge badge-accent">AI đề xuất</span>} />
+        <CardHeader title="Bản nháp AI gợi ý" badge={<span className="row" style={{ gap: 6 }}><span className="badge badge-accent">AI đề xuất</span><span className="badge badge-neutral">Mô phỏng</span></span>} />
         <details className="lai-stages-wrap">
           <summary className="xsmall muted">{STAGES.length} bước · {seconds(Number.isFinite(took) ? took : QUEUE_MS)} · xem chi tiết</summary>
           <StageList job={job} live={live} ctx={ctx} />
