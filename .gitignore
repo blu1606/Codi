@@ -4,3 +4,4 @@ dist
 .env.local
 *.log
 .impeccable/hook.cache.json
+.vitest/
