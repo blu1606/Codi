@@ -59,7 +59,7 @@ export const useTutorVersion = () => useSyncExternalStore((f) => { subs.add(f); 
 
 // ───────────────────────── feedback row (shared with the /ai advisor) ─────────────────────────
 function feedbackRow(prefix, m, i, opts) {
-  const save = (opts && opts.onChange) || (() => Codi.set(null));
+  const save = (opts && opts.onChange) || refresh;
   const vote = (v) => {
     m.vote = m.vote === v ? null : v; m.reason = null;
     save();

@@ -2,11 +2,9 @@
  * Account helpers shared by the shell screens. Everything here talks to the real backend (Better Auth under
  * /api/auth/*, Codi routes under /api/*); nothing is simulated in the browser any more.
  *
- *  accountUser()       the signed-in user for rendering: the backend session user (name, email, emailVerified,
- *                      image, createdAt) over the legacy store record (role, status) that unported pages still read.
- *  syncLegacyUser()    mirrors the session user into the transitional legacy store so pages that still read
- *                      Codi.currentUser() (header badges, other features) see a newly registered or OAuth user and
- *                      fresh name/avatar. Goes away with the legacy store.
+ *  accountUser()       the signed-in user for rendering: the backend session user (id, name, email, emailVerified,
+ *                      image, createdAt) and its primary role.
+ *  refreshAccount()    re-reads the session after a profile or email change.
  *  authMessage(e, fb)  Vietnamese message for a Better Auth / API error.
  *  logActivity(type)   POST /api/student/profile activity (sign-ins feed the profile heatmap).
  *  endSession()        signs out through the backend.
@@ -23,48 +21,12 @@ export const OTP_RESEND_AFTER_S = 30;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ───────────────────────── session user ─────────────────────────
-const SESSION_FIELDS = ['name', 'email', 'emailVerified', 'image', 'createdAt'];
+/** Signed-in user for rendering (backend session user + primary role), or null. */
+export const accountUser = () => Codi.currentUser();
 
-/** Signed-in user for rendering, or null. Backend session fields win over the legacy record. */
-export function accountUser() {
-  const legacy = Codi.currentUser();
-  const su = Codi.session && Codi.session.user;
-  if (!legacy && !su) return null;
-  if (!su) return legacy;
-  const role = Codi.role();
-  return { ...(legacy || {}), id: su.id, role: role === 'guest' ? 'learner' : role, ...Object.fromEntries(SESSION_FIELDS.map((k) => [k, su[k] ?? null])) };
-}
-
-/**
- * Makes the legacy store agree with the backend session: creates the record for a user the legacy seed never had
- * (new sign-up, first OAuth sign-in), marks them current, and copies name/email/image/emailVerified.
- * Returns true when it changed anything.
- */
-export function syncLegacyUser() {
-  const su = Codi.session && Codi.session.user;
-  const users = Codi.db().users;
-  if (!su || !Array.isArray(users)) return false;
-  const rec = users.find((u) => u.id === su.id);
-  const same = rec && Codi.state.currentUserId === su.id && rec.name === su.name && rec.email === su.email
-    && (rec.image || null) === (su.image || null) && rec.emailVerified === !!su.emailVerified;
-  if (same) return false;
-  Codi.set((s) => {
-    let u = s.db.users.find((x) => x.id === su.id);
-    if (!u) {
-      const now = new Date().toISOString();
-      u = { id: su.id, role: 'learner', status: 'active', createdAt: su.createdAt || now, lastActive: now };
-      s.db.users.push(u);
-    }
-    Object.assign(u, { name: su.name, email: su.email, image: su.image || null, emailVerified: !!su.emailVerified });
-    s.currentUserId = su.id;
-  });
-  return true;
-}
-
-/** Re-reads the backend session (after a profile/email change) and mirrors it into the legacy store. */
+/** Re-reads the backend session after a profile / email change. */
 export async function refreshAccount() {
   await Codi.refreshSession();
-  syncLegacyUser();
 }
 
 // ───────────────────────── errors ─────────────────────────

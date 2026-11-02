@@ -2,11 +2,10 @@
  * S13 Progress & results ('/progress'), port of real components/learner-workspace.tsx ProgressResults.
  * Data: GET /api/learner/overview (courses → lessons in path order with their latest results, concept mastery).
  */
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../../lib/use-api';
 import { Alert, Empty, Icon, Mastery, Progress, SpinnerBlock } from '../../components/ui/primitives';
-import { errorText, goalLabel, publishOverview, scoreText } from './learning-store';
+import { errorText, goalLabel, scoreText } from './learning-store';
 
 function QuizCell({ results }) {
   const q = results.find((x) => x.type === 'quiz');
@@ -39,7 +38,6 @@ function WorkCell({ results }) {
 
 export default function ProgressPage({ query }) {
   const { data, loading, error, reload } = useApi('/api/learner/overview');
-  useEffect(() => { if (data) publishOverview(data); }, [data]);
   const tab = query && query.tab === 'done' ? 'done' : 'active';
   const head = (
     <div className="page-header"><div><h1>Tiến độ & kết quả</h1><p className="muted">Điểm quiz, bài tập, nhận xét của giảng viên và mức thành thạo — tất cả ở một nơi.</p></div>

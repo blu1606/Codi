@@ -25,10 +25,3 @@ export function loadSeed() {
   }
   return JSON.parse(JSON.stringify(db));
 }
-
-// A top-level array whose items all carry a unique string id is stored row-per-entity; anything else goes to kv.
-export function isDocCollection(value) {
-  if (!Array.isArray(value) || !value.length) return false;
-  if (!value.every((x) => x && typeof x === 'object' && typeof x.id === 'string')) return false;
-  return new Set(value.map((x) => x.id)).size === value.length;
-}

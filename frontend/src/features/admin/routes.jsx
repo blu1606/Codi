@@ -1,6 +1,4 @@
 // Routes for the admin feature. Each entry: { path, element, role?, title?, layout?: 'focus', exit?: { href, label } }
-// Importing review-api installs Codi.review (shared with the lecturer workspace) at startup.
-import './review-api';
 import { DashboardPage } from './admin-dashboard';
 import { PublicationPage } from './admin-publication';
 import { CoursesPage } from './admin-courses';

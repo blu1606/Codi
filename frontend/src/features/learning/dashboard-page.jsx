@@ -9,7 +9,7 @@ import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
 import { useApi } from '../../lib/use-api';
 import { Alert, Empty, Icon, Progress, SpinnerBlock, Thumb } from '../../components/ui/primitives';
-import { errorText, goalLabel, learnBase, levelLabel, pathCourse, pathRows, publishOverview } from './learning-store';
+import { errorText, goalLabel, learnBase, levelLabel, pathCourse, pathRows } from './learning-store';
 import { DiagCard } from './learning-shared';
 import { buildDepartures, DashBoard, DashFocus } from './dashboard-board';
 import { DashChanges, DashGoal } from './dashboard-side';
@@ -35,7 +35,6 @@ function usePaths(ids) {
 
 export default function DashboardPage() {
   const { data, loading, error, reload } = useApi('/api/learner/overview');
-  useEffect(() => { if (data) publishOverview(data); }, [data]);
   const courses = data ? data.courses : [];
   const active = courses.filter((x) => !x.complete);
   const paths = usePaths(active.filter(hasPath).map((x) => x.id));

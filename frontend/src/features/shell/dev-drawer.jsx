@@ -1,30 +1,27 @@
 /**
- * Prototype-only "Kịch bản thử nghiệm" drawer (mockup core.js renderDrawer + #dev-toggle, Alt+K): role switch,
- * forced scenario states and server data reset. Not product UI.
+ * Prototype-only "Kịch bản thử nghiệm" drawer (mockup core.js renderDrawer + #dev-toggle, Alt+K): role switch and
+ * forced scenario states (kept in this browser). Data is reset with `npm run seed`, never from the browser.
+ * Not product UI.
  *
  * <DevToggle /> is a 40 px icon button rendered in the header actions (both layouts), so it never floats over page
  * content or bottom action bars; <DevDrawer /> (mounted once by AppLayout) owns Alt+K and the panel. They share the
  * open state below.
  */
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { Codi, useCodi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
 import { THEME_OPTIONS, useThemeSync } from './theme';
 import { api } from '../../lib/api';
-import { DEMO_PASSWORD, syncLegacyUser } from './account-store';
+import { DEMO_PASSWORD } from './account-store';
 
 const SCEN = [
   ['paymentOutcome', 'Kết quả thanh toán', [['success', 'Thành công'], ['slow', 'Chậm (chờ lâu)'], ['expired', 'Mã hết hạn'], ['underpaid', 'Chuyển thiếu tiền'], ['qrfail', 'Không tải được QR'], ['late', 'Chuyển khoản trễ (sau hết hạn)'], ['overpaid', 'Chuyển thừa'], ['unavailable', 'Cổng thanh toán không khả dụng']]],
-  ['pathAI', 'AI xếp lộ trình', [['ok', 'Bình thường'], ['fail', 'Lỗi / quá thời gian']]],
-  ['materials', 'Tài liệu bài học', [['ok', 'Tải được'], ['error', 'Lỗi tải']]],
   ['aiAssistant', 'AI (trợ lý bài học & AI Chat)', [['ok', 'Bình thường'], ['thinking', 'Đang nghĩ'], ['ratelimit', 'Vượt giới hạn (trợ lý)'], ['error', 'Không khả dụng / lỗi'], ['loadfail', 'Không tải được lịch sử Tutor']]],
-  ['codeSandbox', 'Sandbox chạy code', [['ok', 'Bình thường'], ['unavailable', 'Sandbox chạy code không khả dụng']]],
   ['kmap', 'Phân tích bản đồ kiến thức', [['ok', 'Thành công'], ['fail', 'Thất bại'], ['cycle', 'Phát hiện vòng lặp']]],
-  ['githubAnalysis', 'Phân tích GitHub (Hồ sơ năng lực)', [['ok', 'Thành công'], ['insufficient', 'Chưa đủ dữ liệu'], ['rate-limit', 'GitHub giới hạn lượt đọc'], ['expired', 'Kết nối hết hiệu lực'], ['failed', 'Thất bại'], ['timeout', 'Quá 60 giây']]],
 ];
 const ROLES = [['guest', 'Khách'], ['learner', 'Học viên'], ['lecturer', 'Giảng viên'], ['admin', 'Quản trị viên']];
-// Seeded user signed in for each role.
-const ROLE_USER = { guest: null, learner: 'usr-learner-001', lecturer: 'usr-lecturer-001', admin: 'usr-admin-001' };
+// Seeded account signed in for each role (backend/scripts/seed-source/data.js).
+const ROLE_EMAIL = { guest: null, learner: 'minhanh@codi.vn', lecturer: 'quochuy@codi.vn', admin: 'giabao@codi.vn' };
 
 // shared open state between the header toggle and the drawer
 let drawerOpen = false;
@@ -46,10 +43,10 @@ export function DevToggle() {
 async function switchRole(role) {
   Codi.ui.closeAll();
   try {
-    const target = ROLE_USER[role] && Codi.user(ROLE_USER[role]);
+    const email = ROLE_EMAIL[role];
     if (Codi.session.user) await api.post('/api/auth/sign-out', {});
-    if (!target) await Codi.refreshSession();
-    else await Codi.signIn(target.email, DEMO_PASSWORD);
+    if (!email) await Codi.refreshSession();
+    else await Codi.signIn(email, DEMO_PASSWORD);
   } catch (e) {
     await Codi.refreshSession().catch(() => {});
     Codi.ui.toast('Không đổi được vai trò: ' + (e && e.message ? e.message : e), { type: 'danger' });
@@ -63,40 +60,11 @@ function setScenario(key, value) {
   Codi.ui.toast('Đã đổi kịch bản thử nghiệm.');
 }
 
-// Resets only the transitional browser-era store (/api/reset on db codi_rebuild) that unported pages still use.
-// The real database (codi: accounts, courses, orders, progress…) is reseeded with `npm run seed` in backend/, which
-// backs it up first; the drawer deliberately does not trigger that from the browser.
-async function resetData() {
-  const r = await Codi.ui.confirm({
-    title: 'Đặt lại dữ liệu tạm?',
-    body: 'Chỉ xoá dữ liệu tạm của các trang chưa chuyển sang máy chủ. Dữ liệu trên máy chủ (tài khoản, khoá học, đơn hàng, tiến độ học…) không thay đổi. Muốn đặt lại toàn bộ, chạy "npm run seed" trong thư mục backend (có sao lưu trước).',
-    reversible: false, confirmLabel: 'Đặt lại dữ liệu tạm', danger: true,
-  });
-  if (!r.ok) return;
-  try {
-    await Codi.reset();
-  } catch (e) {
-    Codi.ui.toast('Không đặt lại được dữ liệu: ' + (e && e.message ? e.message : e), { type: 'danger' });
-    return;
-  }
-  Codi.go('/');
-  Codi.ui.toast('Đã đặt lại dữ liệu tạm.', { type: 'success' });
-}
-
-/** Keeps the transitional legacy store in step with the backend session (new accounts, OAuth returns, resets). */
-function useLegacyUserSync() {
-  const su = Codi.session && Codi.session.user;
-  const legacy = Codi.currentUser();
-  useEffect(() => { syncLegacyUser(); }, [su, legacy]);
-}
-
 export default function DevDrawer() {
   useCodi();
   useThemeSync(); // the drawer is mounted in every layout, so it hosts the theme listener
-  useLegacyUserSync(); // same reason
   const open = useDrawerOpen();
   const setOpen = setDrawerOpen;
-  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => { if (e.altKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setOpen((o) => !o); } };
@@ -105,10 +73,6 @@ export default function DevDrawer() {
   }, []);
 
   const role = Codi.role();
-  const onReset = async () => {
-    setResetting(true);
-    try { await resetData(); } finally { setResetting(false); }
-  };
 
   return (
     <>
@@ -132,8 +96,7 @@ export default function DevDrawer() {
                 ))}
               </fieldset>
             ))}
-            <button type="button" className="btn btn-secondary btn-sm" onClick={onReset} disabled={resetting}><Icon name="rotate-ccw" className="icon-sm" /> Đặt lại dữ liệu tạm</button>
-            <p className="dev-note">Chỉ dữ liệu tạm của các trang chưa chuyển sang máy chủ. Dữ liệu máy chủ: chạy <code>npm run seed</code> trong backend.</p>
+            <p className="dev-note">Đặt lại dữ liệu mẫu: dừng máy chủ rồi chạy <code>npm run seed</code> ở thư mục gốc (tự sao lưu trước).</p>
           </>
         )}
       </div>

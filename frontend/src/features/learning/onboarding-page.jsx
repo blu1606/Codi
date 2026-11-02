@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { Alert, Icon, Mastery } from '../../components/ui/primitives';
 import { Modal } from '../../components/ui/overlay-host';
-import { GOALS, HOURS, LEVELS, errorText, invalidateOverview, learnBase, postOnboarding } from './learning-store';
+import { GOALS, HOURS, LEVELS, errorText, learnBase, postOnboarding } from './learning-store';
 import { LoadState } from './learning-shared';
 import { api } from '../../lib/api';
 
@@ -312,7 +312,6 @@ export default function OnboardingPage({ params, query }) {
       setData(body);
       if (command.type === 'submit') setExplicitResult(true);
       else if (['request-path', 'diagnostic-retake', 'goal-cancel'].includes(command.type)) setExplicitResult(false);
-      invalidateOverview();
       if (command.type !== 'answer') requestAnimationFrame(() => { const h = document.querySelector('#app-main h1'); if (h) h.focus(); });
       return true;
     } catch (e) {

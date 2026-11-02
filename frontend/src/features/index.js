@@ -1,5 +1,5 @@
 // Feature registry. Each feature folder owns its routes.jsx; importing it also runs any side-effect module that
-// installs a cross-feature namespace on Codi (Codi.code, Codi.tutor, Codi.github, Codi.review, Codi.teach …).
+// installs a cross-feature namespace on Codi (Codi.code, Codi.tutor, Codi.github, Codi.teach …).
 import shell from './shell/routes';
 import commerce from './commerce/routes';
 import learning from './learning/routes';

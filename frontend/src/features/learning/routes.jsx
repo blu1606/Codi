@@ -1,6 +1,4 @@
 // Routes for the learning feature. Each entry: { path, element, role?, title?, layout?: 'focus', exit?: { href, label } }
-// Importing learning-store installs the Codi.courseProgress override at startup.
-import './learning-store';
 import './learning.css';
 import DashboardPage from './dashboard-page';
 import OnboardingPage from './onboarding-page';

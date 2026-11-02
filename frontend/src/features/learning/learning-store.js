@@ -3,11 +3,9 @@
  * plans/261102-1834-codi-backend-port/phase-1-report.md, "Contract: routes"):
  *   /api/learner/overview, /api/learn/:courseId/{onboarding,path,lessons/:lessonId/...}.
  * This module holds the endpoint helpers, the DTO → view-row adapters shared by the path page, the dashboard and the
- * lesson player, the copy constants, and the Codi.courseProgress override (fed by the learner overview) so other
- * features show the same progress as the learning screens.
+ * lesson player, and the copy constants.
  */
 import { api } from '../../lib/api';
-import { Codi } from '../../lib/codi';
 
 // ───────────────────────── endpoints ─────────────────────────
 export const learnBase = (courseId) => `/api/learn/${encodeURIComponent(courseId)}`;
@@ -85,32 +83,3 @@ export function pathCourse(view, rows = pathRows(view)) {
 }
 export const pathShown = (view) => !!view && (view.status === 'ready' || view.status === 'failed');
 
-// ───────────────────────── shared progress (Codi.courseProgress) ─────────────────────────
-// The learner overview is the one source of course progress for the signed-in learner. Learning screens publish
-// their fresh copy; other features calling Codi.courseProgress get it after one lazy fetch.
-let overview = null; // { userId, data }
-let fetching = null; // userId of the request in flight
-export function publishOverview(data) {
-  const me = Codi.state.currentUserId;
-  if (!me || !data) return;
-  overview = { userId: me, data };
-}
-/** Drop the cached overview after a change to progress (lesson completed, path set up). */
-export function invalidateOverview() { overview = null; fetching = null; }
-const baseProgress = Codi.courseProgress;
-Codi.courseProgress = (courseId, userId) => {
-  const me = Codi.state.currentUserId;
-  if (!me || (userId && userId !== me) || Codi.role() !== 'learner') return baseProgress(courseId, userId);
-  if (!overview || overview.userId !== me) {
-    if (fetching !== me) {
-      fetching = me;
-      api.get('/api/learner/overview')
-        .then((data) => { if (Codi.state.currentUserId === me) { overview = { userId: me, data }; Codi.rerender(); } })
-        .catch(() => { /* keep the fallback progress; the learning screens show their own load errors */ });
-    }
-    return baseProgress(courseId, userId);
-  }
-  const c = (overview.data.courses || []).find((x) => x.id === courseId);
-  if (!c) return baseProgress(courseId, userId);
-  return { done: c.done, total: c.total, pct: c.percent, completed: !!c.complete, currentLessonId: c.nextLessonId || null };
-};

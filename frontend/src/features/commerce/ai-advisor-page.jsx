@@ -375,7 +375,7 @@ function Composer({ busy, big, draft, setDraft }) {
 function suggestions(user, currentCourse) {
   const gh = Codi.github;
   const ghCard = user && gh ? (gh.isConnected?.()
-    ? { icon: 'github', title: 'Xem lại phân tích GitHub của mình', desc: 'Codi gợi ý khoá dựa trên repo và ngôn ngữ của bạn', run: () => Codi.go('/github/analysis') }
+    ? { icon: 'github', title: 'Xem lại phân tích GitHub của mình', desc: 'Codi gợi ý khoá dựa trên repo và ngôn ngữ của bạn', run: () => Codi.go('/profile?tab=nang-luc') }
     : { icon: 'github', title: 'Phân tích GitHub của mình', desc: 'Kết nối GitHub để Codi gợi ý khoá sát với kỹ năng', run: () => Codi.github?.openConnect?.({ returnTo: '/ai' }) }) : null;
   const base = [
     currentCourse

@@ -4,8 +4,8 @@
  *
  * Port of the real admin-insights-view / admin-finance-view. Data: GET /api/admin/insights/overview and
  * /api/admin/finance/overview (?period=7|30|90). Cards the real app marks unavailable (A4, A6, A9, the A8 grading
- * median and B5) stay working, computed from the store rows by admin-metrics.js (withStoreCards). Period presets
- * 7 / 30 / 90 ngày (real), previous period always compared. Mockup additions kept: per-card detail view with the
+ * median and B5) show the same "chưa có số liệu" reason as the real app. The period choice and the expanded state
+ * are a browser preference (localStorage). Period presets 7 / 30 / 90 ngày (real), previous period always compared. Mockup additions kept: per-card detail view with the
  * full table + CSV, and the B9 export dialog.
  *
  * Cards are built with the chart kit (src/lib/charts.js), which returns trusted HTML strings. Card bodies are
@@ -14,12 +14,12 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Codi, useCodi } from '../../lib/codi';
+import { Codi } from '../../lib/codi';
 import { charts } from '../../lib/charts';
 import { ICON_PATHS } from '../../lib/icon-paths';
 import { Icon, Html, Empty, esc } from '../../components/ui/primitives';
 import { AdminShell } from './admin-shell';
-import { withStoreCards, rangeLabel, dayLabel, dayLabelFull, dayKey, BUCKET_LABEL, BUCKET_TONE } from './admin-metrics';
+import { fromOverview, rangeLabel, dayLabel, dayLabelFull, dayKey, BUCKET_LABEL, BUCKET_TONE } from './admin-metrics';
 import { useAdminGet } from './admin-data';
 
 const { fmt } = Codi;
@@ -40,14 +40,29 @@ const ch = {
 };
 
 const PERIODS = [{ v: '7', label: '7 ngày', days: 7 }, { v: '30', label: '30 ngày', days: 30 }, { v: '90', label: '90 ngày', days: 90 }];
-const prefs = () => Codi.ensure('analyticsPrefs', () => ({ period: '30', open: { insights: false, finance: false } }));
+const PREFS_KEY = 'codi-admin-analytics';
+let prefsCache = null;
+/** Browser-only UI preference: selected period and which "Chi tiết thêm" sections are open. */
+const prefs = () => {
+  if (!prefsCache) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch { saved = {}; }
+    prefsCache = { period: saved.period || '30', open: { insights: false, finance: false, ...(saved.open || {}) } };
+  }
+  return prefsCache;
+};
+const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs())); } catch { /* storage blocked: lasts for this tab */ } };
+
+/** Card the backend has no data source for (same reasons as the real app). No table, so no detail view or CSV. */
+const unavailable = (code, title, question, reason, wide) => ({
+  code, title, question, wide, body: html`<p class="viz-empty" role="status">${reason}</p>`,
+});
 const period = () => (PERIODS.find((x) => x.v === prefs().period) || PERIODS[1]).v;
 
 const vnd = (n) => fmt.vnd(Math.round(n || 0));
 const P = (v) => ch.fmt.pct(v, v < 10 ? 1 : 0);
 const pct = (part, whole) => (whole ? (part / whole) * 100 : 0);
 const sum = (rows, k) => rows.reduce((s, r) => s + (typeof k === 'function' ? k(r) : r[k] || 0), 0);
-const ms = (v) => fmt.num(Math.round(v)) + ' ms';
 /** Current + dashed previous series aligned by position (real LineChart pairs). */
 const pair = (cur, prev, y) => [
   { name: 'Kỳ này', points: cur.map((d) => ({ x: d.date, y: y(d), label: dayLabel(d.date) })) },
@@ -109,33 +124,20 @@ const INSIGHTS = {
   },
   a8(d) {
     const o = d.operations;
-    const grading = o.gradingHoursMedian == null ? '—' : `${fmt.num(Math.round(o.gradingHoursMedian))} giờ`;
     return {
       code: 'A8', title: 'Sức khỏe vận hành', question: 'Học viên có đang phải chờ quá lâu?',
       body: html`<div class="viz-kpis">
         ${ch.kpi({ label: 'Câu hỏi chưa trả lời > 48 giờ', value: o.unansweredQuestions, compare: false })}
         ${ch.kpi({ label: 'Đánh giá chưa phản hồi', value: o.unrepliedReviews, compare: false })}
-        ${ch.kpi({ label: 'Thời gian chấm bài trung vị', value: o.gradingHoursMedian == null ? '—' : Math.round(o.gradingHoursMedian), format: (v) => `${fmt.num(v)} giờ`, compare: false, note: `${fmt.num(o.gradedCount)} bài chấm trong kỳ` })}
       </div>`,
-      note: 'Hai chỉ số đầu tính tại thời điểm hiện tại. Thời gian chấm bài trung vị tính trên bài được chấm trong kỳ.',
+      note: 'Tại thời điểm hiện tại. Thời gian chấm bài trung vị chưa có số liệu đã xác minh.',
       table: { headers: ['Chỉ số (thấp hơn là tốt)', 'Hiện tại'], rows: [
         ['Câu hỏi chưa trả lời > 48 giờ', fmt.num(o.unansweredQuestions)],
         ['Đánh giá chưa phản hồi', fmt.num(o.unrepliedReviews)],
-        ['Thời gian chấm bài trung vị (trong kỳ)', grading],
       ] },
     };
   },
-  a4(d) {
-    const { rows, all } = d.retention;
-    const cols = Array.from({ length: 9 }, (_, i) => 'T' + i);
-    const list = rows.length ? [all].concat(rows.slice().reverse()) : [];
-    return {
-      code: 'A4', title: 'Giữ chân theo nhóm ghi danh', question: 'Sau bao nhiêu tuần học viên bắt đầu bỏ học?', wide: true, sample: all.n, minSample: 20,
-      body: ch.heatmap({ rowHeader: 'Nhóm ghi danh', cols, rows: list, caption: 'Tỉ lệ còn học theo tuần', minN: 10, emptyText: 'Chưa có ghi danh nào trong 8 tuần gần nhất.' }),
-      note: 'Nhóm = tuần ghi danh (thứ Hai, GMT+7), tối đa 8 nhóm gần nhất. Tỉ lệ = học viên có thời gian học trong tuần đó. T0 = tuần ghi danh, ô trống: tuần chưa tới.',
-      table: { headers: ['Nhóm', 'n'].concat(cols), rows: list.map((r) => [r.label, fmt.num(r.n)].concat(r.cells.map((v) => (v == null ? '' : v + '%')))) },
-    };
-  },
+  a4: () => unavailable('A4', 'Giữ chân theo nhóm ghi danh', 'Sau bao nhiêu tuần học viên bắt đầu bỏ học?', 'Chưa có số liệu giữ chân theo tuần: chưa có nhật ký hoạt động theo nhóm ghi danh đã xác minh.', true),
   a5(d) {
     const rows = d.completion.filter((c) => c.learners > 0);
     const rate = (c) => pct(c.completed, c.learners);
@@ -146,35 +148,8 @@ const INSIGHTS = {
       table: { headers: ['Khóa học', 'Học viên', 'Hoàn thành', 'Tỉ lệ'], rows: rows.map((c) => [c.title, fmt.num(c.learners), fmt.num(c.completed), P(rate(c))]) },
     };
   },
-  a6(d) {
-    const s = d.startChoice; const total = s.diagnostic + s.lesson1;
-    const trend = s.weeks.map((x) => ({ x: x.week, label: 'Tuần ' + dayLabel(x.week), y: x.rate }));
-    const prevTotal = d.previousStartChoice.diagnostic + d.previousStartChoice.lesson1;
-    return {
-      code: 'A6', title: 'Làm bài kiểm tra đầu vào hay học từ bài 1', question: 'Bao nhiêu học viên mới chọn tìm điểm bắt đầu?', sample: total,
-      body: html`${ch.stacked({ segments: [{ label: 'Tìm điểm bắt đầu (làm bài đầu vào)', value: s.diagnostic }, { label: 'Học từ bài 1', value: s.lesson1 }], format: fmt.num, emptyText: 'Không có ghi danh mới trong kỳ này.' })}
-        ${trend.length > 1 ? html`<div style="margin-top:16px">${ch.line({ series: [{ name: '% làm bài đầu vào', points: trend }], yFormat: (v) => Math.round(v) + '%', height: 140, ariaLabel: 'Tỉ lệ làm bài đầu vào theo tuần' })}</div>` : ''}`,
-      note: `Tính trên ghi danh mới trong kỳ. Kỳ trước: ${prevTotal ? P(pct(d.previousStartChoice.diagnostic, prevTotal)) : '—'} làm bài đầu vào.`,
-      table: { headers: ['Tuần', 'Ghi danh mới', '% làm bài đầu vào'], rows: s.weeks.map((x) => ['Tuần ' + dayLabel(x.week), fmt.num(x.n), x.rate + '%']) },
-    };
-  },
-  a9(d) {
-    const a = d.ai; const p = d.previousAi;
-    const pts = (days) => days.filter((x) => x.p95 != null);
-    const cur = pts(a.days); const prevDays = p.days.map((x, i) => (a.days[i] && x.p95 != null ? { ...x, date: a.days[i].date, from: x.date } : null)).filter(Boolean);
-    return {
-      code: 'A9', title: 'Sức khỏe AI', question: 'AI có đang chậm hoặc lỗi nhiều hơn?', wide: true,
-      body: html`<div class="viz-kpis">
-          ${ch.kpi({ label: 'Yêu cầu trợ lý / ngày', value: a.requestsPerDay, prev: p.requestsPerDay, compare: true })}
-          ${ch.kpi({ label: 'Lỗi tạo lộ trình', value: a.pathErrorRate == null ? '—' : a.pathErrorRate, format: P, prev: p.pathErrorRate, deltaGood: 'down', compare: a.pathErrorRate != null, note: `${fmt.num(a.pathErrors)}/${fmt.num(a.pathRequests)} lộ trình` })}
-          ${ch.kpi({ label: 'Độ trễ p95 (trung vị)', value: a.p95 == null ? '—' : a.p95, format: ms, prev: p.p95, deltaGood: 'down', compare: a.p95 != null })}
-          ${ch.kpi({ label: 'Lần chạm giới hạn', value: a.rateLimited, prev: p.rateLimited, deltaGood: 'down', compare: true })}
-        </div>
-        <div style="margin-top:16px">${ch.line({ series: [{ name: 'Kỳ này', points: cur.map((x) => ({ x: x.date, y: x.p95, label: dayLabel(x.date) })) }, { name: 'Kỳ trước', dashed: true, points: prevDays.map((x) => ({ x: x.date, y: x.p95, label: dayLabel(x.date), note: dayLabel(x.from) })) }], threshold: { value: 1500, label: 'Mục tiêu p95 ≤ 1.500 ms' }, yFormat: ms, ariaLabel: 'Độ trễ p95 theo ngày', emptyText: 'Không có yêu cầu AI nào trong kỳ này.' })}</div>`,
-      note: `Từ ${fmt.num(a.requests)} yêu cầu trợ lý AI và ${fmt.num(a.pathRequests)} lần tạo lộ trình trong kỳ. Lỗi, độ trễ và lần chạm giới hạn: số càng cao càng xấu.`,
-      table: { headers: ['Ngày', 'Yêu cầu', 'Lỗi', 'Chạm giới hạn', 'p95 (ms)'], rows: a.days.map((x) => [dayLabelFull(x.date), fmt.num(x.requests), fmt.num(x.errors), fmt.num(x.rateLimited), x.p95 == null ? '—' : fmt.num(x.p95)]) },
-    };
-  },
+  a6: () => unavailable('A6', 'Làm bài kiểm tra đầu vào hay học từ bài 1', 'Bao nhiêu học viên mới chọn tìm điểm bắt đầu?', 'Chưa có số liệu: hệ thống chưa ghi nhận lựa chọn học từ bài 1 hay làm bài đầu vào.'),
+  a9: () => unavailable('A9', 'Sức khỏe AI', 'AI có đang chậm hoặc lỗi nhiều hơn?', 'Chưa có số liệu độ trễ p95 và lần chạm giới hạn tốc độ AI: chưa có nguồn dữ liệu đã xác minh.', true),
 };
 
 // ───────────────────────── S37 cards ─────────────────────────
@@ -248,19 +223,7 @@ const FIN = {
       table: { headers: ['Khóa học', 'Đơn', 'Gộp', 'Giảm giá', 'Ròng', 'Hoàn tiền'], rows: rows.map((r) => [r.title, fmt.num(r.paidOrders), vnd(r.gross), vnd(r.discount), vnd(r.net), vnd(r.refunds)]) },
     };
   },
-  b5(d) {
-    const c = d.checkout; const pc = d.previousCheckout;
-    const steps = [{ label: 'Thêm vào giỏ / Mua ngay', value: c.clicks }, { label: 'Tạo đơn', value: c.created }, { label: 'Đã thanh toán', value: c.paid }];
-    return {
-      code: 'B5', title: 'Phễu thanh toán', question: 'Khách bỏ ở bước nào trước khi trả tiền?', sample: c.clicks,
-      body: html`${ch.funnel({ steps, format: fmt.num, emptyText: 'Không có lượt thêm vào giỏ hoặc mua ngay trong kỳ này.' })}
-        <h4 class="small" style="margin:16px 0 8px">Theo nguồn</h4>
-        <div class="table-wrap"><table class="table viz-data-table"><caption class="sr-only">Phễu theo nguồn</caption><thead><tr><th scope="col">Nguồn</th><th scope="col" class="num">Lượt bấm</th><th scope="col" class="num">Tạo đơn</th><th scope="col" class="num">Tỉ lệ tạo đơn</th></tr></thead>
-        <tbody>${c.sources.map(([l, a, o]) => html`<tr><th scope="row">${l}</th><td class="num">${fmt.num(a)}</td><td class="num">${fmt.num(o)}</td><td class="num">${a ? P(pct(o, a)) : '—'}</td></tr>`)}</tbody></table></div>`,
-      note: `Tỉ lệ thanh toán sau khi tạo đơn: ${c.created ? P(pct(c.paid, c.created)) : '—'} (kỳ trước ${pc.created ? P(pct(pc.paid, pc.created)) : '—'}). Lượt bấm tính theo từng khóa học được thêm.`,
-      table: { headers: ['Bước', 'Kỳ này', 'Kỳ trước'], rows: steps.map((s, i) => [s.label, fmt.num(s.value), fmt.num([pc.clicks, pc.created, pc.paid][i])]) },
-    };
-  },
+  b5: () => unavailable('B5', 'Phễu thanh toán', 'Khách bỏ ở bước nào trước khi trả tiền?', 'Chưa có số liệu: hệ thống chưa lưu lịch sử thêm giỏ hàng và mua ngay để dựng phễu từ giỏ tới thanh toán.'),
   b6(d) {
     const b = d.paymentTime.buckets; const total = sum(b, 'orders');
     return {
@@ -306,14 +269,14 @@ const PAGES = {
 };
 
 /**
- * Loads the page overview for the selected period and adds the store-only cards. A malformed reply surfaces as the
+ * Loads the page overview for the selected period. A malformed reply surfaces as the
  * real error panel instead of a blank page. While another period loads, the previous data stays (is-refreshing).
  */
 function useAnalytics(page) {
   const res = useAdminGet(`/api/admin/${page}/overview?period=${period()}`);
   const merged = useMemo(() => {
     if (!res.data) return { data: null, error: null };
-    try { return { data: withStoreCards(page, res.data), error: null }; } catch (error) { console.error(error); return { data: null, error }; }
+    try { return { data: fromOverview(page, res.data), error: null }; } catch (error) { console.error(error); return { data: null, error }; }
   }, [page, res.data]);
   return { d: merged.data, failed: !!(res.error || merged.error) && !merged.data, loading: res.loading, reload: res.reload };
 }
@@ -363,9 +326,10 @@ function ExportDialog({ handle, page, d }) {
 /** Period changes re-fetch every card; the previous render stays visible at reduced opacity while it loads. */
 function useAnalyticsActions(page) {
   const a = useAnalytics(page);
+  const [, rerender] = useState(0);
   const handlers = {
-    'aa-period': (v) => { prefs().period = v; Codi.set(() => {}); },
-    'aa-expand': (pg) => { const o = prefs().open; o[pg] = !o[pg]; Codi.set(() => {}); },
+    'aa-period': (v) => { prefs().period = v; savePrefs(); rerender((n) => n + 1); },
+    'aa-expand': (pg) => { const o = prefs().open; o[pg] = !o[pg]; savePrefs(); rerender((n) => n + 1); },
     'aa-export': (pg) => { if (a.d) Codi.ui.modal({ title: 'Xuất CSV', body: (h) => <ExportDialog handle={h} page={pg} d={a.d} /> }); },
     retry: () => a.reload(),
   };
@@ -396,7 +360,6 @@ function ErrorPanel({ text, onRetry }) {
 }
 
 function AnalyticsPage({ page }) {
-  useCodi();
   const { refreshing, d, failed, onClick, handlers } = useAnalyticsActions(page);
   const P2 = PAGES[page];
   const open = !P2.collapsible || prefs().open[page];
@@ -430,7 +393,6 @@ function AnalyticsPage({ page }) {
 }
 
 function AnalyticsDetailPage({ page, id }) {
-  useCodi();
   const { refreshing, d, failed, onClick, handlers } = useAnalyticsActions(page);
   const P2 = PAGES[page]; const fn = P2.cards[id];
   if (!fn) {

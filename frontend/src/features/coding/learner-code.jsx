@@ -17,7 +17,7 @@ import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
 import { Alert, Icon, Md, SpinnerBlock } from '../../components/ui/primitives';
 import { editor, codeBlock, consoleView, logLines, FailureAlert, rememberFocus, restoreFocus, onInput, runErrorText, setEditorValue, LANG } from './code-api';
-import { explain, syntaxError } from './code-runner';
+import { explain, syntaxError } from './code-text';
 
 const SAVE_DELAY_MS = 650;
 const errText = (e, fallback) => (e && typeof e.message === 'string' && e.message) || fallback;
@@ -501,12 +501,12 @@ function bridge(courseId, lessonId, testId) {
   return { task, code: currentCode(e), failing: failingOf(e, testId), runError: runErrorOf(e), run, tutorial: e.args.tutorial };
 }
 
-const legacyRunTests = Codi.code.runTests;
+
 Object.assign(Codi.code, {
   learner,
   bridge,
   runTests(courseId, lessonId) {
     const e = findEntry(courseId, lessonId);
-    if (e) runAction(e, 'run'); else legacyRunTests(courseId, lessonId);
+    if (e) runAction(e, 'run');
   },
 });

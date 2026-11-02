@@ -77,5 +77,3 @@ export function GithubMark({ className = 'icon' }) {
   );
 }
 
-/** Scenario flag read with a default (new flags are absent from older saved sessions). */
-export const scenario = (state, key, fallback = 'ok') => (state && state.scenario && state.scenario[key]) || fallback;

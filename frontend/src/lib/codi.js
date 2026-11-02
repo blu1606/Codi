@@ -1,32 +1,22 @@
 /**
- * Codi runtime store — the React port of the mockup's window.Codi (docs/mockup/js/core.js).
- *
- * The mockup's business logic is synchronous and mutates Codi.db() in place. The port keeps that contract so
- * feature code can be translated almost line by line:
+ * Codi runtime — the React port of the mockup's window.Codi (docs/mockup/js/core.js), minus its data store.
+ * Domain data (courses, orders, progress …) always comes from the backend through src/lib/api.js and
+ * src/lib/use-api.js; this module only holds the signed-in session, browser-only UI state and shared helpers.
  *
  *   import { Codi, useCodi } from '../lib/codi';
  *   function Page() {
- *     useCodi();                         // subscribe: re-render after every Codi.set()
- *     const course = Codi.course(slug);  // selectors read the live db
- *     const buy = () => Codi.set((s) => { s.db.orders.push(order); });   // mutate, re-render, persist
+ *     useCodi();                    // re-render after every Codi.set() / session change
+ *     const me = Codi.currentUser(); // backend session user (or null)
  *   }
  *
- * STATE
- *  Codi.state = { currentUserId, carts, scenario, db, ...module slices }
- *  Codi.set(fnOrPatch, { render:false })   fn(state) mutates in place, or an object is merged. Re-renders subscribers
- *                                          (unless render:false) and schedules a debounced sync to Postgres.
- *  Codi.ensure(key, defaultFn)             lazily creates a persisted module slice (stored in kv as slice:<key>).
- *  Codi.db()                               the live data (users, courses, orders, vouchers, submissions, questions,
- *                                          reviews, enrolments, learnerProgress, learnerSeed, knowledgeMaps,
- *                                          notifications, bankInfo, categories, levels, codeAttempts, analytics, …).
- *  Codi.reset()                            server reseeds from the mockup data, then the client reloads it.
+ * STATE (browser only, never domain data)
+ *  Codi.state = { currentUserId, scenario }   scenario = Alt+K test flags + resolved theme, kept in localStorage.
+ *  Codi.set(fnOrPatch, { render:false })      fn(state) mutates in place, or an object is merged; re-renders.
  *
- * Persistence: db + slices → Postgres via /api/sync (diffed per entity). currentUserId and scenario → localStorage
- * (they describe this browser session, not shared data).
- *
+ * SESSION     Codi.session = { user, roles } from GET /api/auth/get-session + /api/user/roles (Better Auth cookie).
+ *             Codi.currentUser(), Codi.role(), Codi.signIn(email, password), Codi.signOut(), Codi.refreshSession().
  * NAVIGATION  Codi.go(path) (react-router navigate), Codi.path(), Codi.query()
  * AUTH        Codi.requireAuth(intentFn, { reason }) runs now or opens the sign-in modal and runs after success.
- *             Codi.signIn(email, password) and Codi.signOut() go through the backend (Better Auth cookie session).
  * UI          Codi.ui.toast / confirm / modal / sheet … — see src/components/ui/overlay-host.jsx (registered there).
  */
 import { useSyncExternalStore } from 'react';
@@ -34,8 +24,7 @@ import { api } from './api';
 import { fmt } from './format';
 
 const SESSION_KEY = 'codi-rebuild-session';
-const DEFAULT_SCENARIO = { paymentOutcome: 'success', pathAI: 'ok', materials: 'ok', aiAssistant: 'ok', kmap: 'ok', theme: 'light' };
-const RESERVED = new Set(['currentUserId', 'scenario', 'db']);
+const DEFAULT_SCENARIO = { paymentOutcome: 'success', aiAssistant: 'ok', kmap: 'ok', theme: 'light' };
 
 // ───────────────────────── subscription ─────────────────────────
 let version = 0;
@@ -43,41 +32,32 @@ const listeners = new Set();
 const emit = () => { version += 1; listeners.forEach((l) => l()); };
 const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); };
 
-/** Subscribe a component to every store change. Returns Codi for convenience. */
+/** Subscribe a component to every Codi change. Returns Codi for convenience. */
 export function useCodi() {
   useSyncExternalStore(subscribe, () => version);
   return Codi;
 }
 
-// ───────────────────────── persistence ─────────────────────────
-let docCollections = new Set();
-let lastSaved = new Map(); // "d|collection|id" | "k|kvKey" → JSON string
-let syncTimer = null;
-let syncing = Promise.resolve();
-export const syncStatus = { error: null };
-
-function snapshotEntries(state) {
-  const out = new Map();
-  const db = state.db || {};
-  for (const [key, value] of Object.entries(db)) {
-    if (docCollections.has(key) && Array.isArray(value)) {
-      for (const item of value) if (item && item.id) out.set(`d|${key}|${item.id}`, JSON.stringify(item));
-    } else {
-      out.set(`k|db:${key}`, JSON.stringify(value === undefined ? null : value));
-    }
-  }
-  for (const [key, value] of Object.entries(state)) {
-    if (RESERVED.has(key) || value === undefined) continue;
-    out.set(`k|slice:${key}`, JSON.stringify(value));
-  }
-  return out;
-}
-
-// Only the dev scenario is browser-local; who is signed in comes from the backend session cookie.
-function persistSession() {
+// The dev scenario is browser-local; who is signed in comes from the backend session cookie.
+function persistScenario() {
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ scenario: Codi.state.scenario }));
   } catch { /* storage blocked: scenario lasts for this tab only */ }
+}
+
+function readScenario() {
+  try {
+    const local = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}') || {};
+    return { ...DEFAULT_SCENARIO, ...(local.scenario || {}) };
+  } catch {
+    return { ...DEFAULT_SCENARIO };
+  }
+}
+
+function applyTheme() {
+  const html = document.documentElement;
+  if (Codi.state.scenario.theme === 'dark') html.setAttribute('data-theme', 'dark');
+  else html.removeAttribute('data-theme');
 }
 
 // ───────────────────────── backend session (Better Auth) ─────────────────────────
@@ -94,76 +74,25 @@ async function fetchSession() {
 
 function applySession(session) {
   Codi.session = session;
-  const id = session.user ? session.user.id : null;
-  Codi.state.currentUserId = id && Codi.state.db.users && Codi.state.db.users.some((u) => u.id === id) ? id : null;
-}
-
-function flush() {
-  syncTimer = null;
-  const now = snapshotEntries(Codi.state);
-  const body = { upserts: [], deletes: [], kv: {}, kvDelete: [] };
-  for (const [k, json] of now) {
-    if (lastSaved.get(k) === json) continue;
-    const [kind, a, b] = k.split('|');
-    if (kind === 'd') body.upserts.push({ collection: a, id: b, data: JSON.parse(json) });
-    else body.kv[a] = JSON.parse(json);
-  }
-  for (const k of lastSaved.keys()) {
-    if (now.has(k)) continue;
-    const [kind, a, b] = k.split('|');
-    if (kind === 'd') body.deletes.push({ collection: a, id: b });
-    else body.kvDelete.push(a);
-  }
-  if (!body.upserts.length && !body.deletes.length && !Object.keys(body.kv).length && !body.kvDelete.length) return syncing;
-  lastSaved = now;
-  // keepalive lets the last write finish when the tab reloads or closes right after a change
-  syncing = syncing.then(() => fetch('/api/sync', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); syncStatus.error = null; })
-    .catch((e) => {
-      syncStatus.error = e.message;
-      lastSaved = new Map(); // resend everything on the next change (upserts are idempotent)
-      Codi.ui.toast('Không lưu được thay đổi lên máy chủ. Kiểm tra API rồi thử lại.', { type: 'danger' });
-    }));
-  return syncing;
-}
-const scheduleSync = () => { if (!syncTimer) syncTimer = setTimeout(flush, 250); };
-if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => { if (syncTimer) { clearTimeout(syncTimer); flush(); } });
+  Codi.state.currentUserId = session.user ? session.user.id : null;
 }
 
 /**
- * Loads the snapshot from the API once. Throws when the API or database is unreachable.
- * Concurrent and repeated calls share the same load, so a second call (StrictMode runs effects twice)
- * can never replace a store that pages have already written to. A failed load can be retried.
+ * Loads the backend session once before the app renders. Throws when the API is unreachable. Concurrent and
+ * repeated calls share the same load (StrictMode runs effects twice); a failed load can be retried.
  */
 let loading = null;
-export function loadStore() {
-  if (!loading) loading = loadStoreOnce().catch((e) => { loading = null; throw e; });
+export function loadSession() {
+  if (!loading) loading = loadSessionOnce().catch((e) => { loading = null; throw e; });
   return loading;
 }
 
-async function loadStoreOnce() {
-  const [snap, auth] = await Promise.all([api('/api/snapshot'), fetchSession()]);
-  docCollections = new Set(snap.docCollections || []);
-  let local = {};
-  try { local = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}') || {}; } catch { local = {}; }
-  Codi.state = {
-    carts: {},
-    ...snap.slices,
-    currentUserId: null,
-    scenario: { ...DEFAULT_SCENARIO, ...(local.scenario || {}) },
-    db: snap.db,
-  };
+async function loadSessionOnce() {
+  const auth = await fetchSession();
+  Codi.state = { currentUserId: null, scenario: readScenario() };
   applySession(auth);
-  lastSaved = snapshotEntries(Codi.state);
   applyTheme();
   emit();
-}
-
-function applyTheme() {
-  const html = document.documentElement;
-  if (Codi.state.scenario.theme === 'dark') html.setAttribute('data-theme', 'dark');
-  else html.removeAttribute('data-theme');
 }
 
 // ───────────────────────── navigation bridge ─────────────────────────
@@ -172,46 +101,29 @@ const nav = { navigate: null, location: { pathname: '/', search: '' } };
 export function bindRouter(navigate, location) { nav.navigate = navigate; nav.location = location; }
 
 // ───────────────────────── Codi object ─────────────────────────
-const db = () => Codi.state.db;
-const currentUser = () => (Codi.state.currentUserId ? db().users.find((u) => u.id === Codi.state.currentUserId) || null : null);
+const SESSION_FIELDS = ['id', 'name', 'email', 'emailVerified', 'image', 'createdAt'];
+/** Signed-in user for rendering: the backend session user plus the primary role, or null. */
+function currentUser() {
+  const su = Codi.session && Codi.session.user;
+  if (!su) return null;
+  return { ...Object.fromEntries(SESSION_FIELDS.map((k) => [k, su[k] ?? null])), role: primaryRole(Codi.session.roles) || 'learner' };
+}
 
 export const ROLE_LABEL = { guest: 'Khách', learner: 'Học viên', lecturer: 'Giảng viên', admin: 'Quản trị viên' };
 
 export const Codi = {
-  state: { db: {}, scenario: DEFAULT_SCENARIO, carts: {} },
+  state: { currentUserId: null, scenario: DEFAULT_SCENARIO },
   fmt,
   ROLE_LABEL,
 
-  // state
+  /** Browser-only UI state (scenario flags, theme). Never used for domain data. */
   set(fnOrPatch, opts) {
     if (typeof fnOrPatch === 'function') fnOrPatch(Codi.state);
     else if (fnOrPatch) Object.assign(Codi.state, fnOrPatch);
-    persistSession();
+    persistScenario();
     applyTheme();
-    scheduleSync();
     if (!opts || opts.render !== false) emit();
   },
-  ensure(key, defaultFn) {
-    if (Codi.state[key] === undefined) { Codi.state[key] = defaultFn(); scheduleSync(); }
-    return Codi.state[key];
-  },
-  db,
-  async reset() {
-    await flush();
-    const r = await fetch('/api/reset', { method: 'POST' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    Codi.ui.closeAll();
-    const keepUser = Codi.state.currentUserId;
-    await loadStore();
-    Codi.state.currentUserId = keepUser && db().users.some((u) => u.id === keepUser) ? keepUser : null;
-    Codi._onReset.forEach((fn) => fn());
-    persistSession();
-    emit();
-  },
-  _onReset: [],
-  onReset(fn) { Codi._onReset.push(fn); },
-  /** Forces pending changes to the server now (e.g. before navigating away). */
-  flush: () => flush(),
 
   // navigation
   go(path) { if (nav.navigate) nav.navigate(path); },
@@ -222,56 +134,10 @@ export const Codi = {
   /** Run fn after the current render is committed (mockup Codi.onMount). Prefer useEffect in new code. */
   onMount: (fn) => { setTimeout(() => { try { fn(); } catch (e) { console.error(e); } }, 0); },
 
-  // selectors
+  // session selectors
   currentUser,
-  // The backend roles decide; the legacy record's role is only a fallback while a page still reads Codi.db().
-  role: () => { const u = currentUser(); return u ? primaryRole(Codi.session.roles) || u.role : 'guest'; },
-  user: (id) => db().users.find((u) => u.id === id) || null,
-  course: (idOrSlug) => db().courses.find((c) => c.id === idOrSlug || c.slug === idOrSlug) || null,
-  lessons: (course) => (course ? course.chapters.flatMap((ch) => ch.lessons) : []),
-  lesson: (course, lessonId) => Codi.lessons(course).find((l) => l.id === lessonId) || null,
-  chapterOf: (course, lessonId) => (course ? course.chapters.find((ch) => ch.lessons.some((l) => l.id === lessonId)) : null),
-  category: (id) => db().categories.find((c) => c.id === id) || { id, name: '' },
-  levelLabel: (level) => db().levels[level] || level,
+  role: () => { const u = currentUser(); return u ? u.role : 'guest'; },
   homeFor: (role) => ({ guest: '/', learner: '/dashboard', lecturer: '/teach', admin: '/admin' }[role] || '/'),
-
-  isEnrolled(courseId, userId) {
-    const uid = userId || Codi.state.currentUserId;
-    return !!uid && db().enrolments.some((e) => e.userId === uid && e.courseId === courseId);
-  },
-  enroll(courseId, userId) {
-    const uid = userId || Codi.state.currentUserId;
-    if (!uid || Codi.isEnrolled(courseId, uid)) return;
-    db().enrolments.push({ userId: uid, courseId, enrolledAt: new Date().toISOString() });
-    const c = Codi.course(courseId);
-    if (c) c.learnersCount = (c.learnersCount || 0) + 1;
-  },
-  cart() { const uid = Codi.state.currentUserId; return uid ? (Codi.state.carts[uid] || []) : []; },
-  setCart(ids) { const uid = Codi.state.currentUserId; if (uid) Codi.state.carts[uid] = ids.slice(); },
-  pendingOrderFor(courseId, userId) {
-    const uid = userId || Codi.state.currentUserId;
-    return db().orders.find((o) => o.userId === uid && o.status === 'pending' && o.items.some((i) => i.courseId === courseId)) || null;
-  },
-  ownership(courseId) {
-    const c = Codi.course(courseId);
-    if (!c) return 'not-owned';
-    if (!Codi.state.currentUserId) return c.price === 0 ? 'free' : 'not-owned';
-    if (Codi.isEnrolled(courseId)) return 'owned';
-    if (Codi.pendingOrderFor(courseId)) return 'pending-payment';
-    if (Codi.cart().includes(courseId)) return 'in-cart';
-    if (c.price === 0) return 'free';
-    return 'not-owned';
-  },
-  // Default progress reads db.learnerProgress; the learning feature overrides this to read its own slice.
-  courseProgress(courseId, userId) {
-    const uid = userId || Codi.state.currentUserId;
-    const c = Codi.course(courseId);
-    const total = Codi.lessons(c).length;
-    const rec = db().learnerProgress.find((p) => p.userId === uid && p.courseId === courseId);
-    const done = rec ? rec.completed.length : 0;
-    const next = c ? c.defaultOrder.find((id) => !(rec && rec.completed.includes(id))) : null;
-    return { done, total, pct: total ? Math.round((done / total) * 100) : 0, completed: total > 0 && done >= total, currentLessonId: next || null };
-  },
 
   // auth — openSignIn is registered by the auth feature (src/features/shell)
   openSignIn: (intent) => { Codi.go('/login'); if (intent) Codi._pendingIntent = intent; },
@@ -289,13 +155,15 @@ export const Codi = {
     await api.post('/api/auth/sign-in/email', { email, password, rememberMe: true });
     const session = await fetchSession();
     if (!session.user) throw new Error('Không đọc được phiên đăng nhập. Vui lòng thử lại.');
-    Codi.set(() => applySession(session));
+    applySession(session);
+    emit();
     return session.user.id;
   },
-  /** Re-reads the backend session (e.g. after another tab signed out). */
+  /** Re-reads the backend session (after a profile/email change, or when another tab signed out). */
   async refreshSession() {
     const session = await fetchSession();
-    Codi.set(() => applySession(session));
+    applySession(session);
+    emit();
     return session;
   },
   async signOut({ quiet = false } = {}) {
@@ -305,15 +173,12 @@ export const Codi = {
       if (!quiet) Codi.ui.toast('Không đăng xuất được trên máy chủ: ' + e.message, { type: 'danger' });
       return;
     }
-    Codi.set((s) => { applySession({ user: null, roles: [] }); s.currentUserId = null; });
+    applySession({ user: null, roles: [] });
+    emit();
     if (quiet) return;
     Codi.ui.closeAll();
     Codi.go('/');
     Codi.ui.toast('Bạn đã đăng xuất.');
-  },
-  notify(userId, n) {
-    db().notifications.push({ id: Codi.uid('n'), userId, title: n.title, body: n.body || '', link: n.link || '/', read: false, createdAt: new Date().toISOString() });
-    scheduleSync();
   },
   wait: (ms) => new Promise((r) => setTimeout(r, ms)),
   uid: (prefix) => (prefix || 'id') + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),

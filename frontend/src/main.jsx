@@ -8,16 +8,16 @@ import './styles/learning.css';
 import './styles/ai.css';
 import './styles/lecturer.css';
 import './styles/admin.css';
-import { loadStore } from './lib/codi';
+import { loadSession } from './lib/codi';
 import App from './App';
 
-/** Loads the snapshot from the API before rendering; shows a recoverable error when the API/DB is down. */
+/** Loads the backend session before rendering; shows a recoverable error when the API/DB is down. */
 function Boot() {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
   const load = () => {
     setStatus('loading');
-    loadStore().then(() => setStatus('ready')).catch((e) => { setError(e.message); setStatus('error'); });
+    loadSession().then(() => setStatus('ready')).catch((e) => { setError(e.message); setStatus('error'); });
   };
   useEffect(load, []);
 

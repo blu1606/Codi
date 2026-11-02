@@ -17,7 +17,7 @@ import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { GithubMark, ShellIcon } from './shell-ui';
 import OtpInput from './otp-input';
-import { DEMO_PASSWORD, EMAIL_RE, authCode, authMessage, logActivity, syncLegacyUser } from './account-store';
+import { DEMO_PASSWORD, EMAIL_RE, authCode, authMessage, logActivity } from './account-store';
 import { safeNext } from './github-onboarding-page';
 
 const DEMO = [['minhanh@codi.vn', 'Học viên'], ['quochuy@codi.vn', 'Giảng viên'], ['giabao@codi.vn', 'Quản trị viên'], ['kimoanh@codi.vn', 'Tài khoản bị vô hiệu hoá']];
@@ -76,7 +76,6 @@ export function GoogleMark({ className = 'icon google-mark' }) {
  * finds the GitHub prompt on the dashboard instead.
  */
 function completeAuth({ delay = 0, isNew = false } = {}) {
-  syncLegacyUser(); // a brand-new account is not in the transitional legacy store yet
   logActivity('login');
   const intent = authIntent; authIntent = null;
   const wasModal = !!authModal;
@@ -450,7 +449,6 @@ function AuthPage({ mode, query = {} }) {
   useEffect(() => {
     if (!social) return;
     if (social === 'ok' && Codi.session.user) {
-      syncLegacyUser();
       logActivity('login');
       Codi.ui.toast('Đăng nhập thành công!', { type: 'success' });
       Codi.go(safeNext(next));

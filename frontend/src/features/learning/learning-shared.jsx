@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useApi } from '../../lib/use-api';
 import { Codi } from '../../lib/codi';
 import { Alert, Empty, Icon, SpinnerBlock, Stars } from '../../components/ui/primitives';
 import { STATUS, TYPE_LABEL, errorText, postOnboarding, postPath } from './learning-store';
@@ -14,11 +15,13 @@ export function StatusBadge({ st }) {
 }
 
 export function NotEnrolled({ courseId, message }) {
-  const legacy = Codi.course(courseId);
+  // The learn routes use the course id; the public detail page uses the slug.
+  const { data } = useApi('/api/courses');
+  const course = data && Array.isArray(data.courses) ? data.courses.find((c) => c.id === courseId) : null;
   return (
     <div className="page page-narrow">
       <Empty icon="lock" title="Bạn chưa sở hữu khoá học này" body={message || 'Mua hoặc đăng ký khoá học để bắt đầu học.'}
-        actions={<Link className="btn btn-primary" to={legacy ? `/courses/${legacy.slug}` : '/courses'}>Xem khoá học</Link>} />
+        actions={<Link className="btn btn-primary" to={course ? `/courses/${course.slug}` : '/courses'}>Xem khoá học</Link>} />
     </div>
   );
 }

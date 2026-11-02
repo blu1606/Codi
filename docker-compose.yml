@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     container_name: codi-rebuild-postgres
     environment:
-      POSTGRES_DB: codi_rebuild
+      POSTGRES_DB: codi
       POSTGRES_USER: codi
       POSTGRES_PASSWORD: codi
     ports:
@@ -11,7 +11,7 @@ services:
     volumes:
       - codi_rebuild_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "codi", "-d", "codi_rebuild"]
+      test: ["CMD", "pg_isready", "-U", "codi", "-d", "codi"]
       interval: 5s
       timeout: 5s
       retries: 10

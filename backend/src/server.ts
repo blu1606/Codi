@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { closeLegacyStore, mountLegacyStore, prepareLegacyStore } from "../legacy/routes.js";
 import { mountNextRoutes } from "./host/next-routes";
 import { mountServerActions } from "./host/server-actions";
 import { db } from "./services";
@@ -26,8 +25,6 @@ async function main() {
     }
   });
 
-  await prepareLegacyStore();
-  mountLegacyStore(app);
   const routes = await mountNextRoutes(app, appDir);
   const actionModules = await mountServerActions(app, appDir);
 
@@ -44,7 +41,7 @@ async function main() {
 
   const shutdown = () => {
     server.close(() => {
-      Promise.allSettled([db.$client.end(), closeLegacyStore()]).finally(() => process.exit(0));
+      db.$client.end().finally(() => process.exit(0));
     });
     setTimeout(() => process.exit(0), 3000).unref();
   };

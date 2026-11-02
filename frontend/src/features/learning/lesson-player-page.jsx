@@ -22,7 +22,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon, Progress } from '../../components/ui/primitives';
-import { TYPE_LABEL, errorText, invalidateOverview, lessonBase, pathCourse, pathRows, postLesson } from './learning-store';
+import { TYPE_LABEL, errorText, lessonBase, pathCourse, pathRows, postLesson } from './learning-store';
 import { CompletionCard, LoadState, OfferCard, UpdateNotice, openReview } from './learning-shared';
 import { MaterialView, materialProgress } from './lesson-materials';
 import { AssignmentSection, QuizSection } from './lesson-assessments';
@@ -438,7 +438,6 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
     try {
       const res = await send({ type: 'complete' });
       setOffer(res && res.adjustment ? res.adjustment : null);
-      invalidateOverview();
       Codi.ui.toast('Đã hoàn thành bài học.', { type: 'success' });
       requestAnimationFrame(() => { const h = document.getElementById('lesson-title'); if (h) h.focus(); });
     } catch (e) {
