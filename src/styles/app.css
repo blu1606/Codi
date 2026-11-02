@@ -598,6 +598,16 @@ a.card:hover, .card-link:hover { border-color: var(--border-strong); color: inhe
 }
 .tab:hover { color: var(--fg); }
 .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+/* Phones: the bar scrolls sideways (focusing a tab scrolls it into view). The right edge fades to signal more tabs,
+   and the end padding keeps the last tab (e.g. "Xuất bản") fully readable once scrolled to the end. */
+@media (max-width: 479px) {
+  .tabs {
+    scrollbar-width: none; scroll-snap-type: x proximity; padding-right: 48px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs .tab { scroll-snap-align: start; }
+}
 
 /* Segmented control */
 .segmented { display: inline-flex; padding: 3px; background: var(--subtle); border-radius: var(--radius-md); gap: 2px; }
