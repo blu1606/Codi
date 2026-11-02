@@ -14,7 +14,7 @@ npm run db:up      # Postgres 16 on localhost:5544 (container codi-rebuild-postg
 npm run start      # API on :4100 + web on http://localhost:5190
 ```
 
-The API seeds an empty database automatically from `server/seed-source/data.js` (a copy of the mockup seed).
+The API seeds an empty database automatically from `backend/scripts/seed-source/data.js` (a copy of the mockup seed).
 `npm run seed` reseeds by hand; the in-app "Kịch bản thử nghiệm" drawer (Alt+K) has "Đặt lại dữ liệu" and a role switch.
 
 | Script | What it does |

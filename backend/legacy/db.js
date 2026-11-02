@@ -1,7 +1,7 @@
 import pg from 'pg';
 
 export const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://codi:codi@localhost:5544/codi_rebuild',
+  connectionString: process.env.LEGACY_DATABASE_URL || 'postgresql://codi:codi@localhost:5544/codi_rebuild',
 });
 
 // Two tables keep the prototype's data model intact:

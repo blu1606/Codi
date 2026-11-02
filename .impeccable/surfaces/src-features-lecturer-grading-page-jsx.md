@@ -1,8 +1,8 @@
 ---
 version: 1
 slug: "src-features-lecturer-grading-page-jsx"
-primary_target: "src/features/lecturer/grading-page.jsx"
-related_targets: ["src/features/lecturer-ai/grading-ai.jsx","src/features/lecturer-ai/grading-jobs.js"]
+primary_target: "frontend/src/features/lecturer/grading-page.jsx"
+related_targets: ["frontend/src/features/lecturer-ai/grading-ai.jsx","frontend/src/features/lecturer-ai/grading-jobs.js"]
 ---
 
 Surface: lecturer grading `/teach/grading` and `/teach/grading/:submissionId` (queue + submission + rubric grading + AI grading job). Mode: Operate.

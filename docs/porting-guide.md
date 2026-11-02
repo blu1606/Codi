@@ -12,7 +12,7 @@ Where the real app shows a disabled "Chưa khả dụng" / "Sắp có" AI featur
 compute analytics from seed data rather than inventing numbers. Record every behaviour that differs from the
 mockup docs in `docs/deviations-from-mockup.md`.
 
-Seed additions go in `server/seed-source/patches/<nn>-<area>.js` as plain scripts that call
+Seed additions go in `backend/scripts/seed-source/patches/<nn>-<area>.js` as plain scripts that call
 `patchSeed((db) => { ... })`. They are applied in name order on top of `data.js`.
 
 - `Codi/docs/mockup/README.md` — what is binding.
@@ -76,7 +76,7 @@ Seed additions go in `server/seed-source/patches/<nn>-<area>.js` as plain script
 
 Each feature agent writes only inside `src/features/<its-feature>/` (any file names, kebab-case). Optional styles:
 `src/features/<feature>/<feature>.css`, imported from that feature's code. Do **not** edit `src/lib/*`,
-`src/components/*`, `src/styles/*`, `src/App.jsx`, `src/main.jsx`, `server/*`, or another feature's folder. If the
+`src/components/*`, `src/styles/*`, `src/App.jsx`, `src/main.jsx`, `backend/*`, or another feature's folder. If the
 shared runtime lacks something you need, implement it locally in your feature and report it in your status.
 
 ## Verify

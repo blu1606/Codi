@@ -1,8 +1,8 @@
 ---
 version: 1
 slug: "src-features-lecturer-course-editor-jsx"
-primary_target: "src/features/lecturer/course-editor.jsx"
-related_targets: ["src/features/lecturer/teach-api.jsx","src/features/lecturer/kmap-tab.jsx"]
+primary_target: "frontend/src/features/lecturer/course-editor.jsx"
+related_targets: ["frontend/src/features/lecturer/teach-api.jsx","frontend/src/features/lecturer/kmap-tab.jsx"]
 ---
 
 Surface: lecturer course editor `/teach/courses/:courseId` with tabs Thông tin (/info), Nội dung (default), Bản đồ kiến thức (/kmap), Xuất bản (/publish). Mode: Operate.

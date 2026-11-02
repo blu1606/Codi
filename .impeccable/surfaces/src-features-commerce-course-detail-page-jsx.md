@@ -1,11 +1,11 @@
 ---
 version: 1
 slug: "src-features-commerce-course-detail-page-jsx"
-primary_target: "src/features/commerce/course-detail-page.jsx"
-related_targets: ["src/features/commerce/course-card.jsx"]
+primary_target: "frontend/src/features/commerce/course-detail-page.jsx"
+related_targets: ["frontend/src/features/commerce/course-card.jsx"]
 ---
 
-Surface: Course detail `/courses/:slug` (src/features/commerce/course-detail-page.jsx, course-card.jsx for CTAs). Mode: Persuade into Operate: the visitor decides, then buys (or continues).
+Surface: Course detail `/courses/:slug` (frontend/src/features/commerce/course-detail-page.jsx, course-card.jsx for CTAs). Mode: Persuade into Operate: the visitor decides, then buys (or continues).
 
 Audience and job: a guest or learner decides whether this course fits, what the AI path does for it, and buys it (or resumes it if owned). Owners see progress; lecturers and admins see a role note instead of a buy action.
 

@@ -10,13 +10,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // `patchSeed((db) => { ...mutate db in place... })`, so each feature owns its own seed additions.
 // Patches may read JSON content files from seed-source/content with `readSeedJson(name)`.
 export function loadSeed() {
-  const code = fs.readFileSync(path.join(here, 'seed-source', 'data.js'), 'utf8');
+  const code = fs.readFileSync(path.join(here, 'data.js'), 'utf8');
   const patches = [];
-  const readSeedJson = (name) => JSON.parse(fs.readFileSync(path.join(here, 'seed-source', 'content', name), 'utf8'));
+  const readSeedJson = (name) => JSON.parse(fs.readFileSync(path.join(here, 'content', name), 'utf8'));
   const sandbox = { window: {}, console, patchSeed: (fn) => patches.push(fn), readSeedJson };
   vm.runInNewContext(code, sandbox, { filename: 'data.js' });
   const db = sandbox.window.CodiData;
-  const dir = path.join(here, 'seed-source', 'patches');
+  const dir = path.join(here, 'patches');
   const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.js')).sort() : [];
   for (const f of files) {
     const before = patches.length;

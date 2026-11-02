@@ -1,7 +1,7 @@
 ---
 version: 1
 slug: "src-features-learning-dashboard-page-jsx"
-primary_target: "src/features/learning/dashboard-page.jsx"
+primary_target: "frontend/src/features/learning/dashboard-page.jsx"
 related_targets: []
 ---
 

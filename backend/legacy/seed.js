@@ -1,5 +1,5 @@
 import { pool, ensureSchema } from './db.js';
-import { loadSeed, isDocCollection } from './seed-data.js';
+import { loadSeed, isDocCollection } from '../scripts/seed-source/load-seed.js';
 
 // Drops and rebuilds both tables from the mockup seed, in one transaction.
 export async function reseed() {

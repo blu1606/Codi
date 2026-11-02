@@ -1,11 +1,11 @@
 ---
 version: 1
 slug: "src-features-commerce-catalog-page-jsx"
-primary_target: "src/features/commerce/catalog-page.jsx"
-related_targets: ["src/features/commerce/course-card.jsx"]
+primary_target: "frontend/src/features/commerce/catalog-page.jsx"
+related_targets: ["frontend/src/features/commerce/course-card.jsx"]
 ---
 
-Surface: Catalog `/courses` (src/features/commerce/catalog-page.jsx). Mode: Operate.
+Surface: Catalog `/courses` (frontend/src/features/commerce/catalog-page.jsx). Mode: Operate.
 
 Audience and job: a visitor finds a programming course fast (typeahead search, category, level, price, sort), compares candidates on price, level, rating and duration, and opens one. Primary scene: a laptop in a demo room; text must read from a distance.
 

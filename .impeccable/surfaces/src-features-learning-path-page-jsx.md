@@ -1,8 +1,8 @@
 ---
 version: 1
 slug: "src-features-learning-path-page-jsx"
-primary_target: "src/features/learning/path-page.jsx"
-related_targets: ["src/features/learning/path-views.jsx"]
+primary_target: "frontend/src/features/learning/path-page.jsx"
+related_targets: ["frontend/src/features/learning/path-views.jsx"]
 ---
 
 Surface: the course path page `/learn/:courseId` (AI-ranked personal learning path). Mode: Operate.

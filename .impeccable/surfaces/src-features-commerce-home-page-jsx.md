@@ -1,11 +1,11 @@
 ---
 version: 1
 slug: "src-features-commerce-home-page-jsx"
-primary_target: "src/features/commerce/home-page.jsx"
-related_targets: ["src/features/commerce/commerce.css"]
+primary_target: "frontend/src/features/commerce/home-page.jsx"
+related_targets: ["frontend/src/features/commerce/commerce.css"]
 ---
 
-Surface: Home `/` (src/features/commerce/home-page.jsx). Mode: Persuade.
+Surface: Home `/` (frontend/src/features/commerce/home-page.jsx). Mode: Persuade.
 
 Audience and job: a guest judges in under a minute whether Codi (AI-guided Vietnamese programming courses) fits, then acts: start learning or browse courses. Primary scene: examiners watch a projected demo at 1366-1920 px; mobile must still work. Evidence: seed data only; no testimonials, customers or metrics. Product screens are labelled as sample ("Minh họa · dữ liệu mẫu"). Course photos are Pexels, credited in CREDITS.json.
 

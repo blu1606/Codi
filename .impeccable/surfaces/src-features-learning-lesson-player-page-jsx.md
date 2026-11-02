@@ -1,8 +1,8 @@
 ---
 version: 1
 slug: "src-features-learning-lesson-player-page-jsx"
-primary_target: "src/features/learning/lesson-player-page.jsx"
-related_targets: ["src/features/coding/code-api.jsx","src/features/coding/tutor-api.jsx"]
+primary_target: "frontend/src/features/learning/lesson-player-page.jsx"
+related_targets: ["frontend/src/features/coding/code-api.jsx","frontend/src/features/coding/tutor-api.jsx"]
 ---
 
 Surface: the lesson page `/learn/:courseId/:lessonId` (video, reading, PDF, quiz, assignment upload, coding workspace, AI tutor, Q&A). Mode: Operate.
