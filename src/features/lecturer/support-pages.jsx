@@ -4,6 +4,7 @@
 // locked until reopened; review replies 1–3000 chars; only visible reviews are listed.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useRevealOnSelect } from './reveal-on-select';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon, Stars } from '../../components/ui/primitives';
 import { shell, me, byCourse, persist, FieldError, isVisibleReview } from './teach-api';
@@ -64,6 +65,7 @@ const roleLabel = (m) => (m.from === 'admin' ? 'Quản trị viên' : 'Giảng v
 
 export function QuestionsPage({ query }) {
   useCodi();
+  const detailRef = useRevealOnSelect(query.id || null);
   const view = query.view === 'conversations' ? 'conversations' : 'questions';
   const status = query.status === 'answered' ? 'answered' : 'unanswered';
   const allQuestions = byCourse(Codi.db().questions);
@@ -161,7 +163,7 @@ export function QuestionsPage({ query }) {
         <Link key={x.id} className="split-list-item" to={`/teach/questions?status=${status}&id=${x.id}&view=questions`} aria-current={sel && sel.id === x.id ? 'true' : undefined}>
           <span className="xsmall muted od-truncate">{c ? c.title : ''} › {l ? l.title : ''}</span><span className="small strong od-clamp-2">{x.text}</span><span className="row-between xsmall muted"><span>{(Codi.user(x.userId) || NO_USER).name}</span><span>{fmt.relative(x.createdAt)}</span></span></Link>
       ); }) : <p className="small muted" style={{ padding: 16 }}>Không có câu hỏi.</p>)}</div>
-      <div className="split-detail">{detail}</div></div>
+      <div className="split-detail" ref={detailRef}>{detail}</div></div>
   </>);
 }
 

@@ -5,6 +5,7 @@
 // (Codi.lecturerAI.gradingDraft / gradingBadge); the AI only fills the form, the lecturer saves (G5).
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useRevealOnSelect } from './reveal-on-select';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon } from '../../components/ui/primitives';
 import { shell, myCourses, byCourse, persist, decimal, me, promptReason } from './teach-api';
@@ -196,6 +197,7 @@ function GradeForm({ sel, nextPending, go }) {
 
 export function GradingPage({ params, query }) {
   useCodi();
+  const detailRef = useRevealOnSelect(params.submissionId || (query.status === 'graded' ? 'graded' : 'pending'));
   const status = query.status === 'graded' ? 'graded' : 'pending';
   const mine = myCourses();
   const courseF = mine.some((c) => c.id === query.course) ? query.course : 'all';
@@ -262,6 +264,6 @@ export function GradingPage({ params, query }) {
       <div className="field"><label className="sr-only" htmlFor="g-assign">Lọc theo bài tập</label><select id="g-assign" value={assignF} onChange={(e) => go({ assignment: e.target.value })}><option value="all">Tất cả bài tập</option>{assignOpts.map((a) => <option key={a.id} value={a.id}>{a.title}{courseF === 'all' ? ` · ${a.course}` : ''}</option>)}</select></div>
       <div className="field"><label className="sr-only" htmlFor="g-date">Lọc theo ngày nộp</label><select id="g-date" value={dateF} onChange={(e) => go({ date: e.target.value })}>{DATE_OPTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
     </div>
-    <div className="split-view tc-split"><div className="split-list" role="navigation" aria-label="Danh sách bài nộp">{list.length ? list.map(item) : <p className="small muted" style={{ padding: 16 }}>Không có bài nào trong danh sách.</p>}</div><div className="split-detail">{detail}</div></div>
+    <div className="split-view tc-split"><div className="split-list" role="navigation" aria-label="Danh sách bài nộp">{list.length ? list.map(item) : <p className="small muted" style={{ padding: 16 }}>Không có bài nào trong danh sách.</p>}</div><div className="split-detail" ref={detailRef}>{detail}</div></div>
   </>);
 }
