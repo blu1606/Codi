@@ -67,7 +67,7 @@ and `R2_*` keys, codes are real emails and uploads go to Codi's real R2 buckets.
 | Feature | Needs | Without it |
 |---|---|---|
 | Email codes (register, change email, reset password) | `RESEND_API_KEY`, `EMAIL_FROM` | The code is printed to the backend console: `[Auth OTP for <email>]: 123456` |
-| AI tutor, course advisor, AI quiz questions | `GOOGLE_GENERATIVE_AI_API_KEY` (or `AI_PROVIDER=openai` + `OPENAI_API_KEY`) | The screens show the backend's "AI không khả dụng" error |
+| Tutor (`/ai` advisor, in-lesson AI tab, Tutor page), AI quiz questions | `GOOGLE_GENERATIVE_AI_API_KEY` (or `AI_PROVIDER=openai` + `OPENAI_API_KEY`) | The screens show the backend's "Tutor đang tạm nghỉ" / "AI không khả dụng" error |
 | Checkout | `SEPAY_WEBHOOK_SECRET`, `SEPAY_BANK_CODE`, `SEPAY_ACCOUNT_NUMBER` | Paid checkout answers 503 |
 | Avatar and assignment file uploads | Cloudflare `R2_*` | Uploads fail with the server's error |
 | Google sign-in | `GOOGLE_CLIENT_ID/SECRET` with `http://localhost:3001/api/auth/callback/google` allowed on the OAuth client | Google shows a redirect error |
@@ -77,13 +77,20 @@ and `R2_*` keys, codes are real emails and uploads go to Codi's real R2 buckets.
 
 - `backend/src/app/api/**/route.ts` — Codi's route handlers, plus a few rebuild routes (admin lists, lecturer
   authoring, dev payment). `src/host/next-routes.ts` mounts each on Hono by folder path (`[id]` → `:id`).
-- `backend/src/app/dashboard/**/actions.ts` — Codi's server actions, unchanged, callable as
+- `backend/src/app/dashboard/**/actions.ts` (and `*-actions.ts`) — Codi's server actions, unchanged, callable as
   `POST /api/actions/<module>/<export>` with a JSON array of arguments (`src/host/server-actions.ts`).
-- `backend/src/lib`, `backend/packages/{db,auth,coding-runner}` — Codi's services and packages.
+- `backend/src/lib`, `backend/packages/{db,auth,coding-runner}` — Codi's services and packages, synced with Codi
+  `develop` (the vendored base and the rebuild's own changes are listed in `plans/261102-2319-codi-develop-sync/`).
+- `backend/src/host/ai-worker.ts` — Codi's AI background worker, started inside the API process: GitHub profile
+  analysis, knowledge-map extraction, AI quiz generation and pending learning paths run as jobs leased in Postgres
+  (`ai_jobs`). The backend logs `AI background worker started`. `AI_BACKGROUND_WORKER_ENABLED=false` in
+  `backend/.env` turns it off (GitHub analysis, quiz generation and learning paths then run inline; knowledge-map
+  extraction is unavailable). `AI_DAILY_JOB_LIMIT` (default 5) caps knowledge-map and quiz jobs per lecturer and day.
 - `backend/shims/next` — minimal `next/server`, `next/headers`, `next/cache` over an AsyncLocalStorage request context.
 - `backend/scripts/seed-source/` — the prototype seed (`data.js` + `patches/*.js`); `npm run seed` feeds it to Codi's
   `seed-mockup.ts`, then adds avatars, covers and JSON assignment rubrics.
-- `frontend/src/lib/api.js` — fetch client (cookies, JSON, server error messages); `use-api.js` — `useApi(url)` hook.
+- `frontend/src/lib/api.js` — fetch client (cookies, JSON, server error messages); `use-api.js` — `useApi(url)` hook;
+  `ai-chat.js` — reads the streamed Tutor turn of `POST /api/ai/chat`.
 - `frontend/src/lib/codi.js` — the signed-in session, navigation, UI helpers and browser-only scenario state.
 
 Porting conventions: [porting-guide.md](porting-guide.md). Behaviour that differs from the mockup:

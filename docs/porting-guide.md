@@ -48,7 +48,11 @@ All domain data lives in Postgres behind the backend; the browser keeps no copy 
     `plans/261102-1834-codi-backend-port/phase-1-report.md`.
   - **Server actions** — the exports of `backend/src/app/dashboard/**/actions.ts`, called as
     `api.action('<module>', '<export>', ...args)` (`POST /api/actions/<module>/<export>`, JSON array of arguments),
-    e.g. `api.action('dashboard/lecturer', 'getLecturerCourses', 'all')`.
+    e.g. `api.action('dashboard/lecturer', 'getLecturerCourses', 'all')`. A `"use server"` file named
+    `*-actions.ts` keeps its file name as the last module segment, e.g.
+    `api.action('dashboard/lecturer/courses/courseId/quiz-ai-actions', 'startQuizGeneration', …)`.
+  - **Streamed AI turns** — `POST /api/ai/chat` answers with an AI SDK UI message stream (server-sent events), not
+    JSON; read it with `streamAiChat` from `frontend/src/lib/ai-chat.js`.
 - Adding a route: create `backend/src/app/api/<path>/route.ts` exporting `GET`/`POST`/… handlers in the Next.js
   style (`NextRequest` → `NextResponse.json`); folders `[id]` become `:id`. It is mounted at startup, no registry.
   Check the session with `auth.api.getSession({ headers: request.headers })` and roles with `getActiveRoles`, check

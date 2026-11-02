@@ -27,7 +27,7 @@ several fixes live only upstream.
 
 ## Phases
 
-1. Backend 3-way sync + migrations + worker (blocks 2 and 3).
+1. Backend 3-way sync + migrations + worker (blocks 2 and 3). Done, see [phase-1-report.md](phase-1-report.md).
 2. Tutor frontend port (`/ai`, in-course Tutor) — replaces the interim `/ai` advisor rework (c176199).
 3. Feature branches + switch simulations to real routes.
 4. Verify (smoke, flow, axe, mobile, area scripts), deploy to codi.hoangblue.dev.

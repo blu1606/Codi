@@ -13,6 +13,12 @@ original Codi app. Caddy terminates TLS and proxies the domain to `127.0.0.1:300
 | App secrets | `/opt/codi-rebuild/rebuild.env` (mode 600): Codi's `/etc/codi/codi.env` without its Supabase `DATABASE_URL`, plus the `GITHUB_PROFILE_*` keys and `DEMO_TOOLS=true` |
 | Proxy | `/etc/caddy/Caddyfile`, block `codi.hoangblue.dev` → `127.0.0.1:3001`; `codi.ddnsfree.com` answers with a 301 to it |
 
+The AI background worker (GitHub profile analysis, knowledge-map extraction, AI quiz generation, learning paths) runs
+inside `codi-rebuild-app`; there is no separate worker container (Codi's own stack used `--profile ai-worker`). The
+image sets `AI_BACKGROUND_WORKER_ENABLED=true` and the compose file pins it over `rebuild.env`; to turn it off, put
+`AI_BACKGROUND_WORKER_ENABLED=false` in `/opt/codi-rebuild/.env` and `docker compose up -d app`. The startup log shows
+`AI background worker started`.
+
 `DEMO_TOOLS=true` keeps the simulated SePay payment (Alt+K) working in production. The app rebuilds request URLs as
 https when Caddy sends `X-Forwarded-Proto: https`, so the routes' Origin checks pass.
 
@@ -37,7 +43,10 @@ docker compose up -d app            # migrations are not automatic, see below
 curl -s https://codi.hoangblue.dev/api/health
 ```
 
-Schema changes: `docker compose run --rm --no-deps app npx tsx scripts/migrate.ts`.
+Schema changes: back up (below), then `docker compose run --rm --no-deps app npx tsx scripts/migrate.ts` before
+`docker compose up -d app`. Migrations are tracked by folder name, so a migration that sorts before one already
+applied (as Codi develop's `20261027101706_ai_chats` and `20261031033253_free_toad` do before
+`20261102155311_publication_review_anchors`) still runs.
 
 ## Reset the demo data
 
