@@ -148,7 +148,7 @@ These need to be added to `docs/deviations-from-mockup.md`. That file is control
 5. **Lecturer preview.** The mockup reused the learner workspace. The real preview runs nothing into storage and shows hidden tests only as a count.
 6. **AI quiz.** The mockup appended every question straight into the quiz. Questions now pass the accept/discard gate before they are added (real dialog, STATE-MACHINES §19.1). The mockup's rate-limit copy `Đã dùng hết lượt...` is replaced by the real `AI đang bận` in the quiz dialog.
 7. **Accept-all on the map.** The mockup accepted edges that close a loop. They are now skipped and stay suggested (real D10).
-8. **Map analysis and AI grading.** Real disables both (`Phân tích AI chưa khả dụng`, `Sắp có`). Both stay as working simulations by your decision. The grading draft needs an explicit `Dùng bản nháp này`, while the mockup filled the form directly. These labels have no real or mockup source and are mine: `Dùng bản nháp này`, `Bỏ bản nháp`, `Bản nháp AI gợi ý` and the info note under the draft.
+8. **Map analysis and AI grading.** Both run on Codi's real backend since the develop sync (branches `feat/auto-knowledge-map-analysis` and `feat/ai-grading-suggestions`); the earlier simulations are gone. Map analysis is a background job: "Phân tích lại" / "Phân tích nội dung" / "Thử lại" queue it, saving course content queues one automatically, and the tab re-reads the map every 5 s while it is analysing. The grading suggestion is a review card instead of Codi's direct form fill: each criterion and the feedback can be accepted, edited or ignored, and `Điền vào phiếu chấm` fills only the kept items. These labels have no real or mockup source and are mine: `Điền vào phiếu chấm`, `Gợi ý lại`, `Bỏ qua gợi ý`, `Tổng các mục giữ lại`, `Bản nháp AI gợi ý` and the notes in the card.
 9. **Copy kept from the port where real names its own infrastructure.** Real labels say `JavaScript (QuickJS Sandbox)` and the badge `Bài tập code (S23b)`. The port runs code in a browser Web Worker, so the labels read `JavaScript` and `Bài tập code`.
 10. **Real `Pass` / `Fail` result labels** are shown with the coding feature's Vietnamese `Đạt` / `Chưa đạt` test rows, to stay consistent with the learner view.
 
@@ -183,7 +183,7 @@ These belong in `docs/deviations-from-mockup.md`. That file is outside my owners
 
 ## AI grading assist (stage 3)
 
-- The lecturer's "AI gợi ý điểm và nhận xét" is a saved job per submission (kept in this browser's localStorage, `codi-ai-grading-jobs`): queued, four named stages with progress, per-criterion partial results, then succeeded, failed (with "Thử lại") or cancelled. Leaving the page and returning resumes it. The mockup showed a single loading line. AI still never saves a grade: "Dùng bản nháp này" only fills the form (rule G5).
+- The lecturer's "AI gợi ý điểm và nhận xét" calls Codi's `getAiGradingDraft({ submissionId, viewToken })`: the model reads the text answer and the rubric and returns a score per criterion (or one overall score) and a feedback draft; nothing is saved or sent to the learner. The card shows a loading state with elapsed time and "Dừng", then the review card (accept / edit / ignore per item) or the server's error with "Thử lại". Suggestions stay in memory for the open tab (list badge "Có gợi ý AI") and are tied to the submission version; a reload drops them. AI still never saves a grade: "Điền vào phiếu chấm" only fills the form (rule G5). File-only or link-only submissions get the server's "AI hiện chỉ hỗ trợ bài nộp dạng văn bản" message.
 
 ## GitHub onboarding (stage 3)
 
@@ -212,11 +212,17 @@ User-visible changes:
   admin manual payment check (learner-only in Codi).
 - Lecturer: lessons cannot be dragged into another chapter (Codi has no cross-chapter move); late-submission policy,
   accepted file types, the "AI soạn" badge and per-question AI-reviewed marks are not stored. Knowledge-map analysis
-  stays a simulation, now saved in the database. AI grading drafts and AI document import stay browser simulations.
+  and AI grading suggestions use Codi's real AI (see above). AI document import and AI lesson / code-exercise drafts
+  stay browser simulations.
 - Learner: the entry-test marker on the mastery chart and the lesson count on dashboard recommendations are gone
   (no server data). PDF/slide materials remain a simulated page viewer. Assignment rubrics show as a criteria list.
 - Code runs only in the backend sandbox (JavaScript). The browser runner was removed; the lecturer preview of a
   guided tutorial is read-only.
 - "Hồ sơ năng lực" uses the real GitHub link and analysis routes (linking works locally on port 3001 with
   Codi's GitHub OAuth app). A saved profile shows the full report computed from the saved analysis (summary, languages, push activity, technologies with evidence, insights, knowledge areas, repos, collection scope) instead of the mockup's canned report; the onboarding step keeps a compact summary.
+  "Sửa hồ sơ năng lực" saves learner corrections through `PATCH /api/github-profile/corrections` (leave repos out as
+  evidence, set a technology's usage, hide a technology); a changed repo list queues a summary-only job that rewrites
+  the AI summary from the stored data without reading GitHub again, and the panel waits for it. "Xoá hồ sơ năng lực"
+  deletes the saved analysis but keeps the GitHub link (`DELETE /api/github-profile/profile`). Codi has these routes
+  but no UI for them yet, so the editor layout and its copy are mine.
 - Profile avatars and assignment files are uploaded to R2 through the real routes.

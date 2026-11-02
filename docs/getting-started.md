@@ -32,7 +32,8 @@ overrides it; reseed after changing it).
 | Tài khoản bị vô hiệu hoá | `kimoanh@codi.vn` |
 
 The "Kịch bản thử nghiệm" drawer (Alt+K) switches role by signing in as these accounts for real and forces demo
-states (payment outcome, AI failures, knowledge-map analysis). Its choices stay in this browser only. To reset the
+states (payment outcome, AI failures of the simulated lecturer authoring helpers). Its knowledge-map flag no longer
+has an effect: map analysis runs as a real background job. Its choices stay in this browser only. To reset the
 data, stop `npm start` and run `npm run seed`.
 
 ## Payments in development
@@ -85,7 +86,9 @@ and `R2_*` keys, codes are real emails and uploads go to Codi's real R2 buckets.
   analysis, knowledge-map extraction, AI quiz generation and pending learning paths run as jobs leased in Postgres
   (`ai_jobs`). The backend logs `AI background worker started`. `AI_BACKGROUND_WORKER_ENABLED=false` in
   `backend/.env` turns it off (GitHub analysis, quiz generation and learning paths then run inline; knowledge-map
-  extraction is unavailable). `AI_DAILY_JOB_LIMIT` (default 5) caps knowledge-map and quiz jobs per lecturer and day.
+  extraction is unavailable). `AI_DAILY_JOB_LIMIT` (default 5, at most 999) caps knowledge-map and quiz jobs per
+  lecturer and day. Saving course content queues a knowledge-map analysis too (one active job per course; a later save
+  is picked up when it finishes), so raise the limit locally when editing a lot.
 - `backend/shims/next` — minimal `next/server`, `next/headers`, `next/cache` over an AsyncLocalStorage request context.
 - `backend/scripts/seed-source/` — the prototype seed (`data.js` + `patches/*.js`); `npm run seed` feeds it to Codi's
   `seed-mockup.ts`, then adds avatars, covers and JSON assignment rubrics.
