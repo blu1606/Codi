@@ -1,6 +1,6 @@
 /* Lecturer workspace styles (authoring, grading, analytics) */
 
-.tc-split { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: var(--space-4); }
+.tc-split { display: grid; grid-template-columns: minmax(248px, 288px) minmax(0, 1fr); gap: var(--space-4); }
 @media (max-width: 1024px) { .tc-split { grid-template-columns: minmax(0, 1fr); } }
 
 .tc-kmap-panel { max-height: calc(100vh - var(--header-h) - 64px); overflow-y: auto; }
@@ -106,8 +106,6 @@ svg circle[data-action]:hover { opacity: 0.8; }
 
 /* ───────── grading ───────── */
 .tc-filters .field { min-width: 200px; }
-/* Save actions stay in view while a long AI draft or rubric is scrolled (desktop: right pane; phone: page). */
-.tc-grade-actions { position: sticky; bottom: 0; z-index: 2; padding: var(--space-3) 0; border-top: 1px solid var(--border); background: var(--surface); }
 .tc-rg-row.is-invalid input { border-color: var(--danger); }
 .row.tc-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 960px; }
 .tc-filters .field { min-width: 0; }

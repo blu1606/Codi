@@ -182,10 +182,11 @@ function GradeForm({ sel, nextPending, go }) {
   };
 
   return (
-    <form className="stack-4" onSubmit={(e) => { e.preventDefault(); save('stay'); }} noValidate>
+    <form className="tc-dock-form" onSubmit={(e) => { e.preventDefault(); save('stay'); }} noValidate>
       <div className="card-header"><div className="row" style={{ minWidth: 0 }}><Avatar user={u} /><div className="stack-1" style={{ minWidth: 0 }}><strong className="small od-truncate">{u.name}</strong><span className="xsmall muted od-truncate">{u.email}</span></div></div>
         <span className={`badge ${sel.status === 'graded' ? 'badge-success' : 'badge-warn'}`}>{sel.status === 'graded' ? 'Đã chấm' : 'Chờ chấm'}</span></div>
-      <div className="card-body stack-4">
+      <div className="card-body stack-4 tc-dock-body">
+        <AiGradingSlot sel={sel} onApply={applyAI} />
         {error && <Alert type="danger" body={error} />}
         {rb.length ? (
           <fieldset className="stack-2 tc-rubric-grade"><legend className="field-label">Chấm theo thang điểm Rubric <span className="req">*</span></legend>
@@ -200,19 +201,19 @@ function GradeForm({ sel, nextPending, go }) {
           <div className="field"><span className="row-between"><label htmlFor="g-score">Điểm (0–{sel.maxScore}) <span className="req">*</span></label><span className="xsmall muted">Ngưỡng đạt: {decimal(passAbs)}/{sel.maxScore}</span></span>
             <input id="g-score" name="score" className="mono" type="number" min="0" max={sel.maxScore} step="0.5" placeholder="Ví dụ: 8.5" value={score} onChange={(e) => setScore(e.target.value)} /></div>
         )}
-        <AiGradingSlot sel={sel} onApply={applyAI} />
         <div className="field"><span className="row-between"><label className="field-label" htmlFor="g-fb">Nhận xét cho học viên</label>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => openSnippetPicker({ learnerName: u.name, score: Number.isNaN(current) ? '' : current, onInsert: insert })}><Icon name="list" className="icon-sm" /> Mẫu nhận xét</button></span>
           <textarea id="g-fb" name="feedback" rows={6} placeholder="Điểm làm tốt, điểm cần cải thiện, gợi ý bước tiếp theo..." value={feedback} onChange={(e) => setFeedback(e.target.value)} />
           <span className="field-help">Bấm <strong>&quot;Mẫu nhận xét&quot;</strong> để chèn mẫu có sẵn kèm tên và điểm số.</span></div>
-        <div className="stack-2 tc-grade-actions">
-          <button className="btn btn-primary btn-block" type="submit">{sel.status === 'graded' ? 'Cập nhật điểm' : 'Lưu điểm'}</button>
-          {nextPending ? <>
-            <button type="button" className="btn btn-secondary btn-block" onClick={() => save('next')}>Lưu và chấm bài tiếp theo <Icon name="arrow-right" className="icon-sm" /></button>
-            <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={skip}>Bỏ qua, sang bài tiếp theo →</button>
-          </> : <p className="xsmall muted" style={{ textAlign: 'center' }}>Đây là bài chờ chấm cuối cùng.</p>}
-          {sel.status === 'graded' && <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={() => openHistory(Codi.db().submissions.find((x) => x.id === sel.id) || sel)}><Icon name="clock" className="icon-sm" /> Xem lịch sử điểm ({(sel.history || []).length} lần sửa)</button>}
-        </div>
+      </div>
+      <div className="tc-grade-actions">
+        <p className="xsmall tc-grade-state" role="status" aria-live="polite">{dirty ? <><span className="tc-state-dot" aria-hidden="true" />Có thay đổi chưa lưu</> : 'Không có thay đổi chưa lưu'}</p>
+        <button className="btn btn-primary btn-block" type="submit">{sel.status === 'graded' ? 'Cập nhật điểm' : 'Lưu điểm'}</button>
+        {nextPending ? <>
+          <button type="button" className="btn btn-secondary btn-block" onClick={() => save('next')}>Lưu và chấm bài tiếp theo <Icon name="arrow-right" className="icon-sm" /></button>
+          <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={skip}>Bỏ qua, sang bài tiếp theo</button>
+        </> : <p className="xsmall muted" style={{ textAlign: 'center' }}>Đây là bài chờ chấm cuối cùng.</p>}
+        {sel.status === 'graded' && <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={() => openHistory(Codi.db().submissions.find((x) => x.id === sel.id) || sel)}><Icon name="clock" className="icon-sm" /> Xem lịch sử điểm ({(sel.history || []).length} lần sửa)</button>}
       </div>
     </form>
   );
@@ -261,7 +262,7 @@ export function GradingPage({ params, query }) {
     const hasWork = sel.fileName || sel.link || sel.note;
     detail = (
       <div className="tc-grade">
-        <section className="card">
+        <section className="card tc-stage">
           <div className="card-header"><div className="stack-1"><span className="xsmall muted">{c ? c.title : ''}</span><h2 className="tc-h">{l ? l.title : 'Bài tập'}</h2><span className="xsmall muted">Nộp lúc {fmt.datetime(sel.submittedAt)}</span></div></div>
           <div className="card-body stack-4">
             <div className="stack-1"><strong className="xsmall muted">Yêu cầu bài tập</strong><div className="panel small" style={{ whiteSpace: 'pre-line' }}>{(l && l.assignment && l.assignment.instructions) || 'Không có nội dung yêu cầu cụ thể.'}</div></div>
@@ -273,7 +274,7 @@ export function GradingPage({ params, query }) {
             </div>
           </div>
         </section>
-        <aside className="card"><GradeForm key={sel.id + '|' + sel.status + '|' + (sel.gradedAt || '')} sel={sel} nextPending={nextPending} go={go} /></aside>
+        <aside className="card tc-dock" aria-label="Chấm điểm"><GradeForm key={sel.id + '|' + sel.status + '|' + (sel.gradedAt || '')} sel={sel} nextPending={nextPending} go={go} /></aside>
       </div>
     );
   }

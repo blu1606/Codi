@@ -99,6 +99,27 @@ const codeBadge = (l) => {
 };
 const materialCount = (l) => (Array.isArray(l.materials) ? l.materials.length : l.material && l.material.fileName ? 1 : 0);
 
+/**
+ * One lesson's blockers, using the same rules as readiness(): an unverified code challenge, an assignment without
+ * a rubric and AI questions awaiting review block submission; an open "must" review flag does too. Kind 'fix' means
+ * the lecturer must change content, 'review' means a decision is still open.
+ */
+export function lessonIssues(c, l) {
+  const issues = [];
+  if (l.code && l.code.kind === 'challenge') {
+    const code = l.code;
+    const verified = (code.tests || []).length > 0 && !!(code.solutionVerifiedAt || (code.solutionVerifiedAt === undefined && code.solutionCheck && code.solutionCheck.ok));
+    if (!verified) issues.push({ kind: 'fix', text: (code.tests || []).length ? 'Lời giải chưa đạt test' : 'Chưa có test' });
+  }
+  if (l.assignment && !(l.assignment.rubric || []).length) issues.push({ kind: 'fix', text: 'Thiếu thang chấm' });
+  const aiLeft = l.quiz ? l.quiz.questions.filter((q) => q.aiGenerated && q.aiReviewed === false).length : 0;
+  if (aiLeft) issues.push({ kind: 'review', text: `${aiLeft} câu AI chưa duyệt` });
+  const rr = reviewRound(c);
+  const open = rr ? reviewFlagsFor(rr, l.id).filter((x) => x.status === 'open') : [];
+  if (open.length) issues.push({ kind: open.some((x) => x.severity === 'must') ? 'fix' : 'review', text: `${open.length} góp ý từ quản trị` });
+  return issues;
+}
+
 function RenameForm({ c, id, value, label }) {
   const submit = (e) => {
     e.preventDefault();
@@ -286,20 +307,32 @@ function ContentTab({ c, query }) {
   const hl = query && query.lesson;
   const dragAttrs = (kind, id) => (ro ? {} : { draggable: true, 'data-drag': kind, 'data-id': id });
   const startRename = (id) => { renaming = id; rerender(); };
+  const chapterBlockers = (ch) => ch.lessons.filter((l) => lessonIssues(c, l).length).length;
 
-  const lessonRow = (l, li, ch) => (
+  // Timetable row: fixed columns (number, lesson, type, minutes, checks, readiness, actions) read across the chapter.
+  const lessonRow = (l, li, ch, ci) => {
+    const issues = lessonIssues(c, l);
+    const mark = issues[0];
+    return (
     <li key={l.id} className={`tc-lesson ${hl === l.id ? 'is-target' : ''}`} {...dragAttrs('lesson', l.id)} data-drop="lesson" data-id={l.id}>
-      {!ro && <span className="tc-grip" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
-      <span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span>
-      {renaming === l.id ? <RenameForm c={c} id={l.id} value={l.title} label="Tên bài học" /> : (
-        <div className="od-fill stack-1"><span className="row small strong" style={{ gap: 8 }}>{l.title}{l.isFreePreview && <span className="badge badge-info">Học thử</span>}</span>
-          <span className="row xsmall muted" style={{ gap: 8 }}>{TYPE_LABEL[l.type] || 'Bài đọc'} · Thời lượng: {Math.round(Number(l.durationMin) || 0)} phút{materialCount(l) ? ` · ${materialCount(l)} tài liệu` : ''}{codeBadge(l)}
-          {l.quiz && <span className="badge badge-neutral">Quiz {l.quiz.questions.length} câu</span>}
-          {l.assignment && <span className="badge badge-neutral">Bài tập{(l.assignment.rubric || []).length ? '' : ' · chưa có thang chấm'}</span>}
-          {l.aiDraft && <span className="badge badge-neutral"><Icon name="sparkles" />AI soạn</span>}
-          {aiPending(l) > 0 && <span className="badge badge-accent"><Icon name="sparkles" />{aiPending(l)} câu AI chưa duyệt</span>}
-          {flagBadge(l)}</span></div>
-      )}
+      <span className="tc-grip" aria-hidden="true">{ro ? null : <Icon name="grip-vertical" className="icon-sm" />}</span>
+      <span className="tc-no mono" aria-hidden="true">{ci + 1}.{li + 1}</span>
+      <div className="tc-lesson-main">
+        {renaming === l.id ? <RenameForm c={c} id={l.id} value={l.title} label="Tên bài học" /> : (
+          <div className="stack-1"><span className="row small strong" style={{ gap: 8, flexWrap: 'wrap' }}><span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span>{l.title}{l.isFreePreview && <span className="badge badge-info">Học thử</span>}</span>
+            <span className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>{materialCount(l) ? `${materialCount(l)} tài liệu` : ''}{codeBadge(l)}{l.aiDraft && <span className="badge badge-neutral"><Icon name="sparkles" />AI soạn</span>}{flagBadge(l)}</span></div>
+        )}
+      </div>
+      <span className="tc-cell tc-type-cell small">{TYPE_LABEL[l.type] || 'Bài đọc'}</span>
+      <span className="tc-cell tc-dur small mono">{Math.round(Number(l.durationMin) || 0)} phút</span>
+      <span className="tc-cell tc-checks">
+        {l.quiz && <span className="badge badge-neutral">Quiz {l.quiz.questions.length} câu</span>}
+        {l.assignment && <span className="badge badge-neutral">Bài tập</span>}
+        {!l.quiz && !l.assignment && !l.code && <span className="xsmall muted">—</span>}
+      </span>
+      <span className="tc-cell tc-mark">{mark
+        ? <span className={`badge ${mark.kind === 'fix' ? 'badge-warn' : 'badge-info'}`}><Icon name={mark.kind === 'fix' ? 'alert-triangle' : 'info'} />{mark.text}{issues.length > 1 ? ` +${issues.length - 1}` : ''}</span>
+        : <span className="tc-ok small"><Icon name="check" className="icon-sm" /> Đạt</span>}</span>
       {renaming === l.id ? null : (
         <div className="tc-row-actions">
           <div className="tc-row-links">
@@ -320,7 +353,8 @@ function ContentTab({ c, query }) {
         </div>
       )}
     </li>
-  );
+    );
+  };
   // Two structural actions only: a chapter, or a lesson (its type is chosen in the next step).
   const addBar = ro ? null : (
     <div className="row" style={{ gap: 8 }}>
@@ -339,11 +373,15 @@ function ContentTab({ c, query }) {
             : <Link className="strong text-danger" to={`/teach/courses/${c.id}/quiz/entry`}>Chưa có — Tạo bài kiểm tra đầu vào</Link>}</p></div>
         {addBar}</div></div>
       {!c.chapters.length && <div className="card"><Empty icon="layers" title="Khoá học chưa có nội dung" body="Bắt đầu bằng cách thêm chương đầu tiên, sau đó thêm các bài học lý thuyết, bài thực hành và câu hỏi trắc nghiệm." actions={ro ? null : <button type="button" className="btn btn-primary" onClick={() => addChapter(c)}><Icon name="plus" /> Thêm chương đầu tiên</button>} /></div>}
+      {c.chapters.length > 0 && <div className="tc-cols xsmall muted" aria-hidden="true"><span /><span>Số</span><span>Bài học</span><span>Loại</span><span>Thời lượng</span><span>Kiểm tra</span><span>Trạng thái</span><span>Thao tác</span></div>}
       {c.chapters.map((ch, ci) => (
         <section key={ch.id} className="card tc-chapter" {...dragAttrs('chapter', ch.id)} data-drop="chapter" data-id={ch.id}>
           <div className="card-header">
             <div className="row od-fill">{!ro && <span className="tc-grip" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
-              {renaming === ch.id ? <RenameForm c={c} id={ch.id} value={ch.title} label="Tên chương" /> : <h2 className="tc-h">Chương {ci + 1}: {ch.title}</h2>}</div>
+              {renaming === ch.id ? <RenameForm c={c} id={ch.id} value={ch.title} label="Tên chương" /> : (
+                <div className="stack-1" style={{ minWidth: 0 }}><h2 className="tc-h">Chương {ci + 1}: {ch.title}</h2>
+                  <span className="row xsmall muted" style={{ gap: 8 }}>{ch.lessons.length} bài học{chapterBlockers(ch) ? <span className="badge badge-warn"><Icon name="alert-triangle" />{chapterBlockers(ch)} bài cần sửa</span> : ch.lessons.length ? <span className="badge badge-success"><Icon name="check" />Đạt</span> : <span>Chưa có bài học</span>}</span></div>
+              )}</div>
             {ro || renaming === ch.id ? null : (
               <div className="tc-row-actions tc-ch-actions">
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => openAddLesson(c, ch.id)}><Icon name="plus" className="icon-sm" /> Bài học</button>
@@ -355,7 +393,7 @@ function ContentTab({ c, query }) {
                 ]} /></div>
             )}
           </div>
-          <ol className="list tc-lessons" data-drop-zone={ch.id}>{ch.lessons.map((l, li) => lessonRow(l, li, ch))}
+          <ol className="list tc-lessons" data-drop-zone={ch.id}>{ch.lessons.map((l, li) => lessonRow(l, li, ch, ci))}
             {!ch.lessons.length && <li className="tc-empty-drop small muted" data-drop="chapter-end" data-id={ch.id}>Chương này chưa có bài học. {ro ? '' : 'Bấm “+ Bài học” ở trên để thêm.'}</li>}</ol>
         </section>
       ))}
@@ -550,26 +588,50 @@ function PublishTab({ c }) {
     hidden: <Alert type="warn" title="Khoá học đã ẩn" body={`Lý do ẩn: ${c.hideReason || 'Chưa nêu'}. Học viên đã mua vẫn tiếp tục học được; học viên mới không thể mua khoá học này.`} />,
   }[c.status];
   const canSubmit = ['draft', 'rejected'].includes(c.status);
-  const missing = items.filter((x) => !x.ok).length;
   const rr = reviewRound(c);
   const openMust = !!rr && rr.flags.some((f) => f.status === 'open' && f.severity === 'must');
+  const infoLabels = STEPS[0].labels; const kmapLabels = STEPS[2].labels;
+  const groups = [
+    ['Thông tin', items.filter((x) => infoLabels.includes(x.label))],
+    ['Nội dung', items.filter((x) => !infoLabels.includes(x.label) && !kmapLabels.includes(x.label))],
+    ['Bản đồ kiến thức', items.filter((x) => kmapLabels.includes(x.label))],
+  ];
+  const blockers = items.filter((x) => !x.ok);
   return (
     <div className="stack-4">
       {status}
       <ReviewBlock c={c} />
-      <section className="card"><div className="card-header"><h2 className="tc-h">Điều kiện xuất bản</h2><span className="small muted">{items.length - missing}/{items.length} đạt</span></div>
-        <ul className="list">{items.map((x) => (
-          <li key={x.label} className="list-row"><Icon name={x.ok ? 'check-circle' : 'alert-circle'} className={x.ok ? 'text-success' : 'text-warn'} />
-            <div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.ok ? 'Đã đạt' : x.hint}</span></div>
-            {x.ok ? <span className="badge badge-success">Đạt</span> : x.href ? <Link className="btn btn-secondary btn-sm" to={x.href}>{x.action || 'Mở để sửa'}</Link> : null}</li>
-        ))}</ul></section>
+      {/* Reader: what blocks submission, in the order to fix it. One filled primary, only when nothing blocks. */}
+      {canSubmit && (
+        <section className={`card tc-reader ${blockers.length ? 'is-blocked' : 'is-ready'}`} aria-labelledby="tc-reader-h">
+          <div className="card-body stack-3">
+            <div className="row-between tc-reader-head">
+              <div className="stack-1"><h2 className="tc-h" id="tc-reader-h">{blockers.length ? `Còn ${blockers.length} việc chặn gửi duyệt` : 'Đủ điều kiện gửi duyệt'}</h2>
+                <span className="small muted">{blockers.length ? `Đã đạt ${items.length - blockers.length}/${items.length} điều kiện. Xử lý lần lượt từ trên xuống.` : 'Mọi điều kiện bắt buộc đã đạt. Gửi để quản trị viên duyệt.'}</span></div>
+              {allOk && <button type="button" className="btn btn-primary btn-lg" onClick={() => submitForReview(c)}>{c.status === 'rejected' ? 'Sửa và gửi lại' : 'Gửi yêu cầu xuất bản'}</button>}
+            </div>
+            {blockers.length > 0 && (
+              <ul className="tc-blockers" aria-label="Việc còn lại trước khi gửi">{blockers.map((x) => (
+                <li key={x.label} className="tc-blocker"><Icon name="alert-circle" className="icon-sm text-warn" />
+                  <div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.hint}</span></div>
+                  {x.href && <Link className="btn btn-secondary btn-sm" to={x.href}>{x.action || 'Mở để sửa'}</Link>}</li>
+              ))}</ul>
+            )}
+          </div>
+        </section>
+      )}
+      <section className="card" aria-labelledby="tc-conditions-h"><div className="card-header"><h2 className="tc-h" id="tc-conditions-h">Điều kiện xuất bản</h2><span className="small muted">{items.length - blockers.length}/{items.length} đạt</span></div>
+        <div className="card-body stack-4">{groups.filter(([, list]) => list.length).map(([name, list]) => (
+          <div key={name} className="stack-2"><strong className="xsmall muted">{name} · {list.filter((x) => x.ok).length}/{list.length} đạt</strong>
+            <ul className="list tc-conditions">{list.map((x) => (
+              <li key={x.label} className="list-row"><Icon name={x.ok ? 'check-circle' : 'alert-circle'} className={x.ok ? 'text-success' : 'text-warn'} />
+                <div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.ok ? 'Đã đạt' : x.hint}</span></div>
+                <span className={`badge ${x.ok ? 'badge-success' : 'badge-warn'}`}>{x.ok ? 'Đạt' : 'Chưa đạt'}</span></li>
+            ))}</ul></div>
+        ))}</div></section>
       {readinessAdvice(c).length > 0 && <section className="card"><div className="card-header"><h2 className="tc-h">Gợi ý thêm</h2><span className="xsmall muted">Không bắt buộc để gửi duyệt</span></div>
         <ul className="list">{readinessAdvice(c).map((x) => <li key={x.href} className="list-row"><Icon name="info" className="text-info" /><div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.text}</span></div><Link className="btn btn-ghost btn-sm" to={x.href}>Mở</Link></li>)}</ul></section>}
       {canSubmit && openMust && <Alert type="warn" title="Còn góp ý bắt buộc" body={'Khoá học còn góp ý "Bắt buộc sửa" chưa được xử lý. Vui lòng chỉnh sửa nội dung và đánh dấu đã sửa để đảm bảo khoá học được duyệt.'} />}
-      {canSubmit && (
-        <div className="row"><button type="button" className="btn btn-primary btn-lg" disabled={!allOk} onClick={() => submitForReview(c)}>{c.status === 'rejected' ? 'Sửa và gửi lại' : 'Gửi yêu cầu xuất bản'}</button>
-          {!allOk && <span className="small muted">Hoàn thành {missing} điều kiện còn thiếu để gửi.</span>}</div>
-      )}
     </div>
   );
 }

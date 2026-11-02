@@ -254,7 +254,7 @@ function GradingJobCard({ submission, assignment, disabled, onApply }) {
           {limit ? <p className="xsmall muted">Thử lại sau ít phút, hoặc chấm thủ công theo thang điểm.</p> : <StageList job={job} live={live} ctx={ctx} />}
           <p className="xsmall muted">Lúc {Codi.fmt.datetime(job.finishedAt)}</p>
           <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="btn btn-primary btn-sm" onClick={start} disabled={disabled}><Icon name="refresh" className="icon-sm" /> Thử lại</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={start} disabled={disabled}><Icon name="refresh" className="icon-sm" /> Thử lại</button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => dismissJob(job.id)}>Bỏ qua</button>
           </div>
         </section>
@@ -294,7 +294,7 @@ function GradingJobCard({ submission, assignment, disabled, onApply }) {
         <Alert type="info" body="AI chỉ gợi ý. Điểm chỉ được ghi nhận khi bạn kiểm tra và tự lưu điểm." />
         {job.appliedAt && <p className="xsmall ai-draft-note"><Icon name="check" className="icon-sm" /> Đã điền vào phiếu chấm lúc {Codi.fmt.datetime(job.appliedAt)} — xem lại từng điểm và nhận xét trước khi lưu.</p>}
         <div className="row lai-job-actions">
-          <button type="button" className="btn btn-primary btn-sm" onClick={apply} disabled={disabled}>Dùng bản nháp này</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={apply} disabled={disabled}>Dùng bản nháp này</button>
           <button type="button" className="btn btn-secondary btn-sm" onClick={start} disabled={disabled}>Chấm lại bằng AI</button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => dismissJob(job.id)}>Bỏ qua</button>
         </div>
