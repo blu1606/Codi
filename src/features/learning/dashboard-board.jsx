@@ -60,17 +60,17 @@ export function DashFocus({ focus }) {
     <section className="db-focus" aria-labelledby="db-focus-h">
       <Thumb course={c} small />
       <div className="db-focus-body">
-        <p className="db-focus-course"><span id="db-focus-h">Đang học</span>: <strong>{c.title}</strong></p>
         {row ? (
           <>
-            <p className="db-focus-lesson">{row.title}</p>
+            <h2 id="db-focus-h" className="db-focus-lesson">{row.title}</h2>
             <p className="db-focus-meta small muted">
+              <span>{c.title}</span><span aria-hidden="true">·</span>
               <span>Bài <span className="db-mono">{number}</span></span><span aria-hidden="true">·</span>
               <span className="db-meta-row"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span><span aria-hidden="true">·</span>
               <span><span className="db-mono">{Math.round(row.durationMin || 0)}</span> phút</span>
             </p>
           </>
-        ) : <p className="db-focus-lesson db-focus-lesson-plain">{note}</p>}
+        ) : <><h2 id="db-focus-h" className="db-focus-lesson">{c.title}</h2><p className="db-focus-lesson-plain">{note}</p></>}
         {status !== 'none' && (
           <div className="db-focus-progress">
             <Progress pct={pct} label={`Tiến độ khoá ${c.title}`} />
@@ -100,8 +100,8 @@ export function DashBoard({ departures, leadId }) {
               ? <span className={`db-line db-line-${line.slot}`}><span className="sr-only">Chương {line.no}</span><span aria-hidden="true">{line.no}</span></span>
               : <span aria-hidden="true" className="db-line" />}
             <div className="db-dep-body">
-              <p className="db-dep-course small">{c.title}{line && <> · Chương {line.no}: {row.chapterTitle}</>}</p>
               <p className="db-dep-title"><Link to={`/learn/${c.id}/${row.id}`}><span className="sr-only">Bài {number}: </span>{row.title}</Link></p>
+              <p className="db-dep-course small">{c.title}{line && <> · Chương {line.no}: {row.chapterTitle}</>}</p>
               <p className="db-dep-meta small">
                 <span>Bài <span className="db-mono">{number}</span></span>
                 <span className="db-meta-row"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span>
