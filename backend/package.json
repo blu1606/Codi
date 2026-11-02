@@ -4,12 +4,36 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch legacy/index.js",
-    "seed": "node legacy/seed.js"
+    "dev": "tsx watch --env-file-if-exists=.env --clear-screen=false src/server.ts",
+    "start": "tsx --env-file-if-exists=.env src/server.ts",
+    "migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
+    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "pg": "^8.13.1"
+    "@ai-sdk/google": "4.0.76",
+    "@ai-sdk/openai": "4.0.71",
+    "@aws-sdk/client-s3": "3.1152.0",
+    "@aws-sdk/s3-request-presigner": "3.1136.0",
+    "@codi-1/auth": "file:packages/auth",
+    "@codi-1/coding-runner": "file:packages/coding-runner",
+    "@codi-1/db": "file:packages/db",
+    "@codi-1/ui": "file:packages/ui",
+    "@hono/node-server": "^1.14.0",
+    "ai": "7.0.107",
+    "better-auth": "1.7.5",
+    "drizzle-orm": "1.0.0-rc.4",
+    "hono": "^4.7.0",
+    "next": "file:shims/next",
+    "pg": "^8.23.0",
+    "server-only": "file:shims/server-only",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "1.0.0-rc.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

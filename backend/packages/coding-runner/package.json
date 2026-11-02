@@ -1,0 +1,14 @@
+{
+  "name": "@codi-1/coding-runner",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
+    }
+  },
+  "dependencies": {
+    "quickjs-emscripten": "^0.32.0"
+  }
+}

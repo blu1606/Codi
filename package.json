@@ -6,7 +6,8 @@
   "workspaces": [
     "frontend",
     "backend",
-    "backend/shims/*"
+    "backend/shims/*",
+    "backend/packages/*"
   ],
   "scripts": {
     "start": "concurrently -k -n API,WEB -c cyan,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
@@ -19,5 +20,10 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
+  },
+  "overrides": {
+    "@better-auth/core": "1.7.5",
+    "@better-auth/utils": "0.4.2",
+    "better-call": "1.4.0"
   }
 }

@@ -5,3 +5,6 @@ dist
 *.log
 .impeccable/hook.cache.json
 .vitest/
+
+# backend: generated seed input (built from backend/scripts/seed-source)
+backend/scripts/data/
