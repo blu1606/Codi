@@ -16,13 +16,13 @@ import { POST as sepayCallback } from "@/app/api/payments/sepay/callback/route";
  *  - paid: the amount still due; underpaid: half of it; overpaid: due + 50.000 ₫.
  *  - expire: moves a pending order's payment deadline to now, so the next read expires it (no transfer).
  * Returns the webhook's reply ({ success, message } / { success, underpaid, receivedAmount, targetTotal }).
- * Disabled (404) when NODE_ENV is production.
+ * Disabled (404) when NODE_ENV is production unless DEMO_TOOLS=true.
  */
 const OUTCOMES = new Set(["paid", "underpaid", "overpaid", "expire"]);
 const OVERPAY_EXTRA = 50000;
 
 export async function POST(request: NextRequest) {
-  if (ENV.NODE_ENV === "production") return NextResponse.json({ error: "Không tìm thấy." }, { status: 404 });
+  if (ENV.NODE_ENV === "production" && !ENV.DEMO_TOOLS) return NextResponse.json({ error: "Không tìm thấy." }, { status: 404 });
   // Reject cross-origin cookie-authenticated writes, including requests without Origin.
   if (request.headers.get("origin") !== request.nextUrl.origin) {
     return NextResponse.json({ error: "Yêu cầu không hợp lệ." }, { status: 403 });

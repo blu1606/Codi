@@ -27,13 +27,13 @@
     "next": "file:shims/next",
     "pg": "^8.23.0",
     "server-only": "file:shims/server-only",
+    "tsx": "^4.21.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "1.0.0-rc.4",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

@@ -1,8 +1,10 @@
 // Backend entry: Codi's API (route handlers + server actions, vendored unchanged) on Hono, port 4100.
 // The Vite dev server on :3001 proxies /api here, so the browser sees one origin.
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { mountNextRoutes } from "./host/next-routes";
@@ -28,13 +30,32 @@ async function main() {
   const routes = await mountNextRoutes(app, appDir);
   const actionModules = await mountServerActions(app, appDir);
 
+  // Production image: the built frontend is served from WEB_DIST on the same origin; unknown non-API paths get
+  // index.html so React Router handles them.
+  const webDist = process.env.WEB_DIST;
+  if (webDist) {
+    const indexHtml = readFileSync(path.join(webDist, "index.html"), "utf8");
+    app.use("*", serveStatic({ root: webDist }));
+    app.get("*", (c, next) => (c.req.path.startsWith("/api/") ? next() : c.html(indexHtml)));
+  }
+
   app.notFound((c) => c.json({ error: "Không tìm thấy." }, 404));
   app.onError((error, c) => {
     console.error(`[server] ${c.req.method} ${c.req.path} failed`, error);
     return c.json({ error: "Lỗi máy chủ. Vui lòng thử lại." }, 500);
   });
 
-  const server = serve({ fetch: app.fetch, port }, () => {
+  // Behind a TLS proxy (Caddy) the request arrives as http; rebuild its URL as https so the routes' Origin checks
+  // (Origin === nextUrl.origin) match what the browser sent.
+  const fetch = (req: Request, env: unknown) => {
+    if (req.headers.get("x-forwarded-proto") === "https" && req.url.startsWith("http:")) {
+      const init = { method: req.method, headers: req.headers, body: req.body, duplex: "half" };
+      req = new Request(`https:${req.url.slice(5)}`, init as RequestInit);
+    }
+    return app.fetch(req, env);
+  };
+
+  const server = serve({ fetch, port }, () => {
     const actions = actionModules.reduce((n, m) => n + m.actions.length, 0);
     console.log(`Codi API on http://localhost:${port} (${routes.length} routes, ${actions} actions in ${actionModules.length} modules)`);
   });

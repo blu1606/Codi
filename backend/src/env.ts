@@ -49,4 +49,6 @@ export const ENV = {
   SEPAY_BANK_CODE: read("SEPAY_BANK_CODE"),
   SEPAY_ACCOUNT_NUMBER: read("SEPAY_ACCOUNT_NUMBER"),
   SEED_ACCOUNT_PASSWORD: read("SEED_ACCOUNT_PASSWORD") ?? "Codi@12345",
+  // Prototype demo deploys: keeps the simulated SePay route and the demo seed available in production.
+  DEMO_TOOLS: read("DEMO_TOOLS") === "true",
 } as const;
