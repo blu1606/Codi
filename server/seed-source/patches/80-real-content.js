@@ -15,7 +15,9 @@ patchSeed((db) => {
     const pdf = (l.materials || []).filter((m) => m.type === 'pdf');
     l.materials = [...videos, ...pdf];
     const sources = (real.sources || []).map((s) => `- [${s.title}](${s.url}) (${s.license})`).join('\n');
-    l.body = real.body + (sources ? `\n\n---\n\n**Nguồn tham khảo**\n\n${sources}` : '');
+    // The source's highlight markers were stripped upstream, leaving blank lines at the edges of code blocks.
+    const body = real.body.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => '```' + lang + '\n' + code.replace(/^(\s*\n)+/, '').replace(/\s+$/, '') + '\n```');
+    l.body = body + (sources ? `\n\n---\n\n**Nguồn tham khảo**\n\n${sources}` : '');
     l.sources = real.sources || [];
   }));
 });

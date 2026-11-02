@@ -425,7 +425,7 @@ const charts = {};
     const body = state === 'loading' ? '<div class="viz-skeleton" aria-hidden="true"></div><span class="sr-only">Đang tải…</span>' : state === 'empty' ? empty(o.emptyText) : String(o.body || '');
     const tbl = o.table && state === 'ok' && o.table.rows.length ? `<details class="viz-table"><summary>Bảng số liệu</summary><div class="table-wrap">${table(o.table.headers, o.table.rows, { caption: o.title })}</div></details>` : '';
     return out(`<section class="viz-card${o.wide ? ' is-wide' : ''}${o.cls ? ' ' + o.cls : ''}" aria-labelledby="${tid}"${state === 'loading' ? ' aria-busy="true"' : ''}${o.id ? ` data-card="${esc(o.id)}"` : ''}>
-      <header class="viz-card-head"><div class="viz-card-titles">${o.code ? `<span class="viz-code">${esc(o.code)}</span>` : ''}<h3 id="${tid}">${esc(o.title)}</h3>${o.question ? `<p>${esc(o.question)}</p>` : ''}</div>
+      <header class="viz-card-head"><div class="viz-card-titles"><h3 id="${tid}">${esc(o.title)}</h3>${o.question ? `<p>${esc(o.question)}</p>` : ''}</div>
         <div class="viz-card-actions">${String(o.actions || '')}${o.detailHref ? `<a class="btn btn-ghost btn-sm" href="#${esc(o.detailHref)}">Xem chi tiết<span class="sr-only"> ${esc(o.title)}</span></a>` : ''}</div></header>
       ${small && state === 'ok' ? `<p class="viz-warn"><span aria-hidden="true">▲</span> Mẫu nhỏ (n = ${num(o.sample)}) — đọc kết quả thận trọng.</p>` : ''}
       <div class="viz-card-body">${body}</div>
