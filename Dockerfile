@@ -24,9 +24,11 @@ RUN npm prune --omit=dev --no-audit --no-fund \
 
 # 4. Runtime.
 FROM node:22-alpine AS runtime
+# The AI background worker (src/host/ai-worker.ts) runs inside the app process.
 ENV NODE_ENV=production \
     API_PORT=3001 \
-    WEB_DIST=/app/frontend/dist
+    WEB_DIST=/app/frontend/dist \
+    AI_BACKGROUND_WORKER_ENABLED=true
 WORKDIR /app/backend
 COPY --from=backend --chown=node:node /app /app
 COPY --from=web --chown=node:node /app/frontend/dist /app/frontend/dist

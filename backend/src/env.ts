@@ -23,6 +23,14 @@ if (/supabase\.(co|com)/i.test(DATABASE_URL)) {
   throw new Error("DATABASE_URL points at Supabase; codi-rebuild only runs against the local Postgres.");
 }
 
+// Codi's routes read these two straight from process.env, so the defaults are written back there. The AI background
+// worker (src/host/ai-worker.ts) is on unless AI_BACKGROUND_WORKER_ENABLED=false; an empty AI_DAILY_JOB_LIMIT would
+// fail closed in Codi's quota check, so it falls back to Codi's default of 5 jobs per lecturer, type and day.
+process.env.AI_BACKGROUND_WORKER_ENABLED = read("AI_BACKGROUND_WORKER_ENABLED") === "false" ? "false" : "true";
+const AI_DAILY_JOB_LIMIT = read("AI_DAILY_JOB_LIMIT");
+if (AI_DAILY_JOB_LIMIT) process.env.AI_DAILY_JOB_LIMIT = AI_DAILY_JOB_LIMIT;
+else delete process.env.AI_DAILY_JOB_LIMIT;
+
 export const ENV = {
   NODE_ENV,
   DATABASE_URL,
@@ -31,6 +39,8 @@ export const ENV = {
   BETTER_AUTH_URL: read("BETTER_AUTH_URL") ?? "http://localhost:3001",
   AI_PROVIDER: (read("AI_PROVIDER") ?? "gemini") as "gemini" | "openai",
   AI_MODEL: read("AI_MODEL"),
+  AI_BACKGROUND_WORKER_ENABLED: process.env.AI_BACKGROUND_WORKER_ENABLED === "true",
+  AI_DAILY_JOB_LIMIT: Number(process.env.AI_DAILY_JOB_LIMIT ?? 5),
   GOOGLE_GENERATIVE_AI_API_KEY: read("GOOGLE_GENERATIVE_AI_API_KEY"),
   OPENAI_API_KEY: read("OPENAI_API_KEY"),
   RESEND_API_KEY: read("RESEND_API_KEY"),

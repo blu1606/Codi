@@ -8,6 +8,9 @@ services:
     env_file: [./rebuild.env]
     environment:
       DATABASE_URL: postgresql://codi:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@db:5432/codi
+      # AI jobs (GitHub analysis, knowledge map, quiz generation, learning paths) run in this container; rebuild.env is a
+      # copy of Codi's env, so its own value is overridden here. Set it in .env next to this file to turn the worker off.
+      AI_BACKGROUND_WORKER_ENABLED: ${AI_BACKGROUND_WORKER_ENABLED:-true}
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:

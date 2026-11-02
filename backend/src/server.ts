@@ -7,6 +7,7 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { aiWorkerEnabled, startAiWorker } from "./host/ai-worker";
 import { mountNextRoutes } from "./host/next-routes";
 import { mountServerActions } from "./host/server-actions";
 import { db } from "./services";
@@ -60,9 +61,15 @@ async function main() {
     console.log(`Codi API on http://localhost:${port} (${routes.length} routes, ${actions} actions in ${actionModules.length} modules)`);
   });
 
+  // AI background jobs (GitHub analysis, knowledge map, quiz generation, learning paths) run in this process.
+  const workerStop = new AbortController();
+  const worker = aiWorkerEnabled() ? startAiWorker(workerStop.signal) : Promise.resolve();
+  if (aiWorkerEnabled()) console.log("AI background worker started");
+
   const shutdown = () => {
+    workerStop.abort();
     server.close(() => {
-      db.$client.end().finally(() => process.exit(0));
+      worker.finally(() => db.$client.end()).finally(() => process.exit(0));
     });
     setTimeout(() => process.exit(0), 3000).unref();
   };
