@@ -48,3 +48,12 @@ patchSeed((db) => {
     }
   }
 });
+
+// Demo learner: lesson-js-002 has a graded quiz of 50% (pass mark 70%), so it is not complete. The seeded
+// completion is removed, leaving the quiz attempt as a real "chưa đạt" record the learner can retake.
+patchSeed((db) => {
+  const s = db.learnerSeed && db.learnerSeed.courses && db.learnerSeed.courses['course-js-001'];
+  if (!s) return;
+  s.completed = (s.completed || []).filter((id) => id !== 'lesson-js-002');
+  if (s.completedAt) delete s.completedAt['lesson-js-002'];
+});
