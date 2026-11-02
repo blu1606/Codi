@@ -21,6 +21,7 @@ import { ShellIcon, UserAvatar } from './shell-ui';
 import { THEME_OPTIONS } from './theme';
 import { accountUser } from './account-store';
 import BrandLink from './brand-link';
+import { useCartCount } from '../commerce/commerce-api';
 import { GlobalSearch, SearchTrigger, openSearch } from './global-search';
 import { accountLinks, primaryNav } from './nav-config';
 import { DevToggle } from './dev-drawer';
@@ -94,7 +95,8 @@ function UserMenu({ u, open, onToggle, onClose }) {
 }
 
 function CartButton({ role }) {
-  const count = role === 'learner' ? Codi.cart().length : 0;
+  const cart = useCartCount();
+  const count = role === 'learner' ? cart || 0 : 0;
   const label = `Giỏ hàng, ${count} khoá học`;
   const onClick = (e) => {
     if (role !== 'guest') return;
@@ -117,7 +119,8 @@ function NavDrawer({ open, onClose }) {
   const path = Codi.path();
   const items = primaryNav(role);
   const [signingOut, signOut] = useSignOut(onClose);
-  const cartCount = role === 'learner' ? Codi.cart().length : 0;
+  const cart = useCartCount();
+  const cartCount = role === 'learner' ? cart || 0 : 0;
   const search = () => { onClose(); setTimeout(openSearch, 0); };
   return (
     <Sheet open={open} onClose={onClose} title="Menu Codi" side="left">
