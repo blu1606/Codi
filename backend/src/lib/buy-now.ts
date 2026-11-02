@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gte, isNull, or } from "drizzle-orm";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
 import { courses, orders, orderItems, orderEvents } from "@codi-1/db";
 import { studentEnrollments, studentTransactions } from "@codi-1/db/schema/student-profile";
@@ -111,8 +111,8 @@ export async function createBuyNowOrder(
     };
   }
 
-  // Also check legacy studentTransactions for fallback; a row mirrored from an order (failed / expired /
-  // cancelled) must not resurrect it, as in add-course-to-cart.
+  // Also check legacy studentTransactions for fallback only if active and not cancelled/expired
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
   const [existingTx] = await db
     .select({ id: studentTransactions.id, amount: studentTransactions.amount })
     .from(studentTransactions)
@@ -121,8 +121,11 @@ export async function createBuyNowOrder(
       and(
         eq(studentTransactions.userId, userId),
         eq(studentTransactions.status, "pending"),
-        isNull(orders.id),
-        eq(studentTransactions.courseId, targetCourse.id)
+        eq(studentTransactions.courseId, targetCourse.id),
+        // If an associated canonical order exists, it must be pending
+        or(isNull(orders.id), eq(orders.status, "pending")),
+        // Must not be expired (>30 mins)
+        gte(studentTransactions.createdAt, thirtyMinutesAgo)
       )
     )
     .limit(1);

@@ -1,5 +1,6 @@
 import "server-only";
 import { and, eq, inArray } from "drizzle-orm";
+import { z } from "zod";
 import {
   assessmentAnswers,
   assessmentSubmissions,
@@ -7,7 +8,6 @@ import {
   courses,
   enrollmentSkillMastery,
   lessonProgress,
-  skills,
   studentEnrollments,
   studentStudyDays,
   type Database,
@@ -29,10 +29,12 @@ export interface LearnerEnrollmentRow {
   courseTitle: string;
   diagnosticStatus: string;
   weeklyGoalMinutes: number | null;
+  confirmedKnowledgeMap?: unknown;
 }
 export interface LearnerStudyDayRow { date: string; seconds: number }
 export interface LearnerCompletionRow { enrollmentId: number; completedAt: Date | null }
 export interface LearnerSkillRow { id: number; name: string; courseId: string; pMastery: number | null; evidenceCount: number | null }
+interface LearnerMasteryRow { enrollmentId: number; skillId: number; pMastery: number; evidenceCount: number }
 export interface LearnerSubmissionRow {
   submissionId: number; assessmentId: number; attempt: number; type: "quiz" | "assignment" | "coding";
   mode: "run" | "submit" | null; isDiagnostic: boolean; title: string; courseId: string; maxScore: number;
@@ -53,6 +55,39 @@ const dayStart = (day: string) => Date.parse(`${day}T00:00:00Z`) - GMT7_MS;
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 const weekStartOf = (day: string) => addDays(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
 const roundMinutes = (seconds: number) => Math.round(seconds / 60);
+
+// Database JSON is untrusted at runtime. Do not fall back to the live editable graph:
+// an invalid publication must not reveal unconfirmed skills or names.
+const skillId = z.number().int().positive().safe();
+const probability = z.number().min(0).max(1);
+const publicationSchema = z.object({
+  version: z.literal(1), publicationId: z.string().min(1), contentGeneration: z.number().int().nonnegative(),
+  publishedAt: z.string().min(1),
+  skills: z.array(z.object({ id: skillId, name: z.string().refine((value) => value.trim().length > 0), bktPInit: probability,
+    bktPLearn: probability, bktPGuess: probability, bktPSlip: probability })),
+  edges: z.array(z.object({ from: skillId, to: skillId })),
+  links: z.array(z.object({ lessonId: z.string().min(1), skillId })),
+}).superRefine((map, ctx) => {
+  const ids = new Set(map.skills.map((skill) => skill.id));
+  if (ids.size !== map.skills.length || map.edges.some((edge) => !ids.has(edge.from) || !ids.has(edge.to) || edge.from === edge.to)
+    || map.links.some((link) => !ids.has(link.skillId)) || map.skills.some((skill) => skill.bktPGuess + skill.bktPSlip >= 1)) {
+    ctx.addIssue({ code: "custom", message: "Invalid confirmed knowledge map" });
+  }
+});
+
+/** Match publication skills to mastery by both enrollment and skill, never by skill alone. */
+export function publishedLearnerSkills(enrollments: LearnerEnrollmentRow[], mastery: LearnerMasteryRow[]): LearnerSkillRow[] {
+  const lookup = new Map(mastery.map((row) => [`${row.enrollmentId}:${row.skillId}`, row]));
+  return enrollments.flatMap((enrollment) => {
+    const publication = publicationSchema.safeParse(enrollment.confirmedKnowledgeMap);
+    if (!publication.success) return [];
+    return publication.data.skills.map((skill) => {
+      const row = lookup.get(`${enrollment.id}:${skill.id}`);
+      return { id: skill.id, name: skill.name, courseId: enrollment.courseId,
+        pMastery: row?.pMastery ?? null, evidenceCount: row?.evidenceCount ?? null };
+    });
+  });
+}
 
 /** Mastery level on the 5-stop scale (learning.ts comment: 0 no evidence, 1 <0.40, 2 <0.60, 3 <0.85, 4 >=0.85). */
 export function masteryLevel(pMastery: number | null, evidenceCount: number | null): LearnerStatsSkill["level"] {
@@ -211,6 +246,7 @@ export async function getLearnerStatsData(
       courseTitle: courses.title,
       diagnosticStatus: studentEnrollments.diagnosticStatus,
       weeklyGoalMinutes: studentEnrollments.weeklyGoalMinutes,
+      confirmedKnowledgeMap: courses.confirmedKnowledgeMap,
     }).from(studentEnrollments)
       .innerJoin(courses, eq(courses.id, studentEnrollments.courseId))
       .where(eq(studentEnrollments.userId, userId)),
@@ -219,7 +255,6 @@ export async function getLearnerStatsData(
   ]);
   const scoped = enrollments.filter((enrollment) => courseId === "all" || enrollment.courseId === courseId);
   const scopeIds = scoped.map((enrollment) => enrollment.id);
-  const scopeCourseIds = scoped.map((enrollment) => enrollment.courseId);
   const none = <T,>() => Promise.resolve([] as T[]);
   const [completions, skillRows, submissions, answers] = await Promise.all([
     scopeIds.length ? db.select({ enrollmentId: lessonProgress.enrollmentId, completedAt: lessonProgress.completedAt })
@@ -227,15 +262,11 @@ export async function getLearnerStatsData(
       .where(and(inArray(lessonProgress.enrollmentId, scopeIds), eq(lessonProgress.status, "completed")))
       : none<LearnerCompletionRow>(),
     scopeIds.length ? db.select({
-      id: skills.id, name: skills.name, courseId: skills.courseId,
+      enrollmentId: enrollmentSkillMastery.enrollmentId, skillId: enrollmentSkillMastery.skillId,
       pMastery: enrollmentSkillMastery.pMastery, evidenceCount: enrollmentSkillMastery.evidenceCount,
-    }).from(skills)
-      .leftJoin(enrollmentSkillMastery, and(
-        eq(enrollmentSkillMastery.skillId, skills.id),
-        inArray(enrollmentSkillMastery.enrollmentId, scopeIds),
-      ))
-      .where(and(inArray(skills.courseId, scopeCourseIds), inArray(skills.review, ["accepted", "edited"])))
-      : none<LearnerSkillRow>(),
+    }).from(enrollmentSkillMastery)
+      .where(inArray(enrollmentSkillMastery.enrollmentId, scopeIds))
+      : none<LearnerMasteryRow>(),
     scopeIds.length ? db.select({
       submissionId: assessmentSubmissions.id, assessmentId: assessmentSubmissions.assessmentId,
       attempt: assessmentSubmissions.attempt, type: assessments.type, mode: assessmentSubmissions.mode,
@@ -266,7 +297,7 @@ export async function getLearnerStatsData(
     enrollments,
     studyDays,
     completions,
-    skills: skillRows,
+    skills: publishedLearnerSkills(scoped, skillRows),
     submissions,
     answers,
   }, period, courseId, now);

@@ -36,7 +36,11 @@ export async function POST(request: Request) {
     }
     if (error?.name === "CheckoutError" && typeof error.status === "number") {
       return NextResponse.json(
-        { error: error.message, code: error.code },
+        {
+          error: error.message,
+          code: error.code,
+          pendingOrder: error.pendingOrder,
+        },
         { status: error.status },
       );
     }

@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { hasExpiredPathClaim, learningPathClaimDisposition } from "./learning-path-worker-claim";
+import { attemptLearningPathGeneration } from "./learning-path-worker-attempt";
 import {
   and,
   asc,
@@ -44,10 +46,6 @@ import { aiInteractionLogs } from "@codi-1/db/schema/ai-interaction-logs";
 import { courseReviews } from "@codi-1/db/schema/interaction";
 import { saveCourseReview } from "./course-review-service";
 import { updateBkt } from "./onboarding-contract";
-import {
-  pathGenerationFailure,
-  type PathGenerationFailure,
-} from "./learning-path-errors";
 import {
   constrainPath,
   defaultPathItems as defaultItems,
@@ -616,6 +614,9 @@ async function queue(
       ),
     );
   if (pending.some((job) => job.inputHash === hash)) return;
+  // An expired job may already have billed the provider. Reconcile it before
+  // creating new work, even if the input changed while the process was down.
+  if (hasExpiredPathClaim(pending, Date.now())) return;
   // Superseded requests cannot publish over a newer goal, result, or curriculum.
   await store
     .update(learningPathJobs)
@@ -1047,8 +1048,8 @@ export function createLearningPathService(
         { isolationLevel: "repeatable read", accessMode: "read only" },
       );
     },
-    async runPending(userId: string, courseId: string) {
-      // Bootstrap #96's durable generating marker; also recovers expired worker leases.
+    async runPending(userId: string, courseId: string, options?: { observedJobId: string }) {
+      // Bootstrap the durable generating marker and reconcile expired worker leases.
       await db.transaction((tx) => reconcileLearningPath(tx, userId, courseId));
       const claim = await db.transaction(async (tx) => {
         const ctx = await context(tx, userId, courseId, true);
@@ -1064,11 +1065,8 @@ export function createLearningPathService(
           .orderBy(desc(learningPathJobs.createdAt))
           .limit(1)
           .for("update");
-        if (
-          !job ||
-          (job.leaseExpiresAt && job.leaseExpiresAt.getTime() > Date.now())
-        )
-          return null;
+        const disposition = learningPathClaimDisposition(job, Date.now(), options?.observedJobId);
+        if (disposition === "skip" || !job) return null;
         const token = randomUUID();
         await tx
           .update(learningPathJobs)
@@ -1077,28 +1075,23 @@ export function createLearningPathService(
             leaseExpiresAt: new Date(Date.now() + 60_000),
           })
           .where(eq(learningPathJobs.id, job.id));
-        return { job, token, input: ctx.input };
+        return { job, token, input: ctx.input, disposition };
       });
       if (!claim) return;
       const started = Date.now();
-      let result: GenerationResult | undefined;
-      let failure: PathGenerationFailure | null = null;
-      try {
-        if (!generator) {
-          failure = "provider_unavailable";
-          throw new Error("Path generator unavailable");
-        }
-        result = await generator(claim.input, AbortSignal.timeout(20_000));
-        result.proposal = pathProposal.parse(result.proposal);
-        if (
-          claim.job.trigger === "lesson_completed" &&
-          !result.proposal.lessons.length
-        )
-          throw new LearningPathError("AI không trả về bài học.");
-        constrainPath(claim.input, result.proposal);
-      } catch (error) {
-        failure ??= pathGenerationFailure(error);
-      }
+      const { result, failure } = await attemptLearningPathGeneration(
+        claim.disposition === "recover",
+        generator
+          ? async () => {
+              const result = await generator(claim.input, AbortSignal.timeout(20_000));
+              result.proposal = pathProposal.parse(result.proposal);
+              if (claim.job.trigger === "lesson_completed" && !result.proposal.lessons.length)
+                throw new LearningPathError("AI không trả về bài học.");
+              constrainPath(claim.input, result.proposal);
+              return result;
+            }
+          : undefined,
+      );
       await db.transaction(async (tx) => {
         const ctx = await context(tx, userId, courseId, true);
         const [job] = await tx
@@ -1111,7 +1104,7 @@ export function createLearningPathService(
           !job ||
           job.finishedAt ||
           job.leaseToken !== claim.token ||
-          inputHash(ctx.input) !== job.inputHash
+          (claim.disposition !== "recover" && inputHash(ctx.input) !== job.inputHash)
         )
           return;
         const preserveAi =

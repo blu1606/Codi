@@ -11,6 +11,7 @@ import {
 import { loadLearningLessonAccess } from "./learning-path-service";
 import { LearningPathError } from "./learning-path-contract";
 import { learnerVisibleFeedback } from "./grading-feedback-frame";
+import { parseFeedbackAndHistory } from "./grading-service";
 import {
   assessmentCommand,
   assignmentFileLimit,
@@ -210,6 +211,7 @@ function project(ctx: Context, scope: Scope): AssessmentView {
           submittedAt: s.submittedAt?.toISOString() ?? null,
           gradedAt: s.gradedAt?.toISOString() ?? null,
           feedback: learnerVisibleFeedback(s.feedback),
+          rubricScores: parseFeedbackAndHistory(s.feedback).rubricScores,
           fileName: s.fileName,
           fileUrl: s.fileUrl ? fileUrl(scope) : null,
           linkUrl: s.linkUrl,

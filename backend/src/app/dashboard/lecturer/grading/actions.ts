@@ -26,6 +26,7 @@ import {
   type RubricCriterion,
 } from "@/lib/grading-service";
 import { createNotificationService } from "@/lib/notification-service";
+import { generateAiGradingDraft } from "@/lib/ai-grading-draft";
 
 export interface SubmissionListItemDto {
   id: number;
@@ -579,15 +580,84 @@ export async function gradeSubmission(
   };
 }
 
-/**
- * AI grading is unavailable in the manual-only prototype, including direct action calls.
- */
-export async function getAiGradingDraft(submissionId: number): Promise<{
+/** Returns a lecturer-owned, editable suggestion without persisting a grade or notifying the learner. */
+export async function getAiGradingDraft(input: { submissionId: number; viewToken: string }): Promise<{
   success: boolean;
   suggestedScore?: number;
+  rubricScores?: Record<string, number>;
   feedback?: string;
   error?: string;
 }> {
-  await verifyLecturerSession();
-  return { success: false, error: "AI chấm bài chưa khả dụng. Vui lòng chấm bài thủ công theo thang điểm." };
+  const lecturer = await verifyLecturerSession();
+  if (!Number.isSafeInteger(input.submissionId) || input.submissionId <= 0 || !input.viewToken) {
+    return { success: false, error: "Bài nộp không hợp lệ." };
+  }
+
+  const selection = {
+    id: assessmentSubmissions.id,
+    assessmentId: assessmentSubmissions.assessmentId,
+    enrollmentId: assessmentSubmissions.enrollmentId,
+    attempt: assessmentSubmissions.attempt,
+    savedAt: assessmentSubmissions.savedAt,
+    gradedAt: assessmentSubmissions.gradedAt,
+    gradedBy: assessmentSubmissions.gradedBy,
+    answerText: assessmentSubmissions.answerText,
+    fileUrl: assessmentSubmissions.fileUrl,
+    fileName: assessmentSubmissions.fileName,
+    linkUrl: assessmentSubmissions.linkUrl,
+    submittedAt: assessmentSubmissions.submittedAt,
+    status: assessmentSubmissions.status,
+    score: assessmentSubmissions.score,
+    instructions: assessments.instructions,
+    maxScore: assessments.maxScore,
+    passingScore: assessments.passingScore,
+    rubric: assessments.rubric,
+    type: assessments.type,
+    courseId: assessments.courseId,
+  };
+  const readOwnedSubmission = () => db.select(selection)
+    .from(assessmentSubmissions)
+    .innerJoin(assessments, eq(assessmentSubmissions.assessmentId, assessments.id))
+    .innerJoin(courses, eq(assessments.courseId, courses.id))
+    .where(and(
+      eq(assessmentSubmissions.id, input.submissionId),
+      eq(courses.instructorId, lecturer.id),
+      eq(assessments.type, "assignment"),
+      inArray(assessmentSubmissions.status, ["pending", "graded"]),
+    ))
+    .limit(1);
+  const [row] = await readOwnedSubmission();
+
+  if (!row) return { success: false, error: "Bài nộp không tồn tại hoặc không thuộc quyền chấm của bạn." };
+  if (submissionIdentity(row) !== input.viewToken) {
+    return { success: false, error: "Bài nộp đã thay đổi. Vui lòng tải lại trước khi yêu cầu AI gợi ý." };
+  }
+
+  let rubric: RubricCriterion[] | null = null;
+  if (row.rubric) {
+    try {
+      const parsed: unknown = typeof row.rubric === "string" ? JSON.parse(row.rubric) : row.rubric;
+      if (!Array.isArray(parsed) || !parsed.every((criterion) => criterion && typeof criterion.id === "string" &&
+        criterion.id.length > 0 && Number.isFinite(Number(criterion.points ?? criterion.maxScore)) &&
+        Number(criterion.points ?? criterion.maxScore) >= 0) ||
+        new Set(parsed.map((criterion) => criterion.id)).size !== parsed.length) throw new Error("invalid_rubric");
+      rubric = parsed;
+    } catch {
+      return { success: false, error: "Thang điểm rubric không hợp lệ. Vui lòng chấm bài thủ công." };
+    }
+  }
+
+  const result = await generateAiGradingDraft({
+    instructions: row.instructions,
+    answerText: row.answerText || "",
+    rubric,
+    maxScore: Number(row.maxScore),
+  });
+  if (result.success) {
+    const [current] = await readOwnedSubmission();
+    if (!current || submissionIdentity(current) !== input.viewToken) {
+      return { success: false, error: "Bài nộp đã thay đổi trong lúc AI xử lý. Gợi ý chưa được áp dụng; vui lòng tải lại." };
+    }
+  }
+  return result;
 }

@@ -1,4 +1,4 @@
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, gte, isNull, or } from "drizzle-orm";
 import { courses, orderItems, orders, studentCart, studentEnrollments, studentTransactions } from "@codi-1/db";
 import { db } from "@/services";
 
@@ -36,8 +36,8 @@ export async function addCourseToCart(userId: string, courseId: string): Promise
     return { kind: "pending-payment", orderCode: pendingOrder.code };
   }
 
-  // Check legacy studentTransactions for fallback only if there is no terminal/primary order
-  // (i.e. a mirror pending record must not override an order that failed/expired/cancelled)
+  // Check legacy studentTransactions for fallback only if active, not terminal/primary, and not expired
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
   const [legacyTx] = await db
     .select({ id: studentTransactions.id })
     .from(studentTransactions)
@@ -48,7 +48,9 @@ export async function addCourseToCart(userId: string, courseId: string): Promise
         eq(studentTransactions.status, "pending"),
         eq(studentTransactions.courseId, courseId),
         // If an associated canonical order exists, it must not be in a terminal (non-pending) state.
-        or(isNull(orders.id), eq(orders.status, "pending"))
+        or(isNull(orders.id), eq(orders.status, "pending")),
+        // Must not be expired (>30 mins)
+        gte(studentTransactions.createdAt, thirtyMinutesAgo)
       )
     )
     .limit(1);

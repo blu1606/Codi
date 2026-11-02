@@ -81,6 +81,7 @@ export type AssessmentView = {
     submittedAt: string | null;
     gradedAt: string | null;
     feedback: string | null;
+    rubricScores: Record<string, number> | null;
     fileName: string | null;
     fileUrl: string | null;
     linkUrl: string | null;

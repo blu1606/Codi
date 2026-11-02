@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "15134411-1cca-4fee-9017-1edcca0473ea",
+  "id": "e18f1a64-85f6-457e-afc9-7e8d6bd69c61",
   "prevIds": [
-    "41985dec-ad0c-4552-b5e5-c0166d187e28"
+    "97ad71ab-1507-4316-bb4c-a490acade7ae"
   ],
   "ddl": [
     {
@@ -420,6 +420,24 @@
       "schema": "public"
     },
     {
+      "values": [
+        "lesson",
+        "general"
+      ],
+      "name": "ai_chat_kind",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "user",
+        "assistant"
+      ],
+      "name": "ai_chat_role",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
       "isRlsEnabled": false,
       "name": "account",
       "entityType": "tables",
@@ -751,6 +769,18 @@
     },
     {
       "isRlsEnabled": true,
+      "name": "ai_chat_messages",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
+      "name": "ai_chats",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
       "name": "github_generation_reservations",
       "entityType": "tables",
       "schema": "public"
@@ -758,6 +788,12 @@
     {
       "isRlsEnabled": true,
       "name": "github_profiles",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
+      "name": "ai_jobs",
       "entityType": "tables",
       "schema": "public"
     },
@@ -7700,6 +7736,240 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "chat_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "ai_chat_role",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "role",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "parts",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "metadata",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "ai_tutor_vote",
+      "typeSchema": "public",
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "vote",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "vote_reason",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "ai_chat_kind",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "course_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lesson_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "title",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "context_label",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "context_href",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "budget_key",
       "entityType": "columns",
       "schema": "public",
@@ -7938,6 +8208,162 @@
       "entityType": "columns",
       "schema": "public",
       "table": "github_profiles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "resource_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payload",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'queued'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lease_token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "lease_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "error_code",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ai_jobs"
     },
     {
       "nameExplicit": true,
@@ -9434,6 +9860,62 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "chat_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ai_chat_messages_chat_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ai_chats_user_updated_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "budget_key",
           "isExpression": false,
           "asc": true,
@@ -9450,6 +9932,104 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "github_generation_reservations"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ai_jobs_queue_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "type",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ai_jobs_quota_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "type",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "resource_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"status\" in ('queued', 'running')",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ai_jobs_active_unique_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ai_jobs"
     },
     {
       "nameExplicit": false,
@@ -11290,6 +11870,74 @@
     {
       "nameExplicit": false,
       "columns": [
+        "chat_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "ai_chats",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ai_chat_messages_chat_id_ai_chats_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ai_chats_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "course_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "courses",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "ai_chats_course_id_courses_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "lesson_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "course_lessons",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "ai_chats_lesson_id_course_lessons_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ai_chats"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "user_id"
       ],
       "schemaTo": "public",
@@ -11320,6 +11968,23 @@
       "entityType": "fks",
       "schema": "public",
       "table": "github_profiles"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "ai_jobs_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "ai_jobs"
     },
     {
       "columns": [
@@ -11883,6 +12548,26 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ai_chat_messages_pkey",
+      "schema": "public",
+      "table": "ai_chat_messages",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ai_chats_pkey",
+      "schema": "public",
+      "table": "ai_chats",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "request_id"
       ],
       "nameExplicit": false,
@@ -11899,6 +12584,16 @@
       "name": "github_profiles_pkey",
       "schema": "public",
       "table": "github_profiles",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "ai_jobs_pkey",
+      "schema": "public",
+      "table": "ai_jobs",
       "entityType": "pks"
     },
     {
@@ -12410,6 +13105,13 @@
       "table": "ai_tutor_messages"
     },
     {
+      "value": "\"vote_reason\" IS NULL OR \"vote\" = 'down'",
+      "name": "ai_chat_messages_vote_reason_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ai_chat_messages"
+    },
+    {
       "value": "\"input_tokens\" BETWEEN 1 AND 16000 AND \"max_output_tokens\" BETWEEN 1 AND 4096",
       "name": "github_generation_reservations_tokens_check",
       "entityType": "checks",
@@ -12443,6 +13145,34 @@
       "entityType": "checks",
       "schema": "public",
       "table": "github_profiles"
+    },
+    {
+      "value": "\"type\" in ('github_profile', 'knowledge_map', 'quiz_generation')",
+      "name": "ai_jobs_type_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "value": "\"status\" in ('queued', 'running', 'completed', 'failed')",
+      "name": "ai_jobs_status_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "value": "(\"status\" = 'running' and \"lease_token\" is not null and \"lease_until\" is not null) or (\"status\" <> 'running' and \"lease_token\" is null and \"lease_until\" is null)",
+      "name": "ai_jobs_lease_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ai_jobs"
+    },
+    {
+      "value": "\"payload\" is null or octet_length(\"payload\"::text) <= 65536",
+      "name": "ai_jobs_payload_size_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "ai_jobs"
     }
   ],
   "renames": []

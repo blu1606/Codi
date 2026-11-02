@@ -16,11 +16,18 @@ export interface CheckoutResult {
   totalAmount: number;
 }
 
+export interface PendingOrderDetails {
+  id: number;
+  code: string;
+  totalAmount?: number;
+}
+
 export class CheckoutError extends Error {
   constructor(
     public status: number,
     message: string,
     public code?: string,
+    public pendingOrder?: PendingOrderDetails,
   ) {
     super(message);
     this.name = "CheckoutError";
@@ -57,7 +64,11 @@ export async function createOrderFromCart(
 
   // Guard against missing payment gateway config for orders with total > 0
   if (summary.total > 0 && !getSepayConfig()) {
-    throw new CheckoutError(503, "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.");
+    throw new CheckoutError(
+      503,
+      "Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.",
+      "PAYMENTS_UNAVAILABLE",
+    );
   }
 
   return await db.transaction(async (tx) => {
@@ -81,6 +92,7 @@ export async function createOrderFromCart(
           id: orders.id,
           code: orders.code,
           status: orders.status,
+          totalAmount: orders.totalAmount,
           receivedAmount: orders.receivedAmount,
           paymentDeadline: orders.paymentDeadline,
         })
@@ -135,6 +147,11 @@ export async function createOrderFromCart(
             409,
             `Bạn đang có đơn hàng ${existingPending.code} chờ thanh toán. Vui lòng hoàn tất hoặc huỷ đơn cũ trước khi đặt đơn mới.`,
             "PENDING_ORDER_EXISTS",
+            {
+              id: existingPending.id,
+              code: existingPending.code,
+              totalAmount: existingPending.totalAmount,
+            },
           );
         }
 

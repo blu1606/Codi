@@ -77,17 +77,15 @@ export const pathProposal = z
   })
   .strict();
 export type PathProposal = z.infer<typeof pathProposal>;
-// Gemini documents maxItems, but not UUID/string-length constraints. Validate those locally.
+// Gemini does not support maxItems constraint in OpenAPI schema. Validate length constraints locally.
 export const pathProposalOutput = pathProposal.extend({
   rationale: z.string(),
-  lessons: z
-    .array(
-      pathProposal.shape.lessons.element.extend({
-        lessonId: z.string(),
-        reason: z.string(),
-      }),
-    )
-    .max(1000),
+  lessons: z.array(
+    pathProposal.shape.lessons.element.extend({
+      lessonId: z.string(),
+      reason: z.string(),
+    }),
+  ),
 });
 export type PathLesson = {
   kind?: import("./lesson-kind").LessonKind;

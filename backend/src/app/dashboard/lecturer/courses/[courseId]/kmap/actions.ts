@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { assertNoActiveAiJob, enqueueAiJob, readLatestAiJob } from "@codi-1/db/ai-jobs";
 
 import {
   courseChapters,
@@ -18,6 +19,7 @@ import {
   topoSortLessons,
 } from "@/lib/knowledge-map-runner";
 import { db } from "@/services";
+import { knowledgeMapProducerEnabled } from "@/lib/knowledge-map-extraction";
 import { lockKnowledgeMap } from "@/lib/confirmed-knowledge-map";
 import { getEditableCourse } from "../course-queries";
 import { readLecturerIdentity, verifyLecturerSession } from "@/lib/lecturer-auth";
@@ -47,6 +49,7 @@ export interface KnowledgeMapDataDto {
     knowledgeMapGeneratedAt: Date | null;
     requiresReconfirmation?: boolean;
     confirmationUnavailable?: boolean;
+    analysisAvailable?: boolean;
   };
   isLocked: boolean;
   concepts: KnowledgeMapConceptDto[];
@@ -163,6 +166,10 @@ export async function getKnowledgeMapData(courseId: string): Promise<KnowledgeMa
 
   // Content availability controls empty/ready; ready does not imply analysis or confirmation.
   let effectiveStatus = course.knowledgeMapStatus;
+  if (effectiveStatus === "analysing" && knowledgeMapProducerEnabled() && lessons.length > 0) {
+    const job = await readLatestAiJob(db, { type: "knowledge_map", userId: user.id, resourceId: courseId });
+    if (!job || job.status === "failed") effectiveStatus = "failed";
+  }
   const requiresReconfirmation = course.knowledgeMapStatus === "confirmed" && !course.confirmedKnowledgeMap;
   if (lessons.length === 0) {
     effectiveStatus = "empty";
@@ -200,6 +207,7 @@ export async function getKnowledgeMapData(courseId: string): Promise<KnowledgeMa
       knowledgeMapStatus: effectiveStatus,
       knowledgeMapGeneratedAt: course.knowledgeMapGeneratedAt,
       requiresReconfirmation: requiresReconfirmation && lessons.length > 0,
+      ...(knowledgeMapProducerEnabled() ? { analysisAvailable: true } : {}),
       confirmationUnavailable: course.knowledgeMapStatus === "stale" ||
         (course.knowledgeMapAnalysisGeneration ?? 0) !== (course.knowledgeMapContentGeneration ?? 0),
     },
@@ -213,17 +221,26 @@ export async function getKnowledgeMapData(courseId: string): Promise<KnowledgeMa
   };
 }
 
-/**
- * AI extraction is unavailable in this nonbillable prototype.
- * Keep the endpoint fail-closed for stale clients without mutating saved data.
- */
-export async function runKnowledgeMapAnalysis(courseId: string): Promise<never> {
+/** Start an owned course analysis and persist the job atomically with its status. */
+export async function runKnowledgeMapAnalysis(courseId: string): Promise<{ success: true; jobId: string }> {
   const identity = await readLecturerIdentity();
-  return db.transaction(async (tx) => {
+  const jobId = await db.transaction(async (tx) => {
     await lockKnowledgeMap(tx, courseId, "write");
-    await getEditableCourse(courseId, tx, identity);
-    throw new Error("Phân tích AI chưa khả dụng trong bản thử nghiệm. Không có dữ liệu nào bị thay đổi.");
+    const { course, user } = await getEditableCourse(courseId, tx, identity);
+    if (!knowledgeMapProducerEnabled()) throw new Error("Phân tích AI chưa khả dụng trong bản thử nghiệm. Không có dữ liệu nào bị thay đổi.");
+    const lessons = await tx.select({ id: courseLessons.id }).from(courseLessons)
+      .innerJoin(courseChapters, eq(courseLessons.chapterId, courseChapters.id))
+      .where(eq(courseChapters.courseId, courseId));
+    if (!lessons.length) throw new Error("Thêm ít nhất một bài học trước khi phân tích.");
+    if (lessons.length > 100) throw new Error("Tạm thời chỉ hỗ trợ tối đa 100 bài học mỗi lượt phân tích.");
+    await assertNoActiveAiJob(tx, { type: "knowledge_map", userId: user.id, resourceId: courseId });
+    const id = await enqueueAiJob(tx, { type: "knowledge_map", userId: user.id, resourceId: courseId,
+      payload: { generation: course.knowledgeMapContentGeneration ?? 0 } });
+    await tx.update(courses).set({ knowledgeMapStatus: "analysing" }).where(eq(courses.id, courseId));
+    return id;
   });
+  revalidatePath(`/dashboard/lecturer/courses/${courseId}`);
+  return { success: true, jobId };
 }
 
 /**

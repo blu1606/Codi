@@ -12,7 +12,10 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "@codi-1/db";
+import { finishAiJob, lockAiJob } from "@codi-1/db/ai-jobs";
 import { account, user } from "@codi-1/db/schema/auth";
+import { userRoles } from "@codi-1/db/schema/roles";
+import { ROLE } from "@codi-1/auth";
 import {
   githubProfiles,
   githubGenerationReservations,
@@ -73,6 +76,7 @@ const reservationSchema = z
 
 export type GithubProfileClaimInput = z.infer<typeof claimInput>;
 export type GithubProfileRequest = z.infer<typeof requestSchema>;
+type JobLease = { id: string; leaseToken: string };
 /** Server-owned configuration, never populated from a client request. */
 export type GithubProfileTrustedBudget = z.infer<typeof budgetSchema>;
 export interface GithubLinkedAccount {
@@ -93,6 +97,7 @@ export class GithubProfileStoreError extends Error {
     public readonly code:
       | "invalid_input"
       | "account_unavailable"
+      | "profile_not_found"
       | "active_request"
       | "request_fenced"
       | "invalid_profile"
@@ -171,6 +176,16 @@ async function lockRequest(store: Store, request: GithubProfileRequest) {
   if (!profile) throw new GithubProfileStoreError("request_fenced");
   return profile;
 }
+async function lockActiveLearner(store: Store, userId: string) {
+  // Hold both rows until the enclosing claim, cost reservation or publication
+  // commits; a concurrent ban or role revocation must serialize with it.
+  const result = await store.execute(sql`select ${user.id} from ${user}
+    join ${userRoles} on ${userRoles.userId} = ${user.id}
+    where ${user.id} = ${userId} and ${user.banned} is not true
+      and ${userRoles.roleId} = ${ROLE.LEARNER} and ${userRoles.revokedAt} is null
+    for share of ${user}, ${userRoles}`);
+  if (result.rows.length !== 1) throw new GithubProfileStoreError("request_fenced");
+}
 function storedIdentity(snapshot: unknown, expectedId: string) {
   return (
     snapshot === null ||
@@ -208,12 +223,14 @@ export function createGithubProfileStore(
         return rows[0]!;
       });
     },
-    async claim(input: GithubProfileClaimInput): Promise<GithubProfileRequest> {
+    async claim(input: GithubProfileClaimInput, job?: JobLease): Promise<GithubProfileRequest> {
       const request = parse(claimInput, input);
       return safe(() =>
         database.transaction(
           async (tx) => {
+            if (job) await lockAiJob(tx, job.id, job.leaseToken);
             await lockAccount(tx, request);
+            if (job) await lockActiveLearner(tx, request.userId);
             await tx
               .insert(githubProfiles)
               .values({
@@ -238,7 +255,9 @@ export function createGithubProfileStore(
               .update(githubProfiles)
               .set({
                 activeRequestId: randomUUID(),
-                activeUntil: sql`${databaseNow} + interval '150 seconds'`,
+                activeUntil: job
+                  ? sql`${databaseNow} + interval '210 seconds'`
+                  : sql`${databaseNow} + interval '150 seconds'`,
                 consentVersion: request.consentVersion,
                 consentedAt: databaseNow,
               })
@@ -285,10 +304,33 @@ export function createGithubProfileStore(
         return rows.length === 1;
       });
     },
+    async finishBackground(
+      input: GithubProfileRequest | undefined,
+      job: JobLease,
+      status: "completed" | "failed",
+      errorCode?: string,
+    ): Promise<void> {
+      const request = input ? parse(requestSchema, input) : undefined;
+      await safe(() => database.transaction(async (tx) => {
+        await lockAiJob(tx, job.id, job.leaseToken);
+        if (request) {
+          // A successful empty result must still be authorized at publication.
+          if (status === "completed") {
+            await lockRequest(tx, request);
+            await lockActiveLearner(tx, request.userId);
+          }
+          await tx.update(githubProfiles)
+            .set({ activeRequestId: null, activeUntil: null })
+            .where(requestWhere(request));
+        }
+        await finishAiJob(tx, job.id, job.leaseToken, status, errorCode);
+      }));
+    },
     async publish(
       input: GithubProfileRequest,
       snapshot: GithubCollectionSnapshot,
       analysis: GithubProfileAnalysis,
+      job?: JobLease,
     ): Promise<void> {
       const request = parse(requestSchema, input);
       let retained: GithubCollectionSnapshot;
@@ -315,7 +357,9 @@ export function createGithubProfileStore(
       await safe(() =>
         database.transaction(
           async (tx) => {
+            if (job) await lockAiJob(tx, job.id, job.leaseToken);
             const current = await lockRequest(tx, request);
+            if (job) await lockActiveLearner(tx, request.userId);
             // Validate current corrections, but never replace them with the generation's old copy.
             try {
               projectGithubProfile(retained, proposed, current.corrections);
@@ -335,6 +379,7 @@ export function createGithubProfileStore(
               .returning({ userId: githubProfiles.userId });
             if (rows.length !== 1)
               throw new GithubProfileStoreError("request_fenced");
+            if (job) await finishAiJob(tx, job.id, job.leaseToken, "completed");
           },
           { isolationLevel: "read committed" },
         ),
@@ -397,9 +442,70 @@ export function createGithubProfileStore(
         }
       });
     },
+    async saveCorrections(userId: string, input: unknown): Promise<{ corrections: GithubProfileCorrections; summaryJobId: string | null }> {
+      parse(id, userId);
+      let corrections: GithubProfileCorrections;
+      try { corrections = parse(githubProfileCorrectionsSchema, input); }
+      catch { throw new GithubProfileStoreError("invalid_input"); }
+      return safe(() => database.transaction(async (tx) => {
+        const [owner] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+        if (!owner) throw new GithubProfileStoreError("account_unavailable");
+        const [stored] = await tx.select({ accountId: githubProfiles.accountId, githubUserId: account.accountId, snapshot: githubProfiles.snapshot, analysis: githubProfiles.analysis, corrections: githubProfiles.corrections })
+          .from(githubProfiles).innerJoin(account, and(eq(account.id, githubProfiles.accountId), eq(account.userId, userId), eq(account.providerId, "github")))
+          .where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt))).for("update");
+        if (!stored) throw new GithubProfileStoreError("profile_not_found");
+        try {
+          projectGithubProfile(stored.snapshot as GithubCollectionSnapshot, stored.analysis, corrections);
+        } catch {
+          throw new GithubProfileStoreError("invalid_input");
+        }
+        const previous = githubProfileCorrectionsSchema.parse(stored.corrections);
+        const exclusionsChanged = JSON.stringify(previous.excludedRepositoryIds) !== JSON.stringify(corrections.excludedRepositoryIds);
+        let summaryJobId: string | null = null;
+        if (exclusionsChanged && process.env.AI_BACKGROUND_WORKER_ENABLED === "true") {
+          // Follow the same lock ordering as worker publication: the owner row is
+          // locked first, then reject an already-running analysis before queuing a
+          // summary-only job. This job uses the retained snapshot and never calls GitHub.
+          const active = await tx.execute(sql`select id from ai_jobs where type = 'github_profile' and user_id = ${userId}
+            and resource_id = ${userId} and status in ('queued', 'running') for update nowait`);
+          if (active.rows.length) throw new GithubProfileStoreError("active_request");
+        }
+        await tx.update(githubProfiles).set({ corrections }).where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt)));
+        if (exclusionsChanged && process.env.AI_BACKGROUND_WORKER_ENABLED === "true") {
+          const result = await tx.execute(sql`insert into ai_jobs (type, user_id, resource_id, payload)
+            values ('github_profile', ${userId}, ${userId}, ${JSON.stringify({ consentVersion: "public-github-v1", accountId: stored.accountId,
+              githubUserId: stored.githubUserId, summaryOnly: true })}::jsonb) returning id`);
+          summaryJobId = String(result.rows[0]?.id ?? "");
+          if (!summaryJobId) throw new GithubProfileStoreError("store_failed");
+        }
+        return { corrections, summaryJobId };
+      }));
+    },
+    async deleteProfile(userId: string): Promise<boolean> {
+      parse(id, userId);
+      return safe(() => database.transaction(async (tx) => {
+        const [owner] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+        if (!owner) throw new GithubProfileStoreError("account_unavailable");
+        // Match the learner enqueue lock so a queued analysis cannot recreate deleted data.
+        let active: Awaited<ReturnType<typeof tx.execute>>;
+        try {
+          active = await tx.execute(sql`select id from ai_jobs where type = 'github_profile' and user_id = ${userId}
+            and resource_id = ${userId} and status in ('queued', 'running') for update nowait`);
+        } catch (error) {
+          const cause = error instanceof Error ? error.cause : undefined;
+          if (cause && typeof cause === "object" && "code" in cause && cause.code === "55P03")
+            throw new GithubProfileStoreError("active_request");
+          throw error;
+        }
+        if (active.rows.length) throw new GithubProfileStoreError("active_request");
+        const deleted = await tx.delete(githubProfiles).where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt))).returning({ userId: githubProfiles.userId });
+        return deleted.length > 0;
+      }));
+    },
     async reserveGeneration(
       input: GithubProfileRequest,
       reservationInput: Readonly<GithubProfileGenerationReservation>,
+      job?: JobLease,
     ): Promise<boolean> {
       if (!budget) return false;
       const request = parse(requestSchema, input);
@@ -407,12 +513,14 @@ export function createGithubProfileStore(
       return safe(() =>
         database.transaction(
           async (tx) => {
+            if (job) await lockAiJob(tx, job.id, job.leaseToken);
             // A transaction-scoped, server-derived key serializes count/cost/slot decisions.
             // READ COMMITTED ensures the aggregate sees the preceding lock holder's commit.
             await tx.execute(
               sql`select pg_advisory_xact_lock(hashtextextended(${`github-profile-generation:${budget.budgetKey}`}, 0))`,
             );
             await lockRequest(tx, request);
+            if (job) await lockActiveLearner(tx, request.userId);
             const [usage] = await tx
               .select({
                 attempts: count(),

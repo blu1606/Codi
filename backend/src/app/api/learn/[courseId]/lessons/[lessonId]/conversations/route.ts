@@ -6,11 +6,13 @@ import {
   learningViewer,
   privateHeaders,
 } from "@/lib/learning-path-http";
+import { LearningPathError } from "@/lib/learning-path-contract";
 import {
   escalateToLecturer,
   getLearnerLessonConversation,
   postLearnerConversationReply,
 } from "@/lib/lesson-qa-service";
+import { tutorService } from "@/lib/ai-tutor-runtime";
 
 type Context = { params: Promise<{ courseId: string; lessonId: string }> };
 
@@ -23,12 +25,13 @@ const escalateSchema = z.object({
   failingTest: z.string().nullable().optional(),
   aiSummary: z.string().optional(),
   conversationId: z.number().int().positive().optional(),
-});
+}).strict();
 
 export async function GET(request: NextRequest, context: Context) {
   try {
     const userId = await learningViewer(request);
     const { courseId, lessonId } = await context.params;
+    await tutorService.scope(userId, courseId, lessonId);
     const conv = await getLearnerLessonConversation(
       db,
       userId,
@@ -43,8 +46,11 @@ export async function GET(request: NextRequest, context: Context) {
 
 export async function POST(request: NextRequest, context: Context) {
   try {
+    if (request.headers.get("origin") !== request.nextUrl.origin)
+      throw new LearningPathError("Yêu cầu không hợp lệ.", 403);
     const userId = await learningViewer(request);
     const { courseId, lessonId } = await context.params;
+    await tutorService.scope(userId, courseId, lessonId);
     const json = await request.json().catch(() => ({}));
     const data = escalateSchema.parse(json);
 
@@ -54,6 +60,8 @@ export async function POST(request: NextRequest, context: Context) {
         db,
         userId,
         data.conversationId,
+        courseId,
+        lessonId,
         data.text,
       );
       return NextResponse.json({ reply }, { headers: privateHeaders });

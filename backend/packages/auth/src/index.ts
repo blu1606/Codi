@@ -29,8 +29,9 @@ export type AuthConfig = AuthOriginConfig & {
 };
 
 export function createAuth(env: AuthConfig, database: Database) {
-  const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
-  const fromAddress = env.EMAIL_FROM || "Codi <noreply@hoangblue.dev>";
+  const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
+  const resend = resendApiKey ? new Resend(resendApiKey) : null;
+  const fromAddress = env.EMAIL_FROM || process.env.EMAIL_FROM || "Codi <noreply@hoangblue.dev>";
 
   const otpPlugin = emailOTP({
     otpLength: 6,

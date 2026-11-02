@@ -2,6 +2,8 @@
 //   POST /api/actions/<module>/<exportName>   body: JSON array of arguments (or empty for none)
 // <module> is the action file's folder under src/app with brackets dropped, e.g.
 //   src/app/dashboard/lecturer/courses/[courseId]/kmap/actions.ts → dashboard/lecturer/courses/courseId/kmap
+// A sibling "use server" file named *-actions.ts keeps its name as the last segment:
+//   src/app/dashboard/lecturer/courses/[courseId]/quiz-ai-actions.ts → dashboard/lecturer/courses/courseId/quiz-ai-actions
 // The response body is the action's return value as JSON (undefined → null). The session cookie applies,
 // because actions read it through next/headers like they do in Next.
 import { readdirSync, readFileSync } from "node:fs";
@@ -34,7 +36,7 @@ function errorResponse(error: unknown, label: string) {
 export async function mountServerActions(app: Hono, appDir: string): Promise<MountedActionModule[]> {
   const files = (readdirSync(appDir, { recursive: true }) as string[])
     .map((f) => f.split(path.sep).join("/"))
-    .filter((f) => /(^|\/)actions\.ts$/.test(f) && !f.startsWith("api/"))
+    .filter((f) => /(^|\/|-)actions\.ts$/.test(f) && !f.startsWith("api/"))
     .filter((f) => USE_SERVER.test(readFileSync(path.join(appDir, f), "utf8")))
     .sort();
 
@@ -44,7 +46,7 @@ export async function mountServerActions(app: Hono, appDir: string): Promise<Mou
     const mod = (await import(pathToFileURL(path.join(appDir, file)).href)) as Record<string, unknown>;
     const actions = new Map<string, Action>();
     for (const [name, value] of Object.entries(mod)) if (typeof value === "function") actions.set(name, value as Action);
-    const key = moduleKey(path.posix.dirname(file));
+    const key = moduleKey(path.posix.basename(file) === "actions.ts" ? path.posix.dirname(file) : file.replace(/\.ts$/, ""));
     registry.set(key, actions);
     mounted.push({ module: key, file: `src/app/${file}`, actions: [...actions.keys()].sort() });
   }

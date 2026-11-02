@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   courses,
   orders,
@@ -251,6 +251,7 @@ export async function getPendingOrderBanner(
       id: orders.id,
       code: orders.code,
       totalAmount: orders.totalAmount,
+      paymentDeadline: orders.paymentDeadline,
       createdAt: orders.createdAt,
     })
     .from(orders)
@@ -259,6 +260,47 @@ export async function getPendingOrderBanner(
     .limit(1);
 
   if (!pending) return null;
+
+  // Past its payment deadline: expire it under the same code lock the payment callback takes,
+  // and re-read receivedAmount there, so a transfer that lands meanwhile is flagged for reconciliation.
+  if (pending.paymentDeadline && new Date(pending.paymentDeadline) <= new Date()) {
+    try {
+      await db.transaction(async (tx: any) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${pending.code}))`);
+        const [fresh] = await tx
+          .select({ receivedAmount: orders.receivedAmount })
+          .from(orders)
+          .where(
+            and(
+              eq(orders.id, pending.id),
+              eq(orders.userId, userId),
+              eq(orders.status, "pending"),
+            ),
+          )
+          .limit(1);
+        if (!fresh) return;
+
+        await tx
+          .update(orders)
+          .set({
+            status: "failed",
+            failReason: "expired",
+            needsReconciliation: fresh.receivedAmount > 0 ? true : undefined,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(orders.id, pending.id),
+              eq(orders.userId, userId),
+              eq(orders.status, "pending"),
+            ),
+          );
+      });
+    } catch {
+      // Non-fatal: the banner is hidden either way; the next read retries the expiry
+    }
+    return null;
+  }
 
   const items = await db
     .select({ id: orderItems.id })
