@@ -1,6 +1,6 @@
 # Deployment
 
-The prototype runs on the VPS `172.93.209.12` (Debian, Docker) at **https://codi.ddnsfree.com**, in place of the
+The prototype runs on the VPS `172.93.209.12` (Debian, Docker) at **https://codi.hoangblue.dev** (DNS: A record `codi` → `172.93.209.12` at Name.com; the old `codi.ddnsfree.com` redirects there), in place of the
 original Codi app. Caddy terminates TLS and proxies the domain to `127.0.0.1:3001`.
 
 ## What runs
@@ -11,7 +11,7 @@ original Codi app. Caddy terminates TLS and proxies the domain to `127.0.0.1:300
 | Stack | `/opt/codi-rebuild/compose.yml` (copy of [deploy/compose.yml](../deploy/compose.yml)): `codi-rebuild-app` + `codi-rebuild-db` (Postgres 16, volume `codi-rebuild_pgdata`) |
 | Compose variables | `/opt/codi-rebuild/.env`: `RELEASE` (image tag = git short sha) and `POSTGRES_PASSWORD` |
 | App secrets | `/opt/codi-rebuild/rebuild.env` (mode 600): Codi's `/etc/codi/codi.env` without its Supabase `DATABASE_URL`, plus the `GITHUB_PROFILE_*` keys and `DEMO_TOOLS=true` |
-| Proxy | `/etc/caddy/Caddyfile`, block `codi.ddnsfree.com` → `127.0.0.1:3001` (unchanged) |
+| Proxy | `/etc/caddy/Caddyfile`, block `codi.hoangblue.dev` → `127.0.0.1:3001`; `codi.ddnsfree.com` answers with a 301 to it |
 
 `DEMO_TOOLS=true` keeps the simulated SePay payment (Alt+K) working in production. The app rebuilds request URLs as
 https when Caddy sends `X-Forwarded-Proto: https`, so the routes' Origin checks pass.
@@ -34,7 +34,7 @@ cd /opt/codi-rebuild
 gunzip -c image.tar.gz | docker load && rm image.tar.gz
 sed -i "s/^RELEASE=.*/RELEASE=<sha>/" .env
 docker compose up -d app            # migrations are not automatic, see below
-curl -s https://codi.ddnsfree.com/api/health
+curl -s https://codi.hoangblue.dev/api/health
 ```
 
 Schema changes: `docker compose run --rm --no-deps app npx tsx scripts/migrate.ts`.
@@ -59,7 +59,5 @@ docker compose run --rm --no-deps -e NODE_ENV=development app npx tsx scripts/se
 
 ## Known gaps
 
-- Google sign-in on the domain fails with `redirect_uri_mismatch` until
-  `https://codi.ddnsfree.com/api/auth/callback/google` is added to the Google OAuth client (it only lists
-  `http://localhost:3001`). GitHub sign-in works.
+- The Google and GitHub OAuth clients must list `https://codi.hoangblue.dev/api/auth/callback/{google,github}`.
 - Uploads go to Codi's real R2 buckets and emails are sent through Codi's Resend account.
