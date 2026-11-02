@@ -33,15 +33,10 @@ docker save codi-rebuild:$sha | gzip -1 > image.tar.gz
 scp image.tar.gz root@172.93.209.12:/opt/codi-rebuild/
 ```
 
-On the server:
-
-```bash
-cd /opt/codi-rebuild
-gunzip -c image.tar.gz | docker load && rm image.tar.gz
-sed -i "s/^RELEASE=.*/RELEASE=<sha>/" .env
-docker compose up -d app            # migrations are not automatic, see below
-curl -s https://codi.hoangblue.dev/api/health
-```
+Copy [deploy/compose.yml](../deploy/compose.yml) and [deploy/release.sh](../deploy/release.sh) to `/opt/codi-rebuild/`
+as well, then on the server run `sh /opt/codi-rebuild/release.sh <sha>`. It loads the image, backs up the database to
+`/opt/codi-rebuild/backups/`, keeps `AI_DAILY_JOB_LIMIT=50` in `rebuild.env`, applies migrations, restarts the app and
+waits for it to be healthy. Then check `curl -s https://codi.hoangblue.dev/api/health`.
 
 Schema changes: back up (below), then `docker compose run --rm --no-deps app npx tsx scripts/migrate.ts` before
 `docker compose up -d app`. Migrations are tracked by folder name, so a migration that sorts before one already

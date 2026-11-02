@@ -1,6 +1,6 @@
 # Sync codi-rebuild with Codi origin/develop, port the new Tutor, pull three feature branches
 
-Status: in progress (2026-11-02) · Owner approved all three steps.
+Status: done (2026-11-03) · Owner approved all three steps.
 
 ## Why
 
@@ -31,7 +31,7 @@ several fixes live only upstream.
 2. Tutor frontend port (`/ai`, in-course Tutor) — replaces the interim `/ai` advisor rework (c176199). Done, see
    [phase-2-report.md](phase-2-report.md).
 3. Feature branches + switch simulations to real routes. Done, see [phase-3-report.md](phase-3-report.md).
-4. Verify (smoke, flow, axe, mobile, area scripts), deploy to codi.hoangblue.dev.
+4. Verify (smoke, flow, axe, mobile, area scripts), deploy to codi.hoangblue.dev. Done 2026-11-03: release 312848b, migrations applied, worker on, AI_DAILY_JOB_LIMIT=50.
 
 ## Acceptance
 
