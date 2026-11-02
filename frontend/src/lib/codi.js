@@ -24,7 +24,7 @@ import { api } from './api';
 import { fmt } from './format';
 
 const SESSION_KEY = 'codi-rebuild-session';
-const DEFAULT_SCENARIO = { paymentOutcome: 'success', aiAssistant: 'ok', kmap: 'ok', theme: 'light' };
+const DEFAULT_SCENARIO = { paymentOutcome: 'success', aiAssistant: 'ok', theme: 'light' };
 
 // ───────────────────────── subscription ─────────────────────────
 let version = 0;

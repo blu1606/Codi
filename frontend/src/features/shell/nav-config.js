@@ -26,7 +26,7 @@ export function primaryNav(role, adminCounts) {
       { href: '/courses', label: 'Khoá học', icon: 'book-open', match: /^\/(courses|cart|checkout)(\/|$)/ },
       { href: '/progress', label: 'Học tập', icon: 'graduation-cap', match: /^\/progress(\/|$)/ },
       { href: '/insights', label: 'Thống kê', icon: 'bar-chart', match: /^\/insights(\/|$)/ },
-      { href: '/ai', label: 'AI tư vấn', icon: 'sparkles', match: /^\/ai(\/|$)/ },
+      { href: '/ai', label: 'AI', icon: 'sparkles', match: /^\/ai(\/|$)/ },
     ];
   }
   if (role === 'lecturer') {
@@ -51,7 +51,7 @@ export function primaryNav(role, adminCounts) {
   }
   return [
     { href: '/courses', label: 'Khoá học', icon: 'book-open', match: /^\/courses(\/|$)/ },
-    { href: '/ai', label: 'Lộ trình AI', icon: 'sparkles', match: /^\/ai(\/|$)/ },
+    { href: '/ai', label: 'AI', icon: 'sparkles', match: /^\/ai(\/|$)/ },
   ];
 }
 
@@ -82,7 +82,7 @@ const PAGES = {
   guest: [
     { href: '/', title: 'Trang chủ', subtitle: 'Giới thiệu Codi', icon: 'home', keywords: 'home trang chu gioi thieu' },
     { href: '/courses', title: 'Khoá học', subtitle: 'Danh mục khoá học lập trình', icon: 'book-open', keywords: 'catalog danh muc khoa hoc mua tim' },
-    { href: '/ai', title: 'Lộ trình AI', subtitle: 'Tư vấn chọn khoá học cùng AI', icon: 'sparkles', keywords: 'ai tu van chatbot lo trinh goi y' },
+    { href: '/ai', title: 'AI Tutor', subtitle: 'Hỏi AI về khoá học, bài học và lộ trình', icon: 'sparkles', keywords: 'ai tutor tu van chatbot lo trinh goi y' },
     { href: '/cart', title: 'Giỏ hàng', subtitle: 'Đăng nhập để xem giỏ hàng', icon: 'cart', keywords: 'gio hang cart thanh toan mua' },
     { href: '/login', title: 'Đăng nhập', subtitle: 'Vào tài khoản Codi', icon: 'arrow-right', keywords: 'dang nhap login sign in' },
     { href: '/register', title: 'Đăng ký', subtitle: 'Tạo tài khoản mới', icon: 'user', keywords: 'dang ky tao tai khoan register sign up' },
@@ -96,7 +96,7 @@ const PAGES = {
     { href: '/progress?tab=done', title: 'Khoá học đã hoàn thành', subtitle: 'Học tập', icon: 'check-circle', keywords: 'hoan thanh xong done chung chi' },
     { href: '/insights', title: 'Thống kê học tập', subtitle: 'Thời gian học, điểm quiz', icon: 'bar-chart', keywords: 'thong ke stats insights bieu do thoi gian' },
     { href: '/insights/knowledge-map', title: 'Bản đồ kiến thức', subtitle: 'Mức thành thạo theo chủ đề', icon: 'map', keywords: 'ban do kien thuc knowledge map mastery thanh thao' },
-    { href: '/ai', title: 'AI tư vấn', subtitle: 'Hỏi AI chọn khoá học', icon: 'sparkles', keywords: 'ai tu van chatbot lo trinh goi y' },
+    { href: '/ai', title: 'AI Tutor', subtitle: 'Hỏi AI về khoá học, bài học và lộ trình', icon: 'sparkles', keywords: 'ai tutor tu van chatbot lo trinh goi y' },
     { href: '/profile?tab=nang-luc', title: 'Hồ sơ năng lực', subtitle: 'Phân tích từ GitHub', icon: 'github', keywords: 'ho so nang luc github ky nang' },
     { href: '/profile?tab=transactions', title: 'Đơn hàng của tôi', subtitle: 'Giao dịch và biên lai', icon: 'receipt', keywords: 'don hang giao dich bien lai hoa don thanh toan lich su mua' },
     { href: '/onboarding/github', title: 'Kết nối GitHub', subtitle: 'Bước tài khoản tuỳ chọn', icon: 'git-branch', keywords: 'github ket noi lien ket' },
