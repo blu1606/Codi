@@ -109,14 +109,15 @@ export function Departures({ c, r, rows, lines, currentId, onOpen }) {
           const line = lineOf.get(row.id); const isCur = row.id === currentId; const number = rows.indexOf(row) + 1;
           return (
             <li key={row.id} className={`pt-dep-item ${isCur ? 'is-current' : ''}`}>
-              <p className="pt-dep-line">{line && <LineChip line={line} />}<span className="od-truncate">Chương {line ? line.no : ''} · {row.chapterTitle}</span></p>
+              {line ? <LineChip line={line} /> : <span aria-hidden="true" />}
               <p className="pt-dep-title">
                 <button type="button" className="pt-link" aria-haspopup="dialog" onClick={() => onOpen(row.id)}><span className="sr-only">Bài {number}: </span>{row.title}</button>
               </p>
-              <p className="pt-meta-row small muted">
+              <p className="pt-dep-min"><span className="pt-mono">{Math.round(row.durationMin || 0)}</span><span className="pt-dep-unit">phút</span></p>
+              <p className="pt-dep-meta pt-meta-row small muted">
                 <span>Bài {number}</span><span aria-hidden="true">·</span>
-                <span className="pt-meta-row"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span><span aria-hidden="true">·</span>
-                <span className="pt-mono">{Codi.fmt.duration(row.durationMin)}</span>
+                <span className="pt-meta-row"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span>
+                {line && <span className="pt-dep-chapter">Chương {line.no}: {row.chapterTitle}</span>}
                 {isCur && <span className="pt-here">Bạn đang ở đây</span>}
                 {row.status === 'skippable' && <span className="badge badge-neutral">Có thể bỏ qua</span>}
               </p>
@@ -141,11 +142,12 @@ export function LineAlerts({ c, rows, lines, moves, onSeen, onOpen }) {
   const moved = moves.map((m) => ({ ...m, ...byId.get(m.id) })).filter((m) => m.row);
   const locked = rows.filter((row) => row.status === 'locked' && row.lock);
   const extra = locked.length - LOCKED_SHOWN;
-  const item = (row, number, body, icon, key) => {
+  const item = (row, number, body, kind, key) => {
     const line = lineOf.get(row.id);
+    const tint = kind === 'moved' && line ? `is-line-${line.slot}` : '';
     return (
       <li key={key} className="pt-alert">
-        <span className="pt-alert-icon" aria-hidden="true"><Icon name={icon} className="icon-sm" /></span>
+        <span className={`pt-alert-icon is-${kind} ${tint}`} aria-hidden="true"><Icon name={kind === 'moved' ? 'arrow-up' : 'lock'} className="icon-sm" /></span>
         <div className="pt-alert-body">
           <p className="pt-alert-title">{line && <LineChip line={line} />}
             <button type="button" className="pt-link" aria-haspopup="dialog" onClick={() => onOpen(row.id)}>Bài {number}: {row.title}</button></p>
@@ -157,14 +159,23 @@ export function LineAlerts({ c, rows, lines, moves, onSeen, onOpen }) {
   return (
     <section className="pt-panel" aria-labelledby="pt-alert-h">
       <header className="pt-panel-head">
-        <h2 id="pt-alert-h" className="pt-h2">Thông báo tuyến</h2>
+        <div className="pt-panel-title">
+          <h2 id="pt-alert-h" className="pt-h2">Thông báo tuyến</h2>
+          {(moved.length > 0 || locked.length > 0) && (
+            <p className="pt-alert-count">
+              {moved.length > 0 && <><span className="pt-mono">{moved.length}</span> đổi thứ tự</>}
+              {moved.length > 0 && locked.length > 0 && ' · '}
+              {locked.length > 0 && <><span className="pt-mono">{locked.length}</span> bài khóa</>}
+            </p>
+          )}
+        </div>
         {moved.length > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={onSeen}>Đã xem</button>}
       </header>
       {moved.length || locked.length ? (
         <ul className="pt-alerts" aria-live="polite">
-          {moved.map((m) => item(m.row, m.number, <p className="small pt-alert-text">{m.by ? `Đã đổi thứ tự · lên ${m.by} bậc` : 'Đã đổi thứ tự'}</p>, 'arrow-up', 'm-' + m.id))}
+          {moved.map((m) => item(m.row, m.number, <p className="small pt-alert-text">{m.by ? `Đã đổi thứ tự · lên ${m.by} bậc` : 'Đã đổi thứ tự'}</p>, 'moved', 'm-' + m.id))}
           {locked.slice(0, LOCKED_SHOWN).map((row) => item(row, byId.get(row.id).number,
-            <p className="small muted pt-alert-text">Chưa đủ tiên quyết · nên học {row.lock.concept} trước (bài <Link to={lessonUrl(c, row.lock.lessonId)}>{row.lock.lessonTitle}</Link>).</p>, 'lock', 'l-' + row.id))}
+            <p className="small muted pt-alert-text">Chưa đủ tiên quyết · nên học {row.lock.concept} trước (bài <Link to={lessonUrl(c, row.lock.lessonId)}>{row.lock.lessonTitle}</Link>).</p>, 'locked', 'l-' + row.id))}
           {extra > 0 && <li className="pt-alert-more small muted">Còn {extra} bài chưa đủ tiên quyết khác trong bảng bên dưới.</li>}
         </ul>
       ) : <p className="pt-empty small muted">Không có thay đổi nào. Mọi bài trên lộ trình đều đã đủ tiên quyết.</p>}

@@ -1,6 +1,7 @@
 /**
  * The course as a transit diagram: each chapter is a line in its own colour, each lesson a station.
- * Wide screens get the whole network as SVG lines + HTML station buttons (scrolls inside its frame, zoomable);
+ * Wide screens get the whole network as SVG lines + HTML station buttons, one row per chapter, fitted to the frame
+ * at 100% (zooming in scrolls it sideways);
  * below 1024px the current chapter's line is drawn as a vertical strip with a chapter switcher.
  * Station shape (filled, ring, outlined, dashed, lock) and text carry the status; colour only names the line.
  */
@@ -11,17 +12,21 @@ import { ICON_PATHS } from '../../lib/icon-paths';
 import { lineDone, statusLabel } from './path-views';
 
 // Geometry at zoom 1 (CSS px). Labels are a fixed 15px; the smallest zoom keeps them ≥ 13px.
-const SP = 112;           // station spacing on a line
-const LW = 204;           // label width (two same-side labels are 2·SP apart → 20px gap)
+const SP_MIN = 112;       // closest station spacing (two same-side labels are 2·SP apart → 20px gap)
+const SP_MAX = 248;       // widest spacing, used when the frame has room to spread the rows out
+const LW = 204;           // label width
+const SP_ONE_SIDE = LW + 20; // from this spacing every label fits below its line, which makes rows shorter
 const LH = 64;            // label height: meta line + two title lines
 const GAP = 24;           // line → label
-const DY = 88;            // level change; the bend is 45° so it also takes DY horizontally
-const RUN_SHORT = 28;     // run before/after a bend when the label sits on the side away from it
-const RUN_LONG = LW / 2 + 8; // run that keeps a label on the bend side clear of the diagonal
-const TAG_H = 32; const TAG_GAP = 12; const PAD = 24;
-const Y0 = PAD + TAG_H + TAG_GAP + LH + GAP;
-const HEIGHT = Y0 + DY + GAP + LH + PAD;
+const RUN_SHORT = 28;     // corridor run past the end station when no label sits on the corridor's side
+const RUN_LONG = LW / 2 + 8; // corridor run that clears a label sitting on the corridor's side
+const CHAMFER = 24;       // the corridor turns down through two 45° chamfers
+const TAG_H = 32; const TAG_GAP = 12; const TAG_MIN = 240; const PAD = 24; const ROW_GAP = 16;
+// Row geometry: row top → its line, and the row pitch, for labels on both sides or all below the line.
+const ROW_BOTH = { lineY: TAG_H + TAG_GAP + LH + GAP, rowH: TAG_H + TAG_GAP + 2 * (LH + GAP) + ROW_GAP };
+const ROW_BELOW = { lineY: TAG_H + TAG_GAP + GAP, rowH: TAG_H + TAG_GAP + 2 * GAP + LH + ROW_GAP };
 const HIT = 44;
+const FADE = 32;          // edge fade of a frame scrolled sideways (same value in path-transit.css)
 export const ZOOMS = [0.875, 1, 1.25, 1.5];
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -39,47 +44,121 @@ const isCurrentStation = (row, currentId) => row.id === currentId && row.status 
 /** "Bài n: title · trạng thái" (plus "Bạn đang ở đây" on the current station). */
 export const stationLabel = (row, number, currentId) => `Bài ${number}: ${row.title} · ${statusLabel(row.status)}${isCurrentStation(row, currentId) ? ' · Bạn đang ở đây' : ''}`;
 
+/** Columns, directions, label sides and corridor runs of each chapter row, plus the spacing that fits `avail`. */
+function planRows(lines, oneSide, avail) {
+  const flip = (side) => (side === 'above' ? 'below' : 'above');
+  let col = 0; let dir = 1;
+  const rows = lines.map((line, i) => {
+    const n = line.stations.length;
+    const first = oneSide || i > 0 ? 'below' : (n - 1) % 2 === 0 ? 'above' : 'below';
+    const cols = line.stations.map((_, j) => col + dir * j);
+    const sides = line.stations.map((_, j) => (oneSide || j % 2 === 0 ? first : flip(first)));
+    const row = { cols, sides, dir, out: 0 };
+    col = cols[n - 1]; dir = -dir;
+    return row;
+  });
+  rows.forEach((row, i) => {
+    if (i < rows.length - 1) row.out = (row.sides[row.sides.length - 1] === 'above' ? RUN_SHORT : RUN_LONG) + CHAMFER;
+  });
+  const allCols = rows.flatMap((row) => row.cols);
+  const span = allCols.length ? Math.max(...allCols) - Math.min(...allCols) : 0;
+  // Horizontal extent at spacing sp: labels and the outer edge of each corridor (stroke included).
+  const extent = (sp) => {
+    let lo = Infinity; let hi = -Infinity;
+    rows.forEach((row) => {
+      row.cols.forEach((c) => { lo = Math.min(lo, c * sp - LW / 2); hi = Math.max(hi, c * sp + LW / 2); });
+      if (row.out) { const cx = row.cols[row.cols.length - 1] * sp + row.dir * (row.out + 6); lo = Math.min(lo, cx); hi = Math.max(hi, cx); }
+    });
+    return { lo, hi };
+  };
+  let sp = SP_MIN;
+  if (avail > 0 && span > 0) {
+    const base = extent(SP_MIN);
+    // The extent grows at most `span` px per px of spacing, so this never overshoots the frame.
+    sp = Math.min(SP_MAX, Math.max(SP_MIN, SP_MIN + (avail - (base.hi - base.lo + 2 * PAD)) / span));
+  }
+  return { rows, span, sp, extent, geo: oneSide ? ROW_BELOW : ROW_BOTH };
+}
+
 /**
- * Positions every station. Labels alternate above/below along the whole network. Chapters sit on two levels joined
- * by 45° transfer links; a link bends towards the side free of labels (last label above → bend down), which keeps it
- * short. When that would leave the two levels, it bends the other way with long runs that clear the labels.
+ * Positions every station. Each chapter is its own horizontal row; rows run alternately left→right and right→left,
+ * so a row starts under the station where the previous one ended and the two are joined by a white transfer corridor
+ * that steps out past the end, turns down through 45° chamfers and comes back in.
+ * Station spacing spreads the rows to fill `avail` px (the frame width) between SP_MIN and SP_MAX. When that leaves
+ * room for every label below its line, rows drop the upper label band. Otherwise labels alternate above/below within
+ * a row; a row after the first starts with its label below, and a corridor runs short when the last label of the row
+ * above sits above the line, long enough to clear that label when it does not.
  */
-export function layoutNetwork(lines, currentId) {
-  const sideOf = (g) => (g % 2 === 0 ? 'above' : 'below');
-  let g = 0;
-  const ends = lines.map((line) => { g += line.stations.length; return sideOf(g - 1); });
-  let level = ends.length > 1 && ends[0] === 'below' ? 1 : 0;
-  let x = PAD + LW / 2; g = 0;
-  const placed = []; const links = [];
-  lines.forEach((line, li) => {
-    const y = Y0 + level * DY;
-    const stations = line.stations.map((s, j) => ({ ...s, x: x + j * SP, y, side: sideOf(g + j) }));
-    g += stations.length;
-    placed.push({ ...line, y, stations });
-    if (li === lines.length - 1) return;
-    const want = ends[li] === 'above' ? 1 : -1;
-    const dir = level + want >= 0 && level + want <= 1 ? want : -want;
-    const run = dir === want ? RUN_SHORT : RUN_LONG;
-    const a = stations[stations.length - 1];
-    level += dir;
-    const by = Y0 + level * DY;
-    x = a.x + 2 * run + DY;
-    links.push({ id: lines[li + 1].id, from: a, points: [[a.x, a.y], [a.x + run, a.y], [a.x + run + DY, by], [x, by]] });
+export function layoutNetwork(lines, currentId, avail = 0) {
+  const below = planRows(lines, true, avail);
+  const plan = avail > 0 && (below.span === 0 || below.sp >= SP_ONE_SIDE) ? below : planRows(lines, false, avail);
+  const { rows, sp, geo } = plan;
+  const { lo, hi } = rows.length ? plan.extent(sp) : { lo: 0, hi: -2 * PAD };
+  const xOf = (c) => c * sp - lo + PAD;
+  const width = hi - lo + 2 * PAD;
+  const LINE_Y = geo.lineY;
+  const placed = lines.map((line, i) => {
+    const y = PAD + i * geo.rowH + LINE_Y;
+    const { cols, sides } = rows[i];
+    return { ...line, y, stations: line.stations.map((s, j) => ({ ...s, x: xOf(cols[j]), y, side: sides[j] })) };
   });
-  links.forEach((k, i) => {
+  const links = placed.slice(0, -1).map((line, i) => {
+    const { dir, out } = rows[i];
+    const a = line.stations[line.stations.length - 1];
     const b = placed[i + 1].stations[0];
-    k.travelled = k.from.row.status === 'done' && (b.row.status === 'done' || b.row.id === currentId);
+    const run = out - CHAMFER;
+    const pts = [[a.x, a.y], [a.x + dir * run, a.y], [a.x + dir * out, a.y + CHAMFER], [a.x + dir * out, b.y - CHAMFER], [a.x + dir * run, b.y], [b.x, b.y]];
+    return { id: placed[i + 1].id, x: a.x + dir * out, dir, points: pts, travelled: a.row.status === 'done' && (b.row.status === 'done' || b.row.id === currentId) };
   });
-  // Chapter tags share the top band; each spans its own stretch of the network so tags never overlap.
+  // Chapter tag over each row. Only the corridor arriving from the row above crosses the tag band, so the tag is
+  // clipped on that side and may grow the other way to stay legible.
   placed.forEach((line, i) => {
-    const first = line.stations[0]; const last = line.stations[line.stations.length - 1];
-    const start = i === 0 ? first.x - LW / 2 : links[i - 1].points[2][0] + 8;
-    const end = i === placed.length - 1 ? last.x + LW / 2 : links[i].points[1][0] + DY / 2;
-    line.tag = { x: start, w: Math.max(end - start, 0), y: PAD };
+    const xs = line.stations.map((s) => s.x);
+    let x0 = Math.min(...xs) - LW / 2; let x1 = Math.max(...xs) + LW / 2;
+    const inc = i > 0 ? links[i - 1] : null;
+    if (inc && inc.dir > 0) x1 = Math.min(x1, inc.x - 16);
+    if (inc && inc.dir < 0) x0 = Math.max(x0, inc.x + 16);
+    const need = TAG_MIN - (x1 - x0);
+    if (need > 0) {
+      if (!inc || inc.dir > 0) x0 = Math.max(PAD, x0 - (inc ? need : need / 2));
+      if (!inc || inc.dir < 0) x1 = Math.min(width - PAD, x1 + (inc ? need : need / 2));
+    }
+    line.tag = { x: x0, w: Math.max(x1 - x0, 0), y: line.y - LINE_Y };
   });
-  const lastLine = placed[placed.length - 1];
-  const width = lastLine ? lastLine.stations[lastLine.stations.length - 1].x + LW / 2 + PAD : 0;
-  return { lines: placed, links, width, height: HEIGHT };
+  return { lines: placed, links, width, height: placed.length ? 2 * PAD + placed.length * geo.rowH - ROW_GAP : 0 };
+}
+
+/**
+ * Scroll offset near `target` that cuts the least label and tag text at the faded edges, keeping canvas point `keep`
+ * (zoom-1 px) clearly inside the frame. Labels from different rows overlap in x, so a clean edge is not always
+ * possible; this picks the least-cut position among those that put an edge on a text boundary.
+ */
+function settleScroll(net, zoom, el, target, keep) {
+  const cw = el.clientWidth;
+  const max = Math.max(0, Math.round(net.width * zoom - cw));
+  const clamp = (v) => Math.min(max, Math.max(0, Math.round(v)));
+  // Rendered extents (zoomed canvas px) of the label and tag text: the real words, not the 204px label boxes.
+  const sizer = el.firstElementChild;
+  const base = sizer ? sizer.getBoundingClientRect().left : 0;
+  const spans = Array.from(el.querySelectorAll('.pt-label > *, .pt-tag-no, .pt-tag-name'), (n) => {
+    const r = n.getBoundingClientRect();
+    return [r.left - base, r.right - base];
+  }).filter(([a, b]) => b > a);
+  const cutAt = (e) => spans.reduce((sum, [a, b]) => sum + (a < e && e < b ? Math.min(e - a, b - e) : 0), 0);
+  const cost = (L) => (L > 0 ? cutAt(L + FADE / 2) : 0) + (L < max ? cutAt(L + cw - FADE / 2) : 0);
+  const margin = FADE + HIT;
+  // Stay near the asked-for position (a fifth of the frame at most) with the kept point well inside.
+  const near = clamp(target);
+  const fits = (L) => Math.abs(L - near) <= cw / 5 && (keep == null || (keep * zoom >= L + margin && keep * zoom <= L + cw - margin));
+  const options = [clamp(target)];
+  spans.forEach(([a, b]) => options.push(clamp(a - FADE - 4), clamp(b), clamp(b + FADE + 4 - cw), clamp(a - cw)));
+  let best = options[0]; let bestCost = fits(best) ? cost(best) : Infinity;
+  options.forEach((L) => {
+    if (!fits(L)) return;
+    const c = cost(L);
+    if (c < bestCost - 0.5 || (Math.abs(c - bestCost) <= 0.5 && Math.abs(L - target) < Math.abs(best - target))) { best = L; bestCost = c; }
+  });
+  return best;
 }
 
 const poly = (pts) => pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px} ${py}`).join(' ');
@@ -126,35 +205,55 @@ function NetworkLegend() {
   );
 }
 
-/** Whole network, horizontally scrolling inside the navy frame. */
+/** Edge fades only on the sides that hide more of the network. */
+function markEdges(el) {
+  const max = el.scrollWidth - el.clientWidth;
+  el.style.setProperty('--pt-fade-l', el.scrollLeft > 1 ? `${FADE}px` : '0px');
+  el.style.setProperty('--pt-fade-r', el.scrollLeft < max - 1 ? `${FADE}px` : '0px');
+}
+
+/** Whole network inside the navy frame: fits the frame at 100%, scrolls sideways only when zoomed beyond it. */
 function NetworkMap({ lines, currentId, onOpen }) {
-  const net = useMemo(() => layoutNetwork(lines, currentId), [lines, currentId]);
+  const scroller = useRef(null);
+  const [avail, setAvail] = useState(0);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return undefined;
+    const measure = () => setAvail(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const net = useMemo(() => layoutNetwork(lines, currentId, avail), [lines, currentId, avail]);
   const [zi, setZi] = useState(1);
   const zoom = ZOOMS[zi];
-  const scroller = useRef(null);
+  const scrollable = avail > 0 && net.width * zoom > avail + 1;
   const buttons = useRef(new Map());
   const centre = useRef(null);
   const cur = net.lines.flatMap((l) => l.stations).find((s) => s.row.id === currentId);
 
-  const scrollToCurrent = (smooth) => {
-    const el = scroller.current;
-    if (!el || !cur) return;
-    el.scrollTo({ left: Math.max(0, cur.x * zoom - el.clientWidth / 2), behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' });
-  };
-  // Open on the current station; after a zoom keep the same point in the middle of the frame.
+  // Zoomed beyond the frame: open on the current station, after a zoom keep the same point in the middle.
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (!el) return;
-    if (centre.current == null) { scrollToCurrent(false); return; }
-    el.scrollLeft = Math.max(0, centre.current * zoom - el.clientWidth / 2);
-  }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!el || !avail) return;
+    if (!scrollable) { el.scrollLeft = 0; centre.current = null; markEdges(el); return; }
+    const keep = centre.current ?? (cur ? cur.x : net.width / 2);
+    el.scrollLeft = settleScroll(net, zoom, el, keep * zoom - el.clientWidth / 2, keep);
+    markEdges(el);
+  }, [zoom, avail, net.width, scrollable]); // eslint-disable-line react-hooks/exhaustive-deps
   const setZoom = (next) => {
     const el = scroller.current;
-    if (el) centre.current = (el.scrollLeft + el.clientWidth / 2) / zoom;
+    centre.current = el && scrollable ? (el.scrollLeft + el.clientWidth / 2) / zoom : null;
     setZi(next);
   };
   const locate = () => {
-    scrollToCurrent(true);
+    const el = scroller.current;
+    if (el && cur && scrollable) {
+      centre.current = null;
+      el.scrollTo({ left: settleScroll(net, zoom, el, cur.x * zoom - el.clientWidth / 2, cur.x), behavior: reducedMotion() ? 'auto' : 'smooth' });
+    }
     const b = cur && buttons.current.get(cur.row.id);
     if (b) b.focus({ preventScroll: true });
   };
@@ -168,7 +267,7 @@ function NetworkMap({ lines, currentId, onOpen }) {
         <button type="button" className="pt-tool" onClick={() => setZoom(zi + 1)} disabled={zi === ZOOMS.length - 1} aria-label="Phóng to sơ đồ"><Icon name="plus" /></button>
         {cur && <button type="button" className="pt-tool is-text" onClick={locate}><Icon name="target" /> Về ga hiện tại</button>}
       </div>
-      <div className="pt-scroll" ref={scroller}>
+      <div className={`pt-scroll ${scrollable ? 'is-scrollable' : ''}`} ref={scroller} onScroll={scrollable ? (e) => markEdges(e.currentTarget) : undefined}>
         <div className="pt-sizer" style={{ width: net.width * zoom, height: net.height * zoom }}>
           <div className="pt-canvas" style={{ width: net.width, height: net.height, transform: `scale(${zoom})` }}>
             <svg className="pt-svg" width={net.width} height={net.height} viewBox={`0 0 ${net.width} ${net.height}`} aria-hidden="true" focusable="false">
