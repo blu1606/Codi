@@ -543,6 +543,91 @@ export function ProfileReport({ profile }) {
   );
 }
 
+// ───────────────────────── learner corrections (PATCH /api/github-profile/corrections) ─────────────────────────
+const idName = (id) => { const raw = String(id || '').split(':').slice(1).join(':'); try { return decodeURIComponent(raw) || id; } catch { return raw || id; } };
+
+/**
+ * Learner edits on a saved profile: leave out repositories as evidence, set a technology's usage or hide it. The
+ * server re-projects the profile from the stored snapshot; a changed repository list also rewrites the AI summary.
+ * Area corrections are kept as they are. `onSave(corrections)` receives the full corrections object.
+ */
+export function CorrectionsEditor({ profile, busy, onSave, onCancel }) {
+  const initial = profile.corrections || { excludedRepositoryIds: [], technologies: [], areas: [] };
+  const candidates = repos(profile).filter((r) => r.disposition === 'selected');
+  const [excluded, setExcluded] = useState(() => new Set(initial.excludedRepositoryIds || []));
+  // technologyId → { usage: '' | tried | regular | deep, hidden }
+  const [edits, setEdits] = useState(() => Object.fromEntries((initial.technologies || []).map((t) => [t.technologyId, { usage: t.usage || '', hidden: !!t.hidden }])));
+  const visible = techs(profile).map((t) => ({ id: t.technologyId, name: (t.observations && t.observations[0] && t.observations[0].technology) || idName(t.technologyId), estimate: t.learnerEdited ? null : t.usage }));
+  const hiddenOnly = (initial.technologies || []).filter((t) => t.hidden && !visible.some((v) => v.id === t.technologyId))
+    .map((t) => ({ id: t.technologyId, name: idName(t.technologyId), estimate: null }));
+  const rows = [...visible, ...hiddenOnly];
+  const edit = (id) => edits[id] || { usage: '', hidden: false };
+  const setEdit = (id, patch) => setEdits((x) => ({ ...x, [id]: { ...edit(id), ...patch } }));
+  const toggleRepo = (id) => setExcluded((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const before = JSON.stringify([...(initial.excludedRepositoryIds || [])].sort((a, b) => a - b));
+  const repoChanged = JSON.stringify([...excluded].sort((a, b) => a - b)) !== before;
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const technologies = Object.entries(edits)
+      .filter(([, v]) => v.usage || v.hidden)
+      .map(([technologyId, v]) => ({ technologyId, ...(v.usage ? { usage: v.usage } : {}), ...(v.hidden ? { hidden: true } : {}) }));
+    onSave({ excludedRepositoryIds: [...excluded].sort((a, b) => a - b), technologies, areas: initial.areas || [] });
+  };
+
+  return (
+    <form className="card" onSubmit={submit} aria-label="Chỉnh sửa hồ sơ năng lực" aria-busy={busy || undefined}>
+      <div className="card-body stack-4">
+        <div className="stack-1">
+          <h3 className="small strong" style={{ margin: 0 }}>Chỉnh sửa hồ sơ năng lực</h3>
+          <p className="xsmall muted" style={{ margin: 0 }}>Chỉnh sửa chỉ áp dụng cho hồ sơ trên Codi, không ghi gì lên GitHub. Mức dùng bạn chọn được ghi nhãn &quot;Bạn đã sửa&quot; thay cho ước tính.</p>
+        </div>
+        <fieldset className="stack-2" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="small strong">Repo dùng làm bằng chứng</legend>
+          {candidates.length ? (
+            <ul className="stack-1" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {candidates.map((r) => (
+                <li key={r.id}><label className="row small" style={{ gap: 8 }}>
+                  <input type="checkbox" checked={!excluded.has(r.id)} onChange={() => toggleRepo(r.id)} disabled={busy} />
+                  <span style={{ overflowWrap: 'anywhere' }}>{repositoryLabel(r)}{r.topLanguage ? <span className="muted"> · {r.topLanguage}</span> : null}</span>
+                </label></li>
+              ))}
+            </ul>
+          ) : <p className="small muted" style={{ margin: 0 }}>Không có repo nào được dùng trong lượt phân tích này.</p>}
+          {repoChanged && <p className="xsmall muted" style={{ margin: 0 }} role="status">Bỏ hoặc thêm repo sẽ làm Codi viết lại phần tóm tắt từ dữ liệu đã thu thập (không đọc lại GitHub). Tóm tắt cũ được ẩn cho đến khi xong.</p>}
+        </fieldset>
+        <fieldset className="stack-2" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="small strong">Công nghệ</legend>
+          {rows.length ? (
+            <ul className="stack-2" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {rows.map((t) => {
+                const v = edit(t.id); const sel = `ghc-usage-${t.id.replace(/[^a-z0-9]/gi, '-')}`;
+                return (
+                  <li key={t.id} className="row-between" style={{ gap: 12, flexWrap: 'wrap' }}>
+                    <label className="small strong" htmlFor={sel} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{t.name}</label>
+                    <span className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+                      <select id={sel} className="select" value={v.usage} disabled={busy || v.hidden} onChange={(e) => setEdit(t.id, { usage: e.target.value })}>
+                        <option value="">{t.estimate ? `Theo ước tính (${USAGE_LABELS[t.estimate]})` : 'Theo ước tính của Codi'}</option>
+                        {Object.entries(USAGE_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                      </select>
+                      <label className="row xsmall" style={{ gap: 6 }}><input type="checkbox" checked={v.hidden} disabled={busy} onChange={(e) => setEdit(t.id, { hidden: e.target.checked })} /> Ẩn khỏi hồ sơ</label>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <p className="small muted" style={{ margin: 0 }}>Chưa có công nghệ nào được quan sát.</p>}
+        </fieldset>
+        <div className="row" style={{ gap: 8 }}>
+          <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu chỉnh sửa'}</button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={onCancel}>Huỷ</button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
 const WAITING_STEPS = ['Đọc hồ sơ công khai', 'Tải danh sách repo công khai', 'Thống kê ngôn ngữ', 'So khớp với khoá học của Codi'];
 
 /** Waiting illustration while POST /api/github-profile runs; not real progress (real PendingChecklist). */

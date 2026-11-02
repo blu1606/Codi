@@ -6,6 +6,10 @@
  *   connect   POST /api/auth/link-social { provider:'github', callbackURL } → the browser goes to GitHub
  *   analyse   POST /api/github-profile { consentVersion:'public-github-v1' } (explicit consent) → { profile }, or 202 { job }
  *             when the AI worker runs it in the background; then GET /api/github-profile → { job, profile } until done
+ *   correct   PATCH /api/github-profile/corrections { corrections: { excludedRepositoryIds, technologies[{ technologyId,
+ *             usage?, hidden? }], areas } } → { saved, corrections, summaryJobId }; a changed exclusion list queues a
+ *             summary-only job (no GitHub calls) that rewrites the AI summary, polled like an analysis
+ *   delete    DELETE /api/github-profile/profile → { deleted } (removes the saved analysis, keeps the GitHub link)
  *   unlink    DELETE /api/github-profile
  * Linking and analysing stay separate, explicit steps; nothing starts on page load. Every failure shows the server's
  * message. Locally, GitHub linking needs the OAuth app to accept http://localhost:5190/api/auth/callback/github and
@@ -23,7 +27,7 @@ import { Codi, useCodi } from '../../lib/codi';
 import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { GithubMark } from './shell-ui';
-import { PendingChecklist, ProfileReport } from './github-report';
+import { CorrectionsEditor, PendingChecklist, ProfileReport } from './github-report';
 
 export const PROFILE_HREF = '/profile?tab=nang-luc';
 export const ONBOARDING_PATH = '/onboarding/github';
@@ -129,6 +133,38 @@ async function pollProfileJob(jobId, signal) {
   }
 }
 
+/**
+ * Saves the learner's corrections and shows the corrected profile at once. Resolves the summary job id when the
+ * exclusions changed and the worker rewrites the summary (follow it with waitForSummary), else null.
+ */
+export async function saveGithubCorrections(corrections) {
+  const res = await api.patch('/api/github-profile/corrections', { corrections });
+  const body = await api.get('/api/github-profile');
+  set({ profile: (body && body.profile) || gh.profile });
+  return (res && res.summaryJobId) || null;
+}
+
+/** Waits for the summary-only job queued by saveGithubCorrections, then shows the profile with the new summary. */
+export async function waitForSummary(jobId) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const body = await pollProfileJob(jobId, ctrl.signal);
+    if (body && body.profile) set({ profile: body.profile });
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new Error('Đã hết thời gian chờ 4 phút. Chỉnh sửa đã được lưu; phần tóm tắt có thể vẫn đang được viết lại. Tải lại trang sau để xem.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Deletes the saved analysis and its evidence; the GitHub link stays. */
+export async function deleteGithubProfile() {
+  await api.del('/api/github-profile/profile');
+  set({ profile: null });
+}
+
 /** Unlinks GitHub and deletes the saved analysis. */
 export async function disconnectGithub() {
   await api.del('/api/github-profile');
@@ -212,6 +248,9 @@ export function useGithubAction() {
 function failureTitle(info) {
   if (!info) return 'Chưa hoàn tất thao tác GitHub';
   if (info.action === 'unlink') return 'Chưa ngắt kết nối được GitHub';
+  if (info.action === 'corrections') return info.code === 'active_request' ? 'Một lượt phân tích đang chạy' : 'Chưa lưu được chỉnh sửa';
+  if (info.action === 'summary') return 'Chưa viết lại được phần tóm tắt';
+  if (info.action === 'delete') return info.code === 'active_request' ? 'Một lượt phân tích đang chạy' : 'Chưa xoá được hồ sơ năng lực';
   if (info.action === 'link') return 'Chưa kết nối được GitHub';
   if (info.code === 'rate_limited') return 'GitHub đang giới hạn lượt đọc';
   if (info.code === 'connection_expired') return 'Kết nối GitHub đã hết hiệu lực';
@@ -239,6 +278,7 @@ export function GithubProfilePanel({ linkError }) {
   const [consent, setConsent] = useState(false);
   const [info, setInfo] = useState(null);
   const [note, setNote] = useState('');
+  const [editing, setEditing] = useState(false);
   useEffect(() => { if (linkError) { setInfo({ action: 'link' }); setFailure(LINK_ERRORS[linkError] || LINK_ERRORS.failed); } }, [linkError]);
   if (!Codi.state.currentUserId) return null;
   if (s.status === 'loading' && !s.profile) return <p className="small muted" role="status">Đang tải hồ sơ năng lực…</p>;
@@ -265,6 +305,27 @@ export function GithubProfilePanel({ linkError }) {
     if (!(await confirmUnlinkDialog())) return;
     if (await act('unlink', disconnectGithub, 'Chưa ngắt kết nối được GitHub.')) setNote('Đã ngắt kết nối GitHub.');
   };
+  const saveCorrections = async (corrections) => {
+    let jobId = null;
+    const ok = await act('corrections', async () => { jobId = await saveGithubCorrections(corrections); }, 'Chưa lưu được chỉnh sửa hồ sơ.');
+    if (!ok) return;
+    setEditing(false);
+    if (!jobId) { setNote('Đã lưu chỉnh sửa hồ sơ năng lực.'); return; }
+    if (await act('summary', () => waitForSummary(jobId), 'Chưa viết lại được phần tóm tắt. Bạn có thể thử lại sau.')) {
+      setNote('Đã lưu chỉnh sửa và viết lại phần tóm tắt theo các repo bạn giữ lại.');
+    }
+  };
+  const removeProfile = async () => {
+    const r = await Codi.ui.confirm({
+      title: 'Xoá hồ sơ năng lực?',
+      body: 'Codi xoá kết quả phân tích, bằng chứng và chỉnh sửa đã lưu. Kết nối GitHub vẫn giữ nguyên; bạn có thể phân tích lại bất kỳ lúc nào. Kết quả kiểm tra và tiến độ học không thay đổi.',
+      confirmLabel: 'Xoá hồ sơ',
+      cancelLabel: 'Huỷ',
+    });
+    if (!(r && r.ok)) return;
+    setEditing(false);
+    if (await act('delete', deleteGithubProfile, 'Chưa xoá được hồ sơ GitHub.')) setNote('Đã xoá hồ sơ năng lực. GitHub vẫn được kết nối.');
+  };
   const login = profile && profile.identity ? profile.identity.login : null;
   // A run without technology observations is returned but never saved by the server: show it as temporary only.
   const insufficient = profile && profile.observationAvailability === 'none_observed' ? profile : null;
@@ -288,6 +349,8 @@ export function GithubProfilePanel({ linkError }) {
         {linked && (
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} onClick={() => setConsent(true)}><Icon name="rotate-ccw" className="icon-sm" /> {saved ? 'Phân tích lại' : 'Phân tích GitHub'}</button>
+            {saved && <button type="button" className="btn btn-secondary btn-sm" disabled={!!busy || editing} onClick={() => { setNote(''); setEditing(true); }}><Icon name="pencil" className="icon-sm" /> Sửa hồ sơ năng lực</button>}
+            {saved && <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={removeProfile}><Icon name="trash" className="icon-sm" /> Xoá hồ sơ năng lực</button>}
             <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} onClick={unlink}><Icon name="x" className="icon-sm" /> Ngắt kết nối</button>
           </div>
         )}
@@ -318,6 +381,9 @@ export function GithubProfilePanel({ linkError }) {
       {busy === 'analyse' && saved && <p className="small shell-ghr-rerun" role="status">Đang phân tích lại. Kết quả trước vẫn hiển thị bên dưới; chưa được thay thế.</p>}
       {busy === 'analyse' && <PendingChecklist hasPrevious={!!saved} />}
       {busy === 'unlink' && <p className="small" role="status">Đang ngắt kết nối GitHub…</p>}
+      {busy === 'delete' && <p className="small" role="status">Đang xoá hồ sơ năng lực…</p>}
+      {busy === 'summary' && <p className="small shell-ghr-rerun" role="status">Đã lưu chỉnh sửa. Codi đang viết lại phần tóm tắt theo các repo bạn giữ lại (không đọc lại GitHub); có thể mất 1–2 phút.</p>}
+      {saved && editing && <CorrectionsEditor profile={saved} busy={busy === 'corrections'} onSave={saveCorrections} onCancel={() => setEditing(false)} />}
       {note && <p className="small" role="status">{note}</p>}
       {failure && (
         <Alert type="danger" title={failureTitle(info)}>
@@ -330,7 +396,8 @@ export function GithubProfilePanel({ linkError }) {
               <span><button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} onClick={connect}>{info.code === 'connection_expired' ? 'Kết nối lại GitHub' : 'Kết nối GitHub'}</button></span>
             </span>
           )}
-          {saved && <span style={{ display: 'block' }}>Kết quả trước vẫn hiển thị bên dưới; chưa được thay thế.</span>}
+          {info && info.action === 'summary' && <span style={{ display: 'block' }}>Chỉnh sửa của bạn đã được lưu. Phần tóm tắt cũ không còn khớp nên được ẩn; các quan sát và công nghệ bên dưới đã theo chỉnh sửa mới.</span>}
+          {saved && !(info && ['corrections', 'summary', 'delete'].includes(info.action)) && <span style={{ display: 'block' }}>Kết quả trước vẫn hiển thị bên dưới; chưa được thay thế.</span>}
         </Alert>
       )}
 
