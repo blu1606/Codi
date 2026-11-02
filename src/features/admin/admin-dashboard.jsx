@@ -32,11 +32,12 @@ export function DashboardPage() {
   return (
     <AdminShell active="/admin">
       <div className="page-header"><div><h1>Tổng quan</h1><p className="muted">30 ngày gần nhất · đến {dayLabelFull(today)}</p></div></div>
-      <div className="grid-4">{kpis.map(([l, v, meta]) => <div key={l} className="stat-tile"><span className="stat-label">{l}</span><span className="stat-value od-nowrap">{v}</span><span className="stat-meta">{meta}</span></div>)}</div>
       <h2 className="section ad-section-title">Cần xử lý</h2>
       <div className="grid-4">{todo.map(([href, n, l, meta]) => (
         <Link key={href} className="stat-tile ad-todo" to={href}><span className="stat-value">{fmt.num(n)}</span><span className="stat-label">{l}</span><span className="stat-meta">{meta}</span><span className="stat-go">Mở danh sách <Icon name="arrow-right" className="icon-sm" /></span></Link>
       ))}</div>
+      <h2 className="section ad-section-title">Số liệu 30 ngày</h2>
+      <div className="grid-4">{kpis.map(([l, v, meta]) => <div key={l} className="stat-tile"><span className="stat-label">{l}</span><span className="stat-value od-nowrap">{v}</span><span className="stat-meta">{meta}</span></div>)}</div>
       <h2 className="section ad-section-title">Phân tích</h2>
       <div className="grid-2">
         <Link className="stat-tile ad-entry" to="/admin/insights"><div><h3>Quan sát hệ thống</h3><p className="small muted">Học viên có học, đăng ký, ghi danh, phễu kích hoạt và sức khỏe vận hành</p></div><div className="stat-value">{fmt.num(m.newLearners)}<span className="ad-entry-unit">học viên mới</span></div></Link>
