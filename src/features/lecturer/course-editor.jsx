@@ -2,6 +2,7 @@
 // validation, unsaved guard) · Bản đồ kiến thức (kmap-tab.jsx) · Xuất bản (status banners, review round, readiness).
 // Behaviour and copy follow the real app (dashboard/lecturer/courses/[courseId]/course-editor.tsx, actions.ts,
 // publish/publish-tab-client.tsx). Drag-and-drop reorder and course delete are port-only extras.
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Empty, Icon, CourseStatus } from '../../components/ui/primitives';
@@ -202,6 +203,28 @@ function dndHandlers(c) {
   };
 }
 
+/**
+ * Rare row actions behind one labelled ⋯ control. Native <details> keeps it keyboard-operable without a menu
+ * primitive; the panel closes itself after an action runs.
+ */
+function RowMenu({ label, items }) {
+  const ref = useRef(null);
+  const shown = items.filter(Boolean);
+  return (
+    <details className="tc-menu" ref={ref}>
+      <summary className="btn btn-ghost btn-sm tc-menu-trigger" aria-label={label} title={label}><Icon name="more-horizontal" className="icon-sm" /><span className="sr-only">{label}</span></summary>
+      <div className="tc-menu-panel" role="group">
+        {shown.map((it) => (
+          <button key={it.label} type="button" className={`tc-menu-item ${it.danger ? 'is-danger' : ''}`} disabled={it.disabled}
+            onClick={() => { if (ref.current) ref.current.open = false; it.run(); }}>
+            <Icon name={it.icon} className="icon-sm" /> {it.label}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function ContentTab({ c, query }) {
   useView();
   const ro = locked(c);
@@ -233,16 +256,16 @@ function ContentTab({ c, query }) {
             {l.code ? <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/code/${l.id}`}><Icon name="code" className="icon-sm" /> Code</Link>
               : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id)}><Icon name="file-text" className="icon-sm" /> Chi tiết</button>}
             <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/quiz/${l.id}`}><Icon name="clipboard-check" className="icon-sm" /> Quiz</Link>
-            {ro || l.code || l.assignment ? null : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id, { withAssignment: true })}>Thêm bài tập</button>}
           </div>
           {ro ? null : (
-            <div className="tc-row-tools">
-              {l.code ? <span aria-hidden="true" /> : <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => aiImport(c.id, l.id)} aria-label={`Tạo nội dung cho ${l.title} bằng AI từ tài liệu`} title="Tạo bằng AI từ tài liệu"><Icon name="sparkles" className="icon-sm" /></button>}
-              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => startRename(l.id)} aria-label={`Đổi tên ${l.title}`} title="Đổi tên nhanh"><Icon name="pencil" className="icon-sm" /></button>
-              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'lesson', l.id, -1)} disabled={li === 0} aria-label={`Chuyển ${l.title} lên`} title="Di chuyển lên"><Icon name="arrow-up" className="icon-sm" /></button>
-              <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'lesson', l.id, 1)} disabled={li === ch.lessons.length - 1} aria-label={`Chuyển ${l.title} xuống`} title="Di chuyển xuống"><Icon name="arrow-down" className="icon-sm" /></button>
-              <button type="button" className="btn btn-ghost btn-icon btn-sm tc-del" onClick={() => removeLesson(c, l.id)} aria-label={`Xoá ${l.title}`} title="Xoá bài học"><Icon name="trash" className="icon-sm" /></button>
-            </div>
+            <RowMenu label={`Thao tác khác với ${l.title}`} items={[
+              l.code ? null : { icon: 'sparkles', label: 'Tạo bằng AI từ tài liệu', run: () => aiImport(c.id, l.id) },
+              { icon: 'pencil', label: 'Đổi tên', run: () => startRename(l.id) },
+              l.code || l.assignment ? null : { icon: 'clipboard-check', label: 'Thêm bài tập', run: () => openLessonEditor(c.id, l.id, { withAssignment: true }) },
+              { icon: 'arrow-up', label: 'Chuyển lên', disabled: li === 0, run: () => move(c, 'lesson', l.id, -1) },
+              { icon: 'arrow-down', label: 'Chuyển xuống', disabled: li === ch.lessons.length - 1, run: () => move(c, 'lesson', l.id, 1) },
+              { icon: 'trash', label: 'Xoá bài học', danger: true, run: () => removeLesson(c, l.id) },
+            ]} />
           )}
         </div>
       )}
@@ -274,10 +297,12 @@ function ContentTab({ c, query }) {
             {ro || renaming === ch.id ? null : (
               <div className="tc-row-actions tc-ch-actions">
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => openAddLesson(c, ch.id)}><Icon name="plus" className="icon-sm" /> Bài học</button>
-                <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => startRename(ch.id)} aria-label="Đổi tên chương" title="Đổi tên chương"><Icon name="pencil" className="icon-sm" /></button>
-                <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'chapter', ch.id, -1)} disabled={ci === 0} aria-label="Chuyển chương lên" title="Di chuyển lên"><Icon name="arrow-up" className="icon-sm" /></button>
-                <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => move(c, 'chapter', ch.id, 1)} disabled={ci === c.chapters.length - 1} aria-label="Chuyển chương xuống" title="Di chuyển xuống"><Icon name="arrow-down" className="icon-sm" /></button>
-                <button type="button" className="btn btn-ghost btn-icon btn-sm tc-del" onClick={() => removeChapter(c, ch.id)} aria-label="Xoá chương" title="Xoá chương"><Icon name="trash" className="icon-sm" /></button></div>
+                <RowMenu label={`Thao tác khác với chương ${ci + 1}`} items={[
+                  { icon: 'pencil', label: 'Đổi tên chương', run: () => startRename(ch.id) },
+                  { icon: 'arrow-up', label: 'Chuyển lên', disabled: ci === 0, run: () => move(c, 'chapter', ch.id, -1) },
+                  { icon: 'arrow-down', label: 'Chuyển xuống', disabled: ci === c.chapters.length - 1, run: () => move(c, 'chapter', ch.id, 1) },
+                  { icon: 'trash', label: 'Xoá chương', danger: true, run: () => removeChapter(c, ch.id) },
+                ]} /></div>
             )}
           </div>
           <ol className="list tc-lessons" data-drop-zone={ch.id}>{ch.lessons.map((l, li) => lessonRow(l, li, ch))}

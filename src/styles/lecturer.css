@@ -119,3 +119,15 @@ svg circle[data-action]:hover { opacity: 0.8; }
 .row.tc-prog { gap: var(--space-2); flex-wrap: nowrap; }
 .tc-prog .progress { flex: 1 1 auto; min-width: 64px; }
 .tc-prog .num { min-width: 3.5ch; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ───────── row "⋯" menu (content tab): rare actions behind one labelled trigger ───────── */
+.tc-menu { position: relative; }
+.tc-menu > summary { list-style: none; cursor: pointer; }
+.tc-menu > summary::-webkit-details-marker { display: none; }
+.tc-menu > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tc-menu-panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; min-width: 210px; padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.tc-menu-item { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 44px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.tc-menu-item:hover:not(:disabled) { background: var(--subtle); }
+.tc-menu-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tc-menu-item:disabled { opacity: .5; cursor: not-allowed; }
+.tc-menu-item.is-danger { color: var(--danger); }
