@@ -3,7 +3,7 @@
 // Data and rules come from Codi's actions (dashboard/lecturer/courses/[courseId]/actions.ts, publish/actions.ts)
 // through teach-data.js; the curriculum outline and course delete use /api/lecturer/courses/:courseId.
 // Drag and drop reorders within a chapter or the chapter list (the backend moves one step at a time).
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { api } from '../../lib/api';
@@ -11,13 +11,15 @@ import { Alert, Empty, Icon, CourseStatus } from '../../components/ui/primitives
 import {
   shell, notMine, ls, locked, findLesson, guard,
   TYPE_ICON, TYPE_LABEL, LEVELS, levelLabel, categoryOptions, PRICE_MAX,
-  FieldError, reviewRound, reviewFlagsFor, promptReason, Loading, LoadError,
+  FieldError, reviewRound, reviewFlagsFor, Loading, LoadError,
 } from './teach-api';
 import { rerender, useView } from './view-store';
 import { act, forgetCourse, reloadCourse, reloadMine, useCourse, write } from './teach-data';
 import { KmapTab } from './kmap-tab';
 import { openLessonEditor, openAddLesson } from './lesson-editor';
 import { aiImport } from './quiz-builder';
+import { ReviewNotes, NoteCard, flagHref, useFlagFocus } from './review-notes';
+import { INFO_FIELDS } from '../admin/publication-rules';
 
 const { fmt } = Codi;
 const toast = (msg, o) => Codi.ui.toast(msg, o);
@@ -33,18 +35,6 @@ const CRITERIA = [
   { id: 'assignment', label: 'Bài tập có yêu cầu rõ và thang chấm' },
   { id: 'rights', label: 'Bản quyền tài liệu, không có nội dung vi phạm' },
 ];
-const SEVERITY = { must: 'Bắt buộc sửa', should: 'Nên sửa' };
-const FLAG_STATUS = { open: 'Đang mở', fixed: 'Giảng viên đã sửa', closed: 'Đã đóng' };
-function targetHref(c, t) {
-  const target = t || {};
-  if (target.type === 'question') return `/teach/courses/${c.id}/quiz/${target.lessonId}`;
-  if (target.type === 'test') return `/teach/courses/${c.id}/code/${target.lessonId}`;
-  if (target.label === 'Bài kiểm tra đầu vào') return `/teach/courses/${c.id}/quiz/entry`;
-  if (target.type === 'course') return `/teach/courses/${c.id}/info`;
-  if (target.lessonId) { const f = findLesson(c, target.lessonId); if (f && f.l.code) return `/teach/courses/${c.id}/code/${target.lessonId}`; }
-  return `/teach/courses/${c.id}/content?lesson=${target.lessonId || ''}`;
-}
-
 // Authoring steps in the order a course is prepared (Udemy: plan → create → publish). Each step maps to one tab;
 // every tab stays reachable from the rail, and each step's state comes from the readiness checks.
 const STEPS = [
@@ -283,10 +273,13 @@ function ContentTab({ c, query }) {
   useView();
   const ro = locked(c);
   // open reviewer flags of the last decided round, shown on the lesson they point at
-  const rr = reviewRound(c);
-  const openFlags = (l) => reviewFlagsFor(rr, l.id).filter((x) => x.status === 'open');
-  const flagBadge = (l) => { const n = openFlags(l); return n.length ? <Link className={`badge ${n.some((x) => x.severity === 'must') ? 'badge-danger' : 'badge-warn'}`} to={`/teach/courses/${c.id}/publish`}><Icon name="flag" />{n.length} góp ý từ quản trị</Link> : null; };
   const hl = query && query.lesson;
+  const edit = query && query.edit === '1';
+  const focusFlag = query && query.flag;
+  // "Mở để sửa" on a lesson comment opens the lesson sheet where the comment sits
+  useEffect(() => { if (hl && edit) openLessonEditor(c.id, hl, { flag: focusFlag }); }, [c.id, hl, edit, focusFlag]);
+  useFlagFocus(edit ? null : focusFlag);
+  const lessonNotes = (l) => <ReviewNotes courseId={c.id} collapsible open={hl === l.id} links match={(a) => a.lessonId === l.id} />;
   const dragAttrs = (kind, id) => (ro ? {} : { draggable: true, 'data-drag': kind, 'data-id': id });
   const startRename = (id) => { renaming = id; rerender(); };
   const chapterBlockers = (ch) => ch.lessons.filter((l) => lessonIssues(c, l).length).length;
@@ -302,7 +295,7 @@ function ContentTab({ c, query }) {
       <div className="tc-lesson-main">
         {renaming === l.id ? <RenameForm c={c} id={l.id} value={l.title} label="Tên bài học" /> : (
           <div className="stack-1"><span className="row small strong" style={{ gap: 8, flexWrap: 'wrap' }}><span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span>{l.title}{l.isFreePreview && <span className="badge badge-info">Học thử</span>}</span>
-            <span className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>{materialCount(l) ? `${materialCount(l)} tài liệu` : ''}{codeBadge(l)}{flagBadge(l)}</span></div>
+            <span className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>{materialCount(l) ? `${materialCount(l)} tài liệu` : ''}{codeBadge(l)}</span></div>
         )}
       </div>
       <span className="tc-cell tc-type-cell small">{TYPE_LABEL[l.type] || 'Bài đọc'}</span>
@@ -334,6 +327,7 @@ function ContentTab({ c, query }) {
           )}
         </div>
       )}
+      <div className="tc-lesson-notes">{lessonNotes(l)}</div>
     </li>
     );
   };
@@ -352,7 +346,9 @@ function ContentTab({ c, query }) {
         <div className="stack-1 small muted"><p>Dùng nút mũi tên để sắp xếp thứ tự chương và bài học. Bấm &quot;Chi tiết&quot; để biên tập nội dung bài và tài liệu.{ro ? '' : ' Bạn cũng có thể kéo thả biểu tượng ⋮⋮ để sắp xếp trong cùng chương.'}</p>
           <p>Bài kiểm tra đầu vào (Diagnostic Test): {c.entryTest
             ? <Link className="strong" to={`/teach/courses/${c.id}/quiz/entry`}>Đã có ({c.entryTest.count} câu)</Link>
-            : <Link className="strong text-danger" to={`/teach/courses/${c.id}/quiz/entry`}>Chưa có — Tạo bài kiểm tra đầu vào</Link>}</p></div>
+            : <Link className="strong text-danger" to={`/teach/courses/${c.id}/quiz/entry`}>Chưa có — Tạo bài kiểm tra đầu vào</Link>}</p>
+          <ReviewNotes courseId={c.id} collapsible links title="Bài kiểm tra đầu vào" match={(a) => a.type === 'entry' || !!a.entry} />
+          <ReviewNotes courseId={c.id} collapsible links title="Thông tin khoá học" match={(a) => a.type === 'course'} /></div>
         {addBar}</div></div>
       {!c.chapters.length && <div className="card"><Empty icon="layers" title="Khoá học chưa có nội dung" body="Bắt đầu bằng cách thêm chương đầu tiên, sau đó thêm các bài học lý thuyết, bài thực hành và câu hỏi trắc nghiệm." actions={ro ? null : <button type="button" className="btn btn-primary" onClick={() => addChapter(c)}><Icon name="plus" /> Thêm chương đầu tiên</button>} /></div>}
       {c.chapters.length > 0 && <div className="tc-cols xsmall muted" aria-hidden="true"><span /><span>Số</span><span>Bài học</span><span>Loại</span><span>Thời lượng</span><span>Kiểm tra</span><span>Trạng thái</span><span>Thao tác</span></div>}
@@ -362,6 +358,7 @@ function ContentTab({ c, query }) {
             <div className="row od-fill">{!ro && <span className="tc-grip" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
               {renaming === ch.id ? <RenameForm c={c} id={ch.id} value={ch.title} label="Tên chương" /> : (
                 <div className="stack-1" style={{ minWidth: 0 }}><h2 className="tc-h">Chương {ci + 1}: {ch.title}</h2>
+                  <ReviewNotes courseId={c.id} title="Góp ý cho chương này" match={(a) => a.type === 'chapter' && a.itemId === String(ch.id)} />
                   <span className="row xsmall muted" style={{ gap: 8 }}>{ch.lessons.length} bài học{chapterBlockers(ch) ? <span className="badge badge-warn"><Icon name="alert-triangle" />{chapterBlockers(ch)} bài cần sửa</span> : ch.lessons.length ? <span className="badge badge-success"><Icon name="check" />Đạt</span> : <span>Chưa có bài học</span>}</span></div>
               )}</div>
             {ro || renaming === ch.id ? null : (
@@ -405,8 +402,10 @@ export function validateInfo(d) {
   if (!LEVELS.some(([k]) => k === d.level)) err.level = 'Chọn trình độ hợp lệ.';
   return err;
 }
-function InfoTab({ c }) {
+function InfoTab({ c, query }) {
   useView();
+  useFlagFocus(query && query.flag);
+  const notes = (field) => <ReviewNotes courseId={c.id} title={field ? `Góp ý cho “${INFO_FIELDS[field]}”` : 'Góp ý chung cho khoá học'} match={(a) => a.type === 'course' && (a.itemId || null) === field} />;
   const ro = locked(c);
   if (!infoDraft || infoDraft.id !== c.id) infoDraft = { id: c.id, title: c.title, summary: c.summary, category: c.category, originalCategory: c.category, level: c.level, outcomes: (c.outcomes || []).join('\n'), requirements: (c.requirements || []).join('\n'), proposedPrice: c.proposedPrice === null || c.proposedPrice === undefined ? '' : String(c.proposedPrice), errors: {} };
   const d = infoDraft; const e = d.errors;
@@ -437,16 +436,18 @@ function InfoTab({ c }) {
     <form className="card" onSubmit={save} noValidate data-dirty-scope aria-busy={infoSaving}>
       <div className="card-header"><h2 className="tc-h">Thông tin chi tiết khoá học</h2></div>
       <div className="card-body stack-4">
-        <div className={`field ${e.title ? 'is-invalid' : ''}`}><label htmlFor="in-title">Tên khoá học</label><input id="in-title" name="title" value={d.title} onChange={onInput} disabled={ro} aria-invalid={!!e.title} /><FieldError>{e.title}</FieldError></div>
-        <div className={`field ${e.summary ? 'is-invalid' : ''}`}><label htmlFor="in-sum">Mô tả ngắn</label><textarea id="in-sum" name="summary" rows={3} value={d.summary} onChange={onInput} disabled={ro} aria-invalid={!!e.summary} /><FieldError>{e.summary}</FieldError></div>
+        {notes(null)}
+        <div className={`field ${e.title ? 'is-invalid' : ''}`}><label htmlFor="in-title">Tên khoá học</label><input id="in-title" name="title" value={d.title} onChange={onInput} disabled={ro} aria-invalid={!!e.title} /><FieldError>{e.title}</FieldError>{notes('title')}</div>
+        <div className={`field ${e.summary ? 'is-invalid' : ''}`}><label htmlFor="in-sum">Mô tả ngắn</label><textarea id="in-sum" name="summary" rows={3} value={d.summary} onChange={onInput} disabled={ro} aria-invalid={!!e.summary} /><FieldError>{e.summary}</FieldError>{notes('summary')}</div>
         <div className="grid-3" style={{ alignItems: 'start' }}>
           <div className={`field ${e.category ? 'is-invalid' : ''}`}><label htmlFor="in-cat">Danh mục</label><select id="in-cat" name="category" value={d.category} onChange={onInput} disabled={ro}>{categoryOptions(d.originalCategory).map((x) => <option key={x} value={x}>{x}</option>)}</select><FieldError>{e.category}</FieldError></div>
           <div className={`field ${e.level ? 'is-invalid' : ''}`}><label htmlFor="in-level">Trình độ</label><select id="in-level" name="level" value={d.level} onChange={onInput} disabled={ro}>{LEVELS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select><FieldError>{e.level}</FieldError></div>
           <div className={`field ${e.proposedPrice ? 'is-invalid' : ''}`}><label htmlFor="in-price">Giá đề xuất (VND)</label><input id="in-price" name="proposedPrice" type="number" min="0" step="10000" inputMode="numeric" value={d.proposedPrice} onChange={onInput} disabled={ro} aria-invalid={!!e.proposedPrice} />
             <p className="field-help">Quản trị viên xác nhận giá cuối cùng khi duyệt. Nhập 0 cho khoá miễn phí.{c.status === 'published' ? ` Giá đang bán: ${fmt.vnd(c.price)}.` : ''}</p><FieldError>{e.proposedPrice}</FieldError></div>
         </div>
-        <div className="field"><label htmlFor="in-out">Học viên sẽ học được gì? (Mỗi dòng một ý)</label><textarea id="in-out" name="outcomes" rows={4} value={d.outcomes} onChange={onInput} disabled={ro} /></div>
-        <div className="field"><label htmlFor="in-req">Yêu cầu trước khi học (Mỗi dòng một ý)</label><textarea id="in-req" name="requirements" rows={3} value={d.requirements} onChange={onInput} disabled={ro} /></div>
+        {notes('category')}{notes('price')}
+        <div className="field"><label htmlFor="in-out">Học viên sẽ học được gì? (Mỗi dòng một ý)</label><textarea id="in-out" name="outcomes" rows={4} value={d.outcomes} onChange={onInput} disabled={ro} />{notes('outcomes')}</div>
+        <div className="field"><label htmlFor="in-req">Yêu cầu trước khi học (Mỗi dòng một ý)</label><textarea id="in-req" name="requirements" rows={3} value={d.requirements} onChange={onInput} disabled={ro} />{notes('requirements')}</div>
         {!ro && guard.dirty && (
           <div className="row tc-savebar"><button className="btn btn-primary" type="submit" disabled={infoSaving}>{infoSaving ? <><Icon name="loader" className="icon-sm" /> Đang lưu...</> : <><Icon name="check" className="icon-sm" /> Lưu thay đổi</>}</button><span className="small muted"><Icon name="alert-circle" className="icon-sm text-warn" /> Có thay đổi chưa lưu</span></div>
         )}
@@ -467,30 +468,10 @@ const ROUND_STATUS = { in_review: ['badge-info', 'Đang duyệt'], changes_reque
 /** Changes requested comes from the newest decided review round. */
 const changesRequested = (c) => c.status === 'rejected' && (c.reviewOutcome === 'changes' || (reviewRound(c) || {}).status === 'changes_requested');
 
-async function flagFixed(c, id) {
-  const f = (reviewRound(c) || { flags: [] }).flags.find((x) => x.id === id); if (!f) return;
-  const returned = (r) => c.status === 'rejected' && r && ['changes_requested', 'rejected'].includes(r.status);
-  if (!returned(reviewRound(c))) { toast('Chỉ có thể phản hồi góp ý của vòng mới nhất đã trả về để chỉnh sửa.', { type: 'danger' }); return; }
-  const r = await promptReason({
-    title: 'Đánh dấu góp ý đã sửa?',
-    body: <p className="small"><strong>{(f.target && f.target.label) || f.targetLabel}</strong><br /><span className="muted">{f.comment}</span></p>,
-    label: 'Bạn đã chỉnh sửa nội dung gì?', help: 'Ít nhất 5 ký tự để người duyệt nắm rõ nội dung đã sửa.', min: 5,
-    error: 'Vui lòng mô tả bạn đã sửa gì (ít nhất 5 ký tự).', placeholder: 'Ví dụ: đã đổi đáp án đúng thành "Thêm use client" và cập nhật giải thích.',
-    confirmLabel: 'Xác nhận đã sửa',
-  });
-  if (!r.ok || f.status !== 'open') return;
-  await write(c.id, () => act('publish', 'markFlagFixed', c.id, f.id, r.reason), { toast, okMessage: 'Đã đánh dấu đã sửa.' });
-}
-async function flagReopen(c, id) {
-  const f = (reviewRound(c) || { flags: [] }).flags.find((x) => x.id === id); if (!f || f.status !== 'fixed' || c.status !== 'rejected') return;
-  await write(c.id, () => act('publish', 'reopenFlag', c.id, f.id), { toast });
-}
-
 /** Result of the last decided review round: criterion verdicts + flags the lecturer works through. */
 function ReviewBlock({ c }) {
   const r = reviewRound(c);
   if (!r) return null;
-  const canMark = c.status === 'rejected';
   const all = r.flags || [];
   const open = all.filter((f) => f.status === 'open');
   const order = { open: 0, fixed: 1, closed: 2 };
@@ -508,18 +489,9 @@ function ReviewBlock({ c }) {
             return <li key={k.id} className="rv-crit-row"><div className="rv-crit-main"><span className="small strong">{k.label}</span>{v.note && <span className="xsmall">{v.note}</span>}</div>{t ? <span className={`badge ${t[0]}`}>{t[1]}</span> : <span className="badge badge-neutral">Chưa chấm</span>}</li>;
           })}</ul></div>
         {flags.length > 0 && (
-          <div className="stack-2"><strong className="small">Góp ý chi tiết</strong>
+          <div className="stack-2"><strong className="small">Góp ý chi tiết</strong><span className="xsmall muted">Mỗi góp ý cũng hiện ngay tại chỗ cần sửa (thông tin, chương, bài học, câu hỏi). Bấm “Xem tại chỗ” để mở đúng vị trí.</span>
             <ul className="rv-flags">{flags.map((f) => (
-              <li key={f.id} className={`rv-flag ${f.status !== 'open' ? 'is-closed' : ''}`}>
-                <div className="row-between"><span className="row" style={{ gap: 8, flexWrap: 'wrap' }}><span className={`badge ${f.severity === 'must' ? 'badge-danger' : 'badge-warn'}`}>{SEVERITY[f.severity] || f.severity}</span><span className="badge badge-neutral">{FLAG_STATUS[f.status] || f.status}</span>
-                  {f.source === 'ai' && <span className="badge badge-accent"><Icon name="sparkles" />AI đề xuất</span>}{f.carried && <span className="badge badge-neutral">Vòng trước</span>}</span>
-                  <span className="xsmall muted">{f.createdAt ? fmt.datetime(f.createdAt) : ''}</span></div>
-                <span className="rv-flag-target small strong">{(f.target && f.target.label) || f.targetLabel}</span>
-                <p className="small">{f.comment}</p>
-                {(f.reply || f.lecturerReply) && <p className="rv-reply small"><strong>Bạn đã phản hồi:</strong> {f.reply || f.lecturerReply}</p>}
-                <div className="row" style={{ gap: 8 }}><Link className="btn btn-secondary btn-sm" to={targetHref(c, f.target)}><Icon name="external-link" className="icon-sm" /> Mở để sửa</Link>
-                  {!canMark ? null : f.status === 'open' ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => flagFixed(c, f.id)}><Icon name="check" className="icon-sm" /> Đánh dấu đã sửa</button>
-                    : f.status === 'fixed' ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => flagReopen(c, f.id)}>Bỏ đánh dấu</button> : null}</div></li>
+              <NoteCard key={f.id} c={c} f={f} showTarget link={<Link className="btn btn-secondary btn-sm" to={flagHref(c, f)}><Icon name="map" className="icon-sm" /> Xem tại chỗ</Link>} />
             ))}</ul></div>
         )}
       </div>
@@ -614,6 +586,6 @@ export function CourseEditorPage({ params, query }) {
   if (gate) return gate;
   const c = state.c;
   const tab = TABS.some(([k]) => k === params.tab) ? params.tab : 'content';
-  const body = { content: <ContentTab c={c} query={query} />, info: <InfoTab c={c} />, kmap: <KmapTab c={c} />, publish: <PublishTab c={c} /> }[tab];
+  const body = { content: <ContentTab c={c} query={query} />, info: <InfoTab c={c} query={query} />, kmap: <KmapTab c={c} />, publish: <PublishTab c={c} /> }[tab];
   return shell('/teach/courses', <><EditorHeader c={c} tab={tab} />{body}</>);
 }

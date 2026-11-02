@@ -11,6 +11,7 @@ import { shell, notMine, guard, lecturerAI, ENTRY_MIN, FieldError, Loading, Load
 import { rerender, useView } from './view-store';
 import { act, reloadCourse, reloadMine } from './teach-data';
 import { parseQuizImport, DEFAULT_MAX_QUIZ_OPTIONS } from './quiz-import';
+import { ReviewNotes, useFlagFocus } from './review-notes';
 
 let qb = null; // { key, courseId, lessonId, isEntry, quiz, errors, openExplain:Set }
 const qbKey = (cid, lid) => cid + '/' + lid;
@@ -159,8 +160,9 @@ function useQuizData(courseId, lessonId) {
   return { ...st, reload: load };
 }
 
-export function QuizBuilderPage({ params }) {
+export function QuizBuilderPage({ params, query }) {
   useCodi(); useView();
+  useFlagFocus(query && query.flag);
   const qd = useQuizData(params.courseId, params.lessonId);
   if (!qd.data) {
     if (qd.error && (qd.error.status === 403 || qd.error.status === 404 || /Không tìm thấy/.test(qd.error.message || ''))) return notMine();
@@ -228,6 +230,12 @@ function QuizBuilder({ params, data }) {
     Codi.go('/teach/courses/' + c.id + '/content');
   };
   const adv = advisories(quiz);
+  // reviewer comments: saved questions keep their ids until the next save, so match by id, then by "Câu N"
+  const savedIds = (data.questions || []).map((q) => q.id);
+  const known = new Set(savedIds.map(String));
+  const lid = isEntry ? null : lesson.id;
+  const inThisQuiz = (a) => (isEntry ? a.type === 'entry' || !!a.entry : a.lessonId === lid && (a.type === 'quiz' || a.type === 'question'));
+  const qNotes = (match, title) => <ReviewNotes courseId={c.id} known={known} questionIds={() => savedIds} title={title} match={(a) => inThisQuiz(a) && match(a)} />;
 
   return shell('/teach/courses', <>
     <div className="row-between tc-qb-head" style={{ marginBottom: 16 }}>
@@ -242,6 +250,7 @@ function QuizBuilder({ params, data }) {
     {ro && <div style={{ marginBottom: 16 }}><Alert type="warn" title="Khoá học đang chờ duyệt" body="Bạn đang xem nội dung ở chế độ chỉ đọc. Để chỉnh sửa bài quiz, hãy đợi ban quản trị hoàn tất quá trình duyệt hoặc yêu cầu bổ sung." /></div>}
     <div className="tc-qb" data-dirty-scope>
       <div className="stack-3">
+        {qNotes((a) => a.type !== 'question', isEntry ? 'Góp ý cho bài kiểm tra đầu vào' : 'Góp ý cho quiz này')}
         <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}><strong className="small row" style={{ gap: 6 }}><Icon name="clipboard-check" className="icon-sm" /> Danh sách câu hỏi ({quiz.questions.length} câu)</strong>
           {!ro && <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={openImport}><Icon name="clipboard" className="icon-sm" /> Nhập hàng loạt</button>
@@ -252,6 +261,7 @@ function QuizBuilder({ params, data }) {
           const showExp = !!q.explanation || qb.openExplain.has(q.id);
           return (
             <section key={q.id || i} className={`card ${q.aiGenerated && q.aiReviewed === false ? 'tc-q-ai' : ''}`}><div className="card-body stack-3">
+              {known.has(String(q.id)) && qNotes((a) => a.type === 'question' && a.itemId === String(q.id), `Góp ý cho câu ${i + 1}`)}
               <div className="row-between"><span className="row" style={{ gap: 8 }}><strong className="small">Câu {i + 1}</strong>{q.aiGenerated && <span className={`badge ${q.aiReviewed === false ? 'badge-accent' : 'badge-neutral'}`}><Icon name="sparkles" />{q.aiReviewed === false ? 'AI tạo · chưa duyệt' : 'AI tạo · đã duyệt'}</span>}
                 {!ro && q.aiGenerated && q.aiReviewed === false && <button type="button" className="btn btn-secondary btn-sm" onClick={() => change(() => { q.aiReviewed = true; })}><Icon name="check" className="icon-sm" /> Đã kiểm tra câu này</button>}</span>
                 {ro ? null : (

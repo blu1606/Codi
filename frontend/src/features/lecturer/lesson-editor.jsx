@@ -10,6 +10,7 @@ import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { findLesson, locked, lecturerAI, AIThinking, FieldError } from './teach-api';
 import { act, cachedCourse, reloadCourse, reloadMine } from './teach-data';
+import { ReviewNotes, useFlagFocus } from './review-notes';
 
 const LATE = { accept: 'Vẫn nhận, không trừ điểm', penalty: 'Nhận và trừ điểm', reject: 'Không nhận bài nộp muộn' };
 const newAssignment = () => ({ instructions: '', requiresFile: false, requiresLink: true, acceptedTypes: '', maxScore: 10, passingScore: 50, passScore: 5, dueDays: 7, latePolicy: 'penalty', latePenalty: 20, rubric: [] });
@@ -157,7 +158,7 @@ async function loadDraft(courseId, lessonId, withAssignment) {
   };
 }
 
-function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
+function LessonEditor({ handle, courseId, lessonId, withAssignment, flagId }) {
   const ref = useRef({ rubricAI: null, closed: false, error: null, addingMaterial: false });
   const d = ref.current;
   const [, refresh] = useReducer((x) => x + 1, 0);
@@ -190,6 +191,10 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
     return () => { d.closed = true; request.current += 1; if (rubricJob.current) rubricJob.current.stop(); };
   }, [d, fetchDetails]);
 
+  useFlagFocus(load.state === 'ready' ? flagId : null);
+  // reviewer comments of this lesson, each shown at the block it points at
+  const matIds = new Set((load.state === 'ready' ? d.materials : []).map((m) => String(m.id)));
+  const notes = (match, title) => <ReviewNotes courseId={courseId} known={matIds} title={title} match={(a) => a.lessonId === lessonId && match(a)} />;
   const canSave = !ro && !saving && load.state === 'ready';
   const fail = (msg) => { d.error = msg; refresh(); return false; };
   const save = async () => {
@@ -239,6 +244,7 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
     body = (
       <form className="stack-4" id="tc-lesson-form" noValidate onSubmit={(e) => e.preventDefault()}>
         {ro && <Alert type="warn" title="Đang chờ duyệt — nội dung chỉ đọc" />}
+        {notes((a) => a.type === 'lesson', 'Góp ý cho bài học')}
         <div className="field"><label htmlFor="le-title">Tên bài học <span className="req">*</span></label><input id="le-title" value={d.title} onChange={set('title')} placeholder="Nhập tên bài học..." disabled={ro || saving} /></div>
         <div className="grid-3">
           <div className="field tc-span-2"><label htmlFor="le-desc">Mô tả tóm tắt bài học</label><input id="le-desc" value={d.description} onChange={set('description')} placeholder="Tóm tắt nội dung chính của bài..." disabled={ro || saving} /></div>
@@ -248,7 +254,7 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
           <input id="le-preview" type="checkbox" checked={d.isFreePreview} onChange={set('isFreePreview')} disabled={ro || saving} style={{ marginTop: 3 }} />
           <span className="stack-1"><span className="small strong">Cho phép học thử (Free Preview)</span><span className="xsmall muted">Học viên chưa đăng ký mua khoá học có thể xem trước nội dung bài học này trên trang bán.</span></span>
         </label>
-        <div className="field"><label htmlFor="le-body">Nội dung bài học / Ghi chú lý thuyết</label><textarea id="le-body" className="mono" rows={6} value={d.body} onChange={set('body')} placeholder="Soạn nội dung chi tiết bài đọc hoặc hướng dẫn thực hành..." disabled={ro || saving} /></div>
+        <div className="field"><label htmlFor="le-body">Nội dung bài học / Ghi chú lý thuyết</label><textarea id="le-body" className="mono" rows={6} value={d.body} onChange={set('body')} placeholder="Soạn nội dung chi tiết bài đọc hoặc hướng dẫn thực hành..." disabled={ro || saving} />{notes((a) => a.type === 'reading', 'Góp ý cho bài đọc')}</div>
 
         <section className="stack-3 tc-materials" aria-labelledby="le-mat-h">
           <div className="row-between"><strong id="le-mat-h" className="small row" style={{ gap: 6 }}><Icon name="file-text" className="icon-sm" /> Tài liệu bài học ({d.materials.length} tài liệu)</strong>
@@ -260,6 +266,7 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
                 <span className="od-fill stack-1" style={{ minWidth: 0 }}><span className="small strong od-truncate">{m.title}</span>
                   <span className="xsmall muted mono od-truncate">({m.type}) {m.url || 'Chưa có URL'}</span></span>
                 {!ro && <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => { d.materials.splice(i, 1); refresh(); }} aria-label={`Xoá tài liệu ${m.title}`} title="Xoá tài liệu"><Icon name="trash" className="icon-sm" /></button>}
+                {m.id != null && <div className="tc-mat-notes">{notes((a) => a.type === 'material' && a.itemId === String(m.id))}</div>}
               </li>
             ))}</ul>
           )}
@@ -268,7 +275,9 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment }) {
         </section>
 
         <label className="switch"><input type="checkbox" checked={!!d.assignment} disabled={ro} onChange={(e) => { d.assignment = e.target.checked ? newAssignment() : null; refresh(); }} /><span className="switch-track" />Có bài tập</label>
+        {notes((a) => a.type === 'assignment', 'Góp ý cho bài tập')}
         {d.assignment && <AssignmentBuilder d={d} refresh={refresh} rubricJob={rubricJob} ro={ro} />}
+        {notes((a) => ['quiz', 'question', 'code', 'test'].includes(a.type), 'Góp ý cho quiz / bài code của bài này (sửa ở màn hình riêng)')}
         {d.error && <p className="field-error" role="alert"><Icon name="alert-circle" className="icon-sm" /><span>{d.error}</span></p>}
         {!ro && <div className="panel row-between la-cta"><div className="stack-1"><strong className="small"><Icon name="sparkles" className="icon-sm" /> Tạo nội dung từ tài liệu</strong><span className="xsmall muted">Tải PDF/slide lên, AI soạn tóm tắt, câu hỏi quiz và khái niệm để bạn duyệt.</span></div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={importAI} disabled={!canSave}>Nhập tài liệu &amp; tạo bằng AI</button></div>}
@@ -295,7 +304,7 @@ export function openLessonEditor(courseId, lessonId, opts) {
   if (!findLesson(c, lessonId)) { Codi.ui.toast('Không tìm thấy bài học trong khoá học này.', { type: 'danger' }); return null; }
   return Codi.ui.sheet({
     title: 'Biên tập chi tiết bài học', wide: true, raw: true,
-    body: (h) => <LessonEditor handle={h} courseId={courseId} lessonId={lessonId} withAssignment={!!(opts && opts.withAssignment)} />,
+    body: (h) => <LessonEditor handle={h} courseId={courseId} lessonId={lessonId} withAssignment={!!(opts && opts.withAssignment)} flagId={opts && opts.flag} />,
   });
 }
 
