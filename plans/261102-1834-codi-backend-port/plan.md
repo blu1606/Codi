@@ -1,6 +1,6 @@
 # Port the Codi backend into codi-rebuild
 
-Status: in progress · Owner decision 2026-11-02: option 2 (bring Codi's backend here, keep the rebuild UI), prototype scope, no new CI or tests.
+Status: done (2026-11-02) · Owner decision 2026-11-02: option 2 (bring Codi's backend here, keep the rebuild UI), prototype scope, no new CI or tests.
 
 ## Outcome
 
@@ -34,3 +34,17 @@ Each phase and each feature area is its own commit (or a few), revertable on its
 ## Backup
 
 `../.codi-gc-preserved/db-backups/codi_rebuild-261102-1840.dump` (pg_dump -Fc of the old `codi_rebuild` database, taken before any change).
+
+## Result
+
+codi-rebuild now runs as `frontend/` (the redesigned Vite UI, unchanged look) on `backend/` (Codi's routes and server
+actions on Hono) against database `codi` in the local Postgres. Every screen reads and writes through the backend: the
+JSON store (`/api/snapshot`, `/api/sync`, `/api/reset`, database `codi_rebuild`) and the browser code runner are
+gone, sign-in is real, a purchase creates an order that a simulated SePay webhook pays, and the seed rebuilds the
+demo data (with JSON assignment rubrics) after a backup. Cards and features Codi itself has no data for show Codi's
+unavailable state; AI grading drafts, AI document import and knowledge-map analysis stay simulations. smoke 64/64,
+flow (order paid + owned), mobile without overflow and axe without violations (light + dark) and every area script pass.
+
+Reports: [phase 1](phase-1-report.md) · [commerce](phase-2-commerce.md) · [learning](phase-2-learning.md) ·
+[lecturer](phase-2-lecturer.md) · [admin](phase-2-admin.md) · [shell](phase-2-shell.md) · [phase 3](phase-3-report.md)
+
