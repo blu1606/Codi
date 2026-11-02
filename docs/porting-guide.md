@@ -8,8 +8,9 @@ match the mockup; layout may be cleaned up but never re-invent a screen's states
 
 Since stage 2, the **real app wins**. `Codi/apps/web/src` (Next.js) and `Codi/packages/*` are the primary
 source for behaviour, states, rules and Vietnamese copy. The mockup below fills only what the real app lacks.
-Where the real app shows a disabled "Chưa khả dụng" / "Sắp có" AI feature, keep the working simulation, and
-compute analytics from seed data rather than inventing numbers. Record every behaviour that differs from the
+Where the real app shows a disabled "Chưa khả dụng" / "Sắp có" AI feature, keep the working simulation in the
+browser (never stored as domain data); where it shows an analytics card as unavailable, show the same unavailable
+state rather than computing or inventing numbers. Record every behaviour that differs from the
 mockup docs in `docs/deviations-from-mockup.md`.
 
 Seed additions go in `backend/scripts/seed-source/patches/<nn>-<area>.js` as plain scripts that call
@@ -25,7 +26,7 @@ Seed additions go in `backend/scripts/seed-source/patches/<nn>-<area>.js` as pla
 
 | Mockup | Port |
 |---|---|
-| `Codi.*` state, selectors, auth, notify, go | `src/lib/codi.js` → `import { Codi, useCodi } from '../../lib/codi'` |
+| `Codi.*` session, auth, go, ui | `src/lib/codi.js` → `import { Codi, useCodi } from '../../lib/codi'` |
 | `Codi.fmt` | `Codi.fmt` (also `src/lib/format.js`) |
 | `Codi.icon(name,{cls})` | `<Icon name="cart" className="icon-sm" />` |
 | `Codi.ui.alert/empty/ring/progress/mastery/stepper/stars/avatar/thumb/courseStatus/orderStatus/spinnerBlock/workspace/md` | `<Alert> <Empty> <Ring> <Progress> <Mastery> <Stepper> <Stars> <Avatar> <Thumb> <CourseStatus> <OrderStatus> <SpinnerBlock> <Workspace> <Md>` + `masteryLabel`, `courseStatusLabel`, `orderStatusLabel`, `stream`, `mdToHtml`, `esc`, `<Html html>`, `<CopyButton>` from `src/components/ui/primitives.jsx` |
@@ -33,19 +34,35 @@ Seed additions go in `backend/scripts/seed-source/patches/<nn>-<area>.js` as pla
 | `Codi.charts.*` | `import { charts } from '../../lib/charts'` — returns HTML strings; render with `<Html html={charts.line({...})} />` |
 | CSS (`css/*.css`) | copied verbatim to `src/styles/*.css`, imported globally. Reuse the mockup class names. |
 
-### Store contract (`src/lib/codi.js`)
+### Talking to the backend
 
-- `useCodi()` at the top of every component that reads `Codi.*` → re-renders on every change.
-- Read: `Codi.db().courses`, `Codi.course(slug)`, `Codi.currentUser()`, `Codi.role()`, `Codi.ownership(id)`…
-- Write: `Codi.set((s) => { s.db.orders.push(o); })` — mutate in place exactly like the mockup. It re-renders and
-  syncs changed entities to Postgres automatically. `Codi.set(fn, { render: false })` for silent writes.
-- Persisted per-feature state: `Codi.ensure('learning', () => ({...}))` → `Codi.state.learning` (stored in Postgres
-  as `slice:learning`). Use the same slice keys the mockup uses.
-- Session-only (localStorage): `Codi.state.currentUserId`, `Codi.state.scenario` (forced demo states:
-  `paymentOutcome`, `pathAI`, `materials`, `aiAssistant`, `kmap`, `theme`).
-- `Codi.go('/path')`, `Codi.path()`, `Codi.query()`; prefer `<Link to="/x">` for links (mockup `href="#/x"`).
-- `Codi.rerender()` (re-render all subscribers), `Codi.onMount(fn)` (run after commit; prefer useEffect).
-- `Codi.requireAuth(intent, { reason })`, `Codi.notify(userId, { title, body, link })`, `Codi.uid('ord')`, `Codi.wait(ms)`.
+All domain data lives in Postgres behind the backend; the browser keeps no copy of it.
+
+- Read with `useApi(url)` from `src/lib/use-api.js` → `{ data, loading, error, reload, setData }` (aborts stale
+  requests; a null url skips the call). Render a skeleton while loading and an `<Alert>` with "Thử lại" on error.
+- Write with `api` from `src/lib/api.js`: `api.get/post/put/patch/del(url, body)` sends JSON with the session cookie
+  and throws `ApiError` (`message` = the server's Vietnamese `error`, `status`, `body`). Show `e.message` in a toast
+  or inline, then reload or update local state with the response.
+- Two kinds of endpoints:
+  - **Routes** — `backend/src/app/api/**/route.ts`, e.g. `GET /api/learner/overview`. The contract is listed in
+    `plans/261102-1834-codi-backend-port/phase-1-report.md`.
+  - **Server actions** — the exports of `backend/src/app/dashboard/**/actions.ts`, called as
+    `api.action('<module>', '<export>', ...args)` (`POST /api/actions/<module>/<export>`, JSON array of arguments),
+    e.g. `api.action('dashboard/lecturer', 'getLecturerCourses', 'all')`.
+- Adding a route: create `backend/src/app/api/<path>/route.ts` exporting `GET`/`POST`/… handlers in the Next.js
+  style (`NextRequest` → `NextResponse.json`); folders `[id]` become `:id`. It is mounted at startup, no registry.
+  Check the session with `auth.api.getSession({ headers: request.headers })` and roles with `getActiveRoles`, check
+  `Origin` on writes, and answer errors as `{ error: '<Vietnamese message>' }`.
+
+### Runtime contract (`src/lib/codi.js`)
+
+- `useCodi()` re-renders a component after a session or scenario change.
+- Session: `Codi.currentUser()` (backend user + primary role), `Codi.role()`, `Codi.session`, `Codi.signIn`,
+  `Codi.signOut`, `Codi.refreshSession`, `Codi.requireAuth(intent, { reason })`.
+- Browser-only state: `Codi.state.scenario` (Alt+K flags `paymentOutcome`, `aiAssistant`, `kmap`, and the resolved
+  `theme`), changed with `Codi.set(fn)` and kept in localStorage. Never put domain data there.
+- `Codi.go('/path')`, `Codi.path()`, `Codi.query()`; prefer `<Link to="/x">` for links.
+- `Codi.rerender()`, `Codi.uid('x')`, `Codi.wait(ms)`, `Codi.ui.*`.
 
 ## Translation rules
 
@@ -59,9 +76,10 @@ Seed additions go in `backend/scripts/seed-source/patches/<nn>-<area>.js` as pla
    `e.preventDefault()`. `data-change` / `data-input` → `onChange`. `data-go` → `<Link>` or `Codi.go`.
    `Codi.onMount(fn)` → `useEffect`.
 4. **Module-level view state** (`let view = {...}` + rerender) → `useState` in the page component, or a module
-   variable + `Codi.set(() => {}, …)` when it must survive navigation. Persisted state → `Codi.ensure` slice.
+   variable with a small subscription when it must survive navigation. UI preferences may use localStorage;
+   anything shared or durable goes to the backend.
 5. **Cross-feature namespaces.** A mockup module that assigns `Codi.<ns> = {...}` (e.g. `Codi.code`, `Codi.tutor`,
-   `Codi.github`, `Codi.review`, `Codi.teach`, `Codi.lecturerAI`, `Codi.teachCode`) keeps the **same namespace
+   `Codi.github`, `Codi.teach`, `Codi.lecturerAI`, `Codi.teachCode`) keeps the **same namespace
    and member names** in the port: create `src/features/<feature>/<ns>-api.js(x)` that does
    `Object.assign(Codi, { <ns>: {...} })` and import it from your `routes.jsx` so it is installed at startup.
    - Non-UI members keep their signatures.
@@ -72,14 +90,7 @@ Seed additions go in `backend/scripts/seed-source/patches/<nn>-<area>.js` as pla
 7. **Prototype-only latency** (`Codi.wait`) stays only where it drives a visible loading/progress state.
 8. **No fake shortcuts.** Every state the mockup renders (loading, empty, error, success, forced scenario) exists.
 
-## File ownership
-
-Each feature agent writes only inside `src/features/<its-feature>/` (any file names, kebab-case). Optional styles:
-`src/features/<feature>/<feature>.css`, imported from that feature's code. Do **not** edit `src/lib/*`,
-`src/components/*`, `src/styles/*`, `src/App.jsx`, `src/main.jsx`, `backend/*`, or another feature's folder. If the
-shared runtime lacks something you need, implement it locally in your feature and report it in your status.
-
 ## Verify
 
-- `npx vite build` from `codi-rebuild/` must pass with zero errors (warnings about chunk size are fine).
-- Do not start dev servers or Docker; the controller runs the integrated app and browser checks.
+- `npx vite build` in `frontend/` and `npx tsc --noEmit` in `backend/` pass (chunk-size warnings are fine).
+- With `npm start` running, open the screen as the seeded role and check it again after a reload.

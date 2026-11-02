@@ -9,7 +9,8 @@ Two cross-cutting decisions apply everywhere:
 
 - AI features that the real app shows as "Chưa khả dụng" or "Sắp có" stay working as simulations. AI never
   saves a grade by itself; the lecturer confirms every draft.
-- Analytics and finance numbers are computed from seed and store data, never invented.
+- Analytics and finance numbers come from the backend. Cards the backend has no source for show the real app's
+  "chưa có số liệu" state (see "Backend port" below), never invented or browser-computed numbers.
 
 ## Controller (shared runtime)
 
@@ -181,12 +182,41 @@ These belong in `docs/deviations-from-mockup.md`. That file is outside my owners
 
 ## AI grading assist (stage 3)
 
-- The lecturer's "AI gợi ý điểm và nhận xét" is a saved job per submission (`db.aiGradingJobs`): queued, four named stages with progress, per-criterion partial results, then succeeded, failed (with "Thử lại") or cancelled. Leaving the page and returning resumes it. The mockup showed a single loading line. AI still never saves a grade: "Dùng bản nháp này" only fills the form (rule G5).
+- The lecturer's "AI gợi ý điểm và nhận xét" is a saved job per submission (kept in this browser's localStorage, `codi-ai-grading-jobs`): queued, four named stages with progress, per-criterion partial results, then succeeded, failed (with "Thử lại") or cancelled. Leaving the page and returning resumes it. The mockup showed a single loading line. AI still never saves a grade: "Dùng bản nháp này" only fills the form (rule G5).
 
 ## GitHub onboarding (stage 3)
 
 - New accounts get an optional account-level "Kết nối GitHub" step after OTP verification (`/onboarding/github?next=…`); existing accounts reach it from a dashboard prompt and from course onboarding. The real app has no account-level step.
-- The flow shows the analysis result for review before "Lưu vào hồ sơ" saves it; the profile tab still saves directly, as the real app does.
+- Since the backend port, both the step and the profile tab save the analysis directly, as the real app does (no separate "Lưu vào hồ sơ").
 - A header theme menu (Sáng / Tối / Theo hệ thống) is available to every visitor, guests included.
 - The lesson page is a split pane (material left, work right). The AI tutor and the private Q&A are tabs in the work pane instead of a floating button and docked side panels (redesign decision, 2026-11-02).
 - The course path page draws the AI path as a transit diagram (chapters as lines, lessons as stations); the old list/map toggle is replaced by it, and the knowledge map is a separate link.
+
+## Backend port (2026-11-02)
+
+The JSON prototype store is gone; every screen uses Codi's backend (`plans/261102-1834-codi-backend-port/`).
+User-visible changes:
+
+- Sign-in, register, email OTP, password reset and sessions are real (Better Auth). Without Resend, codes are
+  printed to the backend console. Google / GitHub buttons go to the real provider; the simulated account chooser
+  is gone.
+- Order links use the order code (`/checkout?order=CODI12345`). Payment is a simulated SePay transfer posted to the
+  real webhook handler; the Alt+K outcome picks paid / underpaid / overpaid / expired / late / no transfer.
+- A hidden course answers 404 on its detail page, so the "tạm ẩn, bạn vẫn học bình thường" banner no longer shows.
+  The `?error=1` simulations and the Alt+K flags `pathAI`, `materials`, `codeSandbox` and `githubAnalysis` were
+  replaced by real error states. "Đặt lại dữ liệu" left the Alt+K drawer: run `npm run seed`.
+- Admin analytics A4 (giữ chân), A6 (bài đầu vào hay bài 1), A9 (sức khỏe AI), the A8 grading-time median and B5
+  (phễu thanh toán) show "Chưa có số liệu …" as in the real app. The period choice is kept in this browser.
+- Deactivating a user shows the reason but no date; a criterion note is saved once a verdict is chosen; there is no
+  admin manual payment check (learner-only in Codi).
+- Lecturer: lessons cannot be dragged into another chapter (Codi has no cross-chapter move); late-submission policy,
+  accepted file types, the "AI soạn" badge and per-question AI-reviewed marks are not stored. Knowledge-map analysis
+  stays a simulation, now saved in the database. AI grading drafts and AI document import stay browser simulations.
+- Learner: the entry-test marker on the mastery chart and the lesson count on dashboard recommendations are gone
+  (no server data). PDF/slide materials remain a simulated page viewer. Assignment rubrics show as a criteria list.
+- Code runs only in the backend sandbox (JavaScript). The browser runner was removed; the lecturer preview of a
+  guided tutorial is read-only.
+- "Hồ sơ năng lực" uses the real GitHub link and analysis routes. Locally, linking only works if the GitHub OAuth app
+  accepts `http://localhost:5190/api/auth/callback/github`, so a learner normally sees the "Kết nối GitHub" state;
+  a saved profile shows a compact summary (technologies, observed facts) instead of the mockup's canned report.
+- Profile avatars are stored as data URLs (R2 is not configured locally); assignment file uploads show the server's error.
