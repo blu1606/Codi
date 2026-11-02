@@ -1,7 +1,8 @@
 /**
  * S00 Home '/' (real app/page.tsx + components/{hero,home-features,home-courses,home-mentor,home-footer}.tsx):
- * hero with CTAs and stats, features, popular courses (sorted by enrolment, 4 items, loading / error / empty),
- * AI Mentor, footer. The popular-courses load error is simulated with `?error=1`.
+ * hero with CTAs and stats, a sample product window (learning path, lesson, AI explanation), features, popular
+ * courses (sorted by enrolment, 4 items, loading / error / empty), AI Mentor, closing band, footer.
+ * The popular-courses load error is simulated with `?error=1`.
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -30,6 +31,54 @@ const FOOTER_GROUPS = [
   ['Hỗ trợ', [['Hỏi đáp cùng AI', '/ai'], ['Quản lý tài khoản', '/profile'], ['Đăng nhập', '/login'], ['Khôi phục mật khẩu', '/forgot-password']]],
 ];
 const FooterLink = ({ to, children }) => (to.startsWith('#') ? <a href={to}>{children}</a> : <Link to={to}>{children}</Link>);
+
+/** Sample lesson path for the product window: the first chapter of a published course with real lesson titles. */
+function samplePath() {
+  const course = published().find((c) => c.chapters && c.chapters[0] && c.chapters[0].lessons.length >= 3);
+  if (!course) return null;
+  const ch = course.chapters[0];
+  const lessons = ch.lessons.slice(0, 4).map((l, i) => ({ id: l.id, title: l.title, state: i === 0 ? 'done' : i === 1 ? 'current' : 'next' }));
+  return { course, chapter: ch.title, lessons };
+}
+
+/** The product, working: path strip, lesson, and AI explanation. Sample data, labelled as such. */
+function ProductWindow() {
+  const path = samplePath();
+  const stateLabel = { done: 'Đã học', current: 'Đang học', next: 'Tiếp theo' };
+  return (
+    <figure className="cm-window" aria-label="Minh họa giao diện học: lộ trình, bài học và giải thích của trợ lý AI">
+      <div className="cm-window-bar">
+        <span className="cm-window-dots" aria-hidden="true"><i /><i /><i /></span>
+        <span className="cm-window-title">{path ? path.course.title : 'Lộ trình học'}</span>
+        <span className="badge badge-neutral cm-window-tag">Minh họa · dữ liệu mẫu</span>
+      </div>
+      <div className="cm-window-body">
+        <ol className="cm-path" aria-label="Lộ trình của bạn">
+          <li className="cm-path-head">{path ? path.chapter : 'Chương 1'}</li>
+          {(path ? path.lessons : [
+            { id: 'a', title: 'Bài 1', state: 'done' }, { id: 'b', title: 'Bài 2', state: 'current' }, { id: 'c', title: 'Bài 3', state: 'next' },
+          ]).map((l) => (
+            <li key={l.id} className={`cm-path-stop is-${l.state}`}>
+              <span className="cm-path-dot" aria-hidden="true">{l.state === 'done' ? <Icon name="check" className="icon-sm" /> : null}</span>
+              <span className="cm-path-text"><span className="cm-path-name">{l.title}</span><span className="cm-path-state">{stateLabel[l.state]}</span></span>
+            </li>
+          ))}
+        </ol>
+        <div className="cm-lesson">
+          <h3 className="cm-lesson-title">Loại bỏ phần tử trùng lặp trong mảng</h3>
+          <p className="xsmall muted">Bài đang học · {path ? path.chapter : 'Chương 1'}</p>
+          <p className="small">Một mảng có thể chứa giá trị lặp lại. Với Set, mỗi giá trị chỉ được giữ một lần.</p>
+          <pre className="cm-code"><code>{'const unique = [...new Set(arr)];'}</code></pre>
+        </div>
+        <div className="cm-ai" aria-label="Trợ lý AI giải thích">
+          <p className="cm-ai-q"><Icon name="message-circle" className="icon-sm" /> Vì sao Set loại được trùng?</p>
+          <p className="cm-ai-a small">Set chỉ cho phép mỗi giá trị xuất hiện một lần. Khi trải lại bằng dấu <code>...</code>, ta được một mảng không còn phần tử lặp.</p>
+          <p className="xsmall muted">Trợ lý giải thích từng bước và để bạn quyết định bước tiếp theo.</p>
+        </div>
+      </div>
+    </figure>
+  );
+}
 
 function HomeCourseCard({ course: c }) {
   return (
@@ -115,9 +164,7 @@ export default function HomePage({ query = {} }) {
               {STATS.map(([v, l]) => <div key={v}><dt>{v}</dt><dd>{l}</dd></div>)}
             </dl>
           </div>
-          <div className="cm-hero-media">
-            <img src="/images/hero-learner.webp" width="1200" height="800" alt="" loading="eager" fetchPriority="high" decoding="async" />
-          </div>
+          <div className="cm-hero-media"><ProductWindow /></div>
         </section>
 
         <section className="section cm-home-section" aria-labelledby="home-features-title">
@@ -148,13 +195,18 @@ export default function HomePage({ query = {} }) {
             </ul>
             <Link className="cm-home-link" to="/ai">Trò chuyện với AI Mentor <Icon name="arrow-right" className="icon-sm" /></Link>
           </div>
-          <figure className="cm-mentor-art" role="img" aria-label="Minh họa hội thoại AI Mentor hướng dẫn loại bỏ các phần tử trùng lặp trong mảng JavaScript bằng Set.">
-            <div className="msg msg-user" aria-hidden="true">Làm sao loại bỏ phần tử trùng lặp trong mảng JavaScript?</div>
-            <div className="msg msg-ai" aria-hidden="true">
-              <p className="small">Dùng <code>Set</code>: Set chỉ giữ mỗi giá trị một lần, rồi trải lại thành mảng.</p>
-              <pre className="cm-mentor-code"><code>{'const unique = [...new Set(arr)];'}</code></pre>
+        </section>
+
+        <section className="cm-close" aria-labelledby="home-close-title">
+          <img src="/images/hero-learner.webp" width="1200" height="800" alt="" loading="lazy" decoding="async" />
+          <div className="stack-3">
+            <h2 id="home-close-title">Bắt đầu từ bài học đầu tiên</h2>
+            <p className="muted">Chọn một khóa học, xem đề cương và đăng ký. Lộ trình sẽ bắt đầu từ bài đầu tiên của bạn.</p>
+            <div className="cm-hero-actions">
+              <Link className="btn btn-primary btn-lg" to="/courses">Xem khóa học</Link>
+              <Link className="btn btn-secondary btn-lg" to="/ai">Hỏi AI Codi</Link>
             </div>
-          </figure>
+          </div>
         </section>
       </div>
 

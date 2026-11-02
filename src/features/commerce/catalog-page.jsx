@@ -8,9 +8,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
-import { Empty, Icon } from '../../components/ui/primitives';
-import { catalogEntry, filterCatalog, normaliseSort, published, typeaheadSuggestions } from './commerce-lib';
-import { CourseCard } from './course-card';
+import { Empty, Icon, Thumb } from '../../components/ui/primitives';
+import { catalogEntry, filterCatalog, lecturerName, normaliseSort, priceLabel, published, typeaheadSuggestions } from './commerce-lib';
+import { CourseCta } from './course-card';
 
 let catalogLoaded = false; // first visit shows the loading skeleton once per session
 
@@ -135,11 +135,77 @@ function SearchBox({ value, entries, onSearch, onOpenCourse }) {
   );
 }
 
+const fmt = Codi.fmt;
+const LEVEL_RANK = { Beginner: 1, Intermediate: 2, Advanced: 3 };
+
 function CatalogSkeleton() {
   return (
-    <div className="grid-3" aria-hidden="true">{[1, 2, 3, 4, 5, 6].map((i) => (
-      <div key={i} className="card card-body stack-3"><div className="skeleton" style={{ aspectRatio: '16/9' }} /><div className="skeleton skeleton-line" style={{ width: '80%' }} /><div className="skeleton skeleton-line" style={{ width: '50%' }} /></div>
+    <div className="cm-ledger-skel card" aria-hidden="true">{[1, 2, 3, 4, 5].map((i) => (
+      <div key={i} className="cm-ledger-skel-row"><div className="skeleton" style={{ width: 56, height: 40 }} /><div className="skeleton skeleton-line" style={{ width: '60%' }} /><div className="skeleton skeleton-line" style={{ width: '40%' }} /></div>
     ))}</div>
+  );
+}
+
+/** Sortable header cell: the sort value is the URL's existing sort option; the caret is drawn in CSS. */
+function SortHeader({ label, value, sort, onSort }) {
+  const active = sort === value;
+  return (
+    <th scope="col" aria-sort={active ? 'descending' : 'none'} className="num">
+      <button type="button" className={`cm-sort${active ? ' is-active' : ''}`} onClick={() => onSort(value)}>{label}<span className="cm-sort-caret" aria-hidden="true" /></button>
+    </th>
+  );
+}
+
+function LedgerRow({ course: c }) {
+  const own = Codi.isEnrolled(c.id);
+  const inCart = !own && Codi.cart().includes(c.id);
+  const rank = LEVEL_RANK[c.level] || 1;
+  return (
+    <tr>
+      <td data-label="Khóa học">
+        <div className="cm-ledger-course">
+          <Link className="cm-ledger-thumb" to={`/courses/${c.slug}`} tabIndex={-1} aria-hidden="true"><Thumb course={c} small /></Link>
+          <div className="cm-ledger-text">
+            <Link className="cm-ledger-title" to={`/courses/${c.slug}`}>{c.title}</Link>
+            <span className="small muted od-truncate">{lecturerName(c)}</span>
+            {own && <span className="badge badge-success"><Icon name="check" />Đã sở hữu</span>}
+            {inCart && <span className="badge badge-accent">Trong giỏ</span>}
+          </div>
+        </div>
+      </td>
+      <td data-label="Trình độ">
+        <span className="cm-level"><span className="cm-level-bar" aria-hidden="true">{[1, 2, 3].map((i) => <i key={i} className={i <= rank ? 'on' : undefined} />)}</span>{Codi.levelLabel(c.level)}</span>
+      </td>
+      <td data-label="Đánh giá" className="num">{c.rating > 0 ? <><Icon name="star-filled" className="icon-sm cm-star" /> <span className="strong">{c.rating.toFixed(1)}</span> <span className="muted">({fmt.num(c.ratingCount || 0)})</span></> : <span className="muted">Chưa có</span>}</td>
+      <td data-label="Thời lượng" className="num">{fmt.duration(c.durationMin)}</td>
+      <td data-label="Học viên" className="num">{fmt.num(c.learnersCount || 0)}</td>
+      <td data-label="Học phí" className="num"><span className="strong">{priceLabel(c)}</span></td>
+      <td className="cm-ledger-act"><CourseCta course={c} /></td>
+    </tr>
+  );
+}
+
+/** The results as a comparison ledger: one course per row, sortable where the catalogue has a sort value. */
+function CourseLedger({ list, sort, onSort }) {
+  return (
+    <section aria-labelledby="catalog-results-title" className="cm-ledger-wrap">
+      <h2 id="catalog-results-title" className="sr-only">Danh sách khoá học</h2>
+      <table className="cm-ledger">
+        <caption className="sr-only">Khoá học, sắp xếp theo {label(SORTS, sort)}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Khóa học</th>
+            <th scope="col">Trình độ</th>
+            <SortHeader label="Đánh giá" value="rating" sort={sort} onSort={onSort} />
+            <th scope="col" className="num">Thời lượng</th>
+            <SortHeader label="Học viên" value="enrollment" sort={sort} onSort={onSort} />
+            <th scope="col" className="num">Học phí</th>
+            <th scope="col"><span className="sr-only">Thao tác</span></th>
+          </tr>
+        </thead>
+        <tbody>{list.map((c) => <LedgerRow key={c.id} course={c} />)}</tbody>
+      </table>
+    </section>
   );
 }
 
@@ -203,10 +269,7 @@ export default function CatalogPage({ query: q }) {
             actions={<button type="button" className="btn btn-secondary" onClick={() => update({})}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />
         </div>
       ) : list.length ? (
-        <section aria-labelledby="catalog-results-title">
-          <h2 id="catalog-results-title" className="sr-only">Danh sách khoá học</h2>
-          <div className="grid-3">{list.map((c) => <CourseCard key={c.id} course={c} />)}</div>
-        </section>
+        <CourseLedger list={list} sort={f.sort} onSort={(v) => update({ sort: v })} />
       ) : (
         <div className="card">
           <Empty icon="search" title="Không tìm thấy khóa học phù hợp" body="Thử bỏ bớt bộ lọc, hoặc mô tả mục tiêu để AI Codi gợi ý khóa học."

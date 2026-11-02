@@ -1,15 +1,13 @@
 /**
- * Ownership-aware course CTAs and the catalog course card (real components/courses/catalog-course-card.tsx,
- * STATE-MACHINES §2 CTA mapping). Gated actions (add to cart, buy now, free enrol) run through Codi.requireAuth
- * so they complete after sign-in.
+ * Ownership-aware course CTAs (real components/courses/catalog-course-card.tsx, STATE-MACHINES §2 CTA mapping) and the
+ * gated purchase actions. Gated actions (add to cart, buy now, free enrol) run through Codi.requireAuth so they
+ * complete after sign-in.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
-import { Icon, Thumb } from '../../components/ui/primitives';
-import { addToCart, createBuyNowOrder, lecturerName, priceLabel } from './commerce-lib';
-
-const fmt = Codi.fmt;
+import { Icon } from '../../components/ui/primitives';
+import { addToCart, createBuyNowOrder } from './commerce-lib';
 
 /** "Thêm vào giỏ": shows "Đang thêm…" briefly, then adds and toasts "Xem giỏ hàng". */
 export function AddToCartButton({ course, className, label = true }) {
@@ -63,33 +61,4 @@ export function CourseCta({ course: c, block }) {
   if (own === 'in-cart') return <Link className={'btn btn-secondary' + b} to="/cart"><Icon name="check" /> Đã trong giỏ hàng · Xem giỏ</Link>;
   if (c.price === 0) return <button type="button" className={'btn btn-primary' + b} onClick={() => enrollFree(c)} aria-label={`Đăng ký miễn phí: ${c.title}`}>Đăng ký miễn phí</button>;
   return <AddToCartButton course={c} className={'btn btn-primary' + b} />;
-}
-
-export function CourseCard({ course: c }) {
-  const own = Codi.isEnrolled(c.id);
-  return (
-    <article className="card cm-card">
-      <Link className="cm-card-media" to={`/courses/${c.slug}`} tabIndex={-1} aria-hidden="true"><Thumb course={c} /></Link>
-      <div className="card-body compact cm-card-body">
-        <h3 className="cm-card-title"><Link to={`/courses/${c.slug}`}>{c.title}</Link></h3>
-        <p className="small muted od-truncate">{lecturerName(c)}</p>
-        <p className="cm-card-meta">
-          <span className="badge badge-neutral">{Codi.levelLabel(c.level)}</span>
-          {c.rating > 0
-            ? <span className="od-nowrap"><Icon name="star-filled" className="icon-sm cm-star" /> <span className="strong cm-fg">{c.rating.toFixed(1)}</span> ({fmt.num(c.ratingCount || 0)})</span>
-            : <span>Chưa có đánh giá</span>}
-          <span className="od-nowrap"><Icon name="clock" className="icon-sm" /> {fmt.duration(c.durationMin)}</span>
-        </p>
-        {(own || Codi.cart().includes(c.id)) && (
-          <div className="row" style={{ gap: 6 }}>
-            {own ? <span className="badge badge-success"><Icon name="check" />Đã sở hữu</span> : <span className="badge badge-accent">Trong giỏ</span>}
-          </div>
-        )}
-        <div className="cm-card-foot cm-card-buy">
-          <span className="price">{priceLabel(c)}</span>
-          <CourseCta course={c} />
-        </div>
-      </div>
-    </article>
-  );
 }
