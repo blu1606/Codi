@@ -3,7 +3,7 @@
 //  2. drops and recreates the public and drizzle schemas, then applies Codi's migrations
 //  3. builds scripts/data/mockup-seed.json from the rebuild's seed (export-rebuild-seed.mjs)
 //  4. runs Codi's seed-mockup.ts unchanged (password: SEED_ACCOUNT_PASSWORD, default Codi@12345)
-//  5. applies the rebuild-only user fields seed-mockup does not map (avatar image, email verification)
+//  5. applies the rebuild-only fields seed-mockup does not map (avatars, email verification, course covers)
 // Pass --no-backup to skip step 1.
 import { spawn } from "node:child_process";
 import { createWriteStream, mkdirSync, rmSync, statSync } from "node:fs";
@@ -12,9 +12,9 @@ import { fileURLToPath } from "node:url";
 import { eq, sql } from "drizzle-orm";
 import { createDb } from "@codi-1/db";
 import { user } from "@codi-1/db/schema/auth";
+import { courseDetails } from "@codi-1/db/schema/course-content";
 import { ENV } from "../src/env";
 import { runMigrations } from "./migrate";
-// @ts-expect-error plain ESM script without type declarations
 import { exportRebuildSeed } from "./export-rebuild-seed.mjs";
 
 const backendDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,6 +22,7 @@ const backupDir = path.resolve(backendDir, "../../.codi-gc-preserved/db-backups"
 const CONTAINER = process.env.PG_CONTAINER || "codi-rebuild-postgres";
 
 type SeedUser = { id: string; image?: string | null; emailVerified?: boolean };
+type SeedCourse = { id: string; coverImageUrl?: string | null };
 
 function databaseName(url: string) {
   return decodeURIComponent(new URL(url).pathname.slice(1));
@@ -85,11 +86,11 @@ async function main() {
   await runMigrations(ENV.DATABASE_URL);
 
   console.log("→ Seed input from backend/scripts/seed-source...");
-  const data = exportRebuildSeed() as { users: SeedUser[] };
+  const data = exportRebuildSeed() as { users: SeedUser[]; courses: SeedCourse[] };
 
   await run("npx", ["tsx", "scripts/seed-mockup.ts"], { env: { ...process.env, DATABASE_URL: ENV.DATABASE_URL, SEED_ACCOUNT_PASSWORD: ENV.SEED_ACCOUNT_PASSWORD } });
 
-  console.log("→ Avatars and email verification from the rebuild seed...");
+  console.log("→ Avatars, email verification and course covers from the rebuild seed...");
   const after = createDb({ DATABASE_URL: ENV.DATABASE_URL });
   try {
     await after.transaction(async (tx) => {
@@ -98,6 +99,9 @@ async function main() {
         if (u.image) patch.image = u.image;
         if (u.emailVerified === false) patch.emailVerified = false;
         if (Object.keys(patch).length) await tx.update(user).set(patch).where(eq(user.id, u.id));
+      }
+      for (const c of data.courses) {
+        if (c.coverImageUrl) await tx.update(courseDetails).set({ coverImageUrl: c.coverImageUrl }).where(eq(courseDetails.courseId, c.id));
       }
     });
   } finally {
