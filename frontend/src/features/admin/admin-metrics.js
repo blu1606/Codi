@@ -1,6 +1,6 @@
 /**
- * Admin metrics — every number on the admin dashboard, "Quan sát hệ thống" (A1–A9) and "Tài chính" (B1–B9),
- * computed from the live store rows (orders, users, enrolments, learnerProgress, studyLog, learnerStudyDays,
+ * Admin metrics — the store-computed analytics behind the cards the backend does not serve (see withStoreCards):
+ * "Quan sát hệ thống" (A1–A9) and "Tài chính" (B1–B9) formulas, computed from the live store rows (orders, users, enrolments, learnerProgress, studyLog, learnerStudyDays,
  * checkoutEvents, questions, reviews, submissions, courses). Port of the real app's analytics-contract.ts /
  * analytics-formulas.ts / admin-analytics-service.ts / revenue-analytics-service.ts.
  *
@@ -304,19 +304,31 @@ export function insights(days, now = Date.now()) {
   };
 }
 
-// ───────────────────────── dashboard ─────────────────────────
-/** S30 KPIs and "Cần xử lý" counts. Revenue / orders use the same 30-day window and basis as B1 / B4. */
-export function dashboard(now = Date.now()) {
-  const f = finance(30, now); const w = f.window; const d = db();
+// ───────────────────────── backend overview + store-only cards ─────────────────────────
+/** Backend window { start, end } (ISO) → the { start, end, keys, days } shape the cards render. */
+const fromIsoWindow = (w) => span(Date.parse(w.start), Date.parse(w.end));
+
+/**
+ * Combines GET /api/admin/{insights|finance}/overview with the cards the backend marks unavailable, which stay
+ * computed from the store rows: A4 retention, A6 start choice, A9 AI health, the A8 grading median (insights) and
+ * B5 checkout funnel (finance). The legacy window has the same length as the backend one.
+ */
+export function withStoreCards(page, server) {
+  const window = fromIsoWindow(server.window);
+  const previousWindow = fromIsoWindow(server.previousWindow);
+  if (page === 'insights') {
+    const local = insights(window.days);
+    return {
+      ...server, window, previousWindow,
+      operations: { ...server.operations, gradingHoursMedian: local.operations.gradingHoursMedian, gradedCount: local.operations.gradedCount },
+      retention: local.retention, startChoice: local.startChoice, previousStartChoice: local.previousStartChoice, ai: local.ai, previousAi: local.previousAi,
+    };
+  }
+  const local = finance(window.days);
+  const r = server.reconciliation;
   return {
-    window: w,
-    revenue: f.totals.net, paidOrders: f.totals.paidOrders,
-    orders: f.statusDistribution.reduce((s, b) => s + b.orders, 0),
-    newLearners: arr(d.users).filter((u) => u.role === 'learner' && inWindow(u.createdAt, w)).length,
-    publishedCourses: arr(d.courses).filter((c) => c.status === 'published').length,
-    pendingCourses: arr(d.courses).filter((c) => c.status === 'pending').length,
-    overdueOrders: arr(d.orders).filter((o) => isOverdue(o, now)).length,
-    nearLimitVouchers: arr(d.vouchers).filter((v) => v.active && num(v.usageLimit) > 0 && num(v.used) * 10 >= num(v.usageLimit) * 9).length,
-    inactiveUsers: arr(d.users).filter((u) => u.status === 'inactive').length,
+    ...server, window, previousWindow,
+    reconciliation: { ...r, items: r.items.map((x) => ({ id: x.code, code: x.code, status: x.status, total: x.totalAmount, received: x.receivedAmount, created: Date.parse(x.createdAt), reasons: x.reasons })) },
+    checkout: local.checkout, previousCheckout: local.previousCheckout,
   };
 }

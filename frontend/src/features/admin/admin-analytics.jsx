@@ -2,24 +2,25 @@
  * S36 "Quan sát hệ thống" (A1–A9) and S37 "Tài chính" (B1–B9).
  * Routes (admin): /admin/insights · /admin/insights/:card · /admin/finance · /admin/finance/:card
  *
- * Port of the real admin-insights-view / admin-finance-view. Every number comes from admin-metrics.js, which
- * reads the store rows (orders, users, enrolments, learnerProgress, studyLog, checkoutEvents, questions, reviews,
- * submissions, courses). Cards the real app marks unavailable (A4, A6, A9, B5) stay working, computed from the
- * same rows. Period presets 7 / 30 / 90 ngày (real), previous period always compared. Mockup additions kept:
- * per-card detail view with the full table + CSV, and the B9 export dialog.
+ * Port of the real admin-insights-view / admin-finance-view. Data: GET /api/admin/insights/overview and
+ * /api/admin/finance/overview (?period=7|30|90). Cards the real app marks unavailable (A4, A6, A9, the A8 grading
+ * median and B5) stay working, computed from the store rows by admin-metrics.js (withStoreCards). Period presets
+ * 7 / 30 / 90 ngày (real), previous period always compared. Mockup additions kept: per-card detail view with the
+ * full table + CSV, and the B9 export dialog.
  *
  * Cards are built with the chart kit (src/lib/charts.js), which returns trusted HTML strings. Card bodies are
  * composed with a local escaping `html` tag and rendered via <Html>; "#/…" links inside that markup are handled
  * by one container click handler.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { charts } from '../../lib/charts';
 import { ICON_PATHS } from '../../lib/icon-paths';
 import { Icon, Html, Empty, esc } from '../../components/ui/primitives';
 import { AdminShell } from './admin-shell';
-import { insights, finance, rangeLabel, dayLabel, dayLabelFull, dayKey, BUCKET_LABEL, BUCKET_TONE } from './admin-metrics';
+import { withStoreCards, rangeLabel, dayLabel, dayLabelFull, dayKey, BUCKET_LABEL, BUCKET_TONE } from './admin-metrics';
+import { useAdminGet } from './admin-data';
 
 const { fmt } = Codi;
 
@@ -40,7 +41,7 @@ const ch = {
 
 const PERIODS = [{ v: '7', label: '7 ngày', days: 7 }, { v: '30', label: '30 ngày', days: 30 }, { v: '90', label: '90 ngày', days: 90 }];
 const prefs = () => Codi.ensure('analyticsPrefs', () => ({ period: '30', open: { insights: false, finance: false } }));
-const periodDays = () => (PERIODS.find((x) => x.v === prefs().period) || PERIODS[1]).days;
+const period = () => (PERIODS.find((x) => x.v === prefs().period) || PERIODS[1]).v;
 
 const vnd = (n) => fmt.vnd(Math.round(n || 0));
 const P = (v) => ch.fmt.pct(v, v < 10 ? 1 : 0);
@@ -290,23 +291,31 @@ const FIN = {
 const PAGES = {
   insights: {
     title: 'Quan sát hệ thống', lead: 'Người dùng, nội dung, vận hành và AI — cùng một khoảng thời gian cho mọi thẻ.', route: '/admin/insights',
-    cards: INSIGHTS, overview: ['a1', 'a2', 'a3', 'a7', 'a8'], more: ['a5', 'a4', 'a6', 'a9'], load: insights, collapsible: true,
+    cards: INSIGHTS, overview: ['a1', 'a2', 'a3', 'a7', 'a8'], more: ['a5', 'a4', 'a6', 'a9'], collapsible: true,
     basis: 'Nguồn: tài khoản, ghi danh, tiến độ học, nhật ký học, sự kiện mua hàng, câu hỏi, đánh giá và bài nộp trong hệ thống. Ngày tính theo GMT+7, gồm cả hôm nay; "Kỳ trước" là khoảng có cùng độ dài ngay trước kỳ này.',
     error: 'Không tải được thống kê.',
     quiet: (d) => (sum(d.daily, (x) => x.signups + x.newEnrolments + x.lessonsCompleted + x.activeLearners) === 0 ? 'Không có hoạt động nào được ghi nhận trong kỳ này.' : null),
   },
   finance: {
     title: 'Tài chính', lead: 'Doanh thu, đơn hàng và việc cần đối soát.', route: '/admin/finance',
-    cards: FIN, overview: ['b1', 'b2', 'b4', 'b8'], more: ['b3', 'b5', 'b6', 'b7', 'b9'], load: finance, collapsible: true,
+    cards: FIN, overview: ['b1', 'b2', 'b4', 'b8'], more: ['b3', 'b5', 'b6', 'b7', 'b9'], collapsible: true,
     error: 'Không tải được số liệu tài chính.',
     basis: 'Gộp = tổng giá gốc của đơn đã thanh toán, tính theo ngày thanh toán. Ròng = gộp − giảm giá. Hoàn tiền = đơn đã hoàn, tính theo ngày cập nhật gần nhất.',
     quiet: (d) => (d.totals.paidOrders === 0 && d.statusDistribution.every((r) => r.orders === 0) ? 'Không có đơn hàng nào được thanh toán trong kỳ này.' : null),
   },
 };
 
-/** Loads the page data; a malformed row surfaces as the real error panel instead of a blank page. */
-function load(page) {
-  try { return { data: PAGES[page].load(periodDays()) }; } catch (error) { console.error(error); return { error }; }
+/**
+ * Loads the page overview for the selected period and adds the store-only cards. A malformed reply surfaces as the
+ * real error panel instead of a blank page. While another period loads, the previous data stays (is-refreshing).
+ */
+function useAnalytics(page) {
+  const res = useAdminGet(`/api/admin/${page}/overview?period=${period()}`);
+  const merged = useMemo(() => {
+    if (!res.data) return { data: null, error: null };
+    try { return { data: withStoreCards(page, res.data), error: null }; } catch (error) { console.error(error); return { data: null, error }; }
+  }, [page, res.data]);
+  return { d: merged.data, failed: !!(res.error || merged.error) && !merged.data, loading: res.loading, reload: res.reload };
 }
 const renderCard = (page, id, d) => { const c = PAGES[page].cards[id](d); return ch.card({ id, detailHref: c.table ? `${PAGES[page].route}/${id}` : null, ...c }); };
 
@@ -325,8 +334,8 @@ function downloadCard(page, id, d) {
   Codi.ui.toast(`Đã tải CSV ${c.code} (${c.table.rows.length} dòng).`, { type: 'success' });
 }
 
-function ExportDialog({ handle, page }) {
-  const P2 = PAGES[page]; const { data: d } = load(page);
+function ExportDialog({ handle, page, d }) {
+  const P2 = PAGES[page];
   const cards = d ? P2.overview.concat(P2.more).map((id) => ({ id, c: P2.cards[id](d) })).filter((x) => x.c.table) : [];
   const [picked, setPicked] = useState(() => Object.fromEntries(cards.map((x) => [x.id, true])));
   if (!d) return <p className="small">{P2.error}</p>;
@@ -351,21 +360,14 @@ function ExportDialog({ handle, page }) {
 }
 
 // ───────────────────────── page components ─────────────────────────
-/** Period changes re-render every card; the previous render stays visible at reduced opacity briefly. */
-function useAnalyticsActions() {
-  const [refreshing, setRefreshing] = useState(false);
-  const timer = useRef(null);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const refresh = () => {
-    setRefreshing(true); Codi.set(() => {});
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setRefreshing(false), 350);
-  };
+/** Period changes re-fetch every card; the previous render stays visible at reduced opacity while it loads. */
+function useAnalyticsActions(page) {
+  const a = useAnalytics(page);
   const handlers = {
-    'aa-period': (v) => { prefs().period = v; refresh(); },
-    'aa-expand': (page) => { const o = prefs().open; o[page] = !o[page]; Codi.set(() => {}); },
-    'aa-export': (page) => Codi.ui.modal({ title: 'Xuất CSV', body: (h) => <ExportDialog handle={h} page={page} /> }),
-    retry: refresh,
+    'aa-period': (v) => { prefs().period = v; Codi.set(() => {}); },
+    'aa-expand': (pg) => { const o = prefs().open; o[pg] = !o[pg]; Codi.set(() => {}); },
+    'aa-export': (pg) => { if (a.d) Codi.ui.modal({ title: 'Xuất CSV', body: (h) => <ExportDialog handle={h} page={pg} d={a.d} /> }); },
+    retry: () => a.reload(),
   };
   // One delegated handler for data-action buttons and "#/…" links inside chart-kit markup.
   const onClick = (e) => {
@@ -374,7 +376,7 @@ function useAnalyticsActions() {
     const b = e.target.closest('[data-action="aa-export"]');
     if (b) { e.preventDefault(); handlers['aa-export'](b.dataset.page); }
   };
-  return { refreshing, onClick, handlers };
+  return { refreshing: a.loading && !!a.d, d: a.d, failed: a.failed, onClick, handlers };
 }
 
 function Toolbar({ d, onPeriod }) {
@@ -395,8 +397,8 @@ function ErrorPanel({ text, onRetry }) {
 
 function AnalyticsPage({ page }) {
   useCodi();
-  const { refreshing, onClick, handlers } = useAnalyticsActions();
-  const P2 = PAGES[page]; const { data: d } = load(page);
+  const { refreshing, d, failed, onClick, handlers } = useAnalyticsActions(page);
+  const P2 = PAGES[page];
   const open = !P2.collapsible || prefs().open[page];
   const quiet = d && P2.quiet(d);
   const grid = (ids) => <Html className={`viz-grid-cards ${refreshing ? 'is-refreshing' : ''}`} html={ids.map((id) => String(renderCard(page, id, d))).join('')} />;
@@ -406,7 +408,8 @@ function AnalyticsPage({ page }) {
         <div className="page-header"><div><h1>{P2.title}</h1><p className="muted">{P2.lead}</p></div></div>
         <Toolbar d={d} onPeriod={handlers['aa-period']} />
         {P2.basis && <p className="xsmall muted" style={{ margin: 0 }}>{P2.basis}</p>}
-        {!d && <ErrorPanel text={P2.error} onRetry={handlers.retry} />}
+        {failed && <ErrorPanel text={P2.error} onRetry={handlers.retry} />}
+        {!d && !failed && <div className="viz-grid-cards" aria-busy="true"><div className="viz-skeleton" /><div className="viz-skeleton" /></div>}
         {quiet && <p role="status" className="card ad-panel-row small muted">{quiet}</p>}
         {d && (
           <>
@@ -428,12 +431,11 @@ function AnalyticsPage({ page }) {
 
 function AnalyticsDetailPage({ page, id }) {
   useCodi();
-  const { refreshing, onClick, handlers } = useAnalyticsActions();
+  const { refreshing, d, failed, onClick, handlers } = useAnalyticsActions(page);
   const P2 = PAGES[page]; const fn = P2.cards[id];
   if (!fn) {
     return <AdminShell active={P2.route}><div><Empty icon="bar-chart" title="Không tìm thấy thẻ" actions={<Link className="btn btn-primary" to={P2.route}>Về {P2.title}</Link>} /></div></AdminShell>;
   }
-  const { data: d } = load(page);
   const c = d ? fn(d) : null;
   return (
     <AdminShell active={P2.route}>
@@ -450,7 +452,7 @@ function AnalyticsDetailPage({ page, id }) {
                 {c.table.rows.length ? <Html className="table-wrap" html={String(ch.table(c.table.headers, c.table.rows, { caption: c.title }))} /> : <div className="viz-empty">Chưa có dữ liệu trong kỳ này.</div>}</section>
             )}
           </>
-        ) : <ErrorPanel text={P2.error} onRetry={handlers.retry} />}
+        ) : failed ? <ErrorPanel text={P2.error} onRetry={handlers.retry} /> : <div className="viz-skeleton" aria-busy="true" />}
       </div>
     </AdminShell>
   );
