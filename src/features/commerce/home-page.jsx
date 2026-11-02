@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Icon, Thumb } from '../../components/ui/primitives';
+import { BrandMark } from '../shell/brand-link';
 import { lecturerName, published } from './commerce-lib';
 
 const fmt = Codi.fmt;
@@ -160,7 +161,7 @@ export default function HomePage({ query = {} }) {
       <footer className="cm-footer" aria-label="Thông tin và liên kết Codi">
         <div className="cm-footer-inner">
           <div className="stack-2">
-            <Link to="/" className="logo" aria-label="Codi - Trang chủ"><span className="logo-mark" aria-hidden="true">C</span> Codi</Link>
+            <Link to="/" className="logo" aria-label="Codi - Trang chủ"><BrandMark size={28} /> Codi</Link>
             <p className="xsmall muted">Học lập trình cùng trợ lý AI và lộ trình thiết kế riêng cho mỗi cá nhân. Codi đồng hành từ những dòng code đầu tiên.</p>
           </div>
           {FOOTER_GROUPS.map(([title, links]) => (
