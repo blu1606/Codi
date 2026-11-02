@@ -1,5 +1,5 @@
 // Backend entry: Codi's API (route handlers + server actions, vendored unchanged) on Hono, port 4100.
-// The Vite dev server on :5190 proxies /api here, so the browser sees one origin.
+// The Vite dev server on :3001 proxies /api here, so the browser sees one origin.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";

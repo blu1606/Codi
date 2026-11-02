@@ -217,6 +217,6 @@ User-visible changes:
 - Code runs only in the backend sandbox (JavaScript). The browser runner was removed; the lecturer preview of a
   guided tutorial is read-only.
 - "Hồ sơ năng lực" uses the real GitHub link and analysis routes. Locally, linking only works if the GitHub OAuth app
-  accepts `http://localhost:5190/api/auth/callback/github`, so a learner normally sees the "Kết nối GitHub" state;
+  accepts `http://localhost:3001/api/auth/callback/github`, so a learner normally sees the "Kết nối GitHub" state;
   a saved profile shows a compact summary (technologies, observed facts) instead of the mockup's canned report.
-- Profile avatars are stored as data URLs (R2 is not configured locally); assignment file uploads show the server's error.
+- Profile avatars and assignment files are uploaded to R2 through the real routes.

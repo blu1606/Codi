@@ -28,7 +28,7 @@ export const ENV = {
   DATABASE_URL,
   BETTER_AUTH_SECRET,
   // The browser origin. The Vite dev server proxies /api to the backend, so auth is same-origin.
-  BETTER_AUTH_URL: read("BETTER_AUTH_URL") ?? "http://localhost:5190",
+  BETTER_AUTH_URL: read("BETTER_AUTH_URL") ?? "http://localhost:3001",
   AI_PROVIDER: (read("AI_PROVIDER") ?? "gemini") as "gemini" | "openai",
   AI_MODEL: read("AI_MODEL"),
   GOOGLE_GENERATIVE_AI_API_KEY: read("GOOGLE_GENERATIVE_AI_API_KEY"),

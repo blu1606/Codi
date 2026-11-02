@@ -14,10 +14,10 @@ npm install                    # one install for every workspace (root, frontend
 npm run db:up                  # Postgres 16 on localhost:5544 (container codi-rebuild-postgres)
 cp backend/.env.example backend/.env   # optional: every key has a local default
 npm run seed                   # create/reset database `codi` with the demo data (backs up first)
-npm start                      # API on :4100 + web on http://localhost:5190
+npm start                      # API on :4100 + web on http://localhost:3001
 ```
 
-Open http://localhost:5190. Vite proxies `/api` to the backend, so the browser sees one origin.
+Open http://localhost:3001. Vite proxies `/api` to the backend, so the browser sees one origin.
 
 ## Demo accounts
 
@@ -57,16 +57,21 @@ route answers 404 when `NODE_ENV=production`.
 ## Configuration and keys
 
 `backend/.env` (gitignored; keys in `backend/.env.example`). Defaults: `DATABASE_URL=postgresql://codi:codi@localhost:5544/codi`,
-`BETTER_AUTH_URL=http://localhost:5190` (the browser origin). The backend refuses a Supabase `DATABASE_URL`.
+`BETTER_AUTH_URL=http://localhost:3001` (the browser origin). The backend refuses a Supabase `DATABASE_URL`.
+
+The web runs on port 3001 on purpose: Codi's Google and GitHub OAuth apps are registered for
+`http://localhost:3001`, so copying Codi's keys makes social sign-in work without touching the provider consoles.
+For the same reason Codi's own dev server (also 3001) cannot run at the same time. With Codi's `RESEND_API_KEY`
+and `R2_*` keys, codes are real emails and uploads go to Codi's real R2 buckets.
 
 | Feature | Needs | Without it |
 |---|---|---|
 | Email codes (register, change email, reset password) | `RESEND_API_KEY`, `EMAIL_FROM` | The code is printed to the backend console: `[Auth OTP for <email>]: 123456` |
 | AI tutor, course advisor, AI quiz questions | `GOOGLE_GENERATIVE_AI_API_KEY` (or `AI_PROVIDER=openai` + `OPENAI_API_KEY`) | The screens show the backend's "AI không khả dụng" error |
 | Checkout | `SEPAY_WEBHOOK_SECRET`, `SEPAY_BANK_CODE`, `SEPAY_ACCOUNT_NUMBER` | Paid checkout answers 503 |
-| Avatar and assignment file uploads | Cloudflare `R2_*` | Not configured locally: uploads fail with the server's error (avatars are saved as data URLs instead) |
-| Google sign-in | `GOOGLE_CLIENT_ID/SECRET`, and `http://localhost:5190/api/auth/callback/google` added to the OAuth client | Google shows a redirect error |
-| GitHub sign-in and "Hồ sơ năng lực" | `GITHUB_CLIENT_ID/SECRET` with callback `http://localhost:5190/api/auth/callback/github`; the analysis also needs `OPENAI_API_KEY` and the `GITHUB_PROFILE_BUDGET_*` keys | Linking or analysis shows GitHub's or the backend's error |
+| Avatar and assignment file uploads | Cloudflare `R2_*` | Uploads fail with the server's error |
+| Google sign-in | `GOOGLE_CLIENT_ID/SECRET` with `http://localhost:3001/api/auth/callback/google` allowed on the OAuth client | Google shows a redirect error |
+| GitHub sign-in and "Hồ sơ năng lực" | `GITHUB_CLIENT_ID/SECRET` with callback `http://localhost:3001/api/auth/callback/github`; the analysis also needs `OPENAI_API_KEY` and the `GITHUB_PROFILE_BUDGET_*` keys | Linking or analysis shows GitHub's or the backend's error |
 
 ## How it is built
 
