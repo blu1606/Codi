@@ -2,11 +2,10 @@
 // curriculum table (lesson kind, quiz size, code tests, assignment rubric), the assignment builder (instructions,
 // submission format, scores, rubric) and the guided-tutorial step editor. Writes go through
 // withCourseContentWrite, so ownership, the pending-review lock and knowledge-map staleness follow Codi's rules.
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { ForbiddenError } from "@codi-1/auth";
-import { assessmentSubmissions, assessments, codingExercises, codingTestCases, codingTestResults, codingWorkspaces, courseChapters, courseLessons, courses,
-  lessonSkills, skillPrerequisites, skills, studentEnrollments } from "@codi-1/db";
-import { lockKnowledgeMap } from "@/lib/confirmed-knowledge-map";
+import { assessmentSubmissions, assessments, codingExercises, codingTestCases, codingTestResults, codingWorkspaces, courseLessons, courses,
+  studentEnrollments } from "@codi-1/db";
 import { parseRubric } from "@/lib/assignment-rubric";
 
 export { parseRubric };
@@ -262,57 +261,6 @@ export async function getCourseCodeStats(courseId: string) {
       viewed: spaces.filter((w) => w.viewed).length, worst });
   }
   return { rows };
-}
-
-/**
- * Simulated knowledge-map analysis (Codi's LLM analysis is disabled; the product owner kept the mockup simulation).
- * Every existing concept and edge goes back to "suggested", links to deleted lessons are gone already (cascade),
- * each lesson no concept covers gets its own concept named after the lesson, chained after the previous lesson's
- * concept in authored order. The map becomes "ready" for the current content generation, so it can be confirmed.
- */
-export async function simulateKnowledgeMapAnalysis(courseId: string) {
-  const { course } = await getEditableCourse(courseId);
-  return db.transaction(async (store) => {
-    await lockKnowledgeMap(store, courseId, "write");
-    const [fresh] = await store.select().from(courses).where(eq(courses.id, course.id)).for("update");
-    if (!fresh || fresh.status === "pending") throw new Error("Khoá học đang chờ duyệt — nội dung chỉ đọc.");
-    const lessons = await store.select({ id: courseLessons.id, title: courseLessons.title })
-      .from(courseLessons).innerJoin(courseChapters, eq(courseLessons.chapterId, courseChapters.id))
-      .where(eq(courseChapters.courseId, courseId)).orderBy(asc(courseChapters.position), asc(courseLessons.position));
-    const existing = await store.select({ id: skills.id, name: skills.name }).from(skills).where(eq(skills.courseId, courseId));
-    const ids = existing.map((k) => k.id);
-    const links = ids.length ? await store.select().from(lessonSkills).where(inArray(lessonSkills.skillId, ids)) : [];
-    if (ids.length) {
-      await store.update(skills).set({ review: "suggested" }).where(eq(skills.courseId, courseId));
-      await store.update(skillPrerequisites).set({ review: "suggested" }).where(inArray(skillPrerequisites.skillId, ids));
-    }
-    const names = new Set(existing.map((k) => k.name));
-    const conceptOf = new Map<string, number>(); // lessonId → first concept
-    links.forEach((x) => { if (!conceptOf.has(x.lessonId)) conceptOf.set(x.lessonId, x.skillId); });
-    let previous: number | undefined;
-    let added = 0;
-    for (const l of lessons) {
-      let id = conceptOf.get(l.id);
-      if (id === undefined) {
-        const base = l.title.replace(/^Bài \d+[:.]\s*/i, "").trim().slice(0, 120) || l.title.slice(0, 120);
-        let name = base; let n = 2;
-        while (names.has(name)) name = `${base} (${n++})`;
-        names.add(name);
-        const [k] = await store.insert(skills).values({ courseId, name, source: "ai", review: "suggested" }).returning({ id: skills.id });
-        id = k!.id; added += 1;
-        await store.insert(lessonSkills).values({ lessonId: l.id, skillId: id });
-        if (previous !== undefined && previous !== id) {
-          await store.insert(skillPrerequisites).values({ skillId: id, prerequisiteSkillId: previous, source: "ai", review: "suggested" }).onConflictDoNothing();
-        }
-      }
-      previous = id;
-    }
-    await store.update(courses).set({
-      knowledgeMapStatus: lessons.length ? "ready" : "empty", knowledgeMapModel: "simulated",
-      knowledgeMapGeneratedAt: new Date(), knowledgeMapAnalysisGeneration: fresh.knowledgeMapContentGeneration,
-    }).where(eq(courses.id, courseId));
-    return { success: true as const, concepts: existing.length + added, added };
-  });
 }
 
 /** In-app notice from the lecturer to one enrolled learner ("Nhắn" on the progress page). */

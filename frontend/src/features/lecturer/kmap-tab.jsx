@@ -2,10 +2,12 @@
 // with loop skip (D10), cycle detection, graph view with zoom + chapter filter + side panel, default learning order
 // preview, confirmation with a confirmed snapshot. Copy follows the real knowledge-map-client.tsx.
 // Data and writes: Codi's kmap actions (getKnowledgeMapData, reviewKnowledgeMapItem, renameKnowledgeMapConcept,
-// addKnowledgeMapEdge, acceptAllKnowledgeMap, confirmKnowledgeMap). Analysis comes from the lecturer-ai feature
-// (Codi.lecturerAI.runKnowledgeMapAnalysis, a simulation stored by the backend); without it the tab shows the real
-// trial state ("Phân tích AI chưa khả dụng").
-import { useCallback, useEffect, useState } from 'react';
+// addKnowledgeMapEdge, acceptAllKnowledgeMap, confirmKnowledgeMap). Analysis is Codi's background job: the lecturer-ai
+// feature starts it (Codi.lecturerAI.runKnowledgeMapAnalysis → runKnowledgeMapAnalysis action), saving course content
+// also queues one on the server, and the tab re-reads the map every 5 s while it is 'analysing' (real
+// knowledge-map-client.tsx). When the backend reports analysisAvailable false (AI worker off) or the lecturer-ai
+// feature is absent, the tab shows the real trial state ("Phân tích AI chưa khả dụng").
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { charts } from '../../lib/charts';
@@ -20,7 +22,7 @@ const lessonOf = (c, id) => { const f = findLesson(c, id); return f ? f.l : null
 
 /** Map shape the tab renders, from getKnowledgeMapData. Concept/edge ids are the backend skill ids. */
 const toMap = (d) => ({
-  status: d.course.knowledgeMapStatus, updatedAt: d.course.knowledgeMapGeneratedAt,
+  status: d.course.knowledgeMapStatus, updatedAt: d.course.knowledgeMapGeneratedAt, analysisAvailable: !!d.course.analysisAvailable,
   confirmationUnavailable: !!d.course.confirmationUnavailable, requiresReconfirmation: !!d.course.requiresReconfirmation,
   concepts: d.concepts.map((k) => ({ id: k.id, name: k.name, review: k.review, lessonIds: k.lessonIds || [] })),
   edges: d.edges.map((e) => ({ from: e.from, to: e.to, review: e.review })),
@@ -78,6 +80,7 @@ function topoLessons(c, m) {
 const cname = (m, id) => (m.concepts.find((k) => k.id === id) || { name: id }).name;
 const REVIEW = { suggested: ['Đề xuất', 'badge-warn'], accepted: ['Đã chấp nhận', 'badge-success'], edited: ['Đã sửa', 'badge-info'], declined: ['Đã bỏ', 'badge-neutral'] };
 const reviewOf = (r) => REVIEW[r] || REVIEW.suggested;
+const POLL_MS = 5000;
 const ZOOM_MIN = 0.6; const ZOOM_MAX = 1.4; const ZOOM_STEP = 0.15;
 
 let kmapView = 'graph'; // 'graph' or 'list'
@@ -93,10 +96,29 @@ function useKmapData(courseId) {
   const load = useCallback(async () => {
     setSt((x) => ({ ...x, loading: true, error: null }));
     try { const d = await act('kmap', 'getKnowledgeMapData', courseId); setSt({ m: toMap(d), loading: false, error: null }); }
-    catch (error) { setSt({ m: null, loading: false, error }); }
+    catch (error) { setSt((x) => ({ m: x.m, loading: false, error })); } // a failed poll keeps the map on screen
   }, [courseId]);
   useEffect(() => { load(); }, [load]);
   return { ...st, reload: load };
+}
+
+/** While a real analysis runs, re-read the map every POLL_MS; announce the result once the status changes. */
+function useAnalysisPolling(c, km) {
+  const status = km.m ? km.m.status : null;
+  const polling = !!(km.m && km.m.analysisAvailable && status === 'analysing');
+  const { reload } = km;
+  useEffect(() => {
+    if (!polling) return undefined;
+    const timer = setInterval(() => { reload(); }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [polling, reload]);
+  const previous = useRef(status);
+  useEffect(() => {
+    const was = previous.current; previous.current = status;
+    if (was !== 'analysing' || !status || status === 'analysing') return;
+    reloadCourse(c.id);
+    if (status === 'ready') toast('Bản đồ kiến thức đã sẵn sàng. Xem lại các đề xuất rồi xác nhận.', { type: 'success' });
+  }, [status, c.id]);
 }
 
 function RenameBody({ handle, initial, onSave }) {
@@ -115,14 +137,14 @@ function RenameBody({ handle, initial, onSave }) {
 export function KmapTab({ c }) {
   useView();
   const km = useKmapData(c.id);
+  useAnalysisPolling(c, km);
   if (!km.m) return km.error ? <LoadError error={km.error} onRetry={km.reload} /> : <Loading rows={4} label="Đang tải bản đồ kiến thức…" />;
   return <KmapBody c={c} m={km.m} reload={km.reload} />;
 }
 
-function KmapBody({ c, m: stored, reload }) {
+function KmapBody({ c, m, reload }) {
   const ro = locked(c);
-  const [busy, setBusy] = useState(null); // 'analysing' | 'failed' while/after a run in this view
-  const m = busy ? { ...stored, status: busy } : stored;
+  const [starting, setStarting] = useState(false);
   /** Runs a kmap write, then refreshes the map and the course readiness. */
   const save = async (run, okMessage) => {
     try {
@@ -137,34 +159,35 @@ function KmapBody({ c, m: stored, reload }) {
       await reload(); reloadCourse(c.id);
     }
   };
-  const run = analyser();
+  const run = m.analysisAvailable ? analyser() : null;
+  // Queues the background job; the map turns 'analysing' and the tab polls until the worker finishes.
   const analyse = async () => {
-    if (!run || busy === 'analysing') return;
-    setBusy('analysing');
+    if (!run || starting || m.status === 'analysing') return;
+    setStarting(true);
     const r = await run(c.id);
-    if (r && r.ok === false) { setBusy('failed'); if (r.error) toast(r.error, { type: 'danger' }); return; }
+    setStarting(false);
+    if (r && r.ok === false) toast(r.error || 'Không thể bắt đầu phân tích.', { type: r.code === 'active_job' ? 'info' : 'danger' });
     await reload(); reloadCourse(c.id);
-    setBusy(null);
-    toast('Bản đồ kiến thức đã sẵn sàng. Xem lại các đề xuất rồi xác nhận.', { type: 'success' });
   };
-  const trialNotice = !run && (
-    <Alert type="info" title="Phân tích AI chưa khả dụng" body="Bản thử nghiệm không gọi dịch vụ AI và không tạo bản đồ mới. Nguồn AI và thời điểm tạo đã lưu trước đây chưa được xác minh, không phải bằng chứng đã trích xuất nội dung. Bạn vẫn có thể xem lại, sửa và xác nhận bản đồ hiện có nếu đủ điều kiện. Khi chưa có bản đồ hợp lệ, khoá học chưa thể đáp ứng điều kiện bản đồ để xuất bản." />
-  );
+  const trialNotice = run
+    ? <Alert type="info" title="Bản đồ do AI đề xuất" body="AI sử dụng tiêu đề, mô tả và tối đa 1.200 ký tự đầu của nội dung mỗi bài học để đề xuất khái niệm và quan hệ; chưa đọc PDF, slide hoặc video. Giảng viên cần kiểm tra và bổ sung trước khi xác nhận. Bản đồ đã xác nhận và tiến độ học viên vẫn được giữ trong khi phân tích. Khi bạn lưu nội dung khoá học, Codi tự xếp một lượt phân tích lại." />
+    : <Alert type="info" title="Phân tích AI chưa khả dụng" body="Bản thử nghiệm không gọi dịch vụ AI và không tạo bản đồ mới. Nguồn AI và thời điểm tạo đã lưu trước đây chưa được xác minh, không phải bằng chứng đã trích xuất nội dung. Bạn vẫn có thể xem lại, sửa và xác nhận bản đồ hiện có nếu đủ điều kiện. Khi chưa có bản đồ hợp lệ, khoá học chưa thể đáp ứng điều kiện bản đồ để xuất bản." />;
+  const startLabel = (label) => (starting ? 'Đang bắt đầu…' : label);
   const retryBtn = run && !ro
-    ? <button type="button" className="btn btn-secondary btn-sm" onClick={analyse}><Icon name="refresh" className="icon-sm" /> Thử lại</button>
-    : <span className="row" style={{ gap: 6 }}><button type="button" className="btn btn-secondary btn-sm" disabled><Icon name="refresh" className="icon-sm" /> Thử lại</button><span className="badge badge-neutral">Sắp có</span></span>;
+    ? <button type="button" className="btn btn-secondary btn-sm" onClick={analyse} disabled={starting}><Icon name="refresh" className="icon-sm" /> {startLabel('Thử lại')}</button>
+    : null;
 
-  if (m.status === 'empty') return <div className="stack-4">{trialNotice}<div className="card"><Empty icon="map" title="Chưa có nội dung để phân tích" body="Thêm ít nhất một bài học, sau đó Codi sẽ đề xuất các khái niệm và quan hệ học trước." actions={<Link className="btn btn-primary" to={`/teach/courses/${c.id}/content`}><Icon name="book-open" /> Thêm nội dung</Link>} /></div></div>;
+  if (m.status === 'empty') return <div className="stack-4"><div className="card"><Empty icon="map" title="Chưa có nội dung để phân tích" body="Thêm ít nhất một bài học, sau đó Codi sẽ đề xuất các khái niệm và quan hệ học trước." actions={<Link className="btn btn-primary" to={`/teach/courses/${c.id}/content`}><Icon name="book-open" /> Thêm nội dung</Link>} /></div></div>;
   if (m.status === 'analysing') {
     return run
-      ? <div className="card"><div className="card-body stack-3" role="status"><p className="row strong"><Icon name="loader" /> Đang phân tích nội dung…</p><p className="small muted">AI đang trích xuất khái niệm từ {ls(c).length} bài học. Bạn sẽ nhận thông báo khi xong; có thể rời trang.</p><SpinnerBlock text="Đang trích xuất khái niệm" /></div></div>
+      ? <div className="stack-4">{trialNotice}<div className="card"><div className="card-body stack-3" role="status"><p className="row strong"><Icon name="loader" /> Đang phân tích nội dung…</p><p className="small muted">AI đang trích xuất khái niệm từ {ls(c).length} bài học. Bạn có thể rời trang và quay lại xem kết quả; trang này tự cập nhật khi xong.</p><SpinnerBlock text="Đang trích xuất khái niệm" /></div></div></div>
       : <div className="stack-4">{trialNotice}<Alert type="warn" title="Trạng thái phân tích cũ chưa được xác minh" body="Không có tác vụ AI đang chạy hoặc chức năng thử lại trong bản thử nghiệm." /></div>;
   }
-  if (m.status === 'failed') return <div className="stack-4">{trialNotice}<Alert type="danger" title="Phân tích bản đồ kiến thức thất bại" body="Dịch vụ AI không phản hồi. Nội dung khoá học không bị ảnh hưởng." actions={retryBtn} /></div>;
+  if (m.status === 'failed') return <div className="stack-4">{trialNotice}<Alert type="danger" title="Phân tích bản đồ kiến thức thất bại" body="Chưa hoàn tất phân tích. Nội dung và bản đồ đã xác nhận không bị ảnh hưởng." actions={retryBtn} /></div>;
   if (!m.concepts.length) {
     return (
       <div className="stack-4">{trialNotice}
-        {run ? <div className="card"><Empty icon="sparkles" title="Chưa phân tích bản đồ kiến thức" body={'Codi sẽ đọc nội dung các bài học và đề xuất khái niệm cùng quan hệ "cần học trước". Bạn xem lại và xác nhận trước khi dùng.'} actions={ro ? null : <button type="button" className="btn btn-primary" onClick={analyse}><Icon name="sparkles" /> Phân tích nội dung</button>} /></div>
+        {run ? <div className="card"><Empty icon="sparkles" title="Chưa phân tích bản đồ kiến thức" body={'Codi sẽ đọc nội dung các bài học và đề xuất khái niệm cùng quan hệ "cần học trước". Bạn xem lại và xác nhận trước khi dùng.'} actions={ro ? null : <button type="button" className="btn btn-primary" onClick={analyse} disabled={starting}><Icon name="sparkles" /> {startLabel('Phân tích nội dung')}</button>} /></div>
           : <Alert type="warn" title="Chưa có bản đồ để xác nhận" body="Bản đồ mới hoặc trống chưa thể tạo hoặc xác nhận trong bản thử nghiệm. Thêm bài học không tự động tạo khái niệm hay quan hệ." />}
       </div>
     );
@@ -225,7 +248,7 @@ function KmapBody({ c, m: stored, reload }) {
   if (m.status === 'confirmed') statusLine = <Alert type="success" title="Bản đồ kiến thức đã được xác nhận" body={`Bản đồ đang hoạt động chính thức. Lộ trình cá nhân hoá của học viên sẽ sử dụng thứ tự khái niệm này.${m.updatedAt ? ` Cập nhật ${fmt.datetime(m.updatedAt)}.` : ''}`} />;
   else if (staleBlocked) {
     statusLine = run
-      ? <Alert type="warn" title="Nội dung đã thay đổi sau khi xác nhận" body="Bản đồ có thể không còn khớp với bài học. Hãy phân tích lại và xác nhận." actions={ro ? null : <button type="button" className="btn btn-secondary btn-sm" onClick={analyse}><Icon name="refresh" className="icon-sm" /> Phân tích lại</button>} />
+      ? <Alert type="warn" title="Nội dung đã thay đổi — chưa thể xác nhận lại" body="Hãy phân tích lại và kiểm tra bản đồ sau khi nội dung thay đổi. Bản phát hành đã xác nhận trước đó và dữ liệu học viên được giữ nguyên; chỉnh sửa bản nháp không bỏ qua điều kiện xác nhận hay xuất bản." actions={ro ? null : <button type="button" className="btn btn-secondary btn-sm" onClick={analyse} disabled={starting}><Icon name="refresh" className="icon-sm" /> {startLabel('Phân tích lại')}</button>} />
       : <Alert type="warn" title="Nội dung đã thay đổi — chưa thể xác nhận lại" body="Bản thử nghiệm chưa hỗ trợ phân tích hoặc kiểm tra lại bản đồ sau khi nội dung thay đổi. Bản phát hành đã xác nhận trước đó và dữ liệu học viên được giữ nguyên; chỉnh sửa bản nháp không bỏ qua điều kiện xác nhận hay xuất bản." />;
   } else if (pending) statusLine = <Alert type="accent" title={accepted ? `Đang duyệt dở dang (Partially accepted) — ${accepted} mục đã duyệt, còn ${pending} mục chờ xem lại` : `Sẵn sàng xem lại (Ready for review) — còn ${pending} mục chờ xem lại (nguồn chưa được xác minh)`} body={'Chấp nhận, sửa hoặc bỏ từng khái niệm và quan hệ "cần học trước". Bản đồ chỉ được dùng sau khi bạn xác nhận.'} />;
   else if (!cycle) statusLine = <Alert type="info" title="Đã xem lại mọi đề xuất" body={'Tất cả khái niệm và quan hệ đã được kiểm tra. Hãy bấm "Xác nhận bản đồ kiến thức" bên dưới để áp dụng.'} />;
@@ -234,7 +257,7 @@ function KmapBody({ c, m: stored, reload }) {
     : pending ? `Còn ${pending} đề xuất chưa duyệt. Chấp nhận hoặc bỏ các mục để hoàn tất.`
       : staleBlocked ? (run ? 'Nội dung đã thay đổi; hãy phân tích lại trước khi xác nhận.' : 'Nội dung đã thay đổi; bản thử nghiệm chưa hỗ trợ xác nhận lại.')
         : m.status === 'confirmed' ? 'Bản đồ đã được xác nhận và đang có hiệu lực.'
-          : !live.length ? 'Chưa có bản đồ để xác nhận; chức năng tạo bản đồ chưa khả dụng.'
+          : !live.length ? (run ? 'Chưa có bản đồ để xác nhận; hãy phân tích nội dung.' : 'Chưa có bản đồ để xác nhận; chức năng tạo bản đồ chưa khả dụng.')
             : m.status !== 'ready' ? 'Trạng thái bản đồ hiện tại chưa cho phép xác nhận.'
               : 'Tất cả đề xuất đã được xem xét xong. Sẵn sàng xác nhận!';
 
@@ -276,7 +299,7 @@ function KmapBody({ c, m: stored, reload }) {
       {statusLine}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         {!ro && pending > 0 && <button type="button" className="btn btn-secondary" onClick={acceptAll}><Icon name="check" className="icon-sm" /> Chấp nhận tất cả ({pending})</button>}
-        {!ro && run && !staleBlocked && <button type="button" className="btn btn-ghost" onClick={analyse}><Icon name="refresh" className="icon-sm" /> Phân tích lại</button>}
+        {!ro && run && !staleBlocked && <button type="button" className="btn btn-ghost" onClick={analyse} disabled={starting}><Icon name="refresh" className="icon-sm" /> {startLabel('Phân tích lại')}</button>}
         <div className="field" style={{ minWidth: 200 }}><label className="sr-only" htmlFor="km-ch">Lọc theo chương</label><select id="km-ch" value={kmapChapter} onChange={(e) => { kmapChapter = e.target.value; rerender(); }}><option value="all">Tất cả các chương</option>{chapters.map((ch, i) => <option key={ch.id} value={ch.id}>Chương {i + 1}: {ch.title}</option>)}</select></div>
         <span style={{ marginLeft: 'auto' }} />
         <div className="segmented" role="group" aria-label="Kiểu hiển thị">

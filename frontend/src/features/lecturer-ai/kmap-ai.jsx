@@ -1,17 +1,16 @@
 /**
- * Knowledge-map graph rules for lecturers, ported from the real app's lib/knowledge-map-runner.ts.
- * The map itself (concepts, edges, review states, confirmation) lives in the backend kmap actions used by
- * lecturer/kmap-tab.jsx. Codi's own runKnowledgeMapAnalysis is disabled, so the analysis is the product owner's
- * simulation, run and stored by POST /api/lecturer/courses/:courseId/kmap-analysis.
+ * Knowledge-map graph rules for lecturers, ported from the real app's lib/knowledge-map-runner.ts, and the start of
+ * the real background analysis. The map itself (concepts, edges, review states, confirmation) lives in the backend
+ * kmap actions used by lecturer/kmap-tab.jsx. Analysis is Codi's runKnowledgeMapAnalysis server action: it queues a
+ * knowledge_map AI job (run by the in-process worker) and sets the map to 'analysing'; the tab polls
+ * getKnowledgeMapData until the status changes. Saving course content also queues an analysis on the server.
  *
  * Map shape: { status, concepts[{ id, name, lessonIds[], review: suggested|accepted|edited|declined }],
  *   edges[{ from, to, review }] }   (an edge means "from must be learned before to").
  *
  * Installs on Codi.lecturerAI:
- *   runKnowledgeMapAnalysis(courseId) → Promise<{ ok: true, concepts, added } | { ok: false, error }>
- *       every concept and edge is suggested again, each lesson without a concept gets one (chained in authored
- *       order); the map becomes 'ready' for the current content. Demo flag Codi.state.scenario.kmap === 'fail'
- *       fails client-side after the usual wait.
+ *   runKnowledgeMapAnalysis(courseId) → Promise<{ ok: true, jobId } | { ok: false, code, error }>
+ *       code: 'active_job' | 'daily_limit' | 'store_failed' when the job queue refused, null otherwise.
  *   kmapGraph: { findCycle(conceptIds, edges), reaches(from, to, edges), computeAcceptAllPlan(conceptIds,
  *       suggestedEdges, keptEdges), activeEdges(map), mapCycle(map), topoSortLessons(concepts, edges, lessons) }
  *   acceptAllPlan(map) → { acceptedConcepts[], acceptedEdges[], skippedEdges[] }   (D10 preview, pure)
@@ -19,18 +18,27 @@
 import { Codi } from '../../lib/codi';
 import { api } from '../../lib/api';
 
-const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
+const KMAP_MODULE = 'dashboard/lecturer/courses/courseId/kmap';
+// The backend's AiJobEnqueueError reaches the browser as "AI job enqueue failed: <code>".
+const QUEUE_ERRORS = {
+  active_job: 'Một lượt phân tích bản đồ kiến thức đang chạy. Chờ lượt này xong rồi xem kết quả.',
+  daily_limit: 'Bạn đã dùng hết lượt phân tích AI trong hôm nay. Bản đồ hiện có không thay đổi; hãy thử lại vào ngày mai.',
+  store_failed: 'Chưa xếp được lượt phân tích. Nội dung và bản đồ không bị ảnh hưởng; vui lòng thử lại.',
+};
 const inflight = new Map();
+
+/** Queues a real analysis for the course (one request at a time per course). */
 export function runKnowledgeMapAnalysis(courseId) {
   if (inflight.has(courseId)) return inflight.get(courseId);
   const job = (async () => {
     try {
-      await sleep(1500); // visible "Đang phân tích" state, like the mockup
-      if (Codi.state.scenario && Codi.state.scenario.kmap === 'fail') return { ok: false, error: 'Phân tích bản đồ kiến thức thất bại' };
-      const r = await api.post(`/api/lecturer/courses/${encodeURIComponent(courseId)}/kmap-analysis`, {});
-      return { ok: true, concepts: r.concepts, added: r.added };
+      const r = await api.action(KMAP_MODULE, 'runKnowledgeMapAnalysis', courseId);
+      return { ok: true, jobId: (r && r.jobId) || null };
     } catch (e) {
-      return { ok: false, error: (e && e.message) || 'Phân tích bản đồ kiến thức thất bại' };
+      const message = (e && typeof e.message === 'string' && e.message) || '';
+      const m = /AI job enqueue failed: (\w+)/.exec(message);
+      const code = m ? m[1] : null;
+      return { ok: false, code, error: code ? QUEUE_ERRORS[code] || QUEUE_ERRORS.store_failed : message || 'Không thể bắt đầu phân tích.' };
     } finally {
       inflight.delete(courseId);
     }
