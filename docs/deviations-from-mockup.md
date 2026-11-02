@@ -71,7 +71,10 @@ These need to be added to `docs/deviations-from-mockup.md`. That file is control
     title is English ("A new way to learn & get knowledge"), which breaks the Vietnamese copy rule. The real section
     kickers ("Tính năng ưu việt", "Khóa học", "AI Mentor") and the hero eyebrow are dropped because craft-floor
     bans eyebrows.
-11. /ai is open to every role (PRODUCT L13 says guests and learners).
+11. /ai is open to every role (PRODUCT L13 says guests and learners). Since the develop sync it is the Tutor's full
+    page (Codi develop replaced the S17 advisor view): history sidebar, new chat, delete, `?c=` and `?prompt=`; the
+    S17 intake (goal, level, weekly hours) is asked in general chats of a signed-in learner only when unknown. The
+    advisor's suggested order, follow-up chips and "no match" flag are gone because develop's chat does not produce them.
 12. Course reviews list only visible reviews from enrolled learners, and the learner's own review loses its "(bạn)"
     marker.
 
@@ -110,13 +113,21 @@ These need to be added to `docs/deviations-from-mockup.md`. That file is control
    toast.
 9. Tutorial test results print in the console instead of a separate "Kiểm tra bước này" panel. The TOC check means
    the step was visited.
-10. Tutor: the title is "Trợ lý AI", the placeholder is "Hỏi trợ lý về bài học…". New: three modes, the "+" context
-    menu, the "Yêu cầu" chip, copy, escalate after 👎, "Đã dùng n/3 gợi ý", and the 8-per-60-s limit. A transient
-    failure is shown separately from a stored error. The lecturer-waiting copy is now "Bạn sẽ nhận thông báo khi giảng
-    viên trả lời.".
-11. Selection toolbar: the actions differ for code and for text, as in real.
-12. New: the full Tutor page and the launcher popup. Rebuild-only addition: a "Lưu ý khi dùng trợ lý AI" link in the
-    panel's empty state, so the disclaimer is reachable even when the lesson player does not render the launcher.
+10. Tutor (Codi develop, PR #247 and 2ccbba8a): one Tutor for lesson and general chats with one history. Answers
+    stream with reasoning ("Tutor đang suy nghĩ…") and tool steps; course cards, the comparison table, material
+    sources and the ≤3-line suggestion come from tool results. A lesson keeps one thread (newest 40 messages); the
+    answer mode is a dropdown, the hint ladder sits in the composer, 👎 asks a reason, "Dừng" keeps what was shown,
+    and a failed or rate-limited turn keeps the question with "Thử lại". Guests chat without a stored history (the
+    recent 12 turns travel with each question) and cannot vote. The disclaimer is "Lưu ý khi dùng Trợ giảng AI" under
+    every composer. The lecturer-waiting copy is "Bạn sẽ nhận thông báo khi giảng viên trả lời.".
+11. Selection toolbar: the actions differ for code and for text, as in real. It shows only while the lesson's Tutor
+    tab is mounted and never for text inside the Tutor.
+12. Rebuild deviations from Codi develop: the Tutor lives in the lesson's "Tutor" tab and on `/ai`; develop's
+    floating bubble, docked panel and `T` shortcut are not used (DESIGN.md refuses a chat bubble over the lesson).
+    `/learn/:courseId/tutor` redirects to `/ai` as in develop. An in-app link to `/ai` records the screen it was
+    clicked on as the chat's context. "Xem dòng N" and "Chạy lại test" switch to the Code tab first. A rate-limited
+    turn counts down `retryAfter` and then offers "Thử lại". "Áp dụng" on a suggestion is a secondary button (one
+    filled teal button per panel: send). The dev scenario flag `aiAssistant` still forces thinking / rate limit / error.
 13. Mockup kept where real has nothing: per-instruction-step done markers in "Yêu cầu" and the plain-language
     explanation line under errors.
 
