@@ -364,22 +364,22 @@ export function readiness(c) {
   // real rule: tests exist and the reference solution was verified (solutionVerifiedAt); older rows use solutionCheck
   const verified = (code) => (code.tests || []).length > 0 && !!(code.solutionVerifiedAt || (code.solutionVerifiedAt === undefined && code.solutionCheck && code.solutionCheck.ok));
   const badCode = challenges.filter((l) => !verified(l.code));
-  const codeItem = challenges.length ? [{ ok: !badCode.length, label: 'Bài code có test và lời giải chạy đạt', hint: badCode.length ? `Lời giải mẫu chưa chạy đạt tất cả test. (${badCode.map((l) => `"${l.title}"`).join(', ')})` : '', href: badCode.length ? `/teach/courses/${c.id}/code/${badCode[0].id}` : '' }] : [];
+  const codeItem = challenges.length ? [{ ok: !badCode.length, label: 'Bài code có test và lời giải chạy đạt', action: 'Mở bài code', hint: badCode.length ? `Lời giải mẫu chưa chạy đạt tất cả test. (${badCode.map((l) => `"${l.title}"`).join(', ')})` : '', href: badCode.length ? `/teach/courses/${c.id}/code/${badCode[0].id}` : '' }] : [];
   // AI-generated questions must be reviewed by the lecturer before learners see them
   const unreviewed = (quiz) => (quiz ? quiz.questions.filter((q) => q.aiGenerated && q.aiReviewed === false).length : 0);
   const aiLessons = ls(c).filter((l) => unreviewed(l.quiz));
   const aiCount = aiLessons.reduce((s, l) => s + unreviewed(l.quiz), 0) + unreviewed(c.entryTest);
-  const aiItem = aiCount ? [{ ok: false, label: 'Câu hỏi do AI tạo đã được duyệt', hint: `Còn ${aiCount} câu do AI tạo chưa duyệt.`, href: aiLessons.length ? `/teach/courses/${c.id}/quiz/${aiLessons[0].id}` : `/teach/courses/${c.id}/quiz/entry` }]
+  const aiItem = aiCount ? [{ ok: false, label: 'Câu hỏi do AI tạo đã được duyệt', action: 'Duyệt câu hỏi', hint: `Còn ${aiCount} câu do AI tạo chưa duyệt.`, href: aiLessons.length ? `/teach/courses/${c.id}/quiz/${aiLessons[0].id}` : `/teach/courses/${c.id}/quiz/entry` }]
     : ls(c).some((l) => l.quiz && l.quiz.questions.some((q) => q.aiGenerated)) ? [{ ok: true, label: 'Câu hỏi do AI tạo đã được duyệt' }] : [];
   const assigns = ls(c).filter((l) => l.assignment);
   const noRubric = assigns.filter((l) => !(l.assignment.rubric || []).length);
-  const rubricItem = assigns.length ? [{ ok: !noRubric.length, label: 'Bài tập có thang chấm', hint: `Cần thêm thang chấm: ${noRubric.map((l) => `"${l.title}"`).join(', ')}.`, href: noRubric.length ? `/teach/courses/${c.id}/content?lesson=${noRubric[0].id}` : '' }] : [];
+  const rubricItem = assigns.length ? [{ ok: !noRubric.length, label: 'Bài tập có thang chấm', action: 'Thêm thang chấm', hint: `Cần thêm thang chấm: ${noRubric.map((l) => `"${l.title}"`).join(', ')}.`, href: noRubric.length ? `/teach/courses/${c.id}/content?lesson=${noRubric[0].id}` : '' }] : [];
   return codeItem.concat(aiItem, rubricItem, [
-    { ok: (c.summary || '').trim().length >= 20, label: 'Mô tả khoá học', hint: 'Mô tả ít nhất 20 ký tự.', href: `/teach/courses/${c.id}/info` },
-    { ok: ls(c).length >= 1, label: 'Ít nhất 1 bài học', hint: 'Thêm chương và bài học.', href: `/teach/courses/${c.id}/content` },
-    { ok: c.proposedPrice !== null && c.proposedPrice !== undefined, label: 'Giá đề xuất', hint: 'Nhập giá đề xuất (quản trị viên xác nhận giá cuối).', href: `/teach/courses/${c.id}/info` },
-    { ok: !!(c.entryTest && c.entryTest.questions.length >= ENTRY_MIN), label: `Bài kiểm tra đầu vào (≥ ${ENTRY_MIN} câu)`, hint: c.entryTest ? `Hiện có ${c.entryTest.questions.length} câu.` : 'Chưa có bài kiểm tra đầu vào.', href: `/teach/courses/${c.id}/quiz/entry` },
-    { ok: m.status === 'confirmed', label: 'Bản đồ kiến thức đã xác nhận', hint: m.status === 'stale' ? 'Nội dung đã thay đổi sau khi xác nhận bản đồ.' : 'Xem lại và xác nhận bản đồ.', href: `/teach/courses/${c.id}/kmap` },
+    { ok: (c.summary || '').trim().length >= 20, label: 'Mô tả khoá học', action: 'Viết mô tả', hint: 'Mô tả ít nhất 20 ký tự.', href: `/teach/courses/${c.id}/info` },
+    { ok: ls(c).length >= 1, label: 'Ít nhất 1 bài học', action: 'Thêm bài học', hint: 'Thêm chương và bài học.', href: `/teach/courses/${c.id}/content` },
+    { ok: c.proposedPrice !== null && c.proposedPrice !== undefined, label: 'Giá đề xuất', action: 'Nhập giá', hint: 'Nhập giá đề xuất (quản trị viên xác nhận giá cuối).', href: `/teach/courses/${c.id}/info` },
+    { ok: !!(c.entryTest && c.entryTest.questions.length >= ENTRY_MIN), label: `Bài kiểm tra đầu vào (≥ ${ENTRY_MIN} câu)`, action: 'Tạo bài kiểm tra', hint: c.entryTest ? `Hiện có ${c.entryTest.questions.length} câu.` : 'Chưa có bài kiểm tra đầu vào.', href: `/teach/courses/${c.id}/quiz/entry` },
+    { ok: m.status === 'confirmed', label: 'Bản đồ kiến thức đã xác nhận', action: 'Xem và xác nhận', hint: m.status === 'stale' ? 'Nội dung đã thay đổi sau khi xác nhận bản đồ.' : 'Xem lại và xác nhận bản đồ.', href: `/teach/courses/${c.id}/kmap` },
   ]);
 }
 
@@ -486,7 +486,7 @@ function PublishTab({ c }) {
         <ul className="list">{items.map((x) => (
           <li key={x.label} className="list-row"><Icon name={x.ok ? 'check-circle' : 'alert-circle'} className={x.ok ? 'text-success' : 'text-warn'} />
             <div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.ok ? 'Đã đạt' : x.hint}</span></div>
-            {x.ok ? <span className="badge badge-success">Đạt</span> : x.href ? <Link className="btn btn-secondary btn-sm" to={x.href}>Sửa ngay</Link> : null}</li>
+            {x.ok ? <span className="badge badge-success">Đạt</span> : x.href ? <Link className="btn btn-secondary btn-sm" to={x.href}>{x.action || 'Mở để sửa'}</Link> : null}</li>
         ))}</ul></section>
       {readinessAdvice(c).length > 0 && <section className="card"><div className="card-header"><h2 className="tc-h">Gợi ý thêm</h2><span className="xsmall muted">Không bắt buộc để gửi duyệt</span></div>
         <ul className="list">{readinessAdvice(c).map((x) => <li key={x.href} className="list-row"><Icon name="info" className="text-info" /><div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.text}</span></div><Link className="btn btn-ghost btn-sm" to={x.href}>Mở</Link></li>)}</ul></section>}
