@@ -416,13 +416,14 @@ export function PublicationPage({ query: q }) {
             <div className="row" style={{ gap: 8 }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => openPreview(sel)}><Icon name="eye" className="icon-sm" /> Xem trước như học viên</button></div></div>
           {r.status !== 'in_review' && <Alert type={r.status === 'approved' ? 'success' : r.status === 'rejected' ? 'danger' : 'warn'} title={`Vòng ${r.round}: ${ROUND[r.status]}`} body={r.note || ''} />}
           {sel.status === 'pending' && fixedCarried > 0 && <Alert type="info" title={`Giảng viên đã sửa ${fixedCarried} cờ của vòng trước`} body={'Kiểm tra lại nội dung rồi đóng cờ ở thẻ "Cờ".'} />}
+        </div></section>{!ro && decisionCard(sel, r)}<section className="card"><div className="card-body stack-4">
           <div className="tabs" role="tablist" style={{ margin: 0 }}>
             {[['criteria', 'Tiêu chí'], ['content', 'Nội dung'], ['flags', `Cờ${nFlags ? ' (' + nFlags + ')' : ''}`], ['history', 'Lịch sử']].map(([k, l]) => (
               <Link key={k} className="tab" role="tab" aria-selected={String(v.tab === k)} to={`/admin/publication?tab=${tab}&id=${sel.id}&view=${k}`}>{l}</Link>
             ))}
           </div>
           {body}
-        </div></section>{!ro && decisionCard(sel, r)}</div>
+        </div></section></div>
       );
     }
   }
