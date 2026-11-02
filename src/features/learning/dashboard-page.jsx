@@ -1,34 +1,14 @@
-/** S12 Learner dashboard ('/dashboard'). */
+/** S12 Learner dashboard ('/dashboard'). Focus row with the one "Học tiếp", the departure board, what changed, the week's goal and courses. */
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
-import { Alert, Empty, Icon, Mastery, Progress, Thumb } from '../../components/ui/primitives';
-import { enrolledCoursesOf, goalLabel, rec, scoreText } from './learning-store';
+import { Alert, Empty, Icon, Progress, Thumb } from '../../components/ui/primitives';
+import { currentLessonId, enrolledCoursesOf, isCourseComplete, goalLabel, rec } from './learning-store';
 import { DiagCard, showDiagCard } from './learning-shared';
-import { editGoal } from './path-page';
 import { roundMinutes, secondsByDate, streakDays, today, weekDates } from './study-time';
 import { useSyncError } from './use-sync-error';
-
-// Weekly goal (real learner-overview): the first enrolled course with a goal; otherwise 5 h/week, labelled "Giả định".
-const weeklyGoalInfo = (userId) => {
-  for (const c of enrolledCoursesOf(userId)) {
-    const r = rec(c.id);
-    if (r && r.goal && r.goal.hours) return { hours: r.goal.hours, hasGoal: true, courseId: c.id };
-  }
-  return { hours: 5, hasGoal: false, courseId: null };
-};
-// Minutes studied in this Vietnam calendar week (Monday to Sunday, GMT+7).
-const minutesThisWeek = (userId) => {
-  const byDate = secondsByDate(userId);
-  return roundMinutes(weekDates(today()).reduce((s, d) => s + (byDate.get(d) || 0), 0));
-};
-const skillBadges = (userId) => {
-  const skills = [];
-  enrolledCoursesOf(userId).forEach((c) => {
-    const r = rec(c.id);
-    (c.concepts || []).forEach((k) => { const lv = (r && r.mastery[k.id]) || 0; if (lv >= 3) skills.push({ ...k, level: lv, course: c.title }); });
-  });
-  return skills;
-};
+import { buildDepartures, courseRows, DashBoard, DashFocus } from './dashboard-board';
+import { DashChanges, DashGoal } from './dashboard-side';
+import './dashboard-page.css';
 
 export default function DashboardPage() {
   useCodi();
@@ -40,17 +20,15 @@ export default function DashboardPage() {
   const graded = subs.filter((s) => s.status === 'graded').sort((a, b) => (a.gradedAt < b.gradedAt ? 1 : -1));
   const answered = Codi.db().questions.filter((q) => q.userId === u.id && q.status === 'answered');
   const items = enrolled.map((c) => ({ c, p: Codi.courseProgress(c.id), r: rec(c.id) }));
-  const active = items.filter((x) => !x.p.completed);
+  // "Active" follows the path page: a course is done when its required lessons are, skippable ones aside.
+  const active = items.filter((x) => !isCourseComplete(x.c, x.r));
   const cont = active.slice().sort((a, b) => String(b.r.lastActive || '').localeCompare(String(a.r.lastActive || '')))[0];
-  const doneLessons = items.reduce((s, x) => s + x.p.done, 0);
-  const goalInfo = weeklyGoalInfo(u.id);
-  const streak = streakDays(u.id);
+  const leadId = cont ? cont.c.id : null;
+  const departures = buildDepartures(cont ? [cont, ...active.filter((x) => x !== cont)] : [], leadId);
   const errorAlert = syncError && (
     <Alert type="danger" title="Chưa thể tải hoặc cập nhật dữ liệu học tập" body="Không thể tải dữ liệu học tập. Vui lòng thử lại."
       actions={<button type="button" className="btn btn-secondary btn-sm" onClick={retrySync} disabled={retrying} aria-busy={retrying || undefined}>Thử lại</button>} />
   );
-  const minutesWeek = minutesThisWeek(u.id);
-  const badges = skillBadges(u.id);
 
   const head = (
     <div className="page-header"><div><h1>Bàn làm việc</h1><p className="muted">Chào mừng trở lại, {u.name}!</p></div>
@@ -65,96 +43,62 @@ export default function DashboardPage() {
     );
   }
 
-  // Hero: the single "continue learning" focus (large course media + progress + one primary CTA).
-  let contCard = null;
+  // Focus: the same current lesson the path page's "Học tiếp" opens (currentLessonId, path order, skippable-aware).
+  let focus = { complete: true };
   if (cont) {
-    const c = cont.c; const needsSetup = cont.r.pathStatus === 'none'; const ps = cont.r.pathStatus;
-    const lesson = cont.p.currentLessonId ? Codi.lesson(c, cont.p.currentLessonId) : null;
-    contCard = (
-      <section className="stack-3" aria-labelledby="dash-cont"><h2 id="dash-cont" className="dash-h">Tiếp tục học</h2><div className="dash-hero">
-        <div className="dash-hero-media"><Thumb course={c} /></div>
-        <div className="dash-hero-body">
-          <h3 className="dash-hero-title">{c.title}</h3>
-          <p className="dash-hero-next">{needsSetup ? 'Bước tiếp theo: đặt mục tiêu và làm bài kiểm tra đầu vào' : ps === 'generating' ? 'Codi đang chuẩn bị lộ trình của bạn.' : ps === 'failed' ? 'Lộ trình cần được kiểm tra lại. Bạn có thể mở lộ trình để thử lại.' : lesson ? <>Bài hiện tại: <strong>{lesson.title}</strong></> : 'Bạn đã học hết các bài khả dụng'}</p>
-          {!needsSetup && <div className="dash-hero-progress"><Progress pct={cont.p.pct} /><span className="od-nowrap">{cont.p.done}/{cont.p.total} bài · {cont.p.pct}%</span></div>}
-          <div className="row"><Link className="btn btn-primary btn-lg" to={`/learn/${c.id}${needsSetup ? '/onboarding' : lesson && ps !== 'generating' ? '/' + lesson.id : ''}`}>{needsSetup ? 'Bắt đầu thiết lập' : lesson && ps !== 'generating' ? 'Học tiếp' : 'Mở lộ trình'}</Link>
-            {!needsSetup && <Link className="btn btn-ghost" to={`/learn/${c.id}`}>Xem lộ trình</Link>}</div>
-        </div>
-      </div></section>
-    );
+    const { c, p, r } = cont;
+    const rows = courseRows(c, r);
+    const row = rows.find((x) => x.id === currentLessonId(c, r)) || null;
+    focus = { c, r, status: r.pathStatus, row, number: row ? rows.indexOf(row) + 1 : 0, done: p.done, total: p.total, pct: p.pct };
   }
-  // Side column: what needs attention (grading, latest lecturer feedback, answered questions).
+
+  // What changed: lessons that moved on the path (r.lastUpdate), graded work and answered questions.
+  const pathChanges = items.flatMap(({ c, r }) => (r.lastUpdate ? r.lastUpdate.changes.map((ch) => ({ courseId: c.id, course: c.title, text: ch.text })) : []));
   const latest = graded[0];
   const latestLesson = latest ? Codi.lesson(Codi.course(latest.courseId), latest.lessonId) : null;
-  const aside = (
-    <aside className="dash-aside" aria-label="Cập nhật từ giảng viên">
-      <h2 className="dash-h">Cập nhật cho bạn</h2>
-      <ul className="dash-updates">
-        <li><Link to="/progress"><span className="dash-update-value">{pendingSubs.length}</span><span className="dash-update-label">Bài tập đang chờ chấm</span></Link></li>
-        <li><Link to="/progress"><span className="dash-update-value">{answered.length}</span><span className="dash-update-label">Câu hỏi đã được trả lời</span></Link></li>
-        <li><Link to="/progress"><span className="dash-update-value">{doneLessons}</span><span className="dash-update-label">Bài học đã hoàn thành</span></Link></li>
-      </ul>
-      {!latest && <p className="small muted">Nhận xét của giảng viên sẽ xuất hiện ở đây sau khi bài tập được chấm.</p>}
-      {latest && (
-        <div className="dash-feedback">
-          <h3 className="small strong text-accent">Nhận xét mới nhất</h3>
-          <p className="dash-feedback-lesson">{(latestLesson || {}).title} · <span className="od-nowrap">{scoreText(latest.score)}/{latest.maxScore}</span></p>
-          <p className="dash-feedback-text od-clamp-3">{latest.feedback}</p>
-          <Link className="dash-link" to="/progress">Xem tất cả nhận xét</Link>
-        </div>
-      )}
-    </aside>
-  );
-  // Recommendations: published courses the learner does not own yet.
-  const recs = Codi.db().courses.filter((c) => c.status === 'published' && Codi.ownership(c.id) !== 'owned').slice(0, 3);
+
+  const goalInfo = weeklyGoalInfo(u.id);
+  const minutesWeek = minutesThisWeek(u.id);
   const goalPct = (minutesWeek / (goalInfo.hours * 60)) * 100;
+  const streak = streakDays(u.id);
+  const badges = skillBadges(u.id);
+
+  const recs = Codi.db().courses.filter((c) => c.status === 'published' && Codi.ownership(c.id) !== 'owned').slice(0, 3);
+
   return (
-    <div className="page stack-8">
+    <div className="page db-page stack-8">
       {head}
       {errorAlert}
-      <div className="dash-grid">
-        <div className="dash-main stack-8">
-          {contCard}
-          <section className="card" aria-labelledby="dash-goal"><div className="card-body stack-4">
-            <h2 id="dash-goal" className="dash-h">Mục tiêu & tiến độ</h2>
-            <div className="stack-2"><div className="row-between"><strong className="small">Mục tiêu hàng tuần</strong>
-              <div className="row" style={{ gap: 8 }}>{!goalInfo.hasGoal && <span className="badge badge-neutral">Mặc định</span>}{goalInfo.courseId && <button type="button" className="btn btn-ghost btn-sm" onClick={() => editGoal(goalInfo.courseId)}>Chỉnh mục tiêu</button>}</div></div>
-              <Progress pct={Math.min(100, goalPct)} label="Mục tiêu học tuần này" />
-              <span className="small muted">{minutesWeek} phút / {goalInfo.hours * 60} phút · {Math.round(goalPct)}% tuần này</span></div>
-            {streak > 0 && <div className="streak"><span className="streak-number">{streak}</span><span className="streak-label">ngày liên tiếp</span></div>}
-            {badges.length > 0 && (
-              <div className="stack-2"><strong className="small">Kỹ năng thành thạo</strong>
-                <ul className="badge-list ln-skill-list">{badges.slice(0, 5).map((b) => <li key={b.course + b.id}><Link className="ln-skill" to="/progress" title={`${b.name} · ${b.course}`}><span>{b.name}</span><Mastery level={b.level} /></Link></li>)}</ul>
-                {badges.length > 5 && <span className="small muted">+{badges.length - 5} kỹ năng khác</span>}</div>
-            )}
-          </div></section>
-          {cont && showDiagCard(cont.r) && <DiagCard c={cont.c} />}
-          <section aria-labelledby="dash-mine">
-            <div className="section-title"><h2 id="dash-mine" className="dash-h">Khoá học của tôi</h2><Link className="dash-link" to="/courses">Tìm thêm khoá học</Link></div>
-            <ul className="dash-courses">{items.map(({ c, p, r }) => (
-              <li key={c.id} className="dash-course">
-                <Thumb course={c} small />
-                <div className="dash-course-body">
-                  <Link className="dash-course-title" to={`/learn/${c.id}`}>{c.title}</Link>
-                  {r.pathStatus === 'none' ? <span className="dash-course-meta">Chưa thiết lập lộ trình</span>
-                    : <><Progress pct={p.pct} label={`Tiến độ khoá ${c.title}`} /><span className="dash-course-meta">{p.done}/{p.total} bài · {p.completed ? 'Đã hoàn thành' : goalLabel(r.goal)}</span></>}
-                  {c.status === 'hidden' && <span className="dash-course-meta">Khoá học tạm ẩn — bạn vẫn có thể tiếp tục học.</span>}
-                </div>
-                <Link className="btn btn-secondary btn-sm" to={`/learn/${c.id}${r.pathStatus === 'none' ? '/onboarding' : ''}`}>{r.pathStatus === 'none' ? 'Bắt đầu' : p.completed ? 'Xem lại' : 'Mở lộ trình'}</Link>
-              </li>
-            ))}</ul>
-          </section>
-        </div>
-        {aside}
+      <DashFocus focus={focus} />
+      <div className="db-grid">
+        <DashBoard departures={departures} leadId={leadId} />
+        <DashChanges pending={pendingSubs.length} answered={answered.length} pathChanges={pathChanges} latest={latest} latestLesson={latestLesson} />
       </div>
+      <DashGoal minutesWeek={minutesWeek} goalInfo={goalInfo} goalPct={goalPct} streak={streak} badges={badges} />
+      {cont && showDiagCard(cont.r) && <DiagCard c={cont.c} />}
+      <section className="db-courses-section" aria-labelledby="dash-mine">
+        <div className="section-title"><h2 id="dash-mine" className="db-h2">Khoá học của tôi</h2><Link className="db-link" to="/courses">Tìm thêm khoá học</Link></div>
+        <ul className="db-courses">{items.map(({ c, p, r }) => (
+          <li key={c.id} className="db-course">
+            <Thumb course={c} small />
+            <div className="db-course-body">
+              <Link className="db-course-title" to={`/learn/${c.id}`}>{c.title}</Link>
+              {r.pathStatus === 'none' ? <span className="db-course-meta">Chưa thiết lập lộ trình</span>
+                : <><Progress pct={p.pct} label={`Tiến độ khoá ${c.title}`} /><span className="db-course-meta"><span className="db-mono">{p.done}/{p.total}</span> bài · {p.completed ? 'Đã hoàn thành' : goalLabel(r.goal)}</span></>}
+              {c.status === 'hidden' && <span className="db-course-meta">Khoá học tạm ẩn — bạn vẫn có thể tiếp tục học.</span>}
+            </div>
+            <Link className="btn btn-secondary btn-sm" to={`/learn/${c.id}${r.pathStatus === 'none' ? '/onboarding' : ''}`}>{r.pathStatus === 'none' ? 'Bắt đầu' : p.completed ? 'Xem lại' : 'Mở lộ trình'}</Link>
+          </li>
+        ))}</ul>
+      </section>
       {recs.length > 0 && (
-        <section aria-labelledby="dash-recs">
-          <div className="section-title"><h2 id="dash-recs" className="dash-h">Gợi ý cho bạn</h2><Link className="dash-link" to="/ai">Hỏi AI Codi</Link></div>
-          <div className="dash-recs">{recs.map((c) => (
-            <Link key={c.id} className="dash-rec" to={`/courses/${c.slug}`}>
+        <section className="db-recs-section" aria-labelledby="dash-recs">
+          <div className="section-title"><h2 id="dash-recs" className="db-h2">Gợi ý cho bạn</h2><Link className="db-link" to="/ai">Hỏi AI Codi</Link></div>
+          <div className="db-recs">{recs.map((c) => (
+            <Link key={c.id} className="db-rec" to={`/courses/${c.slug}`}>
               <Thumb course={c} />
-              <span className="dash-rec-title">{c.title}</span>
-              <span className="dash-rec-meta">{Codi.levelLabel(c.level)} · {Codi.lessons(c).length} bài</span>
+              <span className="db-rec-title">{c.title}</span>
+              <span className="db-rec-meta">{Codi.levelLabel(c.level)} · {Codi.lessons(c).length} bài</span>
               <span className="price">{c.price ? Codi.fmt.vnd(c.price) : 'Miễn phí'}</span>
             </Link>
           ))}</div>
@@ -162,4 +106,27 @@ export default function DashboardPage() {
       )}
     </div>
   );
+}
+
+// Weekly goal (real learner-overview): the first enrolled course with a goal; otherwise 5 h/week, labelled "Mặc định".
+function weeklyGoalInfo(userId) {
+  for (const c of enrolledCoursesOf(userId)) {
+    const r = rec(c.id);
+    if (r && r.goal && r.goal.hours) return { hours: r.goal.hours, hasGoal: true, courseId: c.id };
+  }
+  return { hours: 5, hasGoal: false, courseId: null };
+}
+// Concepts at mastery level 3 or above, across enrolled courses.
+function skillBadges(userId) {
+  const skills = [];
+  enrolledCoursesOf(userId).forEach((c) => {
+    const r = rec(c.id);
+    (c.concepts || []).forEach((k) => { const lv = (r && r.mastery[k.id]) || 0; if (lv >= 3) skills.push({ ...k, level: lv, course: c.title }); });
+  });
+  return skills;
+}
+// Minutes studied in this Vietnam calendar week (Monday to Sunday, GMT+7).
+function minutesThisWeek(userId) {
+  const byDate = secondsByDate(userId);
+  return roundMinutes(weekDates(today()).reduce((s, d) => s + (byDate.get(d) || 0), 0));
 }
