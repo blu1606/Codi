@@ -290,7 +290,7 @@ function ProfileView({ u, query }) {
   return (
     <div className="page shell-profile">
       <div className="row-between" style={{ flexWrap: 'wrap' }}>
-        <Link className="btn btn-ghost btn-sm" to={Codi.homeFor(u.role)}><Icon name="arrow-left" className="icon-sm" /> Quay lại Bàn làm việc (Dashboard)</Link>
+        <Link className="btn btn-ghost btn-sm" to={Codi.homeFor(u.role)}><Icon name="arrow-left" className="icon-sm" /> Quay lại trang chủ</Link>
         <span className="xsmall muted row" style={{ gap: 6 }}><ShellIcon name="shield-check" className="icon-sm" /> Tài khoản Codi an toàn</span>
       </div>
       <div className="shell-profile-title">

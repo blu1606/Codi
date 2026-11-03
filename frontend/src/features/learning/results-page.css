@@ -1,0 +1,108 @@
+/* "Kết quả học tập" (/progress). Scoped under .rs-page. Hairline sections on paper: a summary strip, a "Cần làm tiếp"
+   list, then one course's gradebook. Body text stays at 16px; table cells 15px. */
+.rs-page .page-header { margin-bottom: var(--space-4); }
+.rs-tabs .tab[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+.rs-h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.rs-h3 { margin: 0; font-size: var(--text-base); font-weight: 600; }
+.rs-link { font-size: var(--text-sm); font-weight: 600; }
+.rs-book { display: grid; gap: var(--space-8); }
+/* Statistics tab: long course names must not widen the page on a phone. */
+.rs-page .viz-toolbar { flex-wrap: wrap; min-width: 0; }
+.rs-page .viz-toolbar select { max-width: 100%; min-width: 0; }
+.rs-page .viz-data-table { display: block; max-width: 100%; overflow-x: auto; }
+.rs-page .viz-data-table th[scope="row"] { white-space: normal; overflow-wrap: anywhere; }
+
+/* summary strip: figures divided by hairlines, not boxed */
+.rs-summary { margin: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.rs-summary > div { padding: var(--space-4) var(--space-5); display: flex; flex-direction: column-reverse; gap: var(--space-1); }
+.rs-summary > div + div { border-left: 1px solid var(--border); }
+.rs-summary > div:first-child { padding-left: 0; }
+.rs-summary dt { font-size: var(--text-sm); color: var(--muted); }
+.rs-summary dd { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rs-of { font-size: var(--text-base); color: var(--muted); font-weight: 500; }
+
+/* to-do list */
+.rs-todo { display: grid; gap: var(--space-3); padding: var(--space-5); border-radius: var(--radius-lg); background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent); }
+.rs-todo ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.rs-todo li + li { border-top: 1px solid color-mix(in srgb, var(--warn) 18%, transparent); }
+.rs-todo-row { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-2) 0; color: var(--fg); text-decoration: none; }
+.rs-todo-row > .icon:first-child { color: var(--warn); flex: none; }
+.rs-todo-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.rs-todo-text strong { font-weight: 600; overflow-wrap: anywhere; }
+.rs-todo-text span { font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
+.rs-chev { color: var(--muted); flex: none; }
+@media (hover: hover) { .rs-todo-row:hover strong { text-decoration: underline; text-underline-offset: 3px; } }
+.rs-todo-row:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+
+/* one course */
+.rs-course { display: grid; gap: var(--space-6); }
+.rs-course-pick { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.rs-course-pick label { font-weight: 600; font-size: var(--text-sm); }
+.rs-course-pick select { width: auto; min-width: min(420px, 100%); max-width: 100%; }
+.rs-course-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-5); align-items: center; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.rs-course-head .thumb-sm { width: 72px; border-radius: var(--radius-md); }
+.rs-course-title { display: grid; gap: var(--space-2); min-width: 0; }
+.rs-course-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--muted); }
+.rs-course-meta strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+.rs-course-progress { display: flex; align-items: center; gap: var(--space-3); max-width: 420px; }
+.rs-course-progress .progress { flex: 1; }
+.rs-course-progress span { font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* gradebook */
+.rs-table-wrap { border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.rs-table { font-size: 15px; }
+.rs-table th[scope="col"] { white-space: nowrap; }
+.rs-table td, .rs-table th[scope="row"] { vertical-align: top; }
+.rs-table th[scope="row"] { background: transparent; text-align: left; }
+.rs-lesson { display: flex; gap: var(--space-3); align-items: flex-start; font-weight: 500; min-width: 220px; }
+.rs-num { flex: none; min-width: 2ch; color: var(--faint); font-variant-numeric: tabular-nums; font-weight: 500; }
+.rs-lesson-text { display: grid; gap: 2px; min-width: 0; }
+.rs-lesson-text a { color: var(--fg); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+@media (hover: hover) { .rs-lesson-text a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; } }
+.rs-lock { font-size: var(--text-xs); color: var(--muted); font-weight: 400; }
+.rs-result { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rs-works { display: grid; gap: var(--space-3); }
+.rs-work { display: grid; gap: 2px; }
+.rs-work-name { font-size: var(--text-xs); color: var(--muted); }
+.rs-score { font-variant-numeric: tabular-nums; }
+.rs-feedback { font-size: var(--text-sm); color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; max-width: 48ch; }
+
+/* mastery */
+.rs-mastery { display: grid; gap: var(--space-3); }
+.rs-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.rs-mastery-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); column-gap: var(--space-8); }
+.rs-mastery-grid li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 44px; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+.rs-mastery-grid li > span:first-child { overflow-wrap: anywhere; min-width: 0; }
+
+@media (max-width: 900px) {
+  .rs-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rs-summary > div:nth-child(4) { border-left: 0; padding-left: 0; }
+  .rs-summary > div:nth-child(n + 4) { border-top: 1px solid var(--border); }
+}
+@media (max-width: 640px) {
+  .rs-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rs-summary > div { padding: var(--space-3) var(--space-4); }
+  .rs-summary > div:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .rs-summary > div:nth-child(4) { border-left: 1px solid var(--border); padding-left: var(--space-4); }
+  .rs-summary > div:nth-child(n + 3) { border-top: 1px solid var(--border); }
+  .rs-summary dd { font-size: var(--text-xl); }
+  .rs-course-pick { display: grid; gap: var(--space-1); }
+  .rs-course-pick select { min-width: 0; width: 100%; }
+  .rs-course-head { grid-template-columns: auto minmax(0, 1fr); padding: var(--space-4); gap: var(--space-4); }
+  .rs-course-head .thumb-sm { width: 56px; }
+  .rs-course-head > .btn { grid-column: 1 / -1; justify-content: center; }
+  .rs-todo { padding: var(--space-4); }
+  /* the gradebook becomes stacked blocks carrying the same fields */
+  .rs-table-wrap { border: 0; overflow: visible; }
+  .rs-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .rs-table, .rs-table tbody, .rs-table tr { display: block; }
+  .rs-table tr { padding: var(--space-4) 0; border-bottom: 1px solid var(--border); }
+  .rs-table tr:first-child { border-top: 1px solid var(--border); }
+  .rs-table th[scope="row"], .rs-table td { display: flex; padding: 0; border: 0; }
+  .rs-table th[scope="row"] { margin-bottom: var(--space-2); min-width: 0; }
+  .rs-table td { justify-content: space-between; gap: var(--space-4); padding: 4px 0 4px calc(2ch + var(--space-3)); }
+  .rs-table td::before { content: attr(data-label); flex: none; font-size: var(--text-sm); color: var(--muted); }
+  .rs-table td > * { text-align: right; min-width: 0; }
+  .rs-works { justify-items: end; }
+  .rs-table td.rs-none { display: none; } /* a lesson without that kind of work: no empty "—" line */
+}

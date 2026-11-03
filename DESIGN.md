@@ -222,7 +222,7 @@ components:
 
 **Creative North Star: "The Concourse and the Board"**
 
-Codi is a bright, quiet concourse of white paper and slate-wash panels divided by hairlines, and on each screen one navy board hangs in it: the transit diagram on the course path, the departure board on the learner dashboard, the video or code frame in the lesson, the code stage in the home product window. Everything you read for orientation lives on the concourse; the one thing you look up at lives on the board. Deep cyan-teal marks the single action to take and the place you are.
+Codi is a bright, quiet concourse of white paper and slate-wash panels divided by hairlines, and on a screen that needs one, a single navy board hangs in it: the transit diagram on the course path, the video or code frame in the lesson, the code stage in the home product window. The learner's everyday pages (Trang chủ, Khoá học, Kết quả học tập) carry no board at all: they are light cards and hairline rows that answer one question each. Everything you read for orientation lives on the concourse; the one thing you look up at lives on the board. Deep cyan-teal marks the single action to take and the place you are.
 
 Density is working-product density for a projected demo: body text at 16 px, captions no smaller than 12 px, 44 px touch targets everywhere, status in words with an icon beside the colour. Structure is carried by hairline rules and tabular columns (comparison ledger, lesson timetable, rubric ledger, change list) rather than stacks of boxed cards. Learning is drawn as transit: chapters are coloured lines, lessons are stations, the current lesson is a white ring, the next lessons are departures.
 
@@ -292,7 +292,7 @@ A restrained cool-slate neutral field with a single deep cyan-teal voice, plus a
 
 A 4 px spacing grid (4, 8, 12, 16, 20, 24, 32, 48). Content pages sit in a 1200 px container with 16 px side padding and 32/48 px top/bottom; narrow forms at 720 px, focus flows at 640 px. The header is 64 px, sticky, and runs to 1440 px with 24 px padding; workspace pages (lesson split, lecturer and admin workspaces) run full width.
 
-Signature layouts: the lesson is a split pane (material about 58% left, task about 42% right, 12 px draggable divider, a lesson bar with task chips above, an optional docked Tutor AI column on the right) that collapses to tabs on mobile; the path page puts the navy diagram beside a 340 px side column from 1280 px; the dashboard sets the board and change list at 1.55 : 1; course detail keeps a purchase panel sticky beside the proof from 1024 px; grading keeps a narrow queue, a reading stage and a 400 px grade dock; the course editor timetable gets fixed columns from 1180 px.
+Signature layouts: the lesson is a split pane (material about 58% left, task about 42% right, 12 px draggable divider, a lesson bar with task chips above) that collapses to tabs on mobile; the path page puts the navy diagram beside a 340 px side column from 1280 px; the learner home sets a main column beside a 340 px aside from 1100 px; the catalogue is a card grid (min 300 px columns); course detail keeps a purchase panel sticky beside the proof from 1024 px; grading keeps a narrow queue, a reading stage and a 400 px grade dock; the course editor timetable gets fixed columns from 1180 px.
 
 Breakpoints actually used: 420, 480, 640, 768, 860, 900, 1024, 1180, 1280, 1440 px. Below each table breakpoint, rows become stacked blocks carrying the same fields, never a hidden column.
 
@@ -351,22 +351,27 @@ Confident and quiet: solid shape, no gradient, no lift.
 ### Tabs
 - 44 px, 14 px/600 muted labels on a hairline; the selected tab turns teal with a 2 px teal underline.
 
+### Learner home, catalogue and results
+Information architecture and layout follow the owner's VLearn learner prototype; Codi keeps its own logo, name, teal accent, type and tokens.
+- **Navigation:** Trang chủ (`/dashboard`) · Khoá học (`/courses`) · Kết quả học tập (`/progress`) · AI. Statistics and the knowledge map are tabs of Kết quả học tập (`?tab=stats`, `?tab=map`); the old `/insights*` URLs redirect there.
+- **Trang chủ:** the date and "Chào {tên}" as the H1, then sections with plain headings: "Học tiếp" (one card on an accent-mist wash: lesson title at display size, course · chapter · lesson · kind · minutes, course progress, the page's only filled teal button, a cover on the right), "Nhận xét mới của giảng viên", and "Khoá học của tôi" as tappable hairline rows (thumb, title, status badge, done/total, thin progress bar, chevron; five shown, hidden courses only after "Xem tất cả"). The aside holds "Tuần này" (minutes against the goal, seven day dots, streak), waiting grading, mastered skills and suggestions.
+- **Khoá học:** search field, a category pill row (the pressed pill is ink-filled), a result bar (count left; level, price and sort right), a grid of course cards (16:9 cover with category label, two-line title, lecturer, rating · level · duration, price and a secondary action).
+- **Kết quả học tập / Sổ điểm:** a hairline summary strip of five figures, a warn-soft "Cần làm tiếp" list (unsubmitted drafts, results below the pass mark), then one course at a time picked from a select (grouped Đang học / Đã hoàn thành / Tạm ẩn): course header card, lesson gradebook table (stacked blocks below 640 px), concept mastery grid.
+- No eyebrow or pill above a heading; a section is named by its own heading.
+
 ### Departure Board (signature)
-The navy board on the learner dashboard and the transit frame on the path page. 12 px radius, 24 px padding, board-rule hairlines between rows. Each row: a 40 px line chip (line colour, navy mono number), the lesson and its course, tabular minutes. The current row gets a faint white wash and a 1px white inner ring; the "you are here" label is a white pill with navy text. On the path page, chapters are lines, lessons are white station dots, travelled segments solid, upcoming ones dimmed.
+The transit frame on the path page (the learner home no longer carries a board). 12 px radius, 24 px padding, board-rule hairlines between rows. Each row: a 40 px line chip (line colour, navy mono number), the lesson and its course, tabular minutes. The current row gets a faint white wash and a 1px white inner ring; the "you are here" label is a white pill with navy text. On the path page, chapters are lines, lessons are white station dots, travelled segments solid, upcoming ones dimmed.
 
 ### Mastery Meter (signature)
 Five 8 px rounded squares filled with the mastery scale up to the learner's level, followed by a 12 px/600 label. Never shown without the label.
 
 ### Lesson Split Pane (signature)
-Lesson material left, content tabs right (Quiz, Bài tập, Code: only the tasks the lesson has; a lesson without a task is one centred column). The video or code editor sits in a navy frame with 10 px inset; the task primary is pinned at the bottom of the right pane.
-- **Tutor AI** is not a tab. A secondary "Tutor AI" toggle (sparkles icon, accent-mist when on) in the lesson bar docks it as a right-hand column (clamp 340–440 px) that pushes the panes narrower; it never floats over the lesson. Below 1024 px the same toggle opens it as a full-screen sheet with a close button and Escape. It keeps one thread per lesson, shared with /ai.
-- **Hỏi giảng viên & thảo luận** (people answer: the lecturer and classmates) is the last section of the lesson pane, after the completion checklist, with its count in the heading.
-- Code assignments put an editor, a "Chạy" button and a console in the Bài tập tab; a failed run offers "AI giải thích", which opens the Tutor AI with the error.
+Lesson material left, task tabs right (Quiz, Bài tập, Code, AI trợ lý, Hỏi đáp). The AI tutor is a tab beside the work in this surface. The video or code editor sits in a navy frame with 10 px inset; the task primary is pinned at the bottom of the right pane.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep exactly one navy object (#0f172a light, #131d33 dark) per screen, and give it the departure or transit job.
+- **Do** keep at most one navy object (#0f172a light, #131d33 dark) per screen, and give it the transit, video or code job.
 - **Do** keep one filled teal button per screen or docked panel; make everything else secondary, ghost or link.
 - **Do** separate repeated items with 1px hairlines (#e5e7eb) inside one surface; use tabular mono figures for minutes, prices and points.
 - **Do** pair every status colour with a word and an icon, and every mastery fill with its label.

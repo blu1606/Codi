@@ -1,156 +1,121 @@
-/* Learner dashboard (/dashboard). Scoped under .db-page. The navy departure board is the only dark object on the
-   light page, the same frame the course path page draws its transit network in. Body text is at least 16px for the
-   projected demo; captions stay at 14px. */
-.db-page {
-  --db-frame: #0f172a;
-  --db-frame-rule: #334155;
-  --db-frame-fg: #f8fafc;
-  --db-frame-muted: #a8b5c8;
-  --db-line-1: #22d3ee; --db-line-2: #60a5fa; --db-line-3: #fbbf24; --db-line-4: #4ade80;
-  --db-on-line: #0f172a;
+/* Learner home (/dashboard). Scoped under .hm-page. A greeting, then a main column (Học tiếp, feedback, my courses)
+   beside a 340px aside (this week, waiting work, skills, suggestions). Light cards with hairline borders, one filled
+   teal action ("Học tiếp"). Body text 16px; captions 14px. */
+.hm-page { display: grid; gap: var(--space-6); }
+.hm-head { display: grid; gap: var(--space-1); }
+.hm-head h1 { margin: 0; overflow-wrap: anywhere; }
+.hm-date { margin: 0; font-size: var(--text-sm); color: var(--muted); }
+.hm-date::first-letter { text-transform: uppercase; }
+.hm-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--space-8); align-items: start; }
+.hm-main, .hm-side { display: grid; gap: var(--space-8); min-width: 0; }
+.hm-side { gap: var(--space-4); }
+.hm-section { display: grid; gap: var(--space-3); min-width: 0; }
+.hm-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.hm-h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; line-height: 1.3; }
+.hm-h3 { margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.3; }
+.hm-link { font-size: var(--text-sm); font-weight: 600; }
+.hm-muted { margin: 0; font-size: var(--text-sm); color: var(--muted); }
+.hm-strong { color: var(--fg); font-weight: 600; }
+.hm-inline { display: inline-flex; align-items: center; gap: 4px; }
+.hm-chev { color: var(--faint); flex: none; }
+.hm-card { display: grid; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); min-width: 0; }
+
+/* Học tiếp: the one filled action on the page */
+.hm-next {
+  display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: var(--space-6); align-items: center;
+  padding: var(--space-6); border: 1px solid var(--accent-soft-border); border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--accent-soft), var(--surface) 70%);
 }
-html[data-theme="dark"] .db-page { --db-frame: #131d33; --db-frame-rule: #33435f; }
+.hm-next-plain { grid-template-columns: minmax(0, 1fr); border-color: var(--border); background: var(--surface); }
+.hm-next-body { display: grid; gap: var(--space-3); min-width: 0; }
+.hm-next-title { margin: 0; font-family: var(--font-display); font-size: clamp(22px, 1.6vw + 12px, 30px); font-weight: 600; line-height: 1.25; text-wrap: balance; overflow-wrap: anywhere; }
+.hm-next-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--muted); font-size: var(--text-base); }
+.hm-dots > span + span::before { content: "·"; margin-right: var(--space-2); color: var(--faint); }
+.hm-next-progress { display: grid; gap: 6px; max-width: 460px; font-size: var(--text-sm); color: var(--muted); }
+.hm-next-progress strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+.hm-next-actions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin-top: var(--space-1); }
+.hm-next-actions .btn-lg { min-width: 168px; justify-content: center; gap: var(--space-2); }
+.hm-next-note { margin: 0; display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--text-sm); color: var(--muted); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.hm-next-note .icon { color: var(--accent); flex: none; margin-top: 2px; }
+.hm-next-media .thumb { border-radius: var(--radius-md); }
 
-.db-page .db-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.db-h2 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; margin: 0; line-height: 1.3; }
-.db-h3 { font-size: var(--text-base); font-weight: 600; margin: 0; }
-.db-link { font-size: var(--text-sm); font-weight: 600; }
-.db-meta-row { display: inline-flex; align-items: center; gap: var(--space-1); }
-.db-empty, .db-note { color: var(--muted); margin: 0; }
-.db-note { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--text-sm); }
+/* latest feedback */
+.hm-feedback-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); }
+.hm-feedback-where { display: grid; gap: 2px; min-width: 0; }
+.hm-feedback-where strong { overflow-wrap: anywhere; }
+.hm-feedback-where span { font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
+.hm-score { flex: none; font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--text-base); }
+.hm-score strong { font-family: var(--font-display); font-size: var(--text-xl); color: var(--fg); }
+.hm-feedback-text { margin: 0; white-space: pre-line; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 
-/* ---------- focus row: the one primary "Học tiếp" ---------- */
-.db-focus {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-6); align-items: center;
-  padding: var(--space-6) 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-}
-.db-focus .thumb-sm { width: 96px; border-radius: var(--radius-md); }
-.db-focus-body { display: grid; gap: var(--space-2); min-width: 0; }
-.db-focus-course { margin: 0; font-size: var(--text-base); color: var(--muted); }
-.db-focus-course strong { color: var(--fg); font-weight: 600; }
-.db-focus-lesson { margin: 0; font-family: var(--font-display); font-size: clamp(22px, 2.2vw, 30px); font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; }
-.db-focus-lesson-plain { font-size: var(--text-xl); font-family: var(--font-body); font-weight: 500; }
-.db-focus-meta { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; font-size: var(--text-base); }
-.db-focus-progress { display: grid; gap: var(--space-1); max-width: 480px; font-size: var(--text-sm); }
-.db-focus-actions { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
-.db-focus-cta { min-width: 168px; justify-content: center; }
-.db-focus-done { grid-template-columns: minmax(0, 1fr) auto; }
-.db-page .db-focus .btn-lg { min-height: 48px; }
+/* my courses: tappable rows inside one surface */
+.hm-courses { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.hm-courses li + li { border-top: 1px solid var(--border); }
+.hm-course { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-4) var(--space-5); color: var(--fg); text-decoration: none; transition: background-color var(--motion-fast) var(--ease-out); }
+@media (hover: hover) { .hm-course:hover { background: var(--subtle); } .hm-course:hover .hm-course-title { color: var(--accent); } }
+.hm-course:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+.hm-course .thumb-sm { width: 56px; border-radius: var(--radius-md); }
+.hm-course-body { flex: 1; display: grid; gap: 6px; min-width: 0; }
+.hm-course-body .progress { max-width: 320px; height: 6px; }
+.hm-course-title { font-weight: 600; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; }
+.hm-course-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--muted); }
+.hm-course-meta strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+.hm-more { justify-self: start; gap: var(--space-2); }
 
-/* ---------- board + changes ---------- */
-.db-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: var(--space-8); align-items: start; }
-.db-board {
-  background: var(--db-frame); color: var(--db-frame-fg); border-radius: var(--radius-lg);
-  padding: var(--space-6); display: grid; gap: var(--space-4); min-width: 0;
-}
-.db-board-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; border-bottom: 1px solid var(--db-frame-rule); padding-bottom: var(--space-3); }
-.db-board .db-h2 { color: var(--db-frame-fg); }
-.db-board-note { color: var(--db-frame-muted); }
-.db-dep { list-style: none; margin: 0; padding: 0; display: grid; }
-.db-dep-item {
-  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--space-4); align-items: center;
-  padding: var(--space-3) var(--space-3); margin: 0 calc(-1 * var(--space-3)); border-bottom: 1px solid var(--db-frame-rule);
-  border-radius: var(--radius-sm);
-}
-.db-dep-item:last-child { border-bottom: 0; }
-.db-dep-item.is-current { background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35); }
-.db-dep-item.is-lead .db-dep-title a { font-weight: 600; }
-.db-line {
-  width: 40px; height: 40px; border-radius: var(--radius-sm); display: grid; place-items: center;
-  font-family: var(--font-mono); font-weight: 700; font-size: var(--text-base); color: var(--db-on-line); background: var(--db-line-1);
-}
-.db-line-2 { background: var(--db-line-2); }
-.db-line-3 { background: var(--db-line-3); }
-.db-line-4 { background: var(--db-line-4); }
-.db-line-5, .db-line-6 { background: var(--db-line-1); }
-.db-line:empty { background: var(--db-frame-rule); }
-.db-dep-body { display: grid; gap: var(--space-1); min-width: 0; }
-.db-dep-course { margin: 0; font-size: var(--text-base); color: var(--db-frame-muted); overflow-wrap: anywhere; }
-.db-dep-title { margin: 0; font-size: var(--text-lg); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-.db-dep-title a { color: var(--db-frame-fg); text-decoration: none; display: inline-block; min-height: 44px; line-height: 44px; }
-.db-dep-title a:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; border-radius: 2px; }
-@media (hover: hover) { .db-dep-title a:hover { text-decoration: underline; text-underline-offset: 3px; } }
-.db-dep-meta { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: center; color: var(--db-frame-muted); font-size: var(--text-base); }
-.db-here { color: #ffffff; font-weight: 700; }
-.db-here::before { content: "● "; color: var(--db-line-1); }
-.db-dep-min { font-size: var(--text-xl); font-weight: 600; white-space: nowrap; text-align: right; }
-.db-unit { font-size: var(--text-sm); color: var(--db-frame-muted); font-weight: 500; }
-.db-board .db-empty { color: var(--db-frame-muted); }
-.db-board .db-note { color: var(--db-frame-muted); padding-top: var(--space-2); border-top: 1px solid var(--db-frame-rule); }
+/* this week */
+.hm-week-figure { margin: 0; font-size: var(--text-base); color: var(--muted); font-variant-numeric: tabular-nums; }
+.hm-week-figure strong { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 600; color: var(--fg); }
+.hm-days { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
+.hm-days li { display: grid; justify-items: center; gap: 4px; }
+.hm-day-dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--subtle); border: 1px solid var(--border); color: var(--accent-on); }
+.hm-day-dot .icon { width: 14px; height: 14px; }
+.hm-days li.is-on .hm-day-dot { background: var(--accent); border-color: var(--accent); }
+.hm-days li.is-today .hm-day-dot { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent-soft-border); }
+.hm-day-label { font-size: var(--text-xs); color: var(--muted); font-weight: 600; }
+.hm-days li.is-today .hm-day-label { color: var(--accent); }
+.hm-week-note { margin: 0; font-size: var(--text-sm); color: var(--muted); }
+.hm-week-note strong { color: var(--fg); }
+.hm-week-edit { justify-self: start; margin-left: calc(-1 * var(--space-3)); }
 
-.db-changes { display: grid; gap: var(--space-5); align-content: start; min-width: 0; }
-.db-counts { list-style: none; margin: 0; padding: 0; display: grid; }
-.db-counts li { border-bottom: 1px solid var(--border); }
-.db-counts li:first-child { border-top: 1px solid var(--border); }
-.db-counts a { display: flex; align-items: center; gap: var(--space-4); min-height: 56px; color: var(--fg); text-decoration: none; }
-.db-count-value { min-width: 2ch; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 600; color: var(--accent); }
-@media (hover: hover) { .db-counts a:hover span:last-child { text-decoration: underline; text-underline-offset: 3px; } }
-.db-section { display: grid; gap: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--border); }
-.db-path-changes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
-.db-path-changes li { display: flex; gap: var(--space-2); align-items: flex-start; }
-.db-path-changes .icon { color: var(--accent); margin-top: 4px; flex: none; }
-.db-path-body { display: grid; gap: 2px; min-width: 0; }
-.db-path-text { font-size: var(--text-base); overflow-wrap: anywhere; }
-.db-feedback-lesson { margin: 0; font-weight: 600; }
-.db-feedback-text { margin: 0; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+/* waiting work */
+.hm-wait { display: flex; align-items: center; gap: var(--space-3); color: var(--fg); text-decoration: none; }
+.hm-wait > .icon:first-child { color: var(--warn); flex: none; }
+.hm-wait > span { flex: 1; min-width: 0; font-size: var(--text-sm); }
+@media (hover: hover) { .hm-wait:hover { border-color: var(--border-strong); } .hm-wait:hover span { text-decoration: underline; text-underline-offset: 3px; } }
+.hm-wait:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
-/* ---------- goal + streak ---------- */
-.db-goal {
-  display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr); gap: var(--space-8); align-items: start;
-  padding: var(--space-6) 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-}
-.db-goal-week { display: grid; gap: var(--space-3); min-width: 0; }
-.db-goal-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-.db-goal p { margin: 0; }
-.db-streak { display: grid; gap: 0; align-content: start; }
-.db-streak-num { font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 600; line-height: 1; color: var(--accent); }
-.db-streak > span:last-child { font-size: var(--text-base); color: var(--muted); }
-.db-skills { display: grid; gap: var(--space-2); min-width: 0; }
-.db-skill-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
-.db-skill { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); min-height: 40px; color: var(--fg); text-decoration: none; }
-.db-skill > span:first-child { overflow-wrap: anywhere; min-width: 0; }
-@media (hover: hover) { .db-skill:hover > span:first-child { text-decoration: underline; text-underline-offset: 3px; } }
+/* skills + suggestions */
+.hm-skills, .hm-recs { list-style: none; margin: 0; padding: 0; display: grid; }
+.hm-skills li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 40px; font-size: var(--text-sm); }
+.hm-skills li + li { border-top: 1px solid var(--border); }
+.hm-skills li > span:first-child { overflow-wrap: anywhere; min-width: 0; }
+.hm-recs li + li { border-top: 1px solid var(--border); }
+.hm-rec { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; color: var(--fg); text-decoration: none; }
+.hm-rec .thumb-sm { width: 44px; border-radius: var(--radius-sm); }
+.hm-rec-body { display: grid; gap: 2px; min-width: 0; }
+.hm-rec-title { font-weight: 600; font-size: var(--text-sm); line-height: 1.35; overflow-wrap: anywhere; }
+@media (hover: hover) { .hm-rec:hover .hm-rec-title { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; } }
+.hm-rec:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 
-/* ---------- courses + recommendations (hairline rows) ---------- */
-.db-courses { list-style: none; margin: 0; padding: 0; display: grid; }
-.db-course { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--border); }
-.db-course:first-child { border-top: 1px solid var(--border); }
-.db-course .thumb-sm { width: 96px; }
-.db-course-body { display: grid; gap: var(--space-1); min-width: 0; }
-.db-course-title { display: block; font-weight: 600; font-size: var(--text-lg); color: var(--fg); text-decoration: none; }
-@media (hover: hover) { .db-course-title:hover { color: var(--accent); text-decoration: underline; } }
-.db-course-meta { display: block; font-size: var(--text-sm); color: var(--muted); }
-.db-recs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
-.db-rec { display: grid; gap: var(--space-1); align-content: start; color: var(--fg); text-decoration: none; }
-.db-rec .thumb { margin-bottom: var(--space-2); }
-.db-rec-title { display: block; font-weight: 600; }
-.db-rec-meta { display: block; font-size: var(--text-sm); color: var(--muted); }
-@media (hover: hover) { .db-rec:hover .db-rec-title { color: var(--accent); text-decoration: underline; } }
-.db-page .section-title { margin-bottom: var(--space-3); }
+html[data-theme="dark"] .hm-next:not(.hm-next-plain) { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface) 75%); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
 
-/* focus rings on every link and button in the page */
-.db-page a:focus-visible, .db-page button:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
-.db-board a:focus-visible { box-shadow: none; }
-
-/* ---------- responsive ---------- */
 @media (max-width: 1100px) {
-  .db-grid { grid-template-columns: minmax(0, 1fr); }
-  .db-goal { grid-template-columns: minmax(0, 1fr) auto; }
-  .db-skills { grid-column: 1 / -1; }
+  .hm-grid { grid-template-columns: minmax(0, 1fr); }
+  .hm-side { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
 }
 @media (max-width: 720px) {
-  .db-focus { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
-  .db-focus .thumb-sm { width: 72px; }
-  .db-focus-actions { flex-direction: row; align-items: center; flex-wrap: wrap; }
-  .db-focus-cta { min-width: 0; flex: 1 1 auto; }
-  .db-focus-done { grid-template-columns: minmax(0, 1fr); }
-  .db-board { padding: var(--space-4); }
-  .db-dep-item { grid-template-columns: 36px minmax(0, 1fr); gap: var(--space-3); }
-  .db-line { width: 36px; height: 36px; }
-  .db-dep-min { grid-column: 2; text-align: left; font-size: var(--text-base); }
-  .db-goal { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
-  .db-course { grid-template-columns: 72px minmax(0, 1fr); }
-  .db-course .thumb-sm { width: 72px; }
-  .db-course > .btn { grid-column: 2; justify-self: start; }
-  .db-recs { grid-template-columns: minmax(0, 1fr); }
+  .hm-page { gap: var(--space-5); }
+  .hm-main { gap: var(--space-6); }
+  .hm-next { grid-template-columns: minmax(0, 1fr); padding: var(--space-5); gap: var(--space-4); }
+  .hm-next-media { display: none; }
+  .hm-next-actions .btn-lg { flex: 1 1 auto; }
+  .hm-course { padding: var(--space-3) var(--space-4); gap: var(--space-3); }
+  .hm-course .thumb-sm { width: 48px; }
+  /* one column: "Học tiếp", then this week, then everything else in source order */
+  .hm-grid { gap: var(--space-6); }
+  .hm-main, .hm-side { display: contents; }
+  .hm-main > *, .hm-side > * { order: 3; }
+  .hm-main > :first-child { order: 1; }
+  .hm-week { order: 2; }
+  .hm-card { padding: var(--space-4); }
 }

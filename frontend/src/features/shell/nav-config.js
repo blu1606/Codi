@@ -22,10 +22,10 @@ const exact = (p) => new RegExp(`^${p.replace(/\//g, '\\/')}$`);
 export function primaryNav(role, adminCounts) {
   if (role === 'learner') {
     return [
-      { href: '/dashboard', label: 'Bàn làm việc', icon: 'layout-dashboard', match: /^\/(dashboard|learn)(\/|$)/ },
+      { href: '/dashboard', label: 'Trang chủ', icon: 'home', match: /^\/(dashboard|learn)(\/|$)/ },
       { href: '/courses', label: 'Khoá học', icon: 'book-open', match: /^\/(courses|cart|checkout)(\/|$)/ },
-      { href: '/progress', label: 'Học tập', icon: 'graduation-cap', match: /^\/progress(\/|$)/ },
-      { href: '/insights', label: 'Thống kê', icon: 'bar-chart', match: /^\/insights(\/|$)/ },
+      // Scores, study statistics and the knowledge map are tabs of one page; /insights/* redirect into it.
+      { href: '/progress', label: 'Kết quả học tập', icon: 'bar-chart', match: /^\/(progress|insights)(\/|$)/ },
       { href: '/ai', label: 'AI', icon: 'sparkles', match: /^\/ai(\/|$)/ },
     ];
   }
@@ -55,13 +55,13 @@ export function primaryNav(role, adminCounts) {
   ];
 }
 
-export const roleHomeLabel = (role) => (role === 'admin' ? 'Bảng quản trị' : role === 'lecturer' ? 'Khu vực giảng dạy' : 'Bàn làm việc');
+export const roleHomeLabel = (role) => (role === 'admin' ? 'Bảng quản trị' : role === 'lecturer' ? 'Khu vực giảng dạy' : 'Trang chủ');
 
 /** Account menu links (real user-menu.tsx), plus "Đơn hàng của tôi" for learners. */
 export function accountLinks(role) {
   if (role === 'guest') return [];
   const out = [{ href: Codi.homeFor(role), label: roleHomeLabel(role), icon: 'layout-dashboard' }];
-  if (role === 'learner') out.push({ href: '/progress', label: 'Tiến độ & kết quả', icon: 'bar-chart' });
+  if (role === 'learner') out.push({ href: '/progress', label: 'Kết quả học tập', icon: 'bar-chart' });
   out.push({ href: '/profile', label: 'Hồ sơ cá nhân', icon: 'user' });
   if (role === 'learner') {
     out.push({ href: '/profile?tab=nang-luc', label: 'Hồ sơ năng lực', icon: 'github' });
@@ -89,13 +89,13 @@ const PAGES = {
     { href: '/forgot-password', title: 'Quên mật khẩu', subtitle: 'Đặt lại mật khẩu qua email', icon: 'key', keywords: 'quen mat khau doi mat khau password reset' },
   ],
   learner: [
-    { href: '/dashboard', title: 'Bàn làm việc', subtitle: 'Khoá học đang học, việc tiếp theo', icon: 'layout-dashboard', keywords: 'dashboard trang chu tong quan ban lam viec' },
+    { href: '/dashboard', title: 'Trang chủ', subtitle: 'Bài học tiếp theo, mục tiêu tuần, khoá học của tôi', icon: 'home', keywords: 'dashboard trang chu tong quan ban lam viec hoc tiep' },
     { href: '/courses', title: 'Khoá học', subtitle: 'Danh mục khoá học', icon: 'book-open', keywords: 'catalog danh muc khoa hoc mua tim' },
     { href: '/cart', title: 'Giỏ hàng', subtitle: 'Khoá học chờ thanh toán', icon: 'cart', keywords: 'gio hang cart thanh toan mua voucher ma giam gia' },
-    { href: '/progress', title: 'Tiến độ & kết quả', subtitle: 'Học tập', icon: 'graduation-cap', keywords: 'hoc tap tien do ket qua progress dang hoc' },
-    { href: '/progress?tab=done', title: 'Khoá học đã hoàn thành', subtitle: 'Học tập', icon: 'check-circle', keywords: 'hoan thanh xong done chung chi' },
-    { href: '/insights', title: 'Thống kê học tập', subtitle: 'Thời gian học, điểm quiz', icon: 'bar-chart', keywords: 'thong ke stats insights bieu do thoi gian' },
-    { href: '/insights/knowledge-map', title: 'Bản đồ kiến thức', subtitle: 'Mức thành thạo theo chủ đề', icon: 'map', keywords: 'ban do kien thuc knowledge map mastery thanh thao' },
+    { href: '/progress', title: 'Sổ điểm', subtitle: 'Kết quả học tập', icon: 'graduation-cap', keywords: 'so diem ket qua hoc tap tien do progress quiz bai tap nhan xet' },
+    { href: '/progress?show=done', title: 'Khoá học đã hoàn thành', subtitle: 'Kết quả học tập', icon: 'check-circle', keywords: 'hoan thanh xong done chung chi' },
+    { href: '/progress?tab=stats', title: 'Thống kê học tập', subtitle: 'Kết quả học tập · Giờ học, chuỗi ngày, điểm', icon: 'bar-chart', keywords: 'thong ke stats insights bieu do thoi gian' },
+    { href: '/progress?tab=map', title: 'Bản đồ kiến thức', subtitle: 'Kết quả học tập · Mức thành thạo theo khái niệm', icon: 'map', keywords: 'ban do kien thuc knowledge map mastery thanh thao' },
     { href: '/ai', title: 'AI Tutor', subtitle: 'Hỏi AI về khoá học, bài học và lộ trình', icon: 'sparkles', keywords: 'ai tutor tu van chatbot lo trinh goi y' },
     { href: '/profile?tab=nang-luc', title: 'Hồ sơ năng lực', subtitle: 'Phân tích từ GitHub', icon: 'github', keywords: 'ho so nang luc github ky nang' },
     { href: '/profile?tab=transactions', title: 'Đơn hàng của tôi', subtitle: 'Giao dịch và biên lai', icon: 'receipt', keywords: 'don hang giao dich bien lai hoa don thanh toan lich su mua' },

@@ -1,12 +1,13 @@
 /**
- * S13b "Thống kê học tập" ('/insights/stats'), S13c "Bản đồ kiến thức của tôi" ('/insights/knowledge-map') and the
- * '/insights' hub. Ports real app/insights/stats/learner-stats-view.tsx and components/knowledge-map(.tsx|-sections.tsx).
+ * S13b "Thống kê học tập" and S13c "Bản đồ kiến thức", the "Thống kê" and "Bản đồ kiến thức" tabs of "Kết quả học tập"
+ * ('/progress?tab=stats|map'), plus the redirects from the old '/insights*' URLs. Ports real
+ * app/insights/stats/learner-stats-view.tsx and components/knowledge-map(.tsx|-sections.tsx).
  * Data: GET /api/insights/stats?period=&course= (every number is computed on the server from stored study days,
  * submissions and mastery) and GET /api/insights/knowledge-map?course=. Days are GMT+7 calendar dates and weeks start
  * on Monday. Study time is not split per course (said on the page). Filters last for the browser session.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { charts as ch } from '../../lib/charts';
 import { useApi } from '../../lib/use-api';
@@ -59,25 +60,19 @@ function Toolbar({ courses, p, setPref }) {
   );
 }
 
-function LoadFailed({ error, onRetry, title }) {
-  return (
-    <div className="page stack-4"><div className="page-header"><div><h1>{title}</h1></div></div>
-      <Alert type="danger" body={errorText(error, 'Không thể tải số liệu học tập.')} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>Thử lại</button>} /></div>
-  );
-}
-
 // ───────────────────────── S13b ─────────────────────────
-export function StatsPage() {
+/** Study statistics, shown as the "Thống kê" tab of "Kết quả học tập" (/progress?tab=stats). */
+export function StatsPanel() {
   const [p, setPref] = usePrefs();
   const url = `/api/insights/stats?period=${encodeURIComponent(p.period)}&course=${encodeURIComponent(p.course)}`;
   const { data: d, loading, error, reload } = useApi(url);
   if (!d) {
-    if (error) return <LoadFailed error={error} onRetry={reload} title="Thống kê học tập" />;
-    return <div className="page stack-4"><div className="page-header"><div><h1>Thống kê học tập</h1></div></div><SpinnerBlock text="Đang tải thống kê…" /></div>;
+    if (error) return <Alert type="danger" title="Chưa tải được thống kê" body={errorText(error, 'Không thể tải số liệu học tập.')} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={reload} disabled={loading} aria-busy={loading || undefined}>Thử lại</button>} />;
+    return <SpinnerBlock text="Đang tải thống kê…" />;
   }
   const all = d.courses || [];
   if (!all.length) {
-    return <div className="page"><Empty icon="bar-chart" title="Chưa có số liệu học tập" body="Đăng ký một khóa học, số liệu sẽ xuất hiện sau buổi học đầu tiên." actions={<Link className="btn btn-primary" to="/courses">Khám phá khóa học</Link>} /></div>;
+    return <div className="card"><Empty icon="bar-chart" title="Chưa có số liệu học tập" body="Đăng ký một khóa học, số liệu sẽ xuất hiện sau buổi học đầu tiên." actions={<Link className="btn btn-primary" to="/courses">Khám phá khóa học</Link>} /></div>;
   }
   // Window: [start, end) instants of Vietnam calendar days → inclusive local dates; "kỳ trước" = same length before.
   const start = localDate(d.window.start); const end = addDays(localDate(d.window.end), -1);
@@ -89,8 +84,8 @@ export function StatsPage() {
 
   if (!d.studyMinutes && !d.completedLessons && !skills.some((x) => x.level > 0)) {
     return (
-      <div className="page stack-4"><div className="page-header"><div><h1>Thống kê học tập</h1></div></div><Toolbar courses={all} p={p} setPref={setPref} />
-        <Empty icon="bar-chart" title="Chưa có hoạt động trong khoảng này" body="Học một bài là biểu đồ bắt đầu có số liệu. Thử chọn khoảng thời gian dài hơn." actions={<Link className="btn btn-primary" to="/dashboard">Học bài đầu tiên để xem thống kê</Link>} /></div>
+      <div className="stack-4"><Toolbar courses={all} p={p} setPref={setPref} />
+        <div className="card"><Empty icon="bar-chart" title="Chưa có hoạt động trong khoảng này" body="Học một bài là biểu đồ bắt đầu có số liệu. Thử chọn khoảng thời gian dài hơn." actions={<Link className="btn btn-primary" to="/dashboard">Học bài đầu tiên để xem thống kê</Link>} /></div></div>
     );
   }
 
@@ -157,8 +152,7 @@ export function StatsPage() {
 
   const onQuizChange = (el) => { if (el.id === 'li-quiz') setPref({ quiz: el.value }); };
   return (
-    <div className="page stack-4">
-      <div className="page-header"><div><h1>Thống kê học tập</h1><p className="muted">Bạn học đều đặn đến đâu và kỹ năng nào đang lên.</p></div><Link className="btn btn-secondary" to="/insights/knowledge-map"><Icon name="map" className="icon-sm" /> Bản đồ kiến thức</Link></div>
+    <div className="stack-4">
       <div className="stack-2"><Toolbar courses={all} p={p} setPref={setPref} />
       <p className="small muted">{dm(w.start)} – {dm(w.end)} · so với {dm(w.prevStart)} – {dm(w.prevEnd)}{p.course !== 'all' ? ' · Giờ học tính trên mọi khóa (thời gian học chưa tách theo khóa).' : ''}{loading ? ' · Đang cập nhật…' : ''}</p></div>
       {error && <Alert type="danger" body={errorText(error, 'Không thể tải số liệu học tập.')} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={reload}>Thử lại</button>} />}
@@ -202,11 +196,14 @@ function ConceptDetails({ courseId, node }) {
   );
 }
 
-/** Knowledge map of one course (GET /api/insights/knowledge-map?course=…), standalone on /insights/knowledge-map. */
-export function KnowledgeMap({ initialCourseId, embedded }) {
+/**
+ * Knowledge map of one course (GET /api/insights/knowledge-map?course=…). With `onCourseChange` the caller owns the
+ * course (the "Bản đồ kiến thức" tab keeps it in the URL); otherwise the picker remembers it for the session.
+ */
+export function KnowledgeMap({ initialCourseId, embedded, onCourseChange }) {
   const [p, setPref] = usePrefs();
   const [selected, setSelected] = useState(null);
-  const wanted = embedded ? initialCourseId : (p.mapCourse || initialCourseId);
+  const wanted = embedded || onCourseChange ? initialCourseId : (p.mapCourse || initialCourseId);
   const { data: km, loading, error, reload } = useApi(`/api/insights/knowledge-map${wanted ? `?course=${encodeURIComponent(wanted)}` : ''}`);
   useEffect(() => { setSelected(null); }, [km && km.courseId]);
   if (!km) {
@@ -222,7 +219,7 @@ export function KnowledgeMap({ initialCourseId, embedded }) {
   }
   const picker = !embedded && all.length > 1 && (
     <div className="viz-toolbar"><label className="sr-only" htmlFor="li-map">Khoá học</label>
-      <select id="li-map" className="input" style={{ width: 'auto', minHeight: 40 }} value={courseId} onChange={(e) => setPref({ mapCourse: e.target.value })}>
+      <select id="li-map" className="input" style={{ width: 'auto', maxWidth: '100%', minHeight: 40 }} value={courseId} onChange={(e) => (onCourseChange ? onCourseChange(e.target.value) : setPref({ mapCourse: e.target.value }))}>
         <option value="" disabled>Chọn khoá học</option>
         {all.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
       </select></div>
@@ -264,28 +261,13 @@ export function KnowledgeMap({ initialCourseId, embedded }) {
   );
 }
 
-export function KnowledgeMapPage({ query }) {
-  const [p, setPref] = usePrefs();
-  useEffect(() => { if (query && query.course && p.mapCourse !== query.course) setPref({ mapCourse: query.course }); }, [query && query.course]); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <div className="page stack-4">
-      <div className="page-header"><div><h1>Bản đồ kiến thức của tôi</h1><p className="muted">Mỗi ô là một khái niệm; mũi tên chỉ khái niệm cần học trước.</p></div><Link className="btn btn-secondary" to="/insights/stats"><Icon name="bar-chart" className="icon-sm" /> Thống kê học tập</Link></div>
-      <KnowledgeMap initialCourseId={(query && query.course) || p.mapCourse} />
-    </div>
-  );
-}
-
-// ───────────────────────── /insights hub (mockup-only route, kept) ─────────────────────────
-export function InsightsHubPage() {
-  return (
-    <div className="page stack-4">
-      <div className="page-header"><div><h1>Thống kê & bản đồ kiến thức</h1><p className="muted">Xem nhịp học và mức thành thạo của bạn.</p></div></div>
-      <div className="viz-grid-cards">
-        <Link className="viz-card li-hub" to="/insights/stats"><span className="row ln-gap-2 ln-nowrap"><Icon name="bar-chart" className="text-accent" /><strong>Thống kê học tập</strong></span><span className="small muted">Giờ học, chuỗi ngày, điểm quiz và kỹ năng.</span></Link>
-        <Link className="viz-card li-hub" to="/insights/knowledge-map"><span className="row ln-gap-2 ln-nowrap"><Icon name="map" className="text-accent" /><strong>Bản đồ kiến thức của tôi</strong></span><span className="small muted">Khái niệm nào đã vững, khái niệm nào chưa đủ tiên quyết.</span></Link>
-      </div>
-      <Link className="btn btn-ghost" style={{ width: 'fit-content' }} to="/progress">Điểm, bài tập và nhận xét: Tiến độ & kết quả</Link>
-    </div>
-  );
+/**
+ * The old /insights, /insights/stats and /insights/knowledge-map pages now live as tabs of "Kết quả học tập";
+ * links to them land on the matching tab (a ?course= on the map is kept).
+ */
+export function InsightsRedirect({ query, tab }) {
+  const q = new URLSearchParams({ tab });
+  if (tab === 'map' && query && query.course) q.set('course', query.course);
+  return <Navigate to={`/progress?${q.toString()}`} replace />;
 }
 

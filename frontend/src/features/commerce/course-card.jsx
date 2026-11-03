@@ -28,17 +28,21 @@ export function AddToCartButton({ course, className, label = true }) {
   );
 }
 
-/** Card CTA (real catalog-course-card ownership branches). */
-export function CourseCta({ course: c, own, pendingOrderId, block }) {
+/**
+ * Card CTA (real catalog-course-card ownership branches). `quiet` renders every branch as a secondary button, for
+ * lists where many cards sit side by side and the card itself is the main target.
+ */
+export function CourseCta({ course: c, own, pendingOrderId, block, quiet }) {
   const b = block ? ' btn-block' : '';
+  const main = quiet ? 'btn btn-secondary' : 'btn btn-primary';
   const role = Codi.role();
   if (!own) return <span className={'skeleton' + b} style={{ display: 'inline-block', minWidth: 132, height: 36 }} aria-hidden="true" />;
-  if (own === 'owned') return <Link className={'btn btn-primary' + b} to={`/learn/${c.id}`}>Tiếp tục học</Link>;
+  if (own === 'owned') return <Link className={main + b} to={`/learn/${c.id}`} aria-label={quiet ? `Tiếp tục học: ${c.title}` : undefined}>Tiếp tục học</Link>;
   if (role === 'lecturer' || role === 'admin') return <Link className={'btn btn-secondary' + b} to={`/courses/${c.slug}`}>Xem chi tiết</Link>;
   if (own === 'pending-payment') {
     return <Link className={'btn btn-secondary' + b} to={pendingOrderId ? `/checkout?order=${pendingOrderId}` : '/cart'}><Icon name="clock" /> Chờ thanh toán</Link>;
   }
-  if (own === 'in-cart') return <Link className={'btn btn-secondary' + b} to="/cart"><Icon name="check" /> Đã trong giỏ hàng · Xem giỏ</Link>;
-  if (c.price === 0) return <button type="button" className={'btn btn-primary' + b} onClick={() => enrollFree(c)} aria-label={`Đăng ký miễn phí: ${c.title}`}>Đăng ký miễn phí</button>;
-  return <AddToCartButton course={c} className={'btn btn-primary' + b} />;
+  if (own === 'in-cart') return <Link className={'btn btn-secondary' + b} to="/cart"><Icon name="check" /> {quiet ? 'Trong giỏ · Xem giỏ' : 'Đã trong giỏ hàng · Xem giỏ'}</Link>;
+  if (c.price === 0) return <button type="button" className={main + b} onClick={() => enrollFree(c)} aria-label={`Đăng ký miễn phí: ${c.title}`}>Đăng ký miễn phí</button>;
+  return <AddToCartButton course={c} className={main + b} />;
 }

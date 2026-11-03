@@ -420,7 +420,7 @@ export function CheckoutSuccessPage({ query: q }) {
       <div className="stack-2">
         <Link className="btn btn-primary btn-lg btn-block" to={`/learn/${courses[0].id}/onboarding`}>Bắt đầu học</Link>
         <div className="row" style={{ justifyContent: 'center' }}>
-          <Link className="btn btn-ghost" to="/dashboard">Về bàn làm việc</Link>
+          <Link className="btn btn-ghost" to="/dashboard">Về trang chủ</Link>
           <Link className="btn btn-ghost" to="/profile?tab=transactions">Xem biên lai trong Giao dịch</Link>
         </div>
       </div>

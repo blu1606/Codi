@@ -25,7 +25,7 @@ const BENEFITS = [
   ['Phát hiện lỗi logic & gợi ý sửa đổi', 'Cùng tìm lỗi, hiểu nguyên nhân và cải thiện cách viết code của bạn.'],
 ];
 const FOOTER_GROUPS = [
-  ['Nền tảng', [['Lộ trình học tập', '/ai'], ['Danh sách khóa học', '/courses'], ['Bàn làm việc', '/dashboard'], ['AI Mentor', '#home-mentor']]],
+  ['Nền tảng', [['Lộ trình học tập', '/ai'], ['Danh sách khóa học', '/courses'], ['Trang học tập', '/dashboard'], ['AI Mentor', '#home-mentor']]],
   ['Tài nguyên', [['Khám phá công nghệ', '/courses'], ['Tư vấn chọn khóa học', '/ai'], ['Tính năng Codi', '#home-features-title'], ['Hồ sơ học tập', '/profile']]],
   ['Hỗ trợ', [['Hỏi đáp cùng AI', '/ai'], ['Quản lý tài khoản', '/profile'], ['Đăng nhập', '/login'], ['Khôi phục mật khẩu', '/forgot-password']]],
 ];

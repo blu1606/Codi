@@ -1,7 +1,8 @@
 /**
  * S01 Catalog '/courses' (real app/courses/page.tsx) — live search with a three-part typeahead (query suggestions,
- * top results with "Khóa học" / "Chủ đề" badges, "Xem tất cả kết quả"), clear-search button, filter row
- * (category, level, price, sort), removable chips + "Xóa bộ lọc", result count, zero results, load error with retry.
+ * top results with "Khóa học" / "Chủ đề" badges, "Xem tất cả kết quả"), clear-search button, a category pill row,
+ * a result bar (count + level, price, sort), removable chips + "Xóa bộ lọc", a course card grid, zero results and a
+ * load error with retry.
  * Filters live in the URL (replaced, not pushed, like the real app's replaceState). `?course=<id>` deep-links to the
  * course detail; an unknown id is dropped from the URL. Data: GET /api/courses + POST /api/courses/ownership.
  */
@@ -135,77 +136,42 @@ function SearchBox({ value, entries, onSearch, onOpenCourse }) {
 }
 
 const fmt = Codi.fmt;
-const LEVEL_RANK = { Beginner: 1, Intermediate: 2, Advanced: 3 };
 
 function CatalogSkeleton() {
   return (
-    <div className="cm-ledger-skel card" aria-hidden="true">{[1, 2, 3, 4, 5].map((i) => (
-      <div key={i} className="cm-ledger-skel-row"><div className="skeleton" style={{ width: 56, height: 40 }} /><div className="skeleton skeleton-line" style={{ width: '60%' }} /><div className="skeleton skeleton-line" style={{ width: '40%' }} /></div>
-    ))}</div>
+    <ul className="cm-grid" aria-hidden="true">{[1, 2, 3, 4, 5, 6].map((i) => (
+      <li key={i} className="cm-tile cm-tile-skel"><div className="skeleton cm-tile-skel-media" /><div className="cm-tile-body"><div className="skeleton skeleton-line" style={{ width: '80%' }} /><div className="skeleton skeleton-line" style={{ width: '50%' }} /><div className="skeleton skeleton-line" style={{ width: '35%' }} /></div></li>
+    ))}</ul>
   );
 }
 
-/** Sortable header cell: the sort value is the URL's existing sort option; the caret is drawn in CSS. */
-function SortHeader({ label, value, sort, onSort }) {
-  const active = sort === value;
-  return (
-    <th scope="col" aria-sort={active ? 'descending' : 'none'} className="num">
-      <button type="button" className={`cm-sort${active ? ' is-active' : ''}`} onClick={() => onSort(value)}>{label}<span className="cm-sort-caret" aria-hidden="true" /></button>
-    </th>
-  );
-}
-
-function LedgerRow({ course: c, ownership }) {
+/** One course in the catalogue grid: cover, title, lecturer, facts, then price and a quiet action. */
+function CourseTile({ course: c, ownership }) {
   const state = ownership.of(c.id);
   const own = state === 'owned';
-  const inCart = state === 'in-cart';
-  const rank = LEVEL_RANK[c.level] || 1;
+  const href = `/courses/${c.slug}`;
   return (
-    <tr>
-      <td data-label="Khóa học">
-        <div className="cm-ledger-course">
-          <Link className="cm-ledger-thumb" to={`/courses/${c.slug}`} tabIndex={-1} aria-hidden="true"><Thumb course={c} small /></Link>
-          <div className="cm-ledger-text">
-            <Link className="cm-ledger-title" to={`/courses/${c.slug}`}>{c.title}</Link>
-            <span className="small muted od-truncate">{c.lecturerName}</span>
-            {own && <span className="badge badge-success"><Icon name="check" />Đã sở hữu</span>}
-            {inCart && <span className="badge badge-accent">Trong giỏ</span>}
-          </div>
+    <li className="cm-tile">
+      <Link className="cm-tile-media" to={href} tabIndex={-1} aria-hidden="true">
+        <Thumb course={c} />
+        {c.category && <span className="cm-cover-label">{c.category}</span>}
+      </Link>
+      <div className="cm-tile-body">
+        <h3 className="cm-tile-title"><Link to={href}>{c.title}</Link></h3>
+        <p className="cm-tile-by">{c.lecturerName}</p>
+        <p className="cm-tile-facts">
+          {c.rating > 0
+            ? <span className="cm-tile-rating"><Icon name="star-filled" className="icon-sm cm-star" /><strong>{c.rating.toFixed(1)}</strong><span className="muted">({fmt.num(c.ratingCount || 0)})</span></span>
+            : <span>Chưa có đánh giá</span>}
+          <span>{levelLabel(c.level)}</span>
+          {c.duration && <span>{c.duration}</span>}
+        </p>
+        <div className="cm-tile-foot">
+          {own ? <span className="badge badge-success"><Icon name="check" />Đã sở hữu</span> : <span className="cm-tile-price">{priceLabel(c)}</span>}
+          <CourseCta course={c} own={state} pendingOrderId={ownership.pendingOrderId(c.id)} quiet />
         </div>
-      </td>
-      <td data-label="Trình độ">
-        <span className="cm-level"><span className="cm-level-bar" aria-hidden="true">{[1, 2, 3].map((i) => <i key={i} className={i <= rank ? 'on' : undefined} />)}</span>{levelLabel(c.level)}</span>
-      </td>
-      <td data-label="Đánh giá" className="num">{c.rating > 0 ? <><Icon name="star-filled" className="icon-sm cm-star" /> <span className="strong">{c.rating.toFixed(1)}</span> <span className="muted">({fmt.num(c.ratingCount || 0)})</span></> : <span className="muted">Chưa có</span>}</td>
-      <td data-label="Thời lượng" className="num">{c.duration}</td>
-      <td data-label="Học viên" className="num">{fmt.num(c.learnersCount || 0)}</td>
-      <td data-label="Học phí" className="num"><span className="strong">{priceLabel(c)}</span></td>
-      <td className="cm-ledger-act"><CourseCta course={c} own={state} pendingOrderId={ownership.pendingOrderId(c.id)} /></td>
-    </tr>
-  );
-}
-
-/** The results as a comparison ledger: one course per row, sortable where the catalogue has a sort value. */
-function CourseLedger({ list, sort, onSort, ownership }) {
-  return (
-    <section aria-labelledby="catalog-results-title" className="cm-ledger-wrap">
-      <h2 id="catalog-results-title" className="sr-only">Danh sách khoá học</h2>
-      <table className="cm-ledger">
-        <caption className="sr-only">Khoá học, sắp xếp theo {label(SORTS, sort)}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Khóa học</th>
-            <th scope="col">Trình độ</th>
-            <SortHeader label="Đánh giá" value="rating" sort={sort} onSort={onSort} />
-            <th scope="col" className="num">Thời lượng</th>
-            <SortHeader label="Học viên" value="enrollment" sort={sort} onSort={onSort} />
-            <th scope="col" className="num">Học phí</th>
-            <th scope="col"><span className="sr-only">Thao tác</span></th>
-          </tr>
-        </thead>
-        <tbody>{list.map((c) => <LedgerRow key={c.id} course={c} ownership={ownership} />)}</tbody>
-      </table>
-    </section>
+      </div>
+    </li>
   );
 }
 
@@ -232,24 +198,35 @@ export default function CatalogPage({ query: q }) {
   const reset = () => navigate('/courses', { replace: true });
   const catName = f.cat !== 'all' ? f.cat : '';
 
+  // The category row carries its own state; chips list only the filters set elsewhere.
   const chips = [];
   if (f.q.trim()) chips.push(['q', `Từ khóa: "${f.q.trim()}"`]);
-  if (f.cat !== 'all') chips.push(['cat', `Danh mục: ${catName}`]);
   if (f.level !== 'all') chips.push(['level', `Trình độ: ${label(LEVELS, f.level)}`]);
   if (f.price !== 'all') chips.push(['price', `Giá: ${f.price === 'free' ? 'Miễn phí' : 'Trả phí'}`]);
-  if (f.sort !== 'popular') chips.push(['sort', `Sắp xếp: ${label(SORTS, f.sort)}`]);
+  const filtering = chips.length > 0 || f.cat !== 'all';
 
   return (
-    <div className="page">
+    <div className="page cm-catalog">
       <div className="page-header"><div><h1>Khoá học</h1><p className="muted">Tìm khoá học phù hợp với mục tiêu của bạn.</p></div></div>
-      <form className="cm-filters" role="search" onSubmit={(e) => e.preventDefault()}>
+      <form className="cm-find" role="search" onSubmit={(e) => e.preventDefault()}>
         <SearchBox value={f.q} entries={filtered} onSearch={(v) => update({ q: v })} onOpenCourse={(c) => Codi.go('/courses/' + c.slug)} />
-        <FilterSelect name="cat" label="Danh mục" aria="Lọc theo danh mục" value={f.cat} options={[['all', 'Tất cả']].concat(categories.map((c) => [c, c]))} onChange={(k, v) => update({ [k]: v })} />
-        <FilterSelect name="level" label="Trình độ" aria="Lọc theo trình độ" value={f.level} options={LEVELS} onChange={(k, v) => update({ [k]: v })} />
-        <FilterSelect name="price" label="Giá" aria="Lọc theo học phí" value={f.price} options={PRICES} onChange={(k, v) => update({ [k]: v })} />
-        <FilterSelect name="sort" label="Sắp xếp" aria="Sắp xếp danh sách khóa học" value={f.sort} options={SORTS} onChange={(k, v) => update({ [k]: v })} />
       </form>
-      {chips.length > 0 && (
+      {categories.length > 0 && (
+        <div className="cm-cats" role="group" aria-label="Danh mục">
+          {[['all', 'Tất cả']].concat(categories.map((c) => [c, c])).map(([v, l]) => (
+            <button key={v} type="button" className="cm-cat" aria-pressed={f.cat === v} onClick={() => update({ cat: v })}>{l}</button>
+          ))}
+        </div>
+      )}
+      <div className="cm-bar">
+        <p className="cm-count" role="status">{loaded ? <><strong>{list.length}</strong> khoá học{catName ? <> trong <strong>{catName}</strong></> : null}</> : 'Đang tải danh sách khoá học…'}</p>
+        <div className="cm-bar-controls">
+          <FilterSelect name="level" label="Trình độ" aria="Lọc theo trình độ" value={f.level} options={LEVELS} onChange={(k, v) => update({ [k]: v })} />
+          <FilterSelect name="price" label="Giá" aria="Lọc theo học phí" value={f.price} options={PRICES} onChange={(k, v) => update({ [k]: v })} />
+          <FilterSelect name="sort" label="Sắp xếp" aria="Sắp xếp danh sách khóa học" value={f.sort} options={SORTS} onChange={(k, v) => update({ [k]: v })} />
+        </div>
+      </div>
+      {filtering && (
         <div className="od-cluster cm-chips">
           {chips.map(([k, l]) => (
             <span key={k} className="chip">{l}<button type="button" onClick={() => update({ [k]: '' })} aria-label={`Bỏ bộ lọc ${l}`}><Icon name="x" className="icon-sm" /></button></span>
@@ -257,7 +234,6 @@ export default function CatalogPage({ query: q }) {
           <button type="button" className="btn btn-link small" onClick={reset}>Xóa bộ lọc</button>
         </div>
       )}
-      <p className="small muted cm-count" role="status">{loaded ? `${list.length} khoá học` : 'Đang tải danh sách khoá học…'}</p>
       {!loaded ? <CatalogSkeleton /> : !courses ? (
         <div className="card">
           <Empty icon="alert-circle" title="Không tải được danh sách khóa học"
@@ -265,7 +241,10 @@ export default function CatalogPage({ query: q }) {
             actions={<button type="button" className="btn btn-secondary" onClick={() => reload()}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />
         </div>
       ) : list.length ? (
-        <CourseLedger list={list} sort={f.sort} onSort={(v) => update({ sort: v })} ownership={ownership} />
+        <section aria-labelledby="catalog-results-title">
+          <h2 id="catalog-results-title" className="sr-only">Danh sách khoá học, sắp xếp theo {label(SORTS, f.sort)}</h2>
+          <ul className="cm-grid">{list.map((c) => <CourseTile key={c.id} course={c} ownership={ownership} />)}</ul>
+        </section>
       ) : (
         <div className="card">
           <Empty icon="search" title="Không tìm thấy khóa học phù hợp" body="Thử bỏ bớt bộ lọc, hoặc mô tả mục tiêu để AI Codi gợi ý khóa học."

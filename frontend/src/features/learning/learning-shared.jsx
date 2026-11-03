@@ -29,7 +29,7 @@ export function NotEnrolled({ courseId, message }) {
 export function NotFound({ title = 'Không tìm thấy khoá học' }) {
   return (
     <div className="page page-narrow">
-      <Empty icon="map" title={title} actions={<Link className="btn btn-primary" to="/dashboard">Về bàn làm việc</Link>} />
+      <Empty icon="map" title={title} actions={<Link className="btn btn-primary" to="/dashboard">Về trang chủ</Link>} />
     </div>
   );
 }

@@ -138,7 +138,7 @@ export default function PathPage({ params }) {
   return (
     <div className="page pt-page">
       <div className="row-between pt-crumbs">
-        <nav className="small muted" aria-label="Đường dẫn"><Link to="/dashboard">Bàn làm việc</Link> / <span aria-current="page">{title}</span></nav>
+        <nav className="small muted" aria-label="Đường dẫn"><Link to="/dashboard">Trang chủ</Link> / <span aria-current="page">{title}</span></nav>
         <button type="button" className="btn btn-secondary btn-sm" onClick={review}><Icon name="star" className="icon-sm" /> {view.review ? 'Sửa đánh giá' : 'Đánh giá khóa học'}</button>
       </div>
 

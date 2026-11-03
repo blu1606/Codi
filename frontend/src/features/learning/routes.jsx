@@ -5,17 +5,21 @@ import OnboardingPage from './onboarding-page';
 import PathPage from './path-page';
 import LessonPlayerPage from './lesson-player-page';
 import ProgressPage from './progress-page';
-import { InsightsHubPage, KnowledgeMapPage, StatsPage } from './insights-pages';
+import { InsightsRedirect } from './insights-pages';
+
+// Old "Thống kê" URLs open the matching tab of "Kết quả học tập".
+const StatsRedirect = (props) => <InsightsRedirect {...props} tab="stats" />;
+const MapRedirect = (props) => <InsightsRedirect {...props} tab="map" />;
 
 const routes = [
-  { path: '/dashboard', element: DashboardPage, title: 'Bàn làm việc', role: 'learner' },
+  { path: '/dashboard', element: DashboardPage, title: 'Trang chủ', role: 'learner' },
   { path: '/learn/:courseId/onboarding', element: OnboardingPage, title: 'Thiết lập lộ trình', role: 'learner', layout: 'focus', exit: { href: '/dashboard', label: 'Để sau' } },
   { path: '/learn/:courseId', element: PathPage, title: 'Lộ trình học', role: 'learner' },
   { path: '/learn/:courseId/:lessonId', element: LessonPlayerPage, title: 'Bài học', role: 'learner' },
-  { path: '/progress', element: ProgressPage, title: 'Tiến độ & kết quả', role: 'learner' },
-  { path: '/insights/stats', element: StatsPage, title: 'Thống kê học tập', role: 'learner' },
-  { path: '/insights/knowledge-map', element: KnowledgeMapPage, title: 'Bản đồ kiến thức', role: 'learner' },
-  { path: '/insights', element: InsightsHubPage, title: 'Thống kê học tập', role: 'learner' },
+  { path: '/progress', element: ProgressPage, title: 'Kết quả học tập', role: 'learner' },
+  { path: '/insights/stats', element: StatsRedirect, title: 'Kết quả học tập', role: 'learner' },
+  { path: '/insights/knowledge-map', element: MapRedirect, title: 'Kết quả học tập', role: 'learner' },
+  { path: '/insights', element: StatsRedirect, title: 'Kết quả học tập', role: 'learner' },
 ];
 
 export default routes;
