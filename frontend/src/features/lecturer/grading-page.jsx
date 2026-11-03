@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { useRevealOnSelect } from './reveal-on-select';
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon } from '../../components/ui/primitives';
+import { codeBlock } from '../coding/code-api';
 import { shell, decimal, promptReason, guard, Loading, LoadError } from './teach-api';
 import { act, reloadMine } from './teach-data';
 
@@ -268,7 +269,7 @@ export function GradingPage({ params, query }) {
   if (!sel) {
     detail = <div className="card"><Empty icon="clipboard-check" title={status === 'pending' ? 'Không có bài nào chờ chấm' : 'Chưa có bài đã chấm'} body={status === 'pending' ? 'Bạn đã chấm hết các bài nộp. Bài làm mới của học viên sẽ xuất hiện tại đây.' : 'Các bài sau khi chấm điểm sẽ được lưu trữ tại tab này.'} /></div>;
   } else {
-    const hasWork = sel.fileName || sel.linkUrl || sel.answerText;
+    const hasWork = sel.fileName || sel.linkUrl || sel.answerText || sel.codeText;
     detail = (
       <div className="tc-grade">
         <section className="card tc-stage">
@@ -276,6 +277,7 @@ export function GradingPage({ params, query }) {
           <div className="card-body stack-4">
             <div className="stack-1"><strong className="xsmall muted">Yêu cầu bài tập</strong><div className="panel small" style={{ whiteSpace: 'pre-line' }}>{sel.instructions || 'Không có nội dung yêu cầu cụ thể.'}</div></div>
             <div className="stack-2"><strong className="xsmall muted">Nội dung bài nộp</strong>
+              {sel.codeText && <div className="stack-1"><span className="xsmall muted">Code học viên viết và chạy trong bài ({sel.codeLanguage === 'typescript' ? 'TypeScript' : 'JavaScript'}):</span>{codeBlock(sel.codeText, 'javascript')}</div>}
               {sel.fileName && <div className="panel row-between"><span className="row small" style={{ minWidth: 0 }}><Icon name="file-text" className="icon-sm" /> <span className="mono od-truncate">{sel.fileName}</span></span>
                 {sel.fileUrl ? <a className="btn btn-ghost btn-sm" href={sel.fileUrl} target="_blank" rel="noopener noreferrer"><Icon name="download" className="icon-sm" /> Tải về</a>
                   : <button type="button" className="btn btn-ghost btn-sm" onClick={() => Codi.ui.toast(`Tệp "${sel.fileName}" chưa có đường dẫn tải về.`, { type: 'info' })}><Icon name="download" className="icon-sm" /> Tải về</button>}</div>}

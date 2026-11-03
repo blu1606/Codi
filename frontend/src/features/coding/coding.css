@@ -85,6 +85,10 @@ dl.cp-test-detail { display: grid; gap: var(--space-2); margin: 0; }
 .cp-part-work .cp-console-lines { max-height: 220px; }
 .cp-dock { position: sticky; bottom: 0; z-index: 2; margin-top: auto; padding: var(--space-3) 0; background: var(--surface); border-top: 1px solid var(--border); }
 .cp-dock .cp-actions { margin-top: 0; padding-top: 0; border-top: 0; }
+/* code assignment: editor + console with its own "Chạy" (the form's "Nộp bài tập" stays the one primary) */
+.cp-assignment { min-width: 0; }
+.cp-console-bar { gap: var(--space-3); flex-wrap: wrap; }
+.cp-assignment .cp-console-lines { max-height: 240px; }
 
 @media (prefers-reduced-motion: reduce) {
   .cp-spin { animation: none; }

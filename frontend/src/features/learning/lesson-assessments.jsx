@@ -7,6 +7,8 @@
  * latest attempt to pass (D6). Assignment: draft autosave (600 ms), per-assessment size limit (max 20 MB), file
  * removal, resubmit only while pending, graded work cannot be resubmitted. File upload goes through the backend's
  * signed upload (POST .../file prepare → PUT → confirm); without R2 storage the server's error is shown as is.
+ * Code assignments (AssessmentView.codeLanguage set by the server) open Codi.code.assignment: the learner writes the
+ * code here, runs it on the server and submits the code itself; the lecturer's link/file format stays as an option.
  * After every change that affects the checklist, onChange() reloads the lesson.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -14,6 +16,7 @@ import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
 import { useApi } from '../../lib/use-api';
 import { Alert, Icon, SpinnerBlock } from '../../components/ui/primitives';
+import { codeBlock } from '../coding/code-api';
 import { assessmentBase, errorText, scoreText } from './learning-store';
 
 const scrollToId = (id) => { const t = document.getElementById(id); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
@@ -178,10 +181,17 @@ const linkValid = (value) => {
   try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password; } catch { return false; }
 };
 const fileLimitMb = (a) => Math.min(20, Math.max(1, Number(a && a.maxFileSizeMb) || 20));
+const CODE_LANG = { javascript: 'JavaScript', typescript: 'TypeScript' };
+// What a code assignment's editor opens with; submitting it unchanged is not a submission.
+const CODE_STARTER = '// Viết code bài làm ở đây, rồi bấm “Chạy” để xem kết quả.\n';
+const hasCode = (code) => !!code && !!code.trim() && code.trim() !== CODE_STARTER.trim();
 
 function SubmissionContent({ sub }) {
   return (
     <div className="stack-1 small ln-sub-content">
+      {sub.code && (
+        <div className="stack-1"><span className="xsmall muted">Code đã nộp ({CODE_LANG[sub.codeLanguage] || 'JavaScript'})</span>{codeBlock(sub.code, 'javascript')}</div>
+      )}
       {sub.fileName && <span className="row"><Icon name="file-text" className="icon-sm" /> {sub.fileName}</span>}
       {sub.linkUrl && <a className="row" href={/^https?:\/\//.test(sub.linkUrl) ? sub.linkUrl : undefined} target="_blank" rel="noopener noreferrer"><Icon name="link" className="icon-sm" /> {sub.linkUrl}</a>}
       {sub.answerText && <p className="ln-pre">{sub.answerText}</p>}
@@ -191,16 +201,16 @@ function SubmissionContent({ sub }) {
 
 /** Draft fields the form edits: the resubmit draft of a pending submission, the draft submission itself, or empty. */
 function draftOf(sub) {
-  if (sub && sub.draft) return { linkUrl: sub.draft.linkUrl || '', answerText: sub.draft.answerText || '', fileName: sub.draft.fileName || '' };
-  if (sub && sub.status === 'draft') return { linkUrl: sub.linkUrl || '', answerText: sub.answerText || '', fileName: sub.fileName || '' };
-  return { linkUrl: '', answerText: '', fileName: '' };
+  if (sub && sub.draft) return { linkUrl: sub.draft.linkUrl || '', answerText: sub.draft.answerText || '', code: sub.draft.code || '', fileName: sub.draft.fileName || '' };
+  if (sub && sub.status === 'draft') return { linkUrl: sub.linkUrl || '', answerText: sub.answerText || '', code: sub.code || '', fileName: sub.fileName || '' };
+  return { linkUrl: '', answerText: '', code: '', fileName: '' };
 }
 
 export function AssignmentSection({ courseId, lessonId, assessmentId, bare = false, onChange }) {
   const url = assessmentBase(courseId, lessonId, assessmentId);
   const { data: a, loading, error: loadError, reload, setData } = useApi(url);
   if (!a) return <LoadBox id="assignment" label="Bài tập" bare={bare} loading={loading} error={loadError} reload={reload} />;
-  return <AssignmentBody key={a.id} a={a} url={url} bare={bare} setData={setData} onChange={onChange} />;
+  return <AssignmentBody key={a.id} a={a} url={url} bare={bare} setData={setData} onChange={onChange} courseId={courseId} lessonId={lessonId} />;
 }
 
 /** Criteria of a JSON rubric ([{ name, desc, points }], the lecturer builder format), or null for free text. */
@@ -229,16 +239,17 @@ function RubricList({ raw }) {
   );
 }
 
-function AssignmentBody({ a, url, bare, setData, onChange }) {
+function AssignmentBody({ a, url, bare, setData, onChange, courseId, lessonId }) {
   const sub = a.submission;
   const format = a.submissionFormat || 'file_or_link';
+  const codeLang = a.codeLanguage || null;
   const limitMb = fileLimitMb(a);
   const maxScore = Number(a.maxScore) || 10;
   const passPct = a.passingScore != null ? Number(a.passingScore) : 50;
   const stored = draftOf(sub);
-  const [fields, setFields] = useState({ link: stored.linkUrl, note: stored.answerText });
+  const [fields, setFields] = useState({ link: stored.linkUrl, note: stored.answerText, code: stored.code || (codeLang ? CODE_STARTER : '') });
   const [editing, setEditing] = useState(!sub || sub.status === 'draft' || !!(sub && sub.draft));
-  const [saved, setSaved] = useState(stored.linkUrl || stored.answerText || stored.fileName ? 'Đã khôi phục bản nháp.' : 'Bản nháp được lưu tự động.');
+  const [saved, setSaved] = useState(stored.linkUrl || stored.answerText || stored.fileName || hasCode(stored.code) ? 'Đã khôi phục bản nháp.' : 'Bản nháp được lưu tự động.');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
   const [uploadError, setUploadError] = useState(null);
@@ -249,16 +260,18 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
   const pending = useRef(null);
 
   const post = (command) => api.post(url, command);
+  // The fields a draft or submit command carries; code only for assignments with the code editor.
+  const payload = (f) => ({ linkUrl: f.link.trim(), answerText: f.note, ...(codeLang ? { code: hasCode(f.code) ? f.code : '' } : {}) });
   const flushDraft = async () => {
     clearTimeout(timer.current);
     if (!pending.current) return true;
     const next = pending.current; pending.current = null;
-    try { setData(await post({ type: 'assignment-draft', linkUrl: next.link.trim(), answerText: next.note })); return true; } catch { return false; }
+    try { setData(await post({ type: 'assignment-draft', ...payload(next) })); return true; } catch { return false; }
   };
   // Keep the last keystrokes when the learner leaves before the debounce fires.
   useEffect(() => () => {
     clearTimeout(timer.current);
-    if (pending.current) { const next = pending.current; pending.current = null; post({ type: 'assignment-draft', linkUrl: next.link.trim(), answerText: next.note }).catch(() => {}); }
+    if (pending.current) { const next = pending.current; pending.current = null; post({ type: 'assignment-draft', ...payload(next) }).catch(() => {}); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = (next) => {
@@ -272,7 +285,8 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
   };
   const fileName = stored.fileName;
   const linkTrim = fields.link.trim();
-  const ready = format === 'file' ? !!fileName : format === 'link' ? !!linkTrim : format === 'text' ? !!fields.note.trim() : !!fileName || !!linkTrim;
+  const formatReady = format === 'file' ? !!fileName : format === 'link' ? !!linkTrim : format === 'text' ? !!fields.note.trim() : !!fileName || !!linkTrim;
+  const ready = (!!codeLang && hasCode(fields.code)) || formatReady;
   const linkError = touched && fields.link && !linkValid(fields.link) ? 'Đường dẫn chưa hợp lệ. Hãy bắt đầu bằng https://' : null;
 
   const upload = async (file) => {
@@ -319,7 +333,7 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
     setBusy(true);
     clearTimeout(timer.current); pending.current = null;
     try {
-      setData(await post({ type: 'assignment-submit', linkUrl: linkTrim, answerText: fields.note }));
+      setData(await post({ type: 'assignment-submit', ...payload(fields) }));
       setEditing(false); setUploadError(null);
       if (onChange) onChange();
       Codi.ui.toast('Đã nộp bài tập. Bạn có thể hoàn thành bài học ngay.', { type: 'success' });
@@ -331,8 +345,9 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
     if (busy || !sub) return;
     setBusy(true); setError(null);
     try {
-      setData(await post({ type: 'assignment-draft', linkUrl: sub.linkUrl || '', answerText: sub.answerText || '' }));
-      setFields({ link: sub.linkUrl || '', note: sub.answerText || '' });
+      const reopened = { link: sub.linkUrl || '', note: sub.answerText || '', code: sub.code || (codeLang ? CODE_STARTER : '') };
+      setData(await post({ type: 'assignment-draft', ...payload(reopened) }));
+      setFields(reopened);
       setSaved('Bản nháp được lưu tự động.');
       setEditing(true);
     } catch (err) { setError(errorText(err, 'Không thể mở bản nháp.')); }
@@ -374,9 +389,8 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
     const fileOk = format === 'file' || format === 'file_or_link';
     const linkOk = format === 'link' || format === 'file_or_link';
     const formId = `as-${a.id}`;
-    content = (
-      <form className={`stack-4 ${bare ? 'ln-task-fill' : ''}`.trim()} noValidate onSubmit={submit}>
-        {isPending && <Alert type="info" body="Bài đã nộp vẫn được giữ cho đến khi bạn nộp lại." />}
+    const fileAndLink = (
+      <>
         {fileOk && (
           <div className="field"><label htmlFor={`${formId}-file`}>Tệp bài làm{format === 'file' ? ' (bắt buộc)' : ''}</label>
             <input id={`${formId}-file`} type="file" disabled={busy} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) upload(f); }} />
@@ -397,6 +411,28 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
             {linkError && <p className="field-error" id={`${formId}-link-err`}><Icon name="alert-circle" className="icon-sm" /><span>{linkError}</span></p>}
           </div>
         )}
+      </>
+    );
+    content = (
+      <form className={`stack-4 ${bare ? 'ln-task-fill' : ''}`.trim()} noValidate onSubmit={submit}>
+        {isPending && <Alert type="info" body="Bài đã nộp vẫn được giữ cho đến khi bạn nộp lại." />}
+        {codeLang ? (
+          <>
+            <div className="stack-2">
+              <div className="stack-1"><strong className="small">Bài làm ({CODE_LANG[codeLang]})</strong>
+                <span className="field-help">Viết code ngay tại đây và bấm Chạy để chạy trên máy chủ. Khi nộp, giảng viên nhận đúng đoạn code này.</span></div>
+              {Codi.code && Codi.code.assignment
+                ? Codi.code.assignment({ courseId, lessonId, assessmentId: a.id, title: a.title, instructions: a.instructions, language: codeLang, value: fields.code, readonly: busy, onCode: (code) => update({ ...fields, code }) })
+                : null}
+            </div>
+            {(fileOk || linkOk) && (
+              <details className="panel ln-alt-submit" open={!!(fileName || fields.link) || undefined}>
+                <summary className="small strong">Hoặc nộp {fileOk && linkOk ? 'tệp hoặc đường dẫn' : fileOk ? 'tệp' : 'đường dẫn'}</summary>
+                <div className="stack-4">{fileAndLink}</div>
+              </details>
+            )}
+          </>
+        ) : fileAndLink}
         <div className="field"><label htmlFor={`${formId}-note`}>{format === 'text' ? 'Bài làm (bắt buộc)' : 'Ghi chú cho giảng viên (không bắt buộc)'}</label>
           <textarea id={`${formId}-note`} rows={4} maxLength={10000} value={fields.note} disabled={busy} onChange={(e) => update({ ...fields, note: e.target.value })} />
           <span className="field-help" role="status">{saved}</span></div>
@@ -405,7 +441,7 @@ function AssignmentBody({ a, url, bare, setData, onChange }) {
           <button className="btn btn-primary" type="submit" disabled={busy || !ready || !!linkError} aria-busy={busy || undefined}><Icon name="upload" className="icon-sm" /> {busy ? 'Đang gửi…' : 'Nộp bài tập'}</button>
           {isPending && <button type="button" className="btn btn-ghost" onClick={cancelResubmit} disabled={busy}>Huỷ nộp lại</button>}
         </div>
-        {!ready && <p className="small muted">Cần {format === 'file' ? 'tệp bài làm' : format === 'link' ? 'đường dẫn' : format === 'text' ? 'bài làm' : 'tệp hoặc đường dẫn'} trước khi nộp.</p>}</div>
+        {!ready && <p className="small muted">Cần {codeLang ? 'code bài làm' : format === 'file' ? 'tệp bài làm' : format === 'link' ? 'đường dẫn' : format === 'text' ? 'bài làm' : 'tệp hoặc đường dẫn'} trước khi nộp.</p>}</div>
       </form>
     );
   }

@@ -2,12 +2,27 @@ import { z } from "zod";
 import { LearningPathError } from "./learning-path-contract";
 
 const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+/** Same bound as the sandbox runner's code limit. */
+export const ASSIGNMENT_CODE_LIMIT = 65536;
 export const assignmentFields = z
   .object({
     linkUrl: z.string().trim().max(2000),
     answerText: z.string().max(10000),
+    // Code written in the lesson's editor (code assignments only); omitted = keep the saved code.
+    code: z.string().max(ASSIGNMENT_CODE_LIMIT).optional(),
   })
   .strict();
+export const assignmentRunCommand = z
+  .object({ code: z.string().max(ASSIGNMENT_CODE_LIMIT) })
+  .strict();
+export type CodeLanguage = "javascript" | "typescript";
+export type AssignmentRunView = {
+  phase: "done" | "syntax" | "runtime" | "timeout";
+  durationMs: number;
+  logs: string[];
+  error: string | null;
+  line: number | null;
+};
 export const assessmentCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("quiz-open") }).strict(),
   z.object({ type: z.literal("quiz-retake"), submissionId: id }).strict(),
@@ -40,6 +55,33 @@ export type AssignmentDraft = z.infer<typeof assignmentFields> & {
   fileKey: string | null;
   fileName: string | null;
 };
+
+// Statements that build a page, a component or a project are not runnable as one script, even when they name a .js
+// file, so they keep link/file submission.
+// `\b` only knows ASCII letters, so Vietnamese words use Unicode letter boundaries.
+const word = (body: string) => new RegExp(`(?<![\\p{L}\\p{N}_])(?:${body})(?![\\p{L}\\p{N}_])`, "iu");
+const NOT_A_SCRIPT = word(
+  "react|component|jsx|tsx|next\\.js|server component|html|css|dom|codesandbox|github|dự án|trang|giao diện|ứng dụng",
+);
+const WRITES_CODE = word("viết\\s+(?:một\\s+)?hàm|write\\s+a\\s+function|[a-z_$][\\w$]*\\([^)]*\\)\\s*(?:trả về|returns?)");
+const SCRIPT_FILE = /\.(?:m?js|ts)(?![\p{L}\p{N}_])/iu;
+const TYPESCRIPT = /typescript|\.ts(?![\p{L}\p{N}_])/iu;
+const ACCEPTED_FILES_LINE = /^\s*Định dạng tệp chấp nhận:.*$/gimu;
+
+/**
+ * Whether an assignment is a piece of code the learner can write and run in the lesson's editor, and in which
+ * language. Assignments have no language field, so this reads the statement: "Viết hàm formatPrice(n) trả về …" or
+ * "Nộp tệp .js" asks for a script; a page, component or project (React, trang, dự án, GitHub) does not.
+ */
+export function assignmentCodeLanguage(a: {
+  title: string;
+  instructions: string | null;
+}): CodeLanguage | null {
+  const text = `${a.title}\n${(a.instructions ?? "").replace(ACCEPTED_FILES_LINE, "")}`;
+  if (NOT_A_SCRIPT.test(text)) return null;
+  if (!WRITES_CODE.test(text) && !SCRIPT_FILE.test(text)) return null;
+  return TYPESCRIPT.test(text) ? "typescript" : "javascript";
+}
 export type QuizQuestion = {
   id: number;
   text: string;
@@ -65,6 +107,8 @@ export type AssessmentView = {
   maxFileSizeMb: number;
   rubric: string | null;
   dueDays: number | null;
+  /** Set when the assignment is code the learner writes and runs in the lesson (assignmentCodeLanguage). */
+  codeLanguage: CodeLanguage | null;
   questions: {
     id: number;
     text: string;
@@ -86,8 +130,13 @@ export type AssessmentView = {
     fileUrl: string | null;
     linkUrl: string | null;
     answerText: string | null;
+    code: string | null;
+    codeLanguage: CodeLanguage | null;
     draft:
-      (Omit<AssignmentDraft, "fileKey"> & { fileUrl: string | null }) | null;
+      (Omit<AssignmentDraft, "fileKey" | "code"> & {
+        code: string;
+        fileUrl: string | null;
+      }) | null;
     answers: { questionId: number; optionId: number | null }[];
     review: {
       questionId: number;
@@ -198,6 +247,7 @@ export function assignmentTransition(
       | undefined;
     draft: AssignmentDraft;
     format: AssessmentView["submissionFormat"];
+    codeLanguage: CodeLanguage | null;
   },
   command: AssignmentCommand,
 ) {
@@ -217,13 +267,16 @@ export function assignmentTransition(
       draft: { ...state.draft, fileKey: null, fileName: null },
     };
   }
-  const draft = {
+  if (command.code !== undefined && !state.codeLanguage)
+    throw new LearningPathError("Bài tập này không nhận bài làm dạng code.", 400);
+  const draft: AssignmentDraft = {
     ...state.draft,
     linkUrl: command.linkUrl,
     answerText: command.answerText,
+    ...(command.code !== undefined ? { code: command.code } : {}),
   };
   if (command.type === "assignment-submit") {
-    requireAssignment(state.format, draft);
+    requireAssignment(state.format, draft, state.codeLanguage);
     return { type: "submit" as const, draft };
   }
   return { type: "draft" as const, draft };
@@ -281,6 +334,7 @@ export function requireEditableAssignment(status: string | undefined) {
 export function requireAssignment(
   format: AssessmentView["submissionFormat"],
   draft: AssignmentDraft,
+  codeLanguage: CodeLanguage | null = null,
 ) {
   const link = draft.linkUrl.trim();
   if (link) {
@@ -299,6 +353,8 @@ export function requireAssignment(
       );
     }
   }
+  // A code assignment is complete with its code; the lecturer's link/file format stays as an alternative.
+  if (codeLanguage && draft.code?.trim()) return;
   if (
     (format === "file" && !draft.fileKey) ||
     (format === "link" && !link) ||

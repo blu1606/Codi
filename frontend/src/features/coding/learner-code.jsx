@@ -9,6 +9,10 @@
  *       The split lesson page renders 'brief' (requirements / guide + test results) and 'work' (editor, console,
  *       Chạy / Nộp bài) in two panes over one shared workspace state. onChange() runs after a submit or a tutorial step
  *       so the page reloads its checklist.
+ *   assignment({courseId, lessonId, assessmentId, title, instructions, language, value, readonly, onCode}) → element
+ *       Editor + "Chạy" + console for a code assignment (lesson-assessments.jsx). POST .../assessments/:id/run runs the
+ *       draft once in the server sandbox; the assignment form keeps and submits the code. A failed run offers
+ *       "AI giải thích" (Codi.tutor.explainRunError), and while mounted the editor is the Tutor's code workspace.
  *   bridge(courseId, lessonId) → {task:{label,text}, code, failing, runError, run} | null   what the AI tutor may read
  *   subscribe(fn) → unsubscribe             fn() after every workspace change (the Tutor's context chips)
  *   runTests(courseId, lessonId)            runs the sample tests (challenge) or the current step (tutorial)
@@ -31,7 +35,7 @@ const subs = new Set();
 const bump = () => { ver += 1; subs.forEach((f) => f()); };
 const useVersion = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => ver);
 
-const endpointOf = (a) => `/api/learn/${encodeURIComponent(a.courseId)}/lessons/${encodeURIComponent(a.lessonId)}/assessments/${encodeURIComponent(a.assessmentId)}/${a.tutorial ? 'tutorial' : 'coding'}`;
+const endpointOf = (a) => `/api/learn/${encodeURIComponent(a.courseId)}/lessons/${encodeURIComponent(a.lessonId)}/assessments/${encodeURIComponent(a.assessmentId)}/${a.kind === 'assignment' ? 'run' : a.tutorial ? 'tutorial' : 'coding'}`;
 const keyOf = (a) => `${a.courseId}:${a.lessonId}:${a.assessmentId}`;
 function entryFor(a) {
   const key = keyOf(a);
@@ -52,7 +56,12 @@ function load(e) {
 }
 const editorKey = (e) => `lc:${e.key}${e.args.tutorial && e.view ? `:${e.view.current}` : ''}`;
 const editorEl = (e) => document.querySelector(`[data-cp-input="${editorKey(e)}"]`);
-const currentCode = (e) => { const ta = editorEl(e); return ta ? ta.value : e.pendingCode != null ? e.pendingCode : (e.view && e.view.code) || ''; };
+const currentCode = (e) => {
+  const ta = editorEl(e);
+  if (ta) return ta.value;
+  if (e.args.kind === 'assignment') return e.code || '';
+  return e.pendingCode != null ? e.pendingCode : (e.view && e.view.code) || '';
+};
 
 // Draft autosave ("Đang lưu nháp…" until the debounce flushes, then "Đã lưu nháp").
 function flushDraft(e) {
@@ -68,6 +77,8 @@ function flushDraft(e) {
 onInput('lc', (key, value) => {
   const e = entries.get(key.slice(3).split(':').slice(0, 3).join(':'));
   if (!e) return;
+  // Code assignments keep their draft with the rest of the assignment form (lesson-assessments.jsx saves it).
+  if (e.args.kind === 'assignment') { e.code = value; if (e.onCode) e.onCode(value); return; }
   e.pendingCode = value;
   if (!e.saving) { e.saving = true; bump(); }
   clearTimeout(e.timer);
@@ -92,7 +103,23 @@ async function command(e, body, fallback) {
     e.running = false; bump();
   }
 }
+/** "Chạy" for a code assignment: the server sandbox runs the draft once; nothing is graded or stored. */
+async function runAssignment(e) {
+  if (e.running) return;
+  const code = currentCode(e);
+  if (!code.trim()) { e.failure = { message: 'Hãy viết code trước khi chạy.', retry: null }; bump(); return; }
+  rememberFocus();
+  e.running = true; e.failure = null; bump();
+  try {
+    e.lastRun = await api.post(e.url, { code });
+  } catch (err) {
+    e.failure = { message: errText(err, 'Máy chạy code chưa sẵn sàng. Code của bạn vẫn được giữ; hãy thử lại.'), retry: () => runAssignment(e) };
+  } finally {
+    e.running = false; bump();
+  }
+}
 async function runAction(e, mode) {
+  if (e.args.kind === 'assignment') { await runAssignment(e); return; }
   if (!e.view || e.running) return;
   const code = currentCode(e);
   if (e.args.tutorial) {
@@ -478,6 +505,73 @@ function LearnerWorkspace({ args, part, onContinue, onChange }) {
   return args.tutorial ? <TutorialView e={e} part={part} /> : <ChallengeView e={e} part={part} onContinue={onContinue} />;
 }
 
+// ───────────────────────── code assignment (editor + server run) ─────────────────────────
+const ASSIGNMENT_PHASE = { done: 'Chạy xong', syntax: 'Lỗi cú pháp', runtime: 'Lỗi khi chạy', timeout: 'Quá thời gian' };
+const LANG_LABEL = { javascript: 'JavaScript', typescript: 'TypeScript' };
+
+function AssignmentCodeView({ args, title, instructions, language, value, readonly, onCode }) {
+  useVersion();
+  const e = entryFor(args);
+  e.onCode = onCode;
+  e.code = value || '';
+  // While mounted, the editor is the lesson's code workspace for the Tutor (bridge, chips, suggest_code_change).
+  useEffect(() => {
+    e.view = { kind: 'assignment', title, instructions, language };
+    bump();
+    return () => { e.view = null; bump(); };
+  }, [e, title, instructions, language]);
+  useEffect(() => { restoreFocus(); });
+  const busy = e.running;
+  const r = e.lastRun || null;
+  const key = editorKey(e);
+  const err = runErrorText(r);
+  const plain = r && r.error ? explain(r.error) : '';
+  const failed = !!r && r.phase !== 'done';
+  const explainError = () => { if (Codi.tutor && Codi.tutor.explainRunError) Codi.tutor.explainRunError(args.courseId, args.lessonId); };
+  return (
+    <section className="cp-assignment stack-3" data-cp-workspace={key} aria-label="Viết và chạy code">
+      <FailureAlert f={e.failure} busy={busy} />
+      {editor({
+        id: `cp-as-${args.assessmentId}`, key, value, fileName: language === 'typescript' ? 'bai-lam.ts' : 'bai-lam.js',
+        language: 'javascript', label: 'Code bài làm', minRows: 12, maxRows: 22, readonly: busy || readonly, errorLine: r ? r.line : null,
+        barExtra: <span className="cp-lang">{LANG_LABEL[language] || 'JavaScript'}</span>,
+      })}
+      <section className="cp-panel cp-console" aria-label="Console">
+        <div className="row-between cp-console-bar">
+          <h3 className="cp-h3"><Icon name="terminal" className="icon-sm" /> Console</h3>
+          <button type="button" className="btn btn-secondary btn-sm" data-cp-run="" disabled={busy || readonly} aria-busy={busy || undefined} onClick={() => runAssignment(e)}>
+            <Icon name={busy ? 'loader' : 'play'} className={`icon-sm ${busy ? 'cp-spin' : ''}`.trim()} /> {busy ? 'Đang chạy…' : 'Chạy'} <kbd className="cp-kbd">Ctrl/⌘ ↵</kbd>
+          </button>
+        </div>
+        <div className="cp-console-lines" role="log" aria-live="polite" aria-busy={busy || undefined}>
+          {busy ? <p className="cp-console-empty">Đang chạy trên máy chủ…</p> : r ? (
+            <>
+              <p className="cp-console-head">{ASSIGNMENT_PHASE[r.phase] || 'Đã chạy'}{Number.isFinite(r.durationMs) ? ` · ${r.durationMs} ms` : ''}</p>
+              {r.phase === 'timeout' ? <p className="cp-log is-warn">Code đã vượt giới hạn 3 giây. Kiểm tra điều kiện dừng của vòng lặp.</p> : null}
+              {logLines(r)}
+              {err ? <div className="cp-log is-error" role="alert"><code>{err}</code>{plain ? <span className="cp-log-explain">{plain}</span> : null}</div> : null}
+              {r.phase === 'done' && !(r.logs || []).length ? <p className="cp-console-empty">Code chạy xong nhưng chưa in gì. Thêm console.log(...) để xem kết quả, ví dụ gọi thử hàm của bạn.</p> : null}
+              {failed && Codi.tutor ? (
+                <div><button type="button" className="btn btn-secondary btn-sm cp-ask-ai" onClick={explainError}><Icon name="sparkles" className="icon-sm" /> AI giải thích</button></div>
+              ) : null}
+            </>
+          ) : <p className="cp-console-empty">Bấm <strong>Chạy</strong> để chạy code trên máy chủ (tối đa 3 giây) và xem kết quả ở đây.</p>}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+/**
+ * Code assignment editor for lesson-assessments.jsx: opts {courseId, lessonId, assessmentId, title, instructions,
+ * language, value, readonly, onCode(value)}. The form owns the draft (value / onCode); this owns the server runs.
+ */
+function assignment(opts) {
+  const args = { courseId: opts.courseId, lessonId: opts.lessonId, assessmentId: opts.assessmentId, kind: 'assignment' };
+  return <AssignmentCodeView key={keyOf(args)} args={args} title={opts.title} instructions={opts.instructions} language={opts.language}
+    value={opts.value} readonly={!!opts.readonly} onCode={opts.onCode} />;
+}
+
 function learner(opts) {
   const args = { courseId: opts.courseId, lessonId: opts.lessonId, assessmentId: opts.assessmentId, tutorial: !!opts.tutorial };
   const part = opts.part === 'brief' ? 'brief' : 'work';
@@ -490,6 +584,10 @@ function bridge(courseId, lessonId, testId) {
   const e = findEntry(courseId, lessonId);
   if (!e) return null;
   const v = e.view;
+  if (e.args.kind === 'assignment') {
+    const r = e.lastRun || null;
+    return { task: { label: v.title, text: v.instructions || v.title }, code: currentCode(e), failing: null, runError: runErrorText(r), run: r, tutorial: false };
+  }
   let task;
   if (e.args.tutorial) {
     if (v.gated) return null;
@@ -505,6 +603,7 @@ function bridge(courseId, lessonId, testId) {
 
 Object.assign(Codi.code, {
   learner,
+  assignment,
   bridge,
   /** Called after every workspace change (load, edit, run, step) so the Tutor re-reads its context chips. */
   subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },

@@ -60,6 +60,9 @@ export interface SubmissionDetailDto {
   rubric: RubricCriterion[] | null;
   rubricScores: Record<string, number> | null;
   answerText: string | null;
+  /** Code written in the lesson's editor (code assignments). */
+  codeText: string | null;
+  codeLanguage: string | null;
   fileUrl: string | null;
   fileName: string | null;
   linkUrl: string | null;
@@ -334,6 +337,8 @@ export async function getGradingQueueData(filters?: {
         passingScore: assessments.passingScore,
         rubric: assessments.rubric,
         answerText: assessmentSubmissions.answerText,
+        codeText: assessmentSubmissions.codeText,
+        codeLanguage: assessmentSubmissions.codeLanguage,
         fileUrl: assessmentSubmissions.fileUrl,
         fileName: assessmentSubmissions.fileName,
         linkUrl: assessmentSubmissions.linkUrl,
@@ -412,6 +417,8 @@ export async function getGradingQueueData(filters?: {
         rubric: rubricList,
         rubricScores,
         answerText: row.answerText,
+        codeText: row.codeText,
+        codeLanguage: row.codeLanguage,
         fileUrl: row.fileUrl,
         fileName: row.fileName,
         linkUrl: row.linkUrl,
@@ -602,6 +609,8 @@ export async function getAiGradingDraft(input: { submissionId: number; viewToken
     gradedAt: assessmentSubmissions.gradedAt,
     gradedBy: assessmentSubmissions.gradedBy,
     answerText: assessmentSubmissions.answerText,
+    codeText: assessmentSubmissions.codeText,
+    codeLanguage: assessmentSubmissions.codeLanguage,
     fileUrl: assessmentSubmissions.fileUrl,
     fileName: assessmentSubmissions.fileName,
     linkUrl: assessmentSubmissions.linkUrl,
@@ -649,7 +658,11 @@ export async function getAiGradingDraft(input: { submissionId: number; viewToken
 
   const result = await generateAiGradingDraft({
     instructions: row.instructions,
-    answerText: row.answerText || "",
+    // The AI reads the learner's note and, for code assignments, the submitted code.
+    answerText: [
+      row.answerText?.trim() || "",
+      row.codeText?.trim() ? `Code (${row.codeLanguage || "javascript"}):\n\`\`\`\n${row.codeText}\n\`\`\`` : "",
+    ].filter(Boolean).join("\n\n"),
     rubric,
     maxScore: Number(row.maxScore),
   });

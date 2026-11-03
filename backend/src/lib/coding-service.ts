@@ -13,7 +13,7 @@ import {
   codingRunLeases,
 } from "@codi-1/db/schema/coding-exercises";
 import { runJavaScript } from "@codi-1/coding-runner";
-import { runLeaseExpiresAt } from "./coding-run-lease";
+import { acquireRunLease, releaseRunLease } from "./coding-run-lease";
 import { loadLearningLessonAccess } from "./learning-path-service";
 import { LearningPathError } from "./learning-path-contract";
 import {
@@ -232,39 +232,7 @@ export function createCodingService(
     const ctx = await db.transaction(async (tx) => {
       const ctx = await context(tx, scope, true);
       const transition = codingTransition(ctx, command);
-      const [lease] = await tx
-        .insert(codingRunLeases)
-        .values({
-          userId: scope.userId,
-          token,
-          runningUntil: runLeaseExpiresAt,
-          lastStartedAt: sql`clock_timestamp()`,
-        })
-        .onConflictDoUpdate({
-          target: codingRunLeases.userId,
-          set: {
-            token,
-            runningUntil: runLeaseExpiresAt,
-            lastStartedAt: sql`clock_timestamp()`,
-          },
-          setWhere: sql`${codingRunLeases.runningUntil} <= clock_timestamp() and ${codingRunLeases.lastStartedAt} <= clock_timestamp() - interval '2 seconds'`,
-        })
-        .returning();
-      if (!lease) {
-        const [existing] = await tx
-          .select()
-          .from(codingRunLeases)
-          .where(eq(codingRunLeases.userId, scope.userId));
-        if (existing && existing.runningUntil > new Date())
-          throw new LearningPathError(
-            "Bài tập đang chạy. Vui lòng chờ kết quả.",
-            409,
-          );
-        throw new LearningPathError(
-          "Bạn chạy code quá nhanh. Vui lòng chờ 2 giây rồi thử lại.",
-          429,
-        );
-      }
+      await acquireRunLease(tx, scope.userId, token);
       // Persist the submitted draft even when the sandbox later becomes unavailable.
       await workspace(tx, ctx, transition.workspace);
       return ctx;
@@ -327,27 +295,10 @@ export function createCodingService(
         );
         // Preserve edits autosaved while the worker was running.
         await workspace(tx, fresh, { lastRunId: saved!.id });
-        await tx
-          .update(codingRunLeases)
-          .set({ runningUntil: sql`clock_timestamp()` })
-          .where(
-            and(
-              eq(codingRunLeases.userId, scope.userId),
-              eq(codingRunLeases.token, token),
-            ),
-          );
+        await releaseRunLease(tx, scope.userId, token);
       });
     } finally {
-      // An old request must never release a newer request's lease.
-      await db
-        .update(codingRunLeases)
-        .set({ runningUntil: sql`clock_timestamp()` })
-        .where(
-          and(
-            eq(codingRunLeases.userId, scope.userId),
-            eq(codingRunLeases.token, token),
-          ),
-        );
+      await releaseRunLease(db, scope.userId, token);
     }
     return get(scope);
   }

@@ -14,6 +14,7 @@ import { learnerVisibleFeedback } from "./grading-feedback-frame";
 import { parseFeedbackAndHistory } from "./grading-service";
 import {
   assessmentCommand,
+  assignmentCodeLanguage,
   assignmentFileLimit,
   quizTransition,
   assignmentTransition,
@@ -166,12 +167,15 @@ function draftOf(ctx: Context): AssignmentDraft {
       ? {
           linkUrl: s.linkUrl ?? "",
           answerText: s.answerText ?? "",
+          ...(s.codeText != null ? { code: s.codeText } : {}),
           fileKey: s.fileUrl,
           fileName: s.fileName,
         }
       : emptyDraft())
   );
 }
+const codeLanguageOf = (ctx: Context) =>
+  ctx.assessment.type === "assignment" ? assignmentCodeLanguage(ctx.assessment) : null;
 function project(ctx: Context, scope: Scope): AssessmentView {
   const { assessment: a, submission: s, questions, answers } = ctx;
   const submitted = s?.status === "graded" && !!s.submittedAt;
@@ -187,6 +191,7 @@ function project(ctx: Context, scope: Scope): AssessmentView {
     maxFileSizeMb: assignmentFileLimit(a.maxFileSizeMb) / 1024 / 1024,
     rubric: a.rubric,
     dueDays: a.dueDays,
+    codeLanguage: codeLanguageOf(ctx),
     questions: questions.map((q) => ({
       id: q.id,
       text: q.text,
@@ -216,10 +221,16 @@ function project(ctx: Context, scope: Scope): AssessmentView {
           fileUrl: s.fileUrl ? fileUrl(scope) : null,
           linkUrl: s.linkUrl,
           answerText: s.answerText,
+          code: s.codeText,
+          codeLanguage:
+            s.codeLanguage === "javascript" || s.codeLanguage === "typescript"
+              ? s.codeLanguage
+              : null,
           draft: draft
             ? {
                 linkUrl: draft.linkUrl,
                 answerText: draft.answerText,
+                code: draft.code ?? "",
                 fileName: draft.fileName,
                 fileUrl: draft.fileKey ? fileUrl(scope, true) : null,
               }
@@ -453,6 +464,7 @@ export function createAssessmentService(
               submission: s,
               draft: draftOf(ctx),
               format: a.submissionFormat,
+              codeLanguage: codeLanguageOf(ctx),
             },
             command,
           );
@@ -467,9 +479,13 @@ export function createAssessmentService(
             ctx.submission = await saveDraft(tx, ctx, transition.draft);
           } else {
             const draft = transition.draft;
+            const language = codeLanguageOf(ctx);
+            const code = language && draft.code?.trim() ? draft.code : null;
             const values = {
               status: "pending" as const,
               answerText: draft.answerText,
+              codeText: code,
+              codeLanguage: code ? language : null,
               linkUrl: draft.linkUrl || null,
               fileUrl: draft.fileKey,
               fileName: draft.fileName,

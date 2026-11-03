@@ -96,8 +96,11 @@ export const assessmentSubmissions = pgTable.withRLS("assessment_submissions", {
   fileUrl: text("file_url"),
   fileName: text("file_name"),
   linkUrl: text("link_url"),
+  // Code assignments: the code written in the lesson's editor and its language ("javascript" | "typescript").
+  codeText: text("code_text"),
+  codeLanguage: text("code_language"),
   // Pending submissions retain their submitted content while the learner edits a replacement.
-  assignmentDraft: jsonb("assignment_draft").$type<{ linkUrl: string; answerText: string; fileKey: string | null; fileName: string | null }>(),
+  assignmentDraft: jsonb("assignment_draft").$type<{ linkUrl: string; answerText: string; code?: string; fileKey: string | null; fileName: string | null }>(),
   status: submissionStatus("status").default("draft").notNull(),
   score: numeric("score", { precision: 6, scale: 2, mode: "number" }),
   // Rounded correct-question percentage (mockup §10), before score scaling/decimal storage.
@@ -120,6 +123,7 @@ export const assessmentSubmissions = pgTable.withRLS("assessment_submissions", {
   check("submissions_quiz_percent_check", sql`${table.quizPercent} IS NULL OR ${table.quizPercent} BETWEEN 0 AND 100`),
   check("submissions_submitted_check", sql`${table.status} = 'draft' OR ${table.submittedAt} IS NOT NULL`),
   check("submissions_graded_check", sql`${table.status} <> 'graded' OR ${table.score} IS NOT NULL`),
+  check("submissions_code_language_check", sql`${table.codeLanguage} IS NULL OR (${table.codeText} IS NOT NULL AND ${table.codeLanguage} IN ('javascript', 'typescript'))`),
 ]);
 
 export const assessmentAnswers = pgTable.withRLS("assessment_answers", {
