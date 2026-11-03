@@ -292,7 +292,7 @@ A restrained cool-slate neutral field with a single deep cyan-teal voice, plus a
 
 A 4 px spacing grid (4, 8, 12, 16, 20, 24, 32, 48). Content pages sit in a 1200 px container with 16 px side padding and 32/48 px top/bottom; narrow forms at 720 px, focus flows at 640 px. The header is 64 px, sticky, and runs to 1440 px with 24 px padding; workspace pages (lesson split, lecturer and admin workspaces) run full width.
 
-Signature layouts: the lesson is a split pane (material about 58% left, task about 42% right, 12 px draggable divider, a lesson bar with task chips above) that collapses to tabs on mobile; the path page puts the navy diagram beside a 340 px side column from 1280 px; the learner home sets a main column beside a 340 px aside from 1100 px; the catalogue is a card grid (min 300 px columns); course detail keeps a purchase panel sticky beside the proof from 1024 px; grading keeps a narrow queue, a reading stage and a 400 px grade dock; the course editor timetable gets fixed columns from 1180 px.
+Signature layouts: the lesson is a split pane (material about 58% left, task about 42% right, 12 px draggable divider, a lesson bar with task chips above, an optional docked Tutor AI column on the right) that collapses to tabs on mobile; the path page puts the navy diagram beside a 340 px side column from 1280 px; the learner home sets a main column beside a 340 px aside from 1100 px; the catalogue is a card grid (min 300 px columns); course detail keeps a purchase panel sticky beside the proof from 1024 px; grading keeps a narrow queue, a reading stage and a 400 px grade dock; the course editor timetable gets fixed columns from 1180 px.
 
 Breakpoints actually used: 420, 480, 640, 768, 860, 900, 1024, 1180, 1280, 1440 px. Below each table breakpoint, rows become stacked blocks carrying the same fields, never a hidden column.
 
@@ -366,7 +366,10 @@ The transit frame on the path page (the learner home no longer carries a board).
 Five 8 px rounded squares filled with the mastery scale up to the learner's level, followed by a 12 px/600 label. Never shown without the label.
 
 ### Lesson Split Pane (signature)
-Lesson material left, task tabs right (Quiz, Bài tập, Code, AI trợ lý, Hỏi đáp). The AI tutor is a tab beside the work in this surface. The video or code editor sits in a navy frame with 10 px inset; the task primary is pinned at the bottom of the right pane.
+Lesson material left, content tabs right (Quiz, Bài tập, Code: only the tasks the lesson has; a lesson without a task is one centred column). The video or code editor sits in a navy frame with 10 px inset; the task primary is pinned at the bottom of the right pane.
+- **Tutor AI** is not a tab. A secondary "Tutor AI" toggle (sparkles icon, accent-mist when on) in the lesson bar docks it as a right-hand column (clamp 340–440 px) that pushes the panes narrower; it never floats over the lesson. Below 1024 px the same toggle opens it as a full-screen sheet with a close button and Escape. It keeps one thread per lesson, shared with /ai.
+- **Hỏi giảng viên & thảo luận** (people answer: the lecturer and classmates) is the last section of the lesson pane, after the completion checklist, with its count in the heading.
+- Code assignments put an editor, a "Chạy" button and a console in the Bài tập tab; a failed run offers "AI giải thích", which opens the Tutor AI with the error.
 
 ## Do's and Don'ts
 
