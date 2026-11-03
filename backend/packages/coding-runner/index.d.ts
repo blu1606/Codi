@@ -1,6 +1,8 @@
 export type RunPhase = "done" | "syntax" | "runtime" | "timeout";
 export type RunnerInput = {
   code: string;
+  /** TypeScript has its types erased inside the sandbox before it runs. Default: javascript. */
+  language?: "javascript" | "typescript";
   tests: { id: number; input: string | null; isSample: boolean }[];
   timeoutMs?: number;
 };

@@ -1,19 +1,59 @@
-import { parentPort, workerData } from "node:worker_threads";
+// Sandbox child process. index.mjs spawns it with an empty environment, a temp working directory, a V8 heap cap and
+// Node's permission model (read access to this package and the QuickJS modules only; no writes, no child processes,
+// no workers). Learner code never runs in Node: it is interpreted by QuickJS compiled to WebAssembly, which has no
+// file, network, process or environment API. Protocol: one JSON input on stdin, then newline-delimited JSON on stdout
+// ({type:"ready"} once QuickJS is loaded, then {type:"result", result}).
+import * as nodeModule from "node:module";
 import { getQuickJS } from "quickjs-emscripten";
 
+async function readInput() {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of process.stdin) {
+    size += chunk.length;
+    // index.mjs caps code at 64 KiB and tests at 100; anything larger is not from the runner.
+    if (size > 4 * 1024 * 1024) throw new Error("Sandbox input too large");
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+function send(message) {
+  return new Promise((resolve) => process.stdout.write(`${JSON.stringify(message)}\n`, resolve));
+}
+
+/** TypeScript runs as JavaScript after its types are erased (positions stay the same, so line numbers still match). */
+function sourceOf(input) {
+  if (input.language !== "typescript") return { code: input.code, error: null };
+  if (typeof nodeModule.stripTypeScriptTypes !== "function")
+    return { code: null, error: "Máy chủ chưa hỗ trợ chạy TypeScript." };
+  try {
+    return { code: nodeModule.stripTypeScriptTypes(input.code, { mode: "strip" }), error: null };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Không đọc được code TypeScript.";
+    return { code: null, error: String(message).slice(0, 2000) };
+  }
+}
+
+const input = await readInput();
 const QuickJS = await getQuickJS();
-await new Promise((resolve) => {
-  parentPort.once("message", resolve);
-  parentPort.postMessage({ type: "ready" });
-});
+await send({ type: "ready" });
+
 const started = Date.now();
-const deadline = started + workerData.timeoutMs;
+const deadline = started + input.timeoutMs;
 const logs = [];
 const outcomes = [];
 let phase = "done";
 let guestTimedOut = false;
-for (const test of workerData.tests) {
+const source = sourceOf(input);
+
+for (const test of input.tests) {
   const testStarted = Date.now();
+  if (source.error) {
+    phase = "syntax";
+    outcomes.push({ id: test.id, actual: null, phase: "syntax", error: source.error, line: null, durationMs: 0 });
+    continue;
+  }
   if (Date.now() >= deadline) {
     if (!guestTimedOut)
       throw new Error("Sandbox deadline reached outside guest execution");
@@ -64,7 +104,7 @@ for (const test of workerData.tests) {
   })()`),
   );
   // Only learner execution is interruptible; interrupting trusted bootstrap can leave
-  // no serializer available to report the result. The outer worker deadline covers it.
+  // no serializer available to report the result. The parent's watchdog covers it.
   let interrupted = false;
   runtime.setInterruptHandler(() => {
     interrupted = Date.now() >= deadline;
@@ -125,7 +165,14 @@ for (const test of workerData.tests) {
             .consume((h) => vm.getString(h));
           const message = vm.getProp(result.error, "message");
           try {
-            error = serialize(message).slice(0, 2000);
+            // The message comes back as JSON; a string message is shown without its quotes.
+            const text = serialize(message);
+            let plain = text;
+            try {
+              const parsed = JSON.parse(text);
+              if (typeof parsed === "string") plain = parsed;
+            } catch {}
+            error = plain.slice(0, 2000);
           } finally {
             message.dispose();
           }
@@ -150,7 +197,7 @@ for (const test of workerData.tests) {
       }
       return result.value;
     };
-    const initialized = evaluate(workerData.code, "bai-lam.js", true);
+    const initialized = evaluate(source.code, "bai-lam.js", true);
     if (initialized) {
       initialized.dispose();
       const value = evaluate(test.input || "undefined", "test.js", false);
@@ -186,7 +233,7 @@ for (const test of workerData.tests) {
     durationMs: Date.now() - testStarted,
   });
 }
-parentPort.postMessage({
+await send({
   type: "result",
   result: {
     phase,
@@ -195,3 +242,4 @@ parentPort.postMessage({
     outcomes,
   },
 });
+process.exit(0);
