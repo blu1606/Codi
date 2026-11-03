@@ -1,20 +1,23 @@
 /**
- * S11 Lesson player ('/learn/:courseId/:lessonId') + S11b Hỏi đáp (port of real
+ * S11 Lesson player ('/learn/:courseId/:lessonId') + S11b questions to the lecturer (port of real
  * app/learn/[courseId]/[lessonId]/lesson-player.tsx), laid out as a split pane (approved direction "Chia đôi màn hình").
  * Data: GET /api/learn/:courseId/lessons/:lessonId (LessonPlayerView with its CoursePathView), then POST
  * {type:'open'}; study / video / pdf-page / complete are lesson commands. Quiz, assignment, code and tutor panels load
  * their own endpoints and ask the page to reload the checklist after a change.
  *
  * - Lesson bar (sticky under the header): "Danh sách bài" (lesson list sheet), breadcrumb + title, one chip per
- *   checklist task (icon + text, done / active / todo), "Hoàn thành bài học" once every task is done, Bài trước / Bài sau.
+ *   checklist task (icon + text, done / active / todo), "Hoàn thành bài học" once every task is done, the "Tutor AI"
+ *   toggle, Bài trước / Bài sau.
  * - Left pane: the material (video in a navy frame, PDF, reading) or the coding brief, the prerequisite note,
- *   notices, sources and the completion checklist. Scrolls on its own.
- * - Right pane: tabs Quiz · Bài tập · Code (only those the lesson has) · Tutor · Hỏi đáp (n). The default tab is
- *   the lesson's main task. The Tutor is Codi.tutor.embed (never a floating overlay) and Codi.code.learner renders
- *   the editor + console here with its brief on the left. Every panel stays mounted, so drafts, quiz position and the
- *   tutor thread survive tab switches.
+ *   notices, sources, the completion checklist and, last, "Hỏi giảng viên & thảo luận" (people answer there).
+ * - Right pane (only when the lesson has a task): content tabs Quiz · Bài tập · Code. The default tab is the lesson's
+ *   main task; Codi.code.learner renders the editor + console here with its brief on the left. Every panel stays
+ *   mounted, so drafts and quiz position survive tab switches.
+ * - Tutor AI (Codi.tutor.embed) is not a tab: the bar's toggle docks it as a right-hand column that pushes the panes
+ *   (never a floating overlay); below 1024 px it opens as a full-screen sheet. It stays mounted while closed, so the
+ *   thread survives and "AI giải thích" / "Vì sao test … chưa đạt?" can open it with their question.
  * - A draggable divider (pointer + arrow keys, 35–70 %, saved per layout tier) separates the panes.
- * - Below 1024 px the two panes become top-level tabs ("Bài học" · task tabs) under a compact lesson bar.
+ * - Below 1024 px the panes become top-level tabs ("Bài học" · task tabs) under a compact lesson bar.
  * Focused time on this page is credited to the learner's study days on the server (study-time.js).
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -60,6 +63,14 @@ function writeSplit(key, v) {
 }
 function clearSplit(key) {
   try { localStorage.removeItem(key); } catch { /* storage blocked */ }
+}
+// Whether the docked Tutor was left open (desktop only; the phone sheet always starts closed).
+const TUTOR_OPEN_KEY = 'codi-lesson-tutor-open';
+function readTutorOpen() {
+  try { return localStorage.getItem(TUTOR_OPEN_KEY) === '1'; } catch { return false; }
+}
+function writeTutorOpen(open) {
+  try { localStorage.setItem(TUTOR_OPEN_KEY, open ? '1' : '0'); } catch { /* storage blocked: lasts for this visit */ }
 }
 
 function SplitDivider({ value, gridRef, onCommit, onReset }) {
@@ -170,9 +181,10 @@ export function openPathMap(path, rows, animateFrom) {
   });
 }
 
-// ───────────────────────── S11b Hỏi đáp ─────────────────────────
-// Public questions (discussions) and the learner's private lecturer conversation; onCount reports the tab count.
-function QaPanel({ courseId, lessonId, lessonTitle, onCount }) {
+// ───────────────────────── S11b Hỏi giảng viên & thảo luận ─────────────────────────
+// Public questions (discussions) and the learner's private lecturer conversation: people answer here, the Tutor AI
+// lives in its own panel.
+function QaPanel({ courseId, lessonId, lessonTitle }) {
   const base = lessonBase(courseId, lessonId);
   const [qs, setQs] = useState(null);
   const [conv, setConv] = useState(null);
@@ -190,7 +202,7 @@ function QaPanel({ courseId, lessonId, lessonTitle, onCount }) {
       .catch((e) => { if (live) setLoadError(e); });
     return () => { live = false; };
   }, [base, tick]);
-  useEffect(() => { onCount(((qs || []).length) + (conv ? 1 : 0)); }, [qs, conv, onCount]);
+  const count = (qs || []).length + (conv ? 1 : 0);
   const post = async (e) => {
     e.preventDefault();
     if (busy) return;
@@ -208,7 +220,11 @@ function QaPanel({ courseId, lessonId, lessonTitle, onCount }) {
   };
   const sorted = (qs || []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return (
-    <section className="ln-task" aria-label="Hỏi đáp">
+    <section className="ln-qa" id="lesson-qa" aria-labelledby="ln-qa-h">
+      <div className="stack-1">
+        <h2 className="ln-h" id="ln-qa-h"><Icon name="users" className="icon-sm" /> Hỏi giảng viên &amp; thảo luận{count ? <span className="ln-tab-count"> ({count})</span> : null}</h2>
+        <p className="small muted">Giảng viên và học viên cùng khoá trả lời ở đây. Cần giải thích ngay? Hỏi Tutor AI ở thanh trên.</p>
+      </div>
       <LecturerConversation courseId={courseId} lessonId={lessonId} conv={conv} onReply={(m) => setConv((c) => ({ ...c, messages: [...c.messages, m] }))} />
       {loadError ? (
         <Alert type="danger" body={errorText(loadError, 'Không thể tải câu hỏi.')} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => setTick((n) => n + 1)}>Thử lại</button>} />
@@ -226,10 +242,10 @@ function QaPanel({ courseId, lessonId, lessonTitle, onCount }) {
           </li>
         ))}</ul>
       ) : <Empty icon="message-circle" title="Hãy là người đầu tiên đặt câu hỏi" body="Câu hỏi về bài học này sẽ hiển thị ở đây." />}
-      <form className={`ln-dock ln-dock-form stack-2 field ${err ? 'is-invalid' : ''}`} noValidate onSubmit={post}><label htmlFor="qa-text">Câu hỏi của bạn về bài &ldquo;{lessonTitle}&rdquo;</label>
+      <form className={`ln-qa-form stack-2 field ${err ? 'is-invalid' : ''}`} noValidate onSubmit={post}><label htmlFor="qa-text">Câu hỏi của bạn về bài &ldquo;{lessonTitle}&rdquo;</label>
         <textarea id="qa-text" name="text" rows={3} maxLength={5000} placeholder="Mô tả chỗ bạn chưa hiểu, kèm đoạn mã nếu có..." value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
         {err ? <p className="field-error" role="alert"><Icon name="alert-circle" className="icon-sm" /><span>{err}</span></p> : <span className="field-help">Giảng viên và học viên cùng khoá đều xem được câu hỏi.</span>}
-        <div><button className="btn btn-primary" type="submit" disabled={busy} aria-busy={busy || undefined}>Gửi câu hỏi</button></div></form>
+        <div><button className="btn btn-secondary" type="submit" disabled={busy} aria-busy={busy || undefined}><Icon name="send" className="icon-sm" /> Gửi câu hỏi</button></div></form>
     </section>
   );
 }
@@ -346,13 +362,42 @@ function FinishBlock({ courseId, items, missing, done, next, completing, onCompl
 }
 
 // ───────────────────────── workspace (one lesson) ─────────────────────────
-const TAB_LABEL = { lesson: 'Bài học', quiz: 'Quiz', assignment: 'Bài tập', code: 'Code', ai: 'Tutor', qa: 'Hỏi đáp' };
+const TAB_LABEL = { lesson: 'Bài học', quiz: 'Quiz', assignment: 'Bài tập', code: 'Code' };
+
+/**
+ * The docked Tutor column (≥1024 px) or full-screen sheet (phones). Always mounted so the thread, the code bridge and
+ * contextual requests keep working while it is closed; `hidden` removes it from view and from the accessibility tree.
+ * The sheet closes on Escape and hands focus back to the bar's toggle.
+ */
+function TutorDock({ open, compact, onClose, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const el = ref.current;
+    // The phone sheet covers the page, so focus moves into it; the docked column leaves focus where the learner was.
+    if (compact && el) { const t = el.querySelector('textarea, button'); if (t) t.focus({ preventScroll: true }); }
+    if (!compact) return undefined;
+    const root = document.documentElement;
+    const before = root.style.overflow;
+    root.style.overflow = 'hidden';
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    document.addEventListener('keydown', onKey);
+    return () => { root.style.overflow = before; document.removeEventListener('keydown', onKey); };
+  }, [open, compact, onClose]);
+  return (
+    <aside ref={ref} id="ln-tutor" className={`ln-tutor ${compact ? 'is-sheet' : ''}`.trim()} hidden={!open}
+      role={compact ? 'dialog' : 'complementary'} aria-modal={compact && open ? 'true' : undefined} aria-label="Tutor AI">
+      {children}
+    </aside>
+  );
+}
 
 function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPath }) {
   const compact = useMedia(COMPACT_QUERY);
   const narrow = useMedia(NARROW_QUERY);
   const [completing, setCompleting] = useState(false);
-  const [qaCount, setQaCount] = useState(0);
+  const [tutorOpen, setTutorOpen] = useState(() => !window.matchMedia(COMPACT_QUERY).matches && readTutorOpen());
+  const aiButtonRef = useRef(null);
   const l = view.lesson;
   const path = view.path;
   const rows = pathRows(path);
@@ -364,9 +409,10 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
   const asItem = items.find((x) => x.key === 'assignment');
   const isCode = !!codeItem;
   const taskKeys = [codeItem && 'code', quizItem && 'quiz', asItem && 'assignment'].filter(Boolean);
+  const hasTasks = taskKeys.length > 0;
   const [tab, setTab] = useState(() => {
     const open = taskKeys.find((k) => { const it = items.find((x) => x.key === k); return it && !it.done; });
-    return open || taskKeys[0] || 'ai';
+    return open || taskKeys[0] || null;
   });
   const [mode, setMode] = useState('lesson'); // compact layout only: 'lesson' | 'task'
   const mats = view.materials || [];
@@ -412,8 +458,23 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
     requestAnimationFrame(() => { const el = document.getElementById('checklist'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   }, []);
   const pickChip = (key) => { if (key === 'study') showLesson(); else if (taskKeys.includes(key)) selectTab(key); };
-  // The tutor asks to be shown when explain-error / selection / "Hỏi AI" target this lesson.
-  const activateAi = useCallback(() => selectTab('ai'), [selectTab]);
+  const openTutor = useCallback((open) => {
+    setTutorOpen(open);
+    if (!window.matchMedia(COMPACT_QUERY).matches) writeTutorOpen(open);
+  }, []);
+  const closeTutor = useCallback(() => {
+    openTutor(false);
+    requestAnimationFrame(() => { if (aiButtonRef.current) aiButtonRef.current.focus({ preventScroll: true }); });
+  }, [openTutor]);
+  // The tutor asks to be shown when "AI giải thích" / selection / "Vì sao test … chưa đạt?" target this lesson.
+  const activateAi = useCallback(() => openTutor(true), [openTutor]);
+  // Before a line jump or a test run the Tutor shows the editor: the code tab, or the assignment's editor. On a phone
+  // the sheet closes so the editor is visible.
+  const editorTab = codeItem ? 'code' : asItem ? 'assignment' : null;
+  const showEditor = useCallback(() => {
+    if (window.matchMedia(COMPACT_QUERY).matches) setTutorOpen(false);
+    if (editorTab) selectTab(editorTab);
+  }, [editorTab, selectTab]);
 
   const lock = row && row.status !== 'done' ? row.lock : null;
   const idx = rows.findIndex((x) => x.id === l.id);
@@ -445,7 +506,7 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
     } finally { setCompleting(false); }
   };
 
-  const rightTabs = [...taskKeys, 'ai', 'qa'].map((k) => ({ key: k, label: TAB_LABEL[k], count: k === 'qa' ? qaCount : 0 }));
+  const rightTabs = taskKeys.map((k) => ({ key: k, label: TAB_LABEL[k] }));
   const mobileTabs = [{ key: 'lesson', label: TAB_LABEL.lesson }, ...rightTabs];
   const panelHidden = (k) => k !== tab || (compact && mode === 'lesson');
   const codeArgs = codeItem ? { courseId, lessonId: l.id, assessmentId: codeItem.assessmentId, tutorial: !!codeItem.tutorial, onChange: reload } : null;
@@ -454,11 +515,17 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
     quiz: () => <QuizSection key={l.id} courseId={courseId} lessonId={l.id} assessmentId={quizItem.assessmentId} bare onContinue={goChecklist} onChange={reload} />,
     assignment: () => <AssignmentSection key={l.id} courseId={courseId} lessonId={l.id} assessmentId={asItem.assessmentId} bare onChange={reload} />,
     code: () => <div className="ln-code-work">{Codi.code && Codi.code.learner ? Codi.code.learner({ ...codeArgs, part: 'work', onContinue: goChecklist }) : null}</div>,
-    ai: () => (Codi.tutor && typeof Codi.tutor.embed === 'function'
-      ? Codi.tutor.embed(courseId, l.id, { onActivate: activateAi, onShowCode: codeItem ? () => selectTab('code') : undefined, title: l.title })
-      : <div className="ln-task"><Alert type="info" title="Tutor chưa sẵn sàng" body="Bạn vẫn học tiếp bình thường." /></div>),
-    qa: () => <QaPanel courseId={courseId} lessonId={l.id} lessonTitle={l.title} onCount={setQaCount} />,
   };
+  const tutor = Codi.tutor && typeof Codi.tutor.embed === 'function'
+    ? Codi.tutor.embed(courseId, l.id, { onActivate: activateAi, onShowCode: editorTab ? showEditor : undefined, onClose: closeTutor, title: l.title })
+    : <div className="ln-task"><Alert type="info" title="Tutor chưa sẵn sàng" body="Bạn vẫn học tiếp bình thường." /></div>;
+  const aiButton = (
+    <button ref={aiButtonRef} type="button" className={`btn btn-secondary btn-sm ln-ai-toggle ${tutorOpen ? 'is-on' : ''}`.trim()}
+      aria-expanded={tutorOpen} aria-controls="ln-tutor" title={tutorOpen ? 'Đóng Tutor AI' : 'Mở Tutor AI: hỏi về bài này, giải thích lỗi code'}
+      onClick={() => (tutorOpen ? closeTutor() : openTutor(true))}>
+      <Icon name="sparkles" className="icon-sm" /><span>Tutor AI</span>
+    </button>
+  );
 
   const bar = (
     <div className={`ln-bar ${compact ? 'is-compact' : ''}`.trim()} ref={barRef}>
@@ -474,6 +541,7 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
         </div>
         {!compact && <TaskChips items={items} onPick={pickChip} readout={readout} />}
         {ready && !compact && <button type="button" className="btn btn-secondary btn-sm" onClick={complete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học</button>}
+        {!compact && aiButton}
         <nav className="ln-bar-nav" aria-label="Điều hướng bài học">
           {prev ? <Link className="btn btn-secondary btn-sm ln-bar-btn" to={`/learn/${courseId}/${prev}`}><Icon name="chevron-left" className="icon-sm" /><span className="ln-bar-label">Bài trước</span></Link> : null}
           {next ? <Link className={`btn ${done ? 'btn-primary' : 'btn-secondary'} btn-sm ln-bar-btn`} to={`/learn/${courseId}/${next}`}><span className="ln-bar-label">Bài sau</span><Icon name="chevron-right" className="icon-sm" /></Link> : null}
@@ -483,9 +551,10 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
         <div className="ln-bar-row ln-bar-tasks">
           <TaskChips items={items} onPick={pickChip} readout={readout} />
           {ready && <button type="button" className="btn btn-primary btn-sm" onClick={complete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học</button>}
+          {aiButton}
         </div>
       )}
-      {compact && <TabList tabs={mobileTabs} active={mode === 'lesson' ? 'lesson' : tab} label="Khung bài học" className="ln-tabs-top"
+      {compact && hasTasks && <TabList tabs={mobileTabs} active={mode === 'lesson' ? 'lesson' : tab} label="Khung bài học" className="ln-tabs-top"
         onSelect={(k) => (k === 'lesson' ? showLesson() : selectTab(k))} />}
     </div>
   );
@@ -497,8 +566,8 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
     </>
   );
   const left = (
-    <section ref={leftRef} className="ln-pane ln-pane-lesson" id={compact ? 'ln-panel-lesson' : 'ln-pane-lesson'}
-      role={compact ? 'tabpanel' : undefined} aria-labelledby={compact ? 'ln-tab-lesson' : undefined} aria-label={compact ? undefined : 'Bài học'}
+    <section ref={leftRef} className="ln-pane ln-pane-lesson" id={compact && hasTasks ? 'ln-panel-lesson' : 'ln-pane-lesson'}
+      role={compact && hasTasks ? 'tabpanel' : undefined} aria-labelledby={compact && hasTasks ? 'ln-tab-lesson' : undefined} aria-label={compact && hasTasks ? undefined : 'Bài học'}
       hidden={compact && mode !== 'lesson'}>
       <div className="ln-lesson-col">
         {path.updating && done && <Alert type="info" body="Codi đang cập nhật lộ trình. Bạn có thể tiếp tục học hoặc quay lại kiểm tra sau." />}
@@ -519,29 +588,33 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
           </>
         )}
         <FinishBlock courseId={courseId} items={items} missing={missing} done={done} next={next} completing={completing} onComplete={complete} reviewed={!!path.review} onReview={review} />
+        <QaPanel courseId={courseId} lessonId={l.id} lessonTitle={l.title} />
       </div>
     </section>
   );
 
-  const right = (
+  const right = hasTasks ? (
     <section className="ln-pane ln-pane-task" aria-label={compact ? undefined : 'Làm bài'} hidden={compact && mode === 'lesson'}>
       {!compact && <TabList tabs={rightTabs} active={tab} label="Khung làm bài" onSelect={selectTab} />}
       {rightTabs.map((t) => (
         <div key={t.key} className="ln-tabpanel" role="tabpanel" id={`ln-panel-${t.key}`} aria-labelledby={`ln-tab-${t.key}`}
-          hidden={panelHidden(t.key)} data-tutor-scroll={t.key === 'ai' ? '' : undefined}>
+          hidden={panelHidden(t.key)}>
           {panels[t.key]()}
         </div>
       ))}
     </section>
-  );
+  ) : null;
 
   return (
     <div className={`ln-shell ${compact ? 'is-compact' : ''}`.trim()} ref={shellRef}>
       {bar}
-      <div className="ln-split" ref={gridRef} style={compact ? undefined : { '--ln-left': `${split}%` }}>
-        {left}
-        {!compact && <SplitDivider value={split} gridRef={gridRef} onCommit={commitSplit} onReset={resetSplit} />}
-        {right}
+      <div className={`ln-main ${tutorOpen && !compact ? 'has-tutor' : ''}`.trim()}>
+        <div className={`ln-split ${hasTasks ? '' : 'is-single'}`.trim()} ref={gridRef} style={compact || !hasTasks ? undefined : { '--ln-left': `${split}%` }}>
+          {left}
+          {!compact && hasTasks && <SplitDivider value={split} gridRef={gridRef} onCommit={commitSplit} onReset={resetSplit} />}
+          {right}
+        </div>
+        <TutorDock open={tutorOpen} compact={compact} onClose={closeTutor}>{tutor}</TutorDock>
       </div>
     </div>
   );

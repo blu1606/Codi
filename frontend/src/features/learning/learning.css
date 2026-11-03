@@ -226,7 +226,18 @@ ul.ln-mastery-grid { list-style: none; padding: 0; }
    teal for the active tab, the one primary action and progress. ≥1024 px the page is a fixed-height shell and each
    pane scrolls on its own; below that the panes become top-level tabs and the document scrolls. */
 .ln-shell { display: grid; grid-template-rows: auto minmax(0, 1fr); height: calc(100svh - var(--header-h)); background: var(--subtle); }
+/* The main row: the split, and the docked Tutor AI column when it is open (it pushes the panes, never covers them). */
+.ln-main { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.ln-main.has-tutor { grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 440px); }
 .ln-split { display: grid; grid-template-columns: minmax(0, var(--ln-left, 58%)) 12px minmax(0, 1fr); min-height: 0; }
+.ln-split.is-single { grid-template-columns: minmax(0, 1fr); }
+.ln-split.is-single .ln-lesson-col { width: 100%; max-width: 880px; margin-inline: auto; }
+.ln-tutor { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); border-left: 1px solid var(--border); }
+.ln-tutor[hidden] { display: none; }
+.ln-tutor > * { flex: 1 1 0; min-height: 0; }
+.ln-ai-toggle { flex: none; }
+.ln-ai-toggle.is-on { border-color: var(--accent-soft-border); background: var(--accent-soft); color: var(--accent-active); }
+html[data-theme="dark"] .ln-ai-toggle.is-on { color: var(--fg); }
 /* Scroll containers are also the containing block, so absolutely positioned descendants (.sr-only labels) are
    clipped by the pane instead of anchoring to the page and stretching the document past the fixed-height shell. */
 .ln-pane { position: relative; min-width: 0; min-height: 0; background: var(--surface); }
@@ -277,9 +288,11 @@ html[data-theme="dark"] .ln-chip.is-active { color: var(--fg); }
 .ln-task .ln-dock { position: sticky; bottom: 0; z-index: 2; margin-top: auto; margin-inline: calc(-1 * var(--ln-pad)); padding: var(--space-4) var(--ln-pad); background: var(--surface); border-top: 1px solid var(--border); }
 .ln-task .ln-question { font-size: var(--text-xl); }
 
-/* Hỏi đáp */
+/* Hỏi giảng viên & thảo luận: the last section of the lesson pane, after the checklist */
+.ln-qa { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); padding-top: var(--space-6); border-top: 1px solid var(--border); min-width: 0; }
+.ln-qa .ln-h { display: flex; align-items: center; gap: var(--space-2); }
 .ln-qa-item { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); }
-.ln-dock-form textarea { min-height: 88px; }
+.ln-qa-form textarea { min-height: 88px; }
 
 /* code tab: the coding view's work part */
 .ln-code-work { --ln-pad: var(--space-6); display: flex; flex-direction: column; padding: var(--space-5) var(--ln-pad) 0; min-width: 0; }
@@ -355,13 +368,17 @@ body.is-split-resizing iframe { pointer-events: none; }
 .ln-shell.is-compact .ln-bar-tasks { flex-wrap: wrap; padding: var(--space-2) 0; }
 .ln-shell.is-compact .ln-chips { flex: 1 1 auto; min-width: 0; }
 .ln-shell.is-compact .ln-chip { min-height: 40px; }
+.ln-shell.is-compact .ln-ai-toggle { min-height: 44px; margin-left: auto; }
 .ln-shell.is-compact .ln-tabs-top { margin: 0 calc(-1 * var(--space-4)); padding: 0 var(--space-2); border-top: 1px solid var(--border); border-bottom: 0; }
+.ln-shell.is-compact .ln-main { display: block; }
 .ln-shell.is-compact .ln-split { display: block; }
+/* Phones and tablets: Tutor AI is a full-screen sheet over the lesson, below dialogs (60) so its own dialogs show. */
+.ln-tutor.is-sheet { position: fixed; inset: 0; z-index: 55; border-left: 0; }
+.ln-tutor.is-sheet .tc-panel-head { padding-top: max(var(--space-2), env(safe-area-inset-top)); }
 .ln-shell.is-compact .ln-pane-lesson { overflow: visible; }
 .ln-shell.is-compact .ln-lesson-col { padding: var(--space-5) var(--space-4) var(--space-12); }
 .ln-shell.is-compact .ln-tabpanel { overflow: visible; min-height: calc(100svh - var(--header-h) - var(--ln-bar-h, 160px)); }
 .ln-shell.is-compact .ln-task, .ln-shell.is-compact .ln-code-work { --ln-pad: var(--space-4); padding-top: var(--space-5); }
-@media (max-width: 1023px) { .ln-dock-form { position: static !important; } }
 @media (max-width: 640px) {
   .ln-shell.is-compact .ln-bar-nav { gap: var(--space-1); }
   .ln-reading-h { font-size: var(--text-lg); }

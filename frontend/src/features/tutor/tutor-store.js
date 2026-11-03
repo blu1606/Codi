@@ -1,8 +1,8 @@
 /**
  * The one Tutor's shared state (port of Codi develop's components/ai-chat/ai-chat-provider.tsx): where the Tutor is
  * open, which chat is on screen, the viewer's chat history, the lesson's code bridge and the pending contextual
- * request. The rebuild has two Tutor surfaces and never shows both at once: the lesson's Tutor tab and the full page
- * /ai. Codi's floating bubble is not used (DESIGN.md refuses a chat bubble over the lesson).
+ * request. The rebuild has two Tutor surfaces and never shows both at once: the lesson's docked Tutor AI panel and the
+ * full page /ai. Codi's floating bubble is not used (DESIGN.md refuses a chat bubble over the lesson).
  *
  *   const ai = useTutor();   // re-renders on every change; ai.page, ai.active, ai.chats, ai.signedIn, ai.request …
  *

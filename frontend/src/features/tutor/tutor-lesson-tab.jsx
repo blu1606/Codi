@@ -1,6 +1,6 @@
 /**
- * The Tutor inside a lesson: the lesson player's "Tutor" tab (Codi develop shows the same panel docked over the
- * lesson; the rebuild keeps the Tutor as a tab beside the work, DESIGN.md "Lesson Split Pane"). While mounted it
+ * The Tutor inside a lesson: the lesson player's "Tutor AI" panel, docked as a right-hand column that pushes the lesson
+ * (a full-screen sheet on phones), opened from the lesson bar's toggle (DESIGN.md "Lesson Split Pane"). While mounted it
  * describes the lesson to the store (context chip, one thread per lesson), lends the code workspace as the code bridge
  * (task, code, failing test, run error; apply a suggestion, select a line, run the tests) and receives contextual
  * requests (selection toolbar, "Vì sao test … chưa đạt?", console error), showing the tab when one arrives.
@@ -48,7 +48,7 @@ function codeBridge(courseId, lessonId, showCode) {
   };
 }
 
-export default function TutorLessonTab({ courseId, lessonId, title, onActivate, onShowCode }) {
+export default function TutorLessonTab({ courseId, lessonId, title, onActivate, onShowCode, onClose }) {
   const ai = useTutor();
   const { data, error, retry, setLesson } = useConversation(ai);
   const activate = useRef(onActivate);
@@ -86,7 +86,7 @@ export default function TutorLessonTab({ courseId, lessonId, title, onActivate, 
   const header = (
     <div className="tc-panel-head">
       <TutorAvatar />
-      <h2 className="tc-panel-title">Tutor</h2>
+      <h2 className="tc-panel-title">Tutor AI</h2>
       <span className="tc-context" title={`Đang hỏi về: ${page.label}`}><Icon name="book-open" className="icon-xs" /><span>{page.label}</span></span>
       <span className="tc-panel-actions">
         {ai.signedIn ? (
@@ -104,6 +104,9 @@ export default function TutorLessonTab({ courseId, lessonId, title, onActivate, 
           </Popover>
         ) : null}
         <Link to={fullHref} className="btn btn-ghost btn-icon btn-sm" aria-label="Mở toàn trang" title="Mở toàn trang"><TIcon name="maximize" className="icon-sm" /></Link>
+        {typeof onClose === 'function' ? (
+          <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label="Đóng Tutor AI" title="Đóng Tutor AI" onClick={onClose}><Icon name="x" className="icon-sm" /></button>
+        ) : null}
       </span>
     </div>
   );

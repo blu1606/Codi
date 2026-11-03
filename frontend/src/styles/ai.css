@@ -101,10 +101,8 @@
 
 /* ───────────────────────── Lesson tab ───────────────────────── */
 .tc-panel { display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
-.ln-tabpanel > .tc-panel { flex: 1 1 0; min-height: 0; }
-.ln-shell.is-compact .ln-tabpanel > .tc-panel { flex: none; height: calc(100svh - var(--header-h) - var(--ln-bar-h, 160px)); }
 .tc-panel-head { display: flex; align-items: center; gap: var(--space-2); min-height: 52px; padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); border-bottom: 1px solid var(--border); }
-.tc-panel-title { margin: 0; font-family: var(--font-display); font-size: var(--text-base); font-weight: 600; }
+.tc-panel-title { margin: 0; font-family: var(--font-display); font-size: var(--text-base); font-weight: 600; white-space: nowrap; }
 .tc-context { display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 2px var(--space-2); border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-active); font-size: var(--text-xs); font-weight: 600; }
 .tc-context > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tc-panel-actions { display: flex; flex: none; align-items: center; margin-left: auto; }
