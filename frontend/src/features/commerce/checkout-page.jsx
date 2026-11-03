@@ -7,11 +7,15 @@
  * cancelled, refunded.
  *
  * Data: GET /api/orders/:id (polled every 3 s; the server expires overdue orders), POST /api/orders/checkout,
- * /api/orders/cancel, /api/orders/:id/manual-check, /api/orders/:id/new-code. The bank is simulated: the Alt+K
- * scenario paymentOutcome asks the backend (POST /api/dev/simulate-payment) to post a SePay transfer to the real
- * webhook, which marks the order paid and enrols the learner server-side. Outcomes: success | overpaid | underpaid
- * (transfer after 6 s), expired (deadline moved to now), late (expired, then a transfer 8 s later), slow / qrfail
- * (no transfer), unavailable (checkout refused before an order is created).
+ * /api/orders/cancel, /api/orders/:id/manual-check, /api/orders/:id/new-code. The QR is SePay's VietQR image for
+ * the order's bank details, amount due and transfer content; the SePay webhook marks the order paid and enrols the
+ * learner server-side, and polling picks that up.
+ *
+ * Demo tools only (Codi.demoTools): the Alt+K scenario paymentOutcome asks the backend (POST
+ * /api/dev/simulate-payment) to post a simulated SePay transfer to the real webhook. Outcomes: success | overpaid |
+ * underpaid (transfer after 6 s), expired (deadline moved to now), late (expired, then a transfer 8 s later),
+ * slow / qrfail (no transfer), unavailable (checkout refused before an order is created). Without demo tools
+ * nothing is simulated and the page waits for the real transfer.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -20,7 +24,7 @@ import { api } from '../../lib/api';
 import { useApi } from '../../lib/use-api';
 import { Alert, Empty, Icon, Stepper, Thumb, orderStatusLabel } from '../../components/ui/primitives';
 import { SUPPORT_EMAIL, mmss } from './commerce-lib';
-import { cartChanged, checkoutCart, simulatePayment, toOrder } from './commerce-api';
+import { cartChanged, checkoutCart, sepayQrUrl, simulatePayment, toOrder } from './commerce-api';
 
 const fmt = Codi.fmt;
 const clock = (ms) => new Date(ms).toLocaleTimeString('vi-VN');
@@ -34,12 +38,13 @@ const amountDue = (o) => Math.max(0, o.total - (o.received || 0));
 const timeLeft = (o) => (o.paymentDeadline ? new Date(o.paymentDeadline).getTime() - Date.now() : 0);
 const orderUrl = (key) => `/api/orders/${encodeURIComponent(key)}`;
 
-// ───────────────────────── payment simulation ─────────────────────────
+// ───────────────────────── payment simulation (demo tools only) ─────────────────────────
 // One simulated transfer per order code and outcome per page session (StrictMode remounts never send twice).
 const simulated = new Set();
 const SIM_OUTCOME = { success: 'paid', overpaid: 'overpaid', underpaid: 'underpaid' };
 
 function runSimulation(order, onChange) {
+  if (!Codi.demoTools) return; // real shop: only the SePay webhook pays the order
   const outcome = Codi.state.scenario.paymentOutcome;
   const key = `${order.code}:${outcome}`;
   if (simulated.has(key)) return;
@@ -55,27 +60,6 @@ function runSimulation(order, onChange) {
     send('expire').then(() => { if (outcome === 'late') setTimeout(() => send('paid'), LATE_TRANSFER_MS); });
   }
   // 'qrfail', 'slow' and anything else: no transfer arrives; auto-check keeps running until expiry.
-}
-
-// Deterministic QR-like pattern drawn from the transfer content (a designed placeholder, not a scannable code).
-function QrSvg({ seedText }) {
-  const n = 25; let h = 0;
-  for (const ch of seedText) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const rnd = () => { h ^= h << 13; h >>>= 0; h ^= h >> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
-  const finder = (x, y) => (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
-  const cells = [];
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!finder(x, y) && rnd() > 0.52) cells.push(<rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" />);
-  const fp = (x, y) => (
-    <g key={`fp-${x}-${y}`}>
-      <rect x={x} y={y} width="7" height="7" /><rect x={x + 1} y={y + 1} width="5" height="5" fill="#fff" /><rect x={x + 2} y={y + 2} width="3" height="3" />
-    </g>
-  );
-  return (
-    <svg viewBox={`-2 -2 ${n + 4} ${n + 4}`} className="cm-qr" role="img" aria-label={`Mã VietQR (minh hoạ) cho nội dung ${seedText}`} shapeRendering="crispEdges">
-      <rect x="-2" y="-2" width={n + 4} height={n + 4} fill="#fff" />
-      <g fill="#111827">{cells}{fp(0, 0)}{fp(n - 7, 0)}{fp(0, n - 7)}</g>
-    </svg>
-  );
 }
 
 function CopyRow({ label, value, copyValue, emphasis }) {
@@ -192,16 +176,17 @@ async function cancelCheckout(order) {
 function PendingCheckout({ order, bank, checkedAt, reload }) {
   const [, setTick] = useState(0);
   const [start] = useState(() => Date.now());
-  const [qrFailed, setQrFailed] = useState(() => Codi.state.scenario.paymentOutcome === 'qrfail');
+  const [qrFailed, setQrFailed] = useState(() => Codi.demoTools && Codi.state.scenario.paymentOutcome === 'qrfail');
+  const [qrAttempt, setQrAttempt] = useState(0);
   const [cooldown, setCooldown] = useState(0);
   const [checking, setChecking] = useState(false);
   const [manualCheckedAt, setManualCheckedAt] = useState(null);
 
-  // 1 s tick: countdown, cooldown and the slow notice. The simulated transfer "arrives" after 6 s.
+  // 1 s tick: countdown, cooldown and the slow notice. With demo tools the simulated transfer "arrives" after 6 s.
   useEffect(() => {
     const t = setInterval(() => { setTick((n) => n + 1); setCooldown((c) => (c > 0 ? c - 1 : 0)); }, 1000);
-    const sim = setTimeout(() => runSimulation(order, reload), TRANSFER_AFTER_MS);
-    return () => { clearInterval(t); clearTimeout(sim); };
+    const sim = Codi.demoTools ? setTimeout(() => runSimulation(order, reload), TRANSFER_AFTER_MS) : null;
+    return () => { clearInterval(t); if (sim) clearTimeout(sim); };
   }, [order.code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const left = timeLeft(order);
@@ -224,8 +209,11 @@ function PendingCheckout({ order, bank, checkedAt, reload }) {
       setChecking(false);
     }
   };
-  const reloadQr = () => setQrFailed(false);
+  // A remount (new key) makes the browser request the image again after a failed load.
+  const reloadQr = () => { setQrFailed(false); setQrAttempt((n) => n + 1); };
   const b = bank || {};
+  const qrUrl = sepayQrUrl(bank, due, order.code);
+  const showQr = !qrFailed && !!qrUrl;
   return (
     <div className="page stack-4">
       <div className="stack-1"><h1>Thanh toán khóa học</h1><p className="muted">Quét mã bằng ứng dụng ngân hàng, hoặc chuyển khoản theo thông tin bên dưới.</p></div>
@@ -239,17 +227,20 @@ function PendingCheckout({ order, bank, checkedAt, reload }) {
         <div className="stack-4">
           <div className="card"><div className="card-body stack-4">
             <div className="row-between">
-              <h2 className="h-card">{qrFailed ? 'Chuyển khoản thủ công' : 'Quét mã thanh toán'}</h2>
+              <h2 className="h-card">{showQr ? 'Quét mã thanh toán' : 'Chuyển khoản thủ công'}</h2>
               <span className="badge badge-warn od-nowrap"><Icon name="clock" />Hết hạn sau <span data-countdown aria-live="off">{mmss(left)}</span></span>
             </div>
             <p className="xsmall muted">Sau thời gian này mã QR và nội dung chuyển khoản sẽ không còn hiệu lực.</p>
-            {qrFailed ? (
+            {showQr ? (
+              <div className="cm-qr-wrap">
+                <img key={qrAttempt} className="cm-qr" src={qrUrl} width="200" height="200" alt={`Mã VietQR chuyển ${fmt.vnd(due)} tới tài khoản ${b.accountNumber}, nội dung ${order.code}`} onError={() => setQrFailed(true)} />
+                <span className="xsmall muted">VietQR · {b.bank}</span>
+              </div>
+            ) : (
               <Alert type="danger" title="Không tải được mã QR"
-                actions={<button type="button" className="btn btn-secondary btn-sm" onClick={reloadQr}><Icon name="refresh" className="icon-sm" /> Tải lại mã QR</button>}>
+                actions={qrUrl ? <button type="button" className="btn btn-secondary btn-sm" onClick={reloadQr}><Icon name="refresh" className="icon-sm" /> Tải lại mã QR</button> : null}>
                 Hãy chuyển khoản thủ công bằng thông tin bên dưới, nội dung <span className="mono strong">{order.code}</span>. Cần hỗ trợ? Email <Mail />.
               </Alert>
-            ) : (
-              <div className="cm-qr-wrap"><QrSvg seedText={order.code} /><span className="xsmall muted">VietQR · {b.bank} · minh hoạ trong bản thử nghiệm</span></div>
             )}
             <div>
               <CopyRow label="Ngân hàng" value={b.bank} copyValue={b.bank} />
@@ -281,7 +272,7 @@ function PendingCheckout({ order, bank, checkedAt, reload }) {
                 </ol>
               </Alert>
             )}
-            {(slow || qrFailed) && <p className="xsmall muted">Cần hỗ trợ? Email <Mail /> kèm mã giao dịch <span className="mono strong">{order.code}</span>.</p>}
+            {(slow || !showQr) &&<p className="xsmall muted">Cần hỗ trợ? Email <Mail /> kèm mã giao dịch <span className="mono strong">{order.code}</span>.</p>}
             <button type="button" className="btn btn-ghost btn-block" onClick={() => cancelCheckout(order)}>Hủy giao dịch</button>
           </div></div>
         </aside>

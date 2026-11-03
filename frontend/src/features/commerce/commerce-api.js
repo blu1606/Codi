@@ -174,11 +174,11 @@ export const setVoucher = (code) => {
 
 /**
  * Creates the order from the backend cart. Resolves { orderCode, totalAmount } or throws ApiError
- * (409 PENDING_ORDER_EXISTS, 400 voucher / empty cart, 503 payments unavailable). The Alt+K scenario
- * "unavailable" blocks paid checkouts before any order is created.
+ * (409 PENDING_ORDER_EXISTS, 400 voucher / empty cart, 503 payments unavailable). With demo tools on, the Alt+K
+ * scenario "unavailable" blocks paid checkouts before any order is created.
  */
 export async function checkoutCart({ total, replaceOrderId } = {}) {
-  if (total > 0 && Codi.state.scenario.paymentOutcome === 'unavailable') {
+  if (Codi.demoTools && total > 0 && Codi.state.scenario.paymentOutcome === 'unavailable') {
     const e = new Error('Thanh toán tạm thời chưa khả dụng do thiếu cấu hình cổng thanh toán.');
     e.status = 503;
     throw e;
@@ -190,5 +190,20 @@ export async function checkoutCart({ total, replaceOrderId } = {}) {
   return r;
 }
 
-/** Dev bank stand-in: asks the backend to post a SePay transfer for the order (outcome paid|underpaid|overpaid|expire). */
-export const simulatePayment = (orderCode, outcome) => api.post('/api/dev/simulate-payment', { orderCode, outcome });
+/**
+ * Demo-tools bank stand-in: asks the backend to post a SePay transfer for the order (outcome
+ * paid|underpaid|overpaid|expire). Refuses without demo tools, where only the real SePay webhook pays orders.
+ */
+export const simulatePayment = (orderCode, outcome) => (Codi.demoTools
+  ? api.post('/api/dev/simulate-payment', { orderCode, outcome })
+  : Promise.reject(new Error('Mô phỏng thanh toán không khả dụng.')));
+
+/**
+ * SePay's VietQR image for a transfer (https://qr.sepay.vn/img), or null when the bank details are missing.
+ * `bank` is the order route's { bank: bank code, accountNumber }; `content` is the order code the webhook matches.
+ */
+export function sepayQrUrl(bank, amount, content) {
+  if (!bank || !bank.bank || !bank.accountNumber || !content || !(amount > 0)) return null;
+  const q = new URLSearchParams({ acc: bank.accountNumber, bank: bank.bank, amount: String(Math.round(amount)), des: content });
+  return `https://qr.sepay.vn/img?${q}`;
+}

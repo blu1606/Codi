@@ -11,6 +11,7 @@
  *
  * STATE (browser only, never domain data)
  *  Codi.state = { currentUserId, scenario }   scenario = Alt+K test flags + resolved theme, kept in localStorage.
+ *  Codi.demoTools                             backend switch (GET /api/config); when false the flags stay default.
  *  Codi.set(fnOrPatch, { render:false })      fn(state) mutates in place, or an object is merged; re-renders.
  *
  * SESSION     Codi.session = { user, roles } from GET /api/auth/get-session + /api/user/roles (Better Auth cookie).
@@ -45,13 +46,22 @@ function persistScenario() {
   } catch { /* storage blocked: scenario lasts for this tab only */ }
 }
 
-function readScenario() {
+// Without demo tools only the resolved theme survives; every test flag falls back to its default, so a stale
+// localStorage scenario from a demo deploy can never force failures or skip real calls.
+function readScenario(demoTools) {
   try {
     const local = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}') || {};
-    return { ...DEFAULT_SCENARIO, ...(local.scenario || {}) };
+    const saved = local.scenario || {};
+    return demoTools ? { ...DEFAULT_SCENARIO, ...saved } : { ...DEFAULT_SCENARIO, ...(saved.theme ? { theme: saved.theme } : {}) };
   } catch {
     return { ...DEFAULT_SCENARIO };
   }
+}
+
+/** GET /api/config → whether the backend runs with demo tools (dev, or production with DEMO_TOOLS=true). */
+async function fetchDemoTools() {
+  const config = await api('/api/config');
+  return !!(config && config.demoTools === true);
 }
 
 function applyTheme() {
@@ -88,8 +98,9 @@ export function loadSession() {
 }
 
 async function loadSessionOnce() {
-  const auth = await fetchSession();
-  Codi.state = { currentUserId: null, scenario: readScenario() };
+  const [auth, demoTools] = await Promise.all([fetchSession(), fetchDemoTools()]);
+  Codi.demoTools = demoTools;
+  Codi.state = { currentUserId: null, scenario: readScenario(demoTools) };
   applySession(auth);
   applyTheme();
   emit();
@@ -113,6 +124,8 @@ export const ROLE_LABEL = { guest: 'Khách', learner: 'Học viên', lecturer: '
 
 export const Codi = {
   state: { currentUserId: null, scenario: DEFAULT_SCENARIO },
+  /** Demo tools (Alt+K drawer, demo accounts, simulated bank) — from GET /api/config at boot; off until loaded. */
+  demoTools: false,
   fmt,
   ROLE_LABEL,
 

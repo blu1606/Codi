@@ -1,16 +1,16 @@
 /**
  * Prototype-only "Kịch bản thử nghiệm" drawer (mockup core.js renderDrawer + #dev-toggle, Alt+K): role switch and
  * forced scenario states (kept in this browser). Data is reset with `npm run seed`, never from the browser.
- * Not product UI.
+ * Not product UI: only present when the backend reports demo tools on (Codi.demoTools, GET /api/config).
  *
  * <DevToggle /> is a 40 px icon button rendered in the header actions (both layouts), so it never floats over page
- * content or bottom action bars; <DevDrawer /> (mounted once by AppLayout) owns Alt+K and the panel. They share the
- * open state below.
+ * content or bottom action bars (it renders nothing without demo tools); <DevDrawer /> (mounted once by AppLayout
+ * only with demo tools) owns Alt+K and the panel. They share the open state below.
  */
 import { useEffect, useSyncExternalStore } from 'react';
 import { Codi, useCodi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
-import { THEME_OPTIONS, useThemeSync } from './theme';
+import { THEME_OPTIONS } from './theme';
 import { api } from '../../lib/api';
 import { DEMO_PASSWORD } from './account-store';
 
@@ -30,6 +30,7 @@ const useDrawerOpen = () => useSyncExternalStore((f) => { drawerSubs.add(f); ret
 
 export function DevToggle() {
   const open = useDrawerOpen();
+  if (!Codi.demoTools) return null;
   return (
     <button id="dev-toggle" className="dev-toggle" type="button" aria-controls="dev-drawer" aria-expanded={open} title="Kịch bản thử nghiệm (Alt+K)" aria-keyshortcuts="Alt+K" onClick={() => setDrawerOpen((o) => !o)}>
       <svg className="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></svg>
@@ -61,7 +62,6 @@ function setScenario(key, value) {
 
 export default function DevDrawer() {
   useCodi();
-  useThemeSync(); // the drawer is mounted in every layout, so it hosts the theme listener
   const open = useDrawerOpen();
   const setOpen = setDrawerOpen;
 

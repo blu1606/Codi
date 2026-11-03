@@ -249,10 +249,12 @@ function LoginForm({ view }) {
         <SocialButton provider="github" text="Tiếp tục với GitHub" />
       </div>
       <button type="button" className="btn btn-secondary btn-block" onClick={() => setMode('register')}>Chưa có tài khoản? Tạo tài khoản miễn phí</button>
-      <div className="demo-accounts">
-        <span className="xsmall strong">Tài khoản thử nghiệm · mật khẩu {DEMO_PASSWORD}</span>
-        {DEMO.map(([e, l]) => <button key={e} type="button" onClick={() => fill(e)}>{l}: {e}</button>)}
-      </div>
+      {Codi.demoTools && (
+        <div className="demo-accounts">
+          <span className="xsmall strong">Tài khoản thử nghiệm · mật khẩu {DEMO_PASSWORD}</span>
+          {DEMO.map(([e, l]) => <button key={e} type="button" onClick={() => fill(e)}>{l}: {e}</button>)}
+        </div>
+      )}
     </form>
   );
 }

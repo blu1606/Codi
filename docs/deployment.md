@@ -10,7 +10,7 @@ original Codi app. Caddy terminates TLS and proxies the domain to `127.0.0.1:300
 | Image | [Dockerfile](../Dockerfile): multi-stage; one Node container serves `/api` and the built frontend on port 3001 |
 | Stack | `/opt/codi-rebuild/compose.yml` (copy of [deploy/compose.yml](../deploy/compose.yml)): `codi-rebuild-app` + `codi-rebuild-db` (Postgres 16, volume `codi-rebuild_pgdata`) |
 | Compose variables | `/opt/codi-rebuild/.env`: `RELEASE` (image tag = git short sha) and `POSTGRES_PASSWORD` |
-| App secrets | `/opt/codi-rebuild/rebuild.env` (mode 600): Codi's `/etc/codi/codi.env` without its Supabase `DATABASE_URL`, plus the `GITHUB_PROFILE_*` keys and `DEMO_TOOLS=true` |
+| App secrets | `/opt/codi-rebuild/rebuild.env` (mode 600): Codi's `/etc/codi/codi.env` without its Supabase `DATABASE_URL`, plus the `GITHUB_PROFILE_*` keys and `DEMO_TOOLS=false` |
 | Proxy | `/etc/caddy/Caddyfile`, block `codi.hoangblue.dev` → `127.0.0.1:3001`; `codi.ddnsfree.com` answers with a 301 to it |
 
 The AI background worker (GitHub profile analysis, knowledge-map extraction, AI quiz generation, learning paths) runs
@@ -19,8 +19,14 @@ image sets `AI_BACKGROUND_WORKER_ENABLED=true` and the compose file pins it over
 `AI_BACKGROUND_WORKER_ENABLED=false` in `/opt/codi-rebuild/.env` and `docker compose up -d app`. The startup log shows
 `AI background worker started`.
 
-`DEMO_TOOLS=true` keeps the simulated SePay payment (Alt+K) working in production. The app rebuilds request URLs as
-https when Caddy sends `X-Forwarded-Proto: https`, so the routes' Origin checks pass.
+Production runs `DEMO_TOOLS=false`, so it behaves like a real shop: `POST /api/dev/simulate-payment` answers 404, and
+the frontend (which reads `demoTools` from `GET /api/config` at boot) hides the Alt+K scenario drawer and the
+demo-account card, and checkout never simulates a transfer. Checkout shows SePay's VietQR image
+(`https://qr.sepay.vn/img`) built from `SEPAY_BANK_CODE` / `SEPAY_ACCOUNT_NUMBER`, and an order is paid only when
+SePay calls the webhook: in the SePay dashboard the webhook URL must be
+`https://codi.hoangblue.dev/api/payments/sepay/callback`, authenticated with `SEPAY_WEBHOOK_SECRET` (API key).
+Demo tools are always on outside production; `DEMO_TOOLS=true` turns them back on in production with the same image.
+The app rebuilds request URLs as https when Caddy sends `X-Forwarded-Proto: https`, so the routes' Origin checks pass.
 
 ## Release a new version
 

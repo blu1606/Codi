@@ -6,6 +6,7 @@ import { OverlayHost } from '../ui/overlay-host';
 import Header from '../../features/shell/header';
 import DevDrawer, { DevToggle } from '../../features/shell/dev-drawer';
 import ThemeToggle from '../../features/shell/theme-toggle';
+import { useThemeSync } from '../../features/shell/theme';
 import BrandLink from '../../features/shell/brand-link';
 
 /** The route definition matching the current URL (static segments outrank params, like the mockup router). */
@@ -32,6 +33,7 @@ function FocusHeader({ route }) {
 
 export default function AppLayout({ layout }) {
   useCodi();
+  useThemeSync(); // the layout wraps every route, so it hosts the theme listener
   const route = useCurrentRoute();
   return (
     <>
@@ -43,7 +45,7 @@ export default function AppLayout({ layout }) {
         <Outlet />
       </main>
       <OverlayHost />
-      <DevDrawer />
+      {Codi.demoTools && <DevDrawer />}
     </>
   );
 }

@@ -59,6 +59,8 @@ export const ENV = {
   SEPAY_BANK_CODE: read("SEPAY_BANK_CODE"),
   SEPAY_ACCOUNT_NUMBER: read("SEPAY_ACCOUNT_NUMBER"),
   SEED_ACCOUNT_PASSWORD: read("SEED_ACCOUNT_PASSWORD") ?? "Codi@12345",
-  // Prototype demo deploys: keeps the simulated SePay route (POST /api/dev/simulate-payment) on in production.
-  DEMO_TOOLS: read("DEMO_TOOLS") === "true",
+  // Demo tools: the simulated SePay route (POST /api/dev/simulate-payment) and, through GET /api/config, the
+  // frontend's Alt+K scenario drawer, demo-account login card and simulated bank transfer. Always on outside
+  // production; in production only with DEMO_TOOLS=true (a real shop runs DEMO_TOOLS=false and the SePay webhook).
+  DEMO_TOOLS: NODE_ENV !== "production" || read("DEMO_TOOLS") === "true",
 } as const;

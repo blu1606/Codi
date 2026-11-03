@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import { aiWorkerEnabled, startAiWorker } from "./host/ai-worker";
 import { mountNextRoutes } from "./host/next-routes";
 import { mountServerActions } from "./host/server-actions";
+import { ENV } from "./env";
 import { db } from "./services";
 
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "app");
@@ -18,15 +19,21 @@ const port = Number(process.env.API_PORT || 4100);
 async function main() {
   const app = new Hono();
 
+  // `release` is the image tag (git short sha) set by deploy/compose.yml, so release.sh, rollback.sh and the fast
+  // check can confirm which build answers.
+  const release = process.env.APP_RELEASE || "dev";
   app.get("/api/health", async (c) => {
     try {
       await db.execute(sql`select 1`);
-      return c.json({ ok: true });
+      return c.json({ ok: true, release });
     } catch (error) {
       console.error("[health] database unreachable", error);
-      return c.json({ ok: false, error: "Không kết nối được cơ sở dữ liệu." }, 503);
+      return c.json({ ok: false, release, error: "Không kết nối được cơ sở dữ liệu." }, 503);
     }
   });
+
+  // Public runtime switches the frontend reads once at boot (same image for demo and real-shop deploys).
+  app.get("/api/config", (c) => c.json({ demoTools: ENV.DEMO_TOOLS }));
 
   const routes = await mountNextRoutes(app, appDir);
   const actionModules = await mountServerActions(app, appDir);
