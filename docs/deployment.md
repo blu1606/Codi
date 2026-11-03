@@ -53,6 +53,22 @@ docker exec codi-rebuild-db pg_dump -U codi -Fc codi > backup-$(date +%y%m%d-%H%
 docker compose run --rm --no-deps -e NODE_ENV=development app npx tsx scripts/seed.ts --no-backup
 ```
 
+## Load Codi's real data from Supabase
+
+Codi's Supabase project (`codi`, linked in the Codi repo's `supabase/.temp`) has the same 60 tables as the rebuild;
+the rebuild only adds `publication_review_flags.target_item_id` and `course_publication_requests.reviewed_content`.
+From the Codi repo (read-only on Supabase; the CLI makes a temporary login role, no DB password needed):
+
+```bash
+supabase db dump --linked --data-only --use-copy -s public -f data.sql
+```
+
+Then load it with [deploy/load-supabase-data.sh](../deploy/load-supabase-data.sh)
+(`sh load-supabase-data.sh data.sql [container] [db-user] [db-name]`; local defaults `codi-rebuild-postgres codi codi`,
+on the VPS `codi-rebuild-db codi codi`). It backs up the target, replaces all public data in one transaction, drops
+sessions and keeps the rebuild's demo password on the seeded `usr-*` accounts. The dump holds real users' emails and
+password hashes: keep `data.sql` out of git.
+
 ## Logs and rollback
 
 - Logs: `docker logs -f codi-rebuild-app`.
