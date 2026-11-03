@@ -241,42 +241,92 @@ function SectionHead({ title, note }) {
   );
 }
 
+/**
+ * A short ordered scale (overall level, usage, confidence): filled steps up to `at`, the reached step marked.
+ * Large scales print every step label; small ones are decorative pips beside a text label the caller shows.
+ */
+function Scale({ labels, at, size = 'sm', ariaLabel }) {
+  if (size === 'lg') {
+    return (
+      <ol className="ghr-scale is-lg" aria-label={ariaLabel}>
+        {labels.map((label, i) => (
+          <li key={label} className={`${i <= at ? 'is-on' : ''} ${i === at ? 'is-at' : ''}`.trim()} aria-current={i === at ? 'step' : undefined}>
+            <i aria-hidden="true" />
+            <span>{label}</span>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  return (
+    <span className="ghr-scale" aria-hidden="true">
+      {labels.map((label, i) => <i key={label} className={i <= at ? 'is-on' : undefined} />)}
+    </span>
+  );
+}
+
+const LEVEL_KEYS = ['new', 'basic', 'solid'];
+const USAGE_KEYS = ['tried', 'regular', 'deep'];
+const CONFIDENCE_KEYS = ['low', 'medium', 'high'];
+
+/** Every retained source the analysis rests on, split by kind. */
+function evidenceCounts(p) {
+  const all = mergeCitations(
+    ...techs(p).flatMap((t) => [...(t.observations || []).map((o) => o.citations || []), (t.inference && t.inference.citations) || []]),
+    ...(p.areas || []).map((a) => a.citations || []),
+    (p.overall && p.overall.citations) || [],
+  );
+  return { total: all.length, files: all.filter((s) => s.kind === 'file').length, languages: all.filter((s) => s.kind === 'languages').length };
+}
+
 function Overview({ profile }) {
   const { overall, limitations } = profile;
   const langs = languageShares(profile);
   const tools = technologyRows(profile).filter((r) => r.kind !== 'language').length;
   const days = daysSinceLastPush(profile);
-  const kpis = [
-    ['Repo đã phân tích', String(limitations.coverage.selected), `trên ${limitations.coverage.listed} repo đã liệt kê`],
-    ['Ngôn ngữ', String(langs.length), 'có tỉ lệ code GitHub ghi nhận'],
-    ['Framework & công cụ', String(tools), 'khai báo trong file cấu hình'],
-    ['Hoạt động gần nhất', relativeDays(days), days === null ? 'chưa có lần đẩy code' : 'lần đẩy code gần nhất'],
+  const ev = evidenceCounts(profile);
+  const { selected, listed } = limitations.coverage;
+  const levelAt = overall ? LEVEL_KEYS.indexOf(overall.level) : -1;
+  const ledger = [
+    ['Repo đã phân tích', `${selected}/${listed}`, listed ? (selected / listed) * 100 : 0, 'repo công khai đã liệt kê'],
+    ['Nguồn bằng chứng', String(ev.total), null, `${ev.files} file cấu hình · ${ev.languages} thống kê ngôn ngữ`],
+    ['Ngôn ngữ', String(langs.length), null, 'có tỉ lệ code GitHub ghi nhận'],
+    ['Framework & công cụ', String(tools), null, 'khai báo trong file cấu hình'],
+    ['Hoạt động gần nhất', relativeDays(days), null, days === null ? 'chưa có lần đẩy code' : 'lần đẩy code gần nhất'],
   ];
   return (
-    <section aria-label="Tóm tắt" className="stack-4">
-      <div className="card"><div className="card-body stack-3">
-        <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-          <span className="badge badge-solid">{overall ? `Ước tính: ${OVERALL_LABELS[overall.level] || overall.level}` : 'Chưa có ước tính tổng thể'}</span>
-          {overall && <span className="badge badge-outline">Độ tin cậy {CONFIDENCE_LABELS[overall.confidence]}</span>}
+    <section aria-label="Tóm tắt" className="card"><div className="card-body ghr-overview">
+      <div className="stack-3 ghr-level">
+        <div className="row-between" style={{ gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Mức tổng thể ước tính</h3>
           {overall && <EvidenceButton label="Nhận xét tổng thể" sources={overall.citations || []} />}
         </div>
-        <p className="shell-ghr-prose" style={{ margin: 0 }}>
+        {overall ? (
+          <>
+            <Scale size="lg" labels={LEVEL_KEYS.map((k) => OVERALL_LABELS[k])} at={levelAt} ariaLabel={`Mức tổng thể: ${OVERALL_LABELS[overall.level] || overall.level} trên thang Mới bắt đầu, Cơ bản, Vững`} />
+            <p className="small" style={{ marginBottom: 0 }}><span className="strong">{OVERALL_LABELS[overall.level] || overall.level}</span> · độ tin cậy {CONFIDENCE_LABELS[overall.confidence].toLowerCase()}</p>
+          </>
+        ) : <p className="small muted" style={{ margin: 0 }}>Chưa có ước tính tổng thể.</p>}
+        <p className="shell-ghr-prose small" style={{ margin: 0 }}>
           {overall ? overall.summary
             : profile.summaryState === 'invalidated' ? 'Tóm tắt cũ không còn phù hợp với các điều chỉnh.'
-              : 'Codi chưa có nhận xét tổng thể cho hồ sơ này. Các số liệu bên dưới vẫn đúng với repo đã thu thập.'}
+              : 'Codi chưa có nhận xét tổng thể cho hồ sơ này. Các số liệu bên cạnh vẫn đúng với repo đã thu thập.'}
         </p>
-        <p className="small strong" style={{ margin: 0 }}>Ước tính từ repo công khai — không phải điểm và không thay bài kiểm tra.</p>
-      </div></div>
-      <dl className="grid-4" style={{ margin: 0 }}>
-        {kpis.map(([label, value, note]) => (
-          <div key={label} className="stat-tile">
-            <dt className="stat-label">{label}</dt>
-            <dd className="stat-value" style={{ margin: 0 }}>{value}</dd>
-            <dd className="stat-meta" style={{ margin: 0 }}>{note}</dd>
+        <p className="xsmall muted" style={{ margin: 0 }}>Ước tính từ repo công khai, không phải điểm và không thay bài kiểm tra.</p>
+      </div>
+      <dl className="ghr-ledger">
+        {ledger.map(([label, value, bar, note]) => (
+          <div key={label} className="ghr-ledger-row">
+            <dt>{label}</dt>
+            <dd className={`ghr-ledger-value${/\d/.test(value) && !/[a-zà-ỹ]/i.test(value) ? '' : ' is-text'}`}>{value}</dd>
+            <dd className="ghr-ledger-note">
+              {bar !== null && <span className="ghr-track is-thin" aria-hidden="true"><span style={{ width: `${Math.max(2, bar)}%` }} /></span>}
+              {note}
+            </dd>
           </div>
         ))}
       </dl>
-    </section>
+    </div></section>
   );
 }
 
@@ -284,29 +334,41 @@ function LanguageShares({ profile }) {
   const shares = languageShares(profile);
   return (
     <section aria-label="Bạn code bằng gì" className="stack-4">
-      <SectionHead title="Bạn code bằng gì" note="Tỉ lệ code theo GitHub trong các repo đã phân tích. Đây không phải mức thành thạo và không phải tỉ lệ dòng code." />
+      <SectionHead title="Bạn code bằng gì" note="Tỉ lệ code theo GitHub trong các repo đã phân tích, tổng 100%. Không phải mức thành thạo, không phải số dòng code." />
       {shares.length ? (
-        <>
-          <div role="group" aria-label="Tỉ lệ ngôn ngữ, tổng 100%" className="shell-ghr-stackbar">
-            {shares.map((s, i) => (
-              <span key={s.name} role="meter" aria-label={`Tỉ lệ byte ${s.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(s.share * 10) / 10}
-                title={`${s.name}: ${SHARE.format(s.share)}% · ${formatBytes(s.bytes)}`} style={{ width: `${s.share}%`, background: slotColor(i) }} />
-            ))}
-          </div>
-          <ol className="shell-ghr-legend">
-            {shares.map((s, i) => (
-              <li key={s.name}>
-                <span className="gh-lang-dot" aria-hidden="true" style={{ background: slotColor(i) }} />
-                <span className="shell-ghr-legend-name">{s.name}</span>
-                <span className="strong shell-ghr-num">{SHARE.format(s.share)}%</span>
-                <span className="xsmall muted">trong {s.repositoryCount} repo</span>
-                <EvidenceButton label={`Ngôn ngữ ${s.name}`} sources={languageSources(profile, s.name)} />
-              </li>
-            ))}
-          </ol>
-        </>
+        <ol className="ghr-bars" aria-label="Tỉ lệ code theo ngôn ngữ">
+          {shares.map((s, i) => (
+            <li key={s.name} className="ghr-bar-row" title={`${s.name}: ${SHARE.format(s.share)}% · ${formatBytes(s.bytes)}`}>
+              <span className="ghr-bar-name"><span className="gh-lang-dot" aria-hidden="true" style={{ background: slotColor(i) }} />{s.name}</span>
+              <span className="ghr-track" aria-hidden="true"><span style={{ width: `${Math.max(1, s.share)}%`, background: slotColor(i) }} /></span>
+              <span className="ghr-bar-value"><span className="strong shell-ghr-num">{SHARE.format(s.share)}%</span> <span className="xsmall muted">· {s.repositoryCount} repo</span></span>
+              <EvidenceButton label={`Ngôn ngữ ${s.name}`} sources={languageSources(profile, s.name)} />
+            </li>
+          ))}
+        </ol>
       ) : <p className="small muted" style={{ margin: 0 }}>Chưa đủ bằng chứng: chưa có số byte ngôn ngữ dương để vẽ biểu đồ.</p>}
     </section>
+  );
+}
+
+/** How many observed technologies sit at each usage estimate (part-to-whole, counts in the legend). */
+function UsageMix({ rows }) {
+  const count = (u) => rows.filter((r) => r.usage === u).length;
+  const html = charts.stacked({
+    segments: [
+      { label: USAGE_LABELS.deep, value: count('deep'), tone: 'slot-1' },
+      { label: USAGE_LABELS.regular, value: count('regular'), tone: 'slot-3' },
+      { label: USAGE_LABELS.tried, value: count('tried'), tone: 'slot-4' },
+      { label: 'Chưa rõ mức dùng', value: rows.filter((r) => !r.usage).length, tone: 'neutral' },
+    ],
+    format: (v) => `${v} công nghệ`,
+    emptyText: 'Chưa có công nghệ nào được quan sát.',
+  });
+  return (
+    <div className="stack-2">
+      <h4 className="shell-ghr-group">Phân bố theo mức dùng ({rows.length} công nghệ)</h4>
+      <Html html={html} />
+    </div>
   );
 }
 
@@ -321,6 +383,7 @@ function PushActivity({ profile }) {
     axisFormat: (v) => (Number.isInteger(v) ? String(v) : ''), // repo counts are whole numbers; skip fractional ticks
     emptyText: 'Chưa có repo nào có lần đẩy code trong 12 tháng gần nhất.',
     height: 150,
+    maxXLabels: 6, // every other month: 12 labels collide at phone width
   });
   return (
     <section aria-label="Hoạt động đẩy code" className="stack-4">
@@ -347,7 +410,7 @@ function strengthStatus(t) {
   return 'Chưa đủ bằng chứng cho điểm mạnh.';
 }
 
-function TechnologyItem({ row, maxRepos, profile }) {
+function TechnologyItem({ row, profile }) {
   const t = techs(profile).find((x) => x.technologyId === row.technologyId);
   const sources = techSources(t);
   return (
@@ -358,7 +421,7 @@ function TechnologyItem({ row, maxRepos, profile }) {
             <span className="strong">{row.name}</span>
             {row.learnerEdited && <span className="badge badge-neutral">Bạn đã sửa</span>}
           </span>
-          <span className="shell-ghr-meter" aria-hidden="true"><span style={{ width: `${Math.max(4, (row.repositoryCount / maxRepos) * 100)}%` }} /></span>
+          <Scale labels={USAGE_KEYS} at={row.usage ? USAGE_KEYS.indexOf(row.usage) : -1} />
           <span className="xsmall muted"><span className="strong shell-ghr-fg">{row.usageLabel}</span> · {row.repositoryCount} repo</span>
         </summary>
         <div className="stack-2 xsmall muted shell-ghr-tech-body">
@@ -376,17 +439,17 @@ function TechnologyItem({ row, maxRepos, profile }) {
 
 function TechnologyUsage({ profile }) {
   const rows = technologyRows(profile);
-  const maxRepos = Math.max(1, ...rows.map((r) => r.repositoryCount));
   return (
     <section aria-label="Công nghệ" className="stack-4">
-      <SectionHead title="Bạn dùng sâu đến đâu" note="Độ dài thanh là số repo có công nghệ này. Mức dùng là ước tính từ GitHub, không phải điểm và không thay bài kiểm tra." />
+      <SectionHead title="Bạn dùng sâu đến đâu" note="Thang ba bậc: Đã thử, Dùng thường xuyên, Dùng sâu. Mức dùng là ước tính từ GitHub, không phải điểm và không thay bài kiểm tra." />
+      {rows.length > 0 && <UsageMix rows={rows} />}
       {rows.length ? GROUPS.map(([kind, label]) => {
         const group = rows.filter((r) => r.kind === kind);
         if (!group.length) return null;
         return (
           <div key={kind} className="stack-1">
             <h4 className="shell-ghr-group">{label}</h4>
-            <ul className="shell-ghr-tech">{group.map((r) => <TechnologyItem key={r.technologyId} row={r} maxRepos={maxRepos} profile={profile} />)}</ul>
+            <ul className="shell-ghr-tech">{group.map((r) => <TechnologyItem key={r.technologyId} row={r} profile={profile} />)}</ul>
           </div>
         );
       }) : <p className="small muted" style={{ margin: 0 }}>Chưa ghi nhận quan sát công nghệ. Thiếu dữ liệu không có nghĩa là năng lực yếu.</p>}
@@ -424,37 +487,23 @@ function Understanding({ profile }) {
   const areas = profile.areas || [];
   return (
     <section aria-label="Codi hiểu bạn như thế nào" className="stack-4 gh-under">
-      <SectionHead title="Codi hiểu bạn như thế nào" note="Suy ra từ repo công khai, chưa được kiểm chứng về ý nghĩa; không chứng minh năng lực hay quyền tác giả." />
-      <div className="card"><div className="card-body stack-3">
-        <h4 className="small strong" style={{ margin: 0 }}>Mức hiểu biết theo mảng</h4>
-        {areas.length ? (
-          <ol className="gh-domains">
-            {areas.map((a) => (
-              <li key={a.areaId} className="gh-domain">
-                <div className="gh-domain-head">
-                  <span className="gh-domain-icon" aria-hidden="true"><Icon name="layers" className="icon-sm" /></span>
-                  <span className="gh-domain-name" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{a.label}</span>
-                  <span className="gh-domain-level">Chưa có dữ liệu đánh giá</span>
-                  <EvidenceButton label={`Mảng kiến thức ${a.label}`} sources={a.citations || []} />
-                </div>
-                <span className="gh-mastery" data-stop="0" aria-hidden="true"><i /><i /><i /><i /></span>
-                <p className="xsmall muted" style={{ margin: 0 }}>Độ tin cậy {CONFIDENCE_LABELS[a.confidence]} · Ước tính từ GitHub</p>
-                <p className="xsmall muted shell-ghr-prose" style={{ margin: 0 }}>{a.explanation}</p>
-              </li>
-            ))}
-          </ol>
-        ) : <p className="small muted" style={{ margin: 0 }}>Chưa đủ bằng chứng: chưa có suy luận mảng kiến thức.</p>}
-        <p className="xsmall muted" style={{ margin: 0 }}>Chưa đủ bằng chứng đối với mảng chưa có suy luận, repo bị bỏ qua hay phạm vi thu thập chưa đầy đủ.</p>
-      </div></div>
-    </section>
-  );
-}
-
-function Courses() {
-  return (
-    <section aria-label="Dùng trong khoá học" className="stack-2">
-      <SectionHead title="Dùng trong khoá học" />
-      <p className="small muted" style={{ margin: 0 }}>Chưa áp dụng cho khoá nào. Hồ sơ hiện tại chưa cung cấp gợi ý khoá học hay dữ liệu áp dụng trong khoá học, nên chưa có danh sách để hiển thị.</p>
+      <SectionHead title="Codi hiểu bạn như thế nào" note="Mảng kiến thức suy ra từ repo công khai, đo bằng độ tin cậy của suy luận (Thấp, Trung bình, Cao), không phải mức thành thạo. Chưa được kiểm chứng về ý nghĩa." />
+      {areas.length ? (
+        <ol className="gh-domains">
+          {areas.map((a) => (
+            <li key={a.areaId} className="gh-domain">
+              <div className="gh-domain-head">
+                <span className="gh-domain-name" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{a.label}</span>
+                <Scale labels={CONFIDENCE_KEYS} at={CONFIDENCE_KEYS.indexOf(a.confidence)} />
+                <span className="gh-domain-level">Độ tin cậy {CONFIDENCE_LABELS[a.confidence].toLowerCase()}</span>
+                <EvidenceButton label={`Mảng kiến thức ${a.label}`} sources={a.citations || []} />
+              </div>
+              <p className="xsmall muted shell-ghr-prose" style={{ margin: 0 }}>{a.explanation}</p>
+            </li>
+          ))}
+        </ol>
+      ) : <p className="small muted" style={{ margin: 0 }}>Chưa đủ bằng chứng: chưa có suy luận mảng kiến thức.</p>}
+      <p className="xsmall muted" style={{ margin: 0 }}>Chưa đủ bằng chứng đối với mảng chưa có suy luận, repo bị bỏ qua hay phạm vi thu thập chưa đầy đủ.</p>
     </section>
   );
 }
@@ -526,17 +575,22 @@ function Scope({ profile }) {
   );
 }
 
-/** The full saved-profile report (real ProfileResult). */
-export function ProfileReport({ profile }) {
+/**
+ * The full saved-profile report (real ProfileResult), charts first: level and counts, language share, activity,
+ * usage depth, areas; then the rules-based insights, `guidance` (the AI course-guidance choice) and the evidence.
+ */
+export function ProfileReport({ profile, guidance = null }) {
   return (
-    <section aria-label="Kết quả phân tích" className="stack-8 shell-ghr">
+    <section aria-label="Kết quả phân tích" className="stack-6 shell-ghr">
       <Overview profile={profile} />
-      <div className="card"><div className="card-body"><LanguageShares profile={profile} /></div></div>
-      <div className="card"><div className="card-body"><PushActivity profile={profile} /></div></div>
+      <div className="ghr-pair">
+        <div className="card"><div className="card-body"><LanguageShares profile={profile} /></div></div>
+        <div className="card"><div className="card-body"><PushActivity profile={profile} /></div></div>
+      </div>
       <div className="card"><div className="card-body"><TechnologyUsage profile={profile} /></div></div>
+      <div className="card"><div className="card-body"><Understanding profile={profile} /></div></div>
       <Insights profile={profile} />
-      <Understanding profile={profile} />
-      <Courses />
+      {guidance}
       <Repositories profile={profile} />
       <Scope profile={profile} />
     </section>
