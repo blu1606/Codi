@@ -61,6 +61,8 @@
 .tc-bar { display: flex; align-items: center; gap: var(--space-1); min-height: 56px; padding: 0 var(--space-3); border-bottom: 1px solid var(--border); }
 .tc-bar-title { flex: 1 1 0; min-width: 0; overflow: hidden; padding: 0 var(--space-2); font-size: var(--text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .tc-column { width: 100%; max-width: 760px; margin: 0 auto; }
+/* One-time choice about using the GitHub profile for course guidance (features/shell/github-api.jsx) */
+.tc-guidance { flex: none; width: calc(100% - 2 * var(--space-4)); max-width: 760px; max-height: 50vh; overflow-y: auto; margin: var(--space-3) auto 0; }
 .tc-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: var(--space-6) var(--space-4); overscroll-behavior: contain; }
 .tc-dock { padding: 0 var(--space-4) var(--space-4); }
 
@@ -174,13 +176,14 @@
 /* Course cards (search_courses): rows in one hairline surface */
 .tc-courses { display: grid; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); list-style: none; }
 .tc-courses > li + li { border-top: 1px solid var(--border); }
-.tc-course { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title price" "meta price"; align-items: center; gap: 2px var(--space-4); min-height: 56px; padding: var(--space-3) var(--space-4); color: var(--fg); text-decoration: none; transition: background-color var(--motion-fast) var(--ease-out); }
+.tc-course { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title price" "meta price" "note note";align-items: center; gap: 2px var(--space-4); min-height: 56px; padding: var(--space-3) var(--space-4); color: var(--fg); text-decoration: none; transition: background-color var(--motion-fast) var(--ease-out); }
 .tc-course:hover { background: var(--subtle); }
 .tc-course:hover .tc-course-title { color: var(--accent-active); }
 .tc-course:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .tc-course-title { grid-area: title; font-weight: 600; line-height: 1.35; }
 .tc-course-meta { grid-area: meta; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: var(--text-sm); color: var(--muted); }
 .tc-course-meta .icon { color: var(--star); }
+.tc-course-note { grid-area: note; font-size: var(--text-sm); color: var(--fg); line-height: 1.45; }
 .tc-course-price { grid-area: price; font-family: var(--font-mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
 .tc-owned { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-body); font-weight: 600; color: var(--success); }
 

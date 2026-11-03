@@ -43,8 +43,9 @@ export const isStale = (iso) => !!iso && Date.now() - Date.parse(iso) > STALE_MS
 const errText = (e, fallback) => (e && typeof e.message === 'string' && e.message) || fallback;
 
 // ───────────────────────── shared state (per signed-in learner) ─────────────────────────
-// { userId, status:'idle'|'loading'|'ready'|'error', linked, profile, error }
-let gh = { userId: null, status: 'idle', linked: false, profile: null, error: null };
+// { userId, status:'idle'|'loading'|'ready'|'error', linked, profile, aiGuidance, error }
+// aiGuidance: { state:'undecided'|'granted'|'declined', decidedAt } for a published profile, else null.
+let gh = { userId: null, status: 'idle', linked: false, profile: null, aiGuidance: null, error: null };
 let ver = 0;
 const subs = new Set();
 const bump = () => { ver += 1; subs.forEach((f) => f()); };
@@ -55,16 +56,35 @@ export async function loadGithub(force = false) {
   const uid = Codi.state.currentUserId;
   if (!uid || Codi.role() !== 'learner') return;
   if (!force && gh.userId === uid && gh.status !== 'idle') return;
-  gh = { userId: uid, status: 'loading', linked: gh.userId === uid && gh.linked, profile: gh.userId === uid ? gh.profile : null, error: null };
+  const same = gh.userId === uid;
+  gh = { userId: uid, status: 'loading', linked: same && gh.linked, profile: same ? gh.profile : null, aiGuidance: same ? gh.aiGuidance : null, error: null };
   bump();
   try {
     const [accounts, saved] = await Promise.all([api.get('/api/auth/list-accounts'), api.get('/api/github-profile')]);
     if (Codi.state.currentUserId !== uid) return;
     const linked = Array.isArray(accounts) && accounts.some((a) => a && a.providerId === 'github');
-    set({ status: 'ready', linked, profile: (saved && saved.profile) || null });
+    set({ status: 'ready', linked, profile: (saved && saved.profile) || null, aiGuidance: guidanceOf(saved) });
   } catch (e) {
     if (Codi.state.currentUserId === uid) set({ status: 'error', error: errText(e, 'Chưa tải được hồ sơ năng lực.') });
   }
+}
+
+const GUIDANCE_STATES = ['undecided', 'granted', 'declined'];
+const guidanceOf = (body) => {
+  const g = body && body.aiGuidance;
+  return g && GUIDANCE_STATES.includes(g.state) ? { state: g.state, decidedAt: g.decidedAt || null } : null;
+};
+
+/**
+ * Grants (true) or declines/revokes (false) the use of the saved profile summary for AI course guidance:
+ * PUT /api/github-profile/ai-guidance { consent }. Throws ApiError with the server message.
+ */
+export async function setAiGuidance(consent) {
+  const res = await api('/api/github-profile/ai-guidance', { method: 'PUT', body: { consent: !!consent } });
+  const next = guidanceOf(res);
+  if (!next) throw new Error('Chưa lưu được lựa chọn. Bạn có thể thử lại.');
+  set({ aiGuidance: next });
+  return next;
 }
 
 /** Subscribes to the GitHub state and loads it for a signed-in learner. */
@@ -72,7 +92,7 @@ export function useGithub() {
   useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => ver);
   const uid = Codi.state.currentUserId;
   useEffect(() => { loadGithub(); }, [uid]);
-  return gh.userId === uid ? gh : { userId: uid, status: 'idle', linked: false, profile: null, error: null };
+  return gh.userId === uid ? gh : { userId: uid, status: 'idle', linked: false, profile: null, aiGuidance: null, error: null };
 }
 
 /** Starts GitHub account linking; the browser leaves for GitHub and comes back to `returnTo`. Throws on failure. */
@@ -102,6 +122,8 @@ export async function analyseGithub() {
     if (!latest || latest.version !== 1) throw new Error('Chưa tạo được hồ sơ năng lực. Không thể đọc phản hồi máy chủ. Bạn có thể thử lại.');
     const keepPrevious = latest.observationAvailability === 'none_observed' && gh.profile && gh.profile.observationAvailability === 'observed';
     set(keepPrevious ? { linked: true } : { linked: true, profile: latest });
+    // A first published profile starts with an undecided AI-guidance choice; read it so /ai can ask.
+    if (!gh.aiGuidance) api.get('/api/github-profile').then((body) => set({ aiGuidance: guidanceOf(body) })).catch(() => {});
     return latest;
   } catch (e) {
     if (ctrl.signal.aborted) throw new Error('Đã hết thời gian chờ 4 phút. Chưa xác nhận được kết quả; yêu cầu trên máy chủ có thể vẫn đang hoàn tất. Không tự thử lại.');
@@ -162,13 +184,13 @@ export async function waitForSummary(jobId) {
 /** Deletes the saved analysis and its evidence; the GitHub link stays. */
 export async function deleteGithubProfile() {
   await api.del('/api/github-profile/profile');
-  set({ profile: null });
+  set({ profile: null, aiGuidance: null });
 }
 
 /** Unlinks GitHub and deletes the saved analysis. */
 export async function disconnectGithub() {
   await api.del('/api/github-profile');
-  set({ linked: false, profile: null });
+  set({ linked: false, profile: null, aiGuidance: null });
 }
 
 /** The unlink consequence dialog shared by the profile tab and the onboarding step. Resolves true on confirm. */
@@ -222,6 +244,81 @@ export function ProfileSummary({ profile }) {
       )}
       <p className="xsmall muted" style={{ margin: 0 }}>Ước tính từ repo công khai, không phải điểm đánh giá chính thức.</p>
     </div>
+  );
+}
+
+// ───────────────────────── AI course guidance (a separate consent from the analysis) ─────────────────────────
+/** Exactly what leaves Codi when guidance is on (backend lib/github-profile-guidance.ts). */
+function GuidanceSends() {
+  return (
+    <div className="stack-1 small">
+      <p style={{ margin: 0 }}>Mỗi lần bạn hỏi Tutor ở trang Tutor, Codi gửi kèm bản tóm tắt hồ sơ năng lực cho nhà cung cấp AI:</p>
+      <ul className="ghr-guidance-list">
+        <li>tên công nghệ và mức dùng ước tính (ví dụ React · Đã thử)</li>
+        <li>các mảng kiến thức và độ tin cậy</li>
+        <li>mức tổng thể ước tính</li>
+      </ul>
+      <p style={{ margin: 0 }}>Không gửi code, nội dung file, tên repo hay đường dẫn GitHub. Tutor trong bài học không dùng hồ sơ này.</p>
+    </div>
+  );
+}
+
+/** A published, observed profile whose guidance choice the learner can make. */
+const guidanceReady = (s) => s.status === 'ready' && !!s.profile && s.profile.observationAvailability === 'observed' && !!s.aiGuidance;
+
+/** The confirmation box on /ai: asked once per published profile; both answers are saved, so it never nags. */
+export function GuidancePrompt() {
+  useCodi();
+  const s = useGithub();
+  const [busy, failure, run] = useGithubAction();
+  if (!Codi.state.currentUserId || Codi.role() !== 'learner' || !guidanceReady(s) || s.aiGuidance.state !== 'undecided') return null;
+  const decide = (consent) => run(consent ? 'grant' : 'decline', async () => {
+    await setAiGuidance(consent);
+    Codi.ui.toast(consent ? 'Tutor sẽ dùng hồ sơ GitHub để gợi ý khoá học.' : 'Đã ghi nhận. Tutor sẽ không dùng hồ sơ GitHub.');
+  }, 'Chưa lưu được lựa chọn. Bạn có thể thử lại.');
+  return (
+    <section className="card tc-guidance" aria-labelledby="tc-guidance-title"><div className="card-body compact stack-3">
+      <h2 id="tc-guidance-title" className="small strong" style={{ margin: 0 }}>Dùng hồ sơ GitHub để Tutor gợi ý khoá học?</h2>
+      <GuidanceSends />
+      <p className="xsmall muted" style={{ margin: 0 }}>Bạn có thể đổi ý bất kỳ lúc nào trong <Link to={PROFILE_HREF}>Hồ sơ năng lực</Link>.</p>
+      {failure && <p className="small text-danger" role="alert" style={{ margin: 0 }}>{failure}</p>}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn btn-secondary btn-sm" disabled={!!busy} aria-busy={busy === 'grant' || undefined} onClick={() => decide(true)}>{busy === 'grant' ? 'Đang lưu…' : 'Đồng ý dùng hồ sơ'}</button>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={!!busy} aria-busy={busy === 'decline' || undefined} onClick={() => decide(false)}>Không dùng</button>
+      </div>
+    </div></section>
+  );
+}
+
+/** The switch on the profile tab: grant, or revoke at any time. */
+function GuidanceSetting({ guidance }) {
+  const [busy, failure, run] = useGithubAction();
+  // The switch follows the click at once; a failed save puts it back and shows why.
+  const [pending, setPending] = useState(null);
+  const on = pending ?? guidance.state === 'granted';
+  const toggle = async (next) => {
+    setPending(next);
+    await run('guidance', () => setAiGuidance(next), 'Chưa lưu được lựa chọn. Bạn có thể thử lại.');
+    setPending(null);
+  };
+  return (
+    <section aria-label="Dùng để gợi ý khoá học" className="card"><div className="card-body stack-3">
+      <div className="stack-1">
+        <h3 style={{ margin: 0 }}>Dùng để gợi ý khoá học</h3>
+        <p className="xsmall muted" style={{ margin: 0 }}>
+          {on ? `Đang bật từ ${dateLabel(guidance.decidedAt)}. Tutor so khớp công nghệ bạn đã dùng với kỹ năng của từng khoá.`
+            : guidance.state === 'declined' ? `Đã tắt${guidance.decidedAt ? ` từ ${dateLabel(guidance.decidedAt)}` : ''}. Tutor gợi ý khoá mà không dùng hồ sơ này.`
+              : 'Chưa chọn. Tutor gợi ý khoá mà không dùng hồ sơ này.'}
+        </p>
+      </div>
+      <label className="switch">
+        <input type="checkbox" role="switch" checked={on} disabled={!!busy} aria-busy={!!busy || undefined} onChange={(e) => toggle(e.target.checked)} />
+        <span className="switch-track" />
+        <span>Cho Tutor dùng hồ sơ này để gợi ý khoá học</span>
+      </label>
+      <GuidanceSends />
+      {failure && <p className="small text-danger" role="alert" style={{ margin: 0 }}>{failure}</p>}
+    </div></section>
   );
 }
 
@@ -401,7 +498,7 @@ export function GithubProfilePanel({ linkError }) {
         </Alert>
       )}
 
-      {saved && <ProfileReport profile={saved} />}
+      {saved && <ProfileReport profile={saved} guidance={s.aiGuidance ? <GuidanceSetting guidance={s.aiGuidance} /> : null} />}
       {insufficient && (
         <Alert type="info" title="Chưa đủ dữ liệu để ước tính">
           <span style={{ display: 'block' }}>Kết quả tạm thời, không phải hồ sơ đã lưu. Lượt phân tích này chưa ghi nhận quan sát công nghệ.</span>

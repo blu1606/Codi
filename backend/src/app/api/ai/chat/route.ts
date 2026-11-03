@@ -26,6 +26,7 @@ import {
 } from "@/lib/ai-chat-contract";
 import { intakeNote } from "@/lib/learner-intake-contract";
 import { readLearnerIntake } from "@/lib/learner-intake-service";
+import { githubGuidanceNote, readGithubGuidance } from "@/lib/github-profile-guidance";
 import {
   GENERAL_SYSTEM,
   generalTools,
@@ -148,14 +149,21 @@ export async function POST(request: NextRequest) {
       body.context.lessonId === scope.lessonId
         ? (body.lesson?.context ?? {})
         : {};
+    // The GitHub profile reaches the model only after the learner granted AI guidance (general chat only).
+    const guidance = userId && !scope ? await readGithubGuidance(db, userId) : null;
     const tools = scope
       ? lessonTools(db, scope, {
           code: attached.code ?? "",
           hintLevel: hint?.level ?? null,
         })
-      : generalTools(db, userId);
+      : generalTools(db, userId, guidance);
     // What the learner told the Tutor (S17 intake) shapes general answers; onboarding reads the same answers.
-    const profile = userId && !scope ? intakeNote(await readLearnerIntake(db, userId)) : "";
+    const profile = [
+      userId && !scope ? intakeNote(await readLearnerIntake(db, userId)) : "",
+      guidance ? githubGuidanceNote(guidance) : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     const system = scope
       ? tutorSystemPrompt({
           turn: hint

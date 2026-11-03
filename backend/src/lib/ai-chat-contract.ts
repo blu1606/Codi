@@ -249,6 +249,10 @@ export const AI_CHAT_TOOL_LABELS: Record<string, { running: string; done: string
     running: "Đang xem việc học của bạn…",
     done: "Đã xem việc học của bạn",
   },
+  recommend_courses_for_profile: {
+    running: "Đang so khớp hồ sơ GitHub với các khoá…",
+    done: "Đã so khớp hồ sơ GitHub với các khoá",
+  },
 };
 
 // Tool outputs the UI renders as rich blocks (course cards, comparison table, diff).
@@ -268,6 +272,14 @@ export type CourseCardOutput = {
   rating: number | null;
   learners: number;
   owned: boolean;
+  /** Lecturer-reviewed skills the course teaches (first few). */
+  skills?: string[];
+  /** Why the course was suggested, shown on the card (profile recommendations). */
+  note?: string;
+};
+export type RecommendOutput = {
+  basis: { level: string | null; technologies: string[]; masteredOnCodi: number };
+  courses: (CourseCardOutput & { builds: string[]; fills: string[] })[];
 };
 export type CompareOutput = { headers: string[]; rows: string[][] };
 export type SuggestChangeOutput =

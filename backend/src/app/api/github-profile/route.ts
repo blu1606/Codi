@@ -90,9 +90,12 @@ export async function GET(request: NextRequest) {
         "Vui lòng đăng nhập bằng tài khoản học viên.",
         401,
       );
-    const stored = await createGithubProfileStore(db).read(userId);
+    const store = createGithubProfileStore(db);
+    const stored = await store.read(userId);
     return NextResponse.json(
       {
+        // The learner's choice about AI course guidance from this profile (null without a published profile).
+        aiGuidance: stored ? await store.aiGuidance(userId) : null,
         ...(process.env.AI_BACKGROUND_WORKER_ENABLED === "true" ? { job: await readLatestAiJob(db, { type: "github_profile", userId, resourceId: userId }) } : {}),
         profile: stored
           ? projectGithubProfile(

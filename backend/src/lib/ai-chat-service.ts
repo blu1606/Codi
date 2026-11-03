@@ -11,10 +11,17 @@ import { LearningPathError } from "./learning-path-contract";
 import {
   formatVnd,
   getLearnerProgressContext,
+  getMasteredSkillNames,
   getPublishedCatalog,
   levelLabel,
   type AdvisorCourseItem,
 } from "./ai-advisor-service";
+import { GITHUB_OVERALL_LABELS } from "./github-profile-analysis-contract";
+import {
+  matchCoursesToProfile,
+  matchReason,
+  type GuidanceProfile,
+} from "./github-profile-guidance";
 import {
   AI_CHAT_HISTORY_TURNS,
   aiChatTitle,
@@ -26,6 +33,7 @@ import {
   type CompareOutput,
   type CourseCardOutput,
   type MaterialHit,
+  type RecommendOutput,
   type SuggestChangeOutput,
 } from "./ai-chat-contract";
 import { clip, sanitizeDiff, suggestChangeInput } from "./ai-tutor-contract";
@@ -410,7 +418,8 @@ export function lessonTools(
   return tools;
 }
 
-const card = (course: AdvisorCourseItem, owned: Set<string>): CourseCardOutput => ({
+const SKILLS_SHOWN = 8;
+const card = (course: AdvisorCourseItem, owned: Set<string>, note?: string): CourseCardOutput => ({
   id: course.id,
   slug: course.slug,
   title: course.title,
@@ -420,10 +429,15 @@ const card = (course: AdvisorCourseItem, owned: Set<string>): CourseCardOutput =
   rating: course.rating,
   learners: course.enrollmentCount,
   owned: owned.has(course.id),
+  skills: course.skills.slice(0, SKILLS_SHOWN),
+  ...(note ? { note } : {}),
 });
 
-/** General Tutor (S17 and every non-lesson screen): the public catalogue, plus the learner's own learning. */
-export function generalTools(db: Database, userId: string | null) {
+/**
+ * General Tutor (S17 and every non-lesson screen): the public catalogue, plus the learner's own learning.
+ * `guidance` is the learner's GitHub profile summary, passed only after they granted AI guidance.
+ */
+export function generalTools(db: Database, userId: string | null, guidance: GuidanceProfile | null = null) {
   let cache: Promise<{ catalog: AdvisorCourseItem[]; owned: Set<string> }> | null = null;
   const load = () =>
     (cache ??= Promise.all([
@@ -447,7 +461,7 @@ export function generalTools(db: Database, userId: string | null) {
         const scored = catalog
           .filter((course) => !level || levelLabel(course.level) === level)
           .map((course) => {
-            const haystack = `${course.title} ${course.slug} ${course.description}`.toLowerCase();
+            const haystack = `${course.title} ${course.slug} ${course.description} ${course.skills.join(" ")}`.toLowerCase();
             return {
               course,
               score: terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0),
@@ -480,8 +494,41 @@ export function generalTools(db: Database, userId: string | null) {
     }),
   };
   if (!userId) return tools;
+  const profileTools = guidance
+    ? {
+        recommend_courses_for_profile: tool({
+          description:
+            "Gợi ý khoá tiếp theo từ hồ sơ GitHub học viên đã đồng ý chia sẻ: so khớp công nghệ học viên đã dùng và kỹ năng đã thành thạo trên Codi với kỹ năng của từng khoá (máy chủ tính, không đoán). Giao diện hiển thị thẻ khoá kèm lý do; chỉ nhắc khoá có trong kết quả.",
+          inputSchema: z.object({
+            goal: z
+              .string()
+              .max(100)
+              .optional()
+              .describe("Chỉ chủ đề hay công nghệ cụ thể học viên nêu (ví dụ: Python, backend). Bỏ trống nếu học viên không nêu."),
+          }),
+          execute: async ({ goal }): Promise<RecommendOutput> => {
+            const [{ catalog, owned }, masteredSkills] = await Promise.all([load(), getMasteredSkillNames(db, userId)]);
+            const matches = matchCoursesToProfile(guidance, catalog, { owned, masteredSkills, query: goal });
+            const byId = new Map(catalog.map((course) => [course.id, course]));
+            return {
+              basis: {
+                level: guidance.level ? GITHUB_OVERALL_LABELS[guidance.level] : null,
+                technologies: guidance.technologies.slice(0, 8).map((tech) => tech.name),
+                masteredOnCodi: masteredSkills.length,
+              },
+              courses: matches.map((match) => ({
+                ...card(byId.get(match.courseId)!, owned, matchReason(match, guidance)),
+                builds: match.builds,
+                fills: match.fills.slice(0, SKILLS_SHOWN),
+              })),
+            };
+          },
+        }),
+      }
+    : {};
   return {
     ...tools,
+    ...profileTools,
     get_my_learning: tool({
       description:
         "Các khoá học viên đang học và tiến độ từng khoá (số bài xong / tổng), kèm link vào học tiếp.",
@@ -537,7 +584,7 @@ export function generalTools(db: Database, userId: string | null) {
 
 export const GENERAL_SYSTEM = [
   "Bạn là Tutor của Codi, nền tảng học lập trình. Trả lời bằng tiếng Việt, ngắn gọn, thân thiện, dùng Markdown.",
-  "Khi học viên hỏi chọn khoá, lộ trình hay so sánh: gọi search_courses (và compare_courses khi cần so sánh); chỉ nhắc khoá có trong kết quả công cụ, không bịa khoá, giá, số bài. Giao diện tự hiển thị thẻ khoá từ kết quả công cụ, bạn chỉ cần giải thích vì sao hợp.",
+  "Khi học viên hỏi chọn khoá, lộ trình hay so sánh: gọi search_courses (và compare_courses khi cần so sánh); nếu có công cụ recommend_courses_for_profile thì ưu tiên nó khi học viên hỏi nên học gì tiếp. Chỉ nhắc khoá có trong kết quả công cụ, không bịa khoá, giá, số bài, kỹ năng. Giao diện tự hiển thị thẻ khoá từ kết quả công cụ, bạn chỉ cần giải thích vì sao hợp.",
   "Khi học viên hỏi về việc học của chính mình (nên học gì, đang tới đâu): gọi get_my_learning nếu có; nếu không có công cụ này thì học viên chưa đăng nhập, mời đăng nhập để xem tiến độ.",
   "Danh mục không có khoá cho mục tiêu được hỏi thì nói rõ \"Codi chưa có khoá cho mục tiêu này\" và gợi ý khoá gần nhất.",
   "Trích link bằng Markdown đúng href công cụ trả về; khoá học dùng /courses/<slug>.",

@@ -14,8 +14,13 @@ export const githubProfiles = pgTable.withRLS("github_profiles", {
   analysis: jsonb("analysis"),
   corrections: jsonb("corrections").default({}).notNull(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
+  // The learner's separate choice about sending the published profile's summary (technologies, areas, level;
+  // never code) to the AI provider for course guidance. Both null: not asked yet. Analysis consent is above.
+  aiGuidanceConsentedAt: timestamp("ai_guidance_consented_at", { withTimezone: true }),
+  aiGuidanceDeclinedAt: timestamp("ai_guidance_declined_at", { withTimezone: true }),
 }, (table) => [
   check("github_profiles_active_check", sql`(${table.activeRequestId} IS NULL) = (${table.activeUntil} IS NULL)`),
+  check("github_profiles_ai_guidance_check", sql`${table.aiGuidanceConsentedAt} IS NULL OR ${table.aiGuidanceDeclinedAt} IS NULL`),
   check("github_profiles_publication_check", sql`(${table.publishedAt} IS NULL AND ${table.snapshot} IS NULL AND ${table.analysis} IS NULL) OR (${table.publishedAt} IS NOT NULL AND ${table.snapshot} IS NOT NULL AND ${table.analysis} IS NOT NULL)`),
 ]);
 

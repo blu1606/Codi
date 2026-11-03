@@ -113,6 +113,7 @@ export const TOOL_LABELS = {
   search_courses: { running: 'Đang tìm trong danh mục khoá học…', done: 'Đã tìm trong danh mục khoá học' },
   compare_courses: { running: 'Đang so sánh các khoá…', done: 'Đã so sánh các khoá' },
   get_my_learning: { running: 'Đang xem việc học của bạn…', done: 'Đã xem việc học của bạn' },
+  recommend_courses_for_profile: { running: 'Đang so khớp hồ sơ GitHub với các khoá…', done: 'Đã so khớp hồ sơ GitHub với các khoá' },
 };
 
 // ───────────────────────── S17 intake ─────────────────────────

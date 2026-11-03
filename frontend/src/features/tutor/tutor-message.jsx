@@ -15,7 +15,7 @@ import { DOWN_REASONS, TOOL_LABELS, formatVnd, messageText } from './tutor-contr
 
 const isToolPart = (part) => typeof part.type === 'string' && part.type.startsWith('tool-');
 const toolName = (part) => part.type.slice(5);
-const TOOL_ICONS = { search_course_material: 'search', get_my_progress: 'graduation-cap', search_courses: 'search', compare_courses: 'layers', get_my_learning: 'graduation-cap', suggest_code_change: 'code' };
+const TOOL_ICONS = { search_course_material: 'search', get_my_progress: 'graduation-cap', search_courses: 'search', recommend_courses_for_profile: 'compass', compare_courses: 'layers', get_my_learning: 'graduation-cap', suggest_code_change: 'code' };
 
 /** What the model thought before answering, folded by default once it is done. */
 function Reasoning({ text, live }) {
@@ -79,6 +79,7 @@ function CourseCards({ courses }) {
               {c.level} · {c.lessonCount} bài
               {c.rating !== null && c.rating !== undefined ? <> · <Icon name="star" className="icon-xs" /> {Number(c.rating).toFixed(1)}</> : null}
             </span>
+            {c.note ? <span className="tc-course-note">{c.note}</span> : null}
             <span className="tc-course-price">
               {c.owned ? <span className="tc-owned"><Icon name="check-circle" className="icon-xs" /> Đã sở hữu</span> : c.price ? formatVnd(c.price) : 'Miễn phí'}
             </span>
@@ -144,7 +145,7 @@ function ToolPart({ part, diff }) {
   let detail = null;
   let block = null;
   if (output && name === 'search_course_material') detail = <Sources hits={output.hits || []} />;
-  if (output && name === 'search_courses') block = <CourseCards courses={output.courses || []} />;
+  if (output && (name === 'search_courses' || name === 'recommend_courses_for_profile')) block = <CourseCards courses={output.courses || []} />;
   if (output && name === 'compare_courses') block = <CompareTable table={output} />;
   if (output && name === 'suggest_code_change' && diff && output.ok) block = <DiffBlock id={part.toolCallId} diff={output.diff} actions={diff} />;
   return <><ToolStep name={name} state={part.state} input={part.input} detail={detail} />{block}</>;

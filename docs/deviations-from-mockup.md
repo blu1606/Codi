@@ -236,4 +236,15 @@ User-visible changes:
   the AI summary from the stored data without reading GitHub again, and the panel waits for it. "Xoá hồ sơ năng lực"
   deletes the saved analysis but keeps the GitHub link (`DELETE /api/github-profile/profile`). Codi has these routes
   but no UI for them yet, so the editor layout and its copy are mine.
+  The report leads with charts drawn from the saved analysis (overall level scale, counts ledger, language share
+  bars, push activity, usage mix, area confidence scale), each with its values in text.
+- GitHub profile for course guidance (not in Codi): a separate consent from the analysis. `/ai` asks once per
+  published profile ("Dùng hồ sơ GitHub để Tutor gợi ý khoá học?"); yes and no are both stored
+  (`github_profiles.ai_guidance_consented_at` / `ai_guidance_declined_at`, `PUT /api/github-profile/ai-guidance
+  { consent }`), and the "Dùng để gợi ý khoá học" switch in "Hồ sơ năng lực" grants or revokes it. Only with
+  consent does the general `/ai` chat send the AI provider a summary: technology names with usage, area labels with
+  confidence and the overall level, never code, file contents, repo names or links. The lesson Tutor never uses it.
+  With consent the chat also gets `recommend_courses_for_profile`, which ranks unowned courses on the server by the
+  technologies the learner uses, their reviewed course skills not yet shown or mastered, and level fit
+  (`backend/src/lib/github-profile-guidance.ts`). Onboarding still does not suggest a level from GitHub.
 - Profile avatars and assignment files are uploaded to R2 through the real routes.

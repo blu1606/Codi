@@ -21,6 +21,7 @@ import { ChatLoadError, HistoryList, HistorySearch, useConversation } from './tu
 import { TIcon, TutorAvatar } from './tutor-ui';
 import { useTutor } from './tutor-store';
 import { KEEP_HISTORY, QUESTION_MAX } from './tutor-contract';
+import { GuidancePrompt } from '../shell/github-api';
 
 const SIDE = { min: 200, max: 400, initial: 260 };
 const SIDE_KEY = 'codi:tutor-side';
@@ -155,6 +156,8 @@ export default function TutorPage({ query = {} }) {
       <Link to={back} className="btn btn-ghost btn-icon btn-sm" aria-label="Thu về trang trước" title="Thu về trang trước"><TIcon name="chevrons-left" className="icon-sm" /></Link>
     </div>
   );
+  // Asked once, under the bar, when a learner has a published GitHub profile and has not chosen yet.
+  const header = <>{bar}<GuidancePrompt /></>;
 
   return (
     <div className="tc-page" onPointerUp={() => { resizing.current = null; }}>
@@ -166,7 +169,7 @@ export default function TutorPage({ query = {} }) {
         <section className="tc-main" aria-label="Đoạn chat">{bar}<h1 className="sr-only">Tutor</h1><p className="tc-center" role="status"><Icon name="loader" className="icon-sm tc-spin" /> Đang mở đoạn chat…</p></section>
       ) : (
         <TutorThread key={data.id} ai={ai} variant="page" chatId={data.id} initialMessages={data.messages} chat={data.chat} lesson={data.lesson}
-          onLesson={setLesson} header={bar} />
+          onLesson={setLesson} header={header} />
       )}
     </div>
   );

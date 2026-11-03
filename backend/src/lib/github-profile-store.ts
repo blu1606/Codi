@@ -186,6 +186,16 @@ async function lockActiveLearner(store: Store, userId: string) {
     for share of ${user}, ${userRoles}`);
   if (result.rows.length !== 1) throw new GithubProfileStoreError("request_fenced");
 }
+/** "undecided" until the learner answers; a decline is kept so the question is not asked again. */
+export interface GithubAiGuidance {
+  state: "undecided" | "granted" | "declined";
+  decidedAt: string | null;
+}
+function guidanceOf(row: { consentedAt: Date | null; declinedAt: Date | null }): GithubAiGuidance {
+  if (row.consentedAt) return { state: "granted", decidedAt: row.consentedAt.toISOString() };
+  if (row.declinedAt) return { state: "declined", decidedAt: row.declinedAt.toISOString() };
+  return { state: "undecided", decidedAt: null };
+}
 function storedIdentity(snapshot: unknown, expectedId: string) {
   return (
     snapshot === null ||
@@ -480,6 +490,40 @@ export function createGithubProfileStore(
         }
         return { corrections, summaryJobId };
       }));
+    },
+    /** The learner's AI-guidance choice for the published profile; null when no profile is published. */
+    async aiGuidance(userId: string): Promise<GithubAiGuidance | null> {
+      parse(id, userId);
+      return safe(async () => {
+        const [row] = await database
+          .select({
+            consentedAt: githubProfiles.aiGuidanceConsentedAt,
+            declinedAt: githubProfiles.aiGuidanceDeclinedAt,
+          })
+          .from(githubProfiles)
+          .where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt)))
+          .limit(1);
+        return row ? guidanceOf(row) : null;
+      });
+    },
+    /** Grants or declines (and so revokes) AI guidance; both are remembered. Null when no profile is published. */
+    async setAiGuidance(userId: string, consent: boolean): Promise<GithubAiGuidance | null> {
+      parse(id, userId);
+      return safe(async () => {
+        const [row] = await database
+          .update(githubProfiles)
+          .set(
+            consent
+              ? { aiGuidanceConsentedAt: databaseNow, aiGuidanceDeclinedAt: null }
+              : { aiGuidanceConsentedAt: null, aiGuidanceDeclinedAt: databaseNow },
+          )
+          .where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt)))
+          .returning({
+            consentedAt: githubProfiles.aiGuidanceConsentedAt,
+            declinedAt: githubProfiles.aiGuidanceDeclinedAt,
+          });
+        return row ? guidanceOf(row) : null;
+      });
     },
     async deleteProfile(userId: string): Promise<boolean> {
       parse(id, userId);

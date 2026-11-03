@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, like, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, like, sql } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import {
   aiInteractionLogs,
@@ -6,7 +6,10 @@ import {
   courseDetails,
   courseLessons,
   courses,
+  enrollmentSkillMastery,
   lessonProgress,
+  lessonSkills,
+  skills,
   studentActivities,
   studentEnrollments,
 } from "@codi-1/db";
@@ -25,6 +28,8 @@ export interface AdvisorCourseItem {
   enrollmentCount: number;
   coverImageUrl: string | null;
   description: string;
+  /** Lecturer-reviewed skills taught in the course's published lessons. */
+  skills: string[];
 }
 
 export interface LearnerProgressContext {
@@ -222,6 +227,7 @@ export async function getPublishedCatalog(db: Database): Promise<AdvisorCourseIt
     .where(eq(courses.status, "published"))
     .orderBy(asc(courses.title));
 
+  const skillsByCourse = await getCourseSkills(db, rows.map((r) => r.id));
   return rows.map((r) => ({
     id: r.id,
     slug: r.slug,
@@ -233,8 +239,51 @@ export async function getPublishedCatalog(db: Database): Promise<AdvisorCourseIt
     enrollmentCount: Number(r.enrollmentCount),
     coverImageUrl: r.coverImageUrl,
     description: r.description ?? "",
+    skills: skillsByCourse.get(r.id) ?? [],
   }));
 }
+
+/**
+ * Skills each course actually teaches: lecturer-reviewed skills (accepted or edited) tagged on a published lesson of
+ * a published chapter. Suggested or declined AI skills never count.
+ */
+export async function getCourseSkills(db: Database, courseIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (!courseIds.length) return out;
+  const rows = await db
+    .selectDistinct({ courseId: courseChapters.courseId, skillId: skills.id, name: skills.name })
+    .from(lessonSkills)
+    .innerJoin(skills, eq(skills.id, lessonSkills.skillId))
+    .innerJoin(courseLessons, eq(courseLessons.id, lessonSkills.lessonId))
+    .innerJoin(courseChapters, eq(courseChapters.id, courseLessons.chapterId))
+    .where(
+      and(
+        inArray(courseChapters.courseId, courseIds),
+        eq(courseLessons.isPublished, true),
+        eq(courseChapters.isPublished, true),
+        inArray(skills.review, ["accepted", "edited"]),
+      ),
+    )
+    .orderBy(asc(skills.id));
+  for (const row of rows) {
+    const list = out.get(row.courseId) ?? [];
+    list.push(row.name);
+    out.set(row.courseId, list);
+  }
+  return out;
+}
+
+/** Names of skills the learner has mastered in any enrolled course (BKT level 3, pMastery >= 0.60). */
+export async function getMasteredSkillNames(db: Database, userId: string): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ name: skills.name })
+    .from(enrollmentSkillMastery)
+    .innerJoin(studentEnrollments, eq(studentEnrollments.id, enrollmentSkillMastery.enrollmentId))
+    .innerJoin(skills, eq(skills.id, enrollmentSkillMastery.skillId))
+    .where(and(eq(studentEnrollments.userId, userId), gte(enrollmentSkillMastery.pMastery, MASTERED_P)));
+  return rows.map((row) => row.name);
+}
+const MASTERED_P = 0.6;
 
 /**
  * Log advisor conversation to ai_interaction_logs table
