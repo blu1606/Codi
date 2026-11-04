@@ -11,6 +11,7 @@ import { Alert, Icon } from '../../components/ui/primitives';
 import { findLesson, locked, lecturerAI, AIThinking, FieldError } from './teach-api';
 import { act, cachedCourse, reloadCourse, reloadMine } from './teach-data';
 import { ReviewNotes, useFlagFocus } from './review-notes';
+import { ACCEPT, checkFile, fmtClock, fmtSize, uploadLessonFile } from './lesson-media-api';
 
 const LATE = { accept: 'Vẫn nhận, không trừ điểm', penalty: 'Nhận và trừ điểm', reject: 'Không nhận bài nộp muộn' };
 const newAssignment = () => ({ instructions: '', requiresFile: false, requiresLink: true, acceptedTypes: '', maxScore: 10, passingScore: 50, passScore: 5, dueDays: 7, latePolicy: 'penalty', latePenalty: 20, rubric: [] });
@@ -118,16 +119,31 @@ function AssignmentBuilder({ d, refresh, rubricJob, ro }) {
   );
 }
 
-/** "Thêm tài liệu" form: URL-only, title and URL required (real handleAddMaterial). */
-function MaterialForm({ onAdd, onClose, disabled }) {
+/** "Thêm tài liệu" form: a URL, or a file uploaded to Codi (video, PDF, PPTX, DOCX) that fills type, URL and size. */
+function MaterialForm({ courseId, onAdd, onClose, disabled }) {
   const [type, setType] = useState('video');
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [err, setErr] = useState('');
+  const [up, setUp] = useState(null); // { pct } while uploading
+  const ctrl = useRef(null);
+  useEffect(() => () => { if (ctrl.current) ctrl.current.abort(); }, []);
   const add = () => {
     if (!title.trim()) { setErr('Vui lòng nhập tên tài liệu.'); return; }
     if (!url.trim()) { setErr('Vui lòng nhập URL tài liệu.'); return; }
     onAdd({ id: Codi.uid('mat'), type, title: title.trim(), url: url.trim() }); // string id = not saved yet
+  };
+  const upload = (file) => {
+    const problem = checkFile(file, 'any');
+    if (problem) { setErr(problem); return; }
+    ctrl.current = new AbortController(); setErr(''); setUp({ pct: 0 });
+    uploadLessonFile(courseId, file, { signal: ctrl.current.signal, onProgress: (pct) => setUp({ pct }) })
+      .then((res) => {
+        setUp(null);
+        if (!res.material) { setErr(res.storageError || 'Chưa lưu được tệp.'); return; }
+        onAdd({ id: Codi.uid('mat'), ...res.material, title: title.trim() || res.material.title });
+      })
+      .catch((e) => { setUp(null); if (!(e && e.name === 'AbortError')) setErr((e && e.message) || 'Không tải được tệp lên.'); });
   };
   return (
     <div className="panel stack-3 tc-mat-form">
@@ -137,8 +153,14 @@ function MaterialForm({ onAdd, onClose, disabled }) {
         <div className="field tc-span-2"><label htmlFor="mat-title">Tiêu đề tài liệu</label><input id="mat-title" value={title} onChange={(e) => { setTitle(e.target.value); setErr(''); }} placeholder="Ví dụ: Slide bài giảng Chương 1" /></div>
       </div>
       <div className={`field ${err ? 'is-invalid' : ''}`}><label htmlFor="mat-url">Đường dẫn (URL)</label><input id="mat-url" type="url" inputMode="url" value={url} onChange={(e) => { setUrl(e.target.value); setErr(''); }} placeholder="https://..." />
-        <span className="field-help">Chỉ hỗ trợ đường dẫn (URL) tới tài liệu đã lưu trữ. Chưa hỗ trợ tải tệp lên.</span><FieldError>{err}</FieldError></div>
-      <div className="row" style={{ justifyContent: 'flex-end' }}><button type="button" className="btn btn-primary btn-sm" onClick={add} disabled={disabled}>Thêm vào danh sách</button></div>
+        <span className="field-help">Dán đường dẫn (YouTube, Drive…) hoặc tải tệp lên Codi: video tối đa 500MB, PDF/PPTX/DOCX tối đa 50MB.</span><FieldError>{err}</FieldError></div>
+      {up && <div className="progress" role="progressbar" aria-label="Tiến độ tải lên" aria-valuenow={up.pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: up.pct + '%' }} /></div>}
+      <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+        {up ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => ctrl.current && ctrl.current.abort()}>Huỷ tải lên ({up.pct}%)</button> : <>
+          <label className={`btn btn-secondary btn-sm ${disabled ? 'is-disabled' : ''}`} htmlFor="mat-file"><Icon name="upload" className="icon-sm" /> Tải tệp lên</label>
+          <input id="mat-file" className="sr-only" type="file" accept={ACCEPT.any} disabled={disabled} onChange={(e) => { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (file) upload(file); }} />
+        </>}
+        <button type="button" className="btn btn-primary btn-sm" onClick={add} disabled={disabled || !!up}>Thêm đường dẫn</button></div>
     </div>
   );
 }
@@ -270,7 +292,7 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment, flagId }) {
               </li>
             ))}</ul>
           )}
-          {d.addingMaterial && !ro && <MaterialForm disabled={saving} onClose={() => { d.addingMaterial = false; refresh(); }}
+          {d.addingMaterial && !ro && <MaterialForm courseId={courseId} disabled={saving} onClose={() => { d.addingMaterial = false; refresh(); }}
             onAdd={(m) => { d.materials.push(m); d.addingMaterial = false; refresh(); Codi.ui.toast('Đã thêm tài liệu vào danh sách chuẩn bị lưu.', { type: 'success' }); }} />}
         </section>
 
@@ -339,25 +361,175 @@ export async function addLesson(c, chapterId, kind) {
   if (isCode) Codi.go(`/teach/courses/${c.id}/code/${l.id}`); else openLessonEditor(c.id, l.id);
   return l;
 }
-/** Blank lesson for "Từ tài liệu / slide": the import sheet fills it, without opening the lesson editor. */
-async function addLessonQuiet(c, chapterId) {
-  const l = await createLesson(c, chapterId);
-  if (l) await reloadCourse(c.id);
-  return l;
+// ───────────────────────── new video / reading / slide lesson ─────────────────────────
+const NEW_KIND = {
+  video: {
+    title: 'Thêm bài video', accept: 'video', fileLabel: 'Tải video lên', urlLabel: 'Dán đường dẫn',
+    fileHelp: 'MP4, MOV, WEBM hoặc MKV, tối đa 500MB. Thời lượng bài được lấy từ video.',
+    urlHelp: 'Video YouTube phát và lưu tiến độ ngay trong bài; đường dẫn khác học viên mở ở tab mới.', urlPlaceholder: 'https://www.youtube.com/watch?v=...',
+    ai: 'Dùng AI chép lời giảng (Whisper), xem khung hình rồi soạn tóm tắt bài đọc và câu hỏi quiz',
+  },
+  pdf: {
+    title: 'Thêm bài slide / PDF', accept: 'pdf', fileLabel: 'Tải PDF / PPTX lên', urlLabel: 'Dán đường dẫn',
+    fileHelp: 'PDF hoặc PPTX, tối đa 50MB.', urlHelp: 'Đường dẫn tới tệp PDF/slide đã lưu trữ (Google Drive, Canva…).', urlPlaceholder: 'https://...',
+    ai: 'Dùng AI đọc tài liệu (trang dạng ảnh được nhận dạng bằng OCR) rồi soạn tóm tắt bài đọc và câu hỏi quiz',
+  },
+  reading: { title: 'Thêm bài đọc' },
+};
+const baseName = (name) => String(name || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+
+function NewLessonForm({ handle, courseId, chapterId, kind }) {
+  const cfg = NEW_KIND[kind];
+  const c = cachedCourse(courseId);
+  const [f, setF] = useState({ title: '', description: '', durationMin: 10, isFreePreview: false, body: '', source: kind === 'reading' ? null : 'file', url: '', ai: true });
+  const [up, setUp] = useState({ state: 'idle', pct: 0, name: '', res: null, error: '' });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const ctrl = useRef(null);
+  const touched = useRef({ title: false, dur: false });
+  useEffect(() => () => { if (ctrl.current) ctrl.current.abort(); }, []);
+  const set = (k, v) => { setF((x) => ({ ...x, [k]: v })); setErr(''); };
+  const ch = c && (c.chapters.find((x) => x.id === chapterId) || c.chapters[0]);
+
+  const pick = (file) => {
+    const problem = checkFile(file, cfg.accept);
+    if (problem) { setUp({ state: 'error', pct: 0, name: file.name, res: null, error: problem }); return; }
+    if (ctrl.current) ctrl.current.abort();
+    ctrl.current = new AbortController();
+    setUp({ state: 'uploading', pct: 0, name: file.name, res: null, error: '' }); setErr('');
+    uploadLessonFile(courseId, file, { signal: ctrl.current.signal, onProgress: (pct) => setUp((u) => (u.state === 'uploading' ? { ...u, pct } : u)) })
+      .then((res) => {
+        setUp({ state: 'done', pct: 100, name: file.name, res, error: '' });
+        setF((x) => ({
+          ...x,
+          title: touched.current.title && x.title.trim() ? x.title : baseName(file.name).slice(0, 120),
+          durationMin: !touched.current.dur && res.upload.durationSeconds ? Math.max(1, Math.min(360, Math.ceil(res.upload.durationSeconds / 60))) : x.durationMin,
+        }));
+      })
+      .catch((e) => { if (e && e.name === 'AbortError') return; setUp({ state: 'error', pct: 0, name: file.name, res: null, error: (e && e.message) || 'Không tải được tệp lên.' }); });
+  };
+  const uploaded = up.state === 'done' ? up.res : null;
+  const useAI = f.source === 'file' && f.ai;
+
+  const submit = async () => {
+    const title = f.title.trim();
+    if (title.length < 2) return setErr('Tên bài học cần ít nhất 2 ký tự.');
+    const dur = Number(f.durationMin);
+    if (!Number.isFinite(dur) || dur < 1 || dur > 360) return setErr('Thời lượng (phút) phải từ 1 đến 360.');
+    let material = null;
+    if (kind === 'reading') {
+      if (!f.body.trim()) return setErr('Nhập nội dung bài đọc.');
+    } else if (f.source === 'file') {
+      if (up.state === 'uploading') return setErr('Đợi tệp tải lên xong.');
+      if (!uploaded) return setErr(kind === 'video' ? 'Chọn video để tải lên.' : 'Chọn tệp PDF/PPTX để tải lên.');
+      if (!uploaded.material && !f.ai) return setErr(uploaded.storageError || 'Chưa lưu được tệp. Hãy thử lại hoặc dán đường dẫn.');
+      material = uploaded.material;
+    } else {
+      const url = f.url.trim();
+      if (!/^https?:\/\/\S+$/i.test(url)) return setErr('Nhập đường dẫn bắt đầu bằng http:// hoặc https://.');
+      material = { type: kind === 'video' ? 'video' : /\.pptx?(\?|$)/i.test(url) ? 'slide' : 'pdf', title, url };
+    }
+    setSaving(true);
+    const l = await createLesson(c, ch && ch.id, title);
+    if (!l) { setSaving(false); return; }
+    try {
+      await act('course', 'updateLesson', courseId, l.id, {
+        title, description: f.description.trim(), durationMinutes: Math.round(dur), body: kind === 'reading' ? f.body : '',
+        isFreePreview: !!f.isFreePreview, materials: material ? [{ type: material.type, title: material.title || title, url: material.url, fileSizeKb: material.fileSizeKb || undefined, durationSeconds: material.durationSeconds || undefined }] : [],
+      });
+    } catch (e) {
+      setSaving(false); setErr((e && e.message) || 'Đã tạo bài nhưng chưa lưu được nội dung. Mở "Chi tiết" để sửa.');
+      reloadCourse(courseId); reloadMine();
+      return;
+    }
+    await reloadCourse(courseId); reloadMine();
+    handle.close();
+    if (useAI && uploaded) {
+      const AI = lecturerAI();
+      if (AI && AI.openImport) { AI.openImport(courseId, l.id, { upload: { ...uploaded, material: null } }); return; }
+    }
+    Codi.go(`/teach/courses/${courseId}/content?lesson=${l.id}`);
+    Codi.ui.toast(`Đã thêm bài “${title}” vào ${ch ? ch.title : 'khoá học'}.`, { type: 'success' });
+  };
+
+  if (!c) return null;
+  return (
+    <>
+      <div className="sheet-body stack-4">
+        <p className="small muted">Bài được thêm vào <strong>{ch ? ch.title : ''}</strong>. Quiz và bài tập thêm sau ở dòng bài học.</p>
+        {kind !== 'reading' && (
+          <fieldset className="stack-3"><legend className="field-label">{kind === 'video' ? 'Video bài giảng' : 'Tài liệu bài giảng'} <span className="req">*</span></legend>
+            <div className="viz-seg-ctrl" role="group" aria-label="Nguồn">
+              {[['file', cfg.fileLabel], ['url', cfg.urlLabel]].map(([k, t]) => <button key={k} type="button" aria-pressed={f.source === k} disabled={saving} onClick={() => set('source', k)}>{t}</button>)}
+            </div>
+            {f.source === 'file' ? (
+              <div className="stack-2">
+                {up.state === 'idle' || up.state === 'error' ? (
+                  <div className="la-drop">
+                    <Icon name={kind === 'video' ? 'video' : 'upload'} className="icon-lg" /><span className="small muted">{cfg.fileHelp}</span>
+                    <label className="btn btn-primary" htmlFor="nl-file">Chọn tệp</label>
+                    <input id="nl-file" className="sr-only" type="file" accept={ACCEPT[cfg.accept]} onChange={(e) => { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (file) pick(file); }} />
+                  </div>
+                ) : (
+                  <div className="la-file"><Icon name={kind === 'video' ? 'video' : 'file-text'} className="icon-sm" />
+                    <span className="small od-fill"><strong>{up.name}</strong>{uploaded ? ` · ${fmtSize(uploaded.upload.sizeKb)}${uploaded.upload.durationSeconds ? ` · ${fmtClock(uploaded.upload.durationSeconds)}` : ''}` : ` · đang tải ${up.pct}%`}</span>
+                    <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={() => { if (ctrl.current) ctrl.current.abort(); setUp({ state: 'idle', pct: 0, name: '', res: null, error: '' }); }}>{up.state === 'uploading' ? 'Huỷ' : 'Đổi tệp'}</button></div>
+                )}
+                {up.state === 'uploading' && <div className="progress" role="progressbar" aria-label="Tiến độ tải lên" aria-valuenow={up.pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: up.pct + '%' }} /></div>}
+                {up.state === 'error' && <FieldError>{up.error}</FieldError>}
+                {uploaded && uploaded.storageError && <p className="small text-warn"><Icon name="alert-triangle" className="icon-sm" /> {uploaded.storageError}</p>}
+                <label className="check"><input type="checkbox" checked={f.ai} disabled={saving} onChange={(e) => set('ai', e.target.checked)} /> {cfg.ai}</label>
+                {f.ai && <p className="xsmall muted">Sau khi tạo bài, AI đọc tệp và đưa bản nháp để bạn duyệt; không có gì đến học viên trước khi bạn chấp nhận.</p>}
+              </div>
+            ) : (
+              <div className="field"><label htmlFor="nl-url">Đường dẫn (URL)</label>
+                <input id="nl-url" type="url" inputMode="url" value={f.url} onChange={(e) => set('url', e.target.value)} placeholder={cfg.urlPlaceholder} disabled={saving} />
+                <span className="field-help">{cfg.urlHelp}</span></div>
+            )}
+          </fieldset>
+        )}
+        <div className="field"><label htmlFor="nl-title">Tên bài học <span className="req">*</span></label>
+          <input id="nl-title" value={f.title} onChange={(e) => { touched.current.title = true; set('title', e.target.value); }} placeholder={kind === 'video' ? 'Ví dụ: useEffect và vòng đời component' : 'Nhập tên bài học...'} disabled={saving} /></div>
+        <div className="grid-3">
+          <div className="field tc-span-2"><label htmlFor="nl-desc">Mô tả ngắn</label><input id="nl-desc" value={f.description} onChange={(e) => set('description', e.target.value)} placeholder="Tóm tắt nội dung chính của bài..." disabled={saving} /></div>
+          <div className="field"><label htmlFor="nl-dur">Thời lượng (phút)</label><input id="nl-dur" type="number" min="1" max="360" value={f.durationMin} onChange={(e) => { touched.current.dur = true; set('durationMin', num(e.target.value)); }} disabled={saving} /></div>
+        </div>
+        {kind === 'reading' && (
+          <div className="field"><label htmlFor="nl-body">Nội dung bài đọc <span className="req">*</span></label>
+            <textarea id="nl-body" className="mono" rows={10} value={f.body} onChange={(e) => set('body', e.target.value)} placeholder={'## Tiêu đề\n\n**Mục tiêu:** ...\n\n- Ý chính 1\n- Ý chính 2'} disabled={saving} />
+            <span className="field-help">Hỗ trợ Markdown: **in đậm**, `code`, khối ``` và danh sách bắt đầu bằng "- ". Có sẵn tài liệu? Dùng "Tạo bằng AI → Từ tài liệu / slide".</span></div>
+        )}
+        <label className="check"><input type="checkbox" checked={f.isFreePreview} onChange={(e) => set('isFreePreview', e.target.checked)} disabled={saving} /> Cho phép học thử (Free Preview)</label>
+        {err && <p className="field-error" role="alert"><Icon name="alert-circle" className="icon-sm" /><span>{err}</span></p>}
+      </div>
+      <div className="sheet-footer">
+        <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => handle.close()}>Huỷ</button>
+        <button type="button" className="btn btn-primary" disabled={saving || up.state === 'uploading'} onClick={submit}>
+          {saving ? <><Icon name="loader" className="icon-sm" /> Đang tạo…</> : useAI && uploaded ? <><Icon name="sparkles" className="icon-sm" /> Tạo bài và soạn bằng AI</> : 'Tạo bài học'}</button>
+      </div>
+    </>
+  );
+}
+
+function openNewLesson(c, chapterId, kind) {
+  return Codi.ui.sheet({
+    title: NEW_KIND[kind].title, wide: true, raw: true,
+    body: (h) => <NewLessonForm handle={h} courseId={c.id} chapterId={chapterId} kind={kind} />,
+  });
 }
 
 const LESSON_KINDS = [
   { group: 'Tự soạn', items: [
-    ['video', 'video', 'Video', 'Gắn đường dẫn video, thêm tóm tắt, quiz hoặc bài tập.'],
+    ['video', 'video', 'Video', 'Tải video lên hoặc dán link YouTube; AI chép lời và soạn quiz nếu bạn muốn.'],
     ['reading', 'book-open', 'Bài đọc', 'Nội dung chữ có định dạng, đọc ngay trên Codi.'],
-    ['pdf', 'presentation', 'Slide / PDF', 'Gắn đường dẫn slide hoặc tài liệu PDF đã lưu trữ.'],
+    ['pdf', 'presentation', 'Slide / PDF', 'Tải PDF/PPTX lên hoặc dán đường dẫn; AI đọc (kể cả bản scan) và soạn quiz.'],
     ['code', 'code', 'Bài code', 'Đề bài, code khởi đầu, lời giải và test chấm tự động.'],
     ['tutorial', 'terminal', 'Hướng dẫn code', 'Từng bước có code chạy thử, kiểu Replit.'],
   ] },
   { group: 'Tạo bằng AI', items: [
     ['ai-lesson', 'sparkles', 'Bài giảng bằng AI', 'Nhập chủ đề, AI soạn bài đọc và câu quiz để bạn duyệt.'],
     ['ai-code', 'sparkles', 'Bài code bằng AI', 'AI soạn đề, lời giải, test và gợi ý; lời giải được chạy thử.'],
-    ['ai-import', 'upload', 'Từ tài liệu / slide', 'Tải PDF, PPTX hoặc DOCX; AI tạo tóm tắt, quiz, khái niệm.'],
+    ['ai-import', 'upload', 'Từ tài liệu / video', 'Tải PDF, PPTX, DOCX hoặc video; AI soạn bài đọc và quiz để bạn duyệt.'],
   ] },
 ];
 
@@ -372,9 +544,10 @@ function AddLessonBody({ handle, courseId, chapterId }) {
       if (AI && AI.openCreate) AI.openCreate(c.id, kind === 'ai-code' ? 'code' : 'lesson', ch);
       else if (AI) Codi.ui.toast('Tạo bài bằng AI chưa sẵn sàng.', { type: 'danger' });
     } else if (kind === 'ai-import') {
-      const AI = lecturerAI(); if (!AI || !AI.openImport) return;
-      addLessonQuiet(c, ch).then((l) => { if (l) AI.openImport(c.id, l.id); });
-    } else addLesson(c, ch, kind);
+      // The lesson is created when the reviewed draft is applied, so cancelling leaves no empty lesson behind.
+      const AI = lecturerAI(); if (AI && AI.openImport) AI.openImport(c.id, null, { chapterId: ch });
+    } else if (NEW_KIND[kind]) openNewLesson(c, ch, kind);
+    else addLesson(c, ch, kind);
   };
   return (
     <div className="stack-4">
