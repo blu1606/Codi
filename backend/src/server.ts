@@ -24,14 +24,13 @@ async function main() {
   // Security headers on every response (pages and API). HSTS is ignored by browsers over plain http, so local runs
   // are unaffected. No Content-Security-Policy yet: the pages load Google Fonts, YouTube embeds, SePay QR images and
   // R2 media, and a policy needs its own test pass. COOP/CORP keep Hono's same-origin defaults (no popups are used).
-  app.use(
-    "*",
-    secureHeaders({
-      strictTransportSecurity: "max-age=31536000",
-      xFrameOptions: "DENY",
-      referrerPolicy: "strict-origin-when-cross-origin",
-    }),
-  );
+  // Uploaded lecture PDFs are embedded in the lesson page (an iframe on the same origin), so that one route allows
+  // SAMEORIGIN framing; everything else stays DENY.
+  const headersFor = (xFrameOptions: "DENY" | "SAMEORIGIN") =>
+    secureHeaders({ strictTransportSecurity: "max-age=31536000", xFrameOptions, referrerPolicy: "strict-origin-when-cross-origin" });
+  const strictHeaders = headersFor("DENY");
+  const mediaHeaders = headersFor("SAMEORIGIN");
+  app.use("*", (c, next) => (c.req.path === "/api/lesson-media" ? mediaHeaders(c, next) : strictHeaders(c, next)));
 
   // `release` is the image tag (git short sha) set by deploy/compose.yml, so release.sh, rollback.sh and the fast
   // check can confirm which build answers.
