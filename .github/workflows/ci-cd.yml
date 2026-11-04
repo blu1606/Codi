@@ -10,10 +10,13 @@
 name: CI/CD
 
 on:
+  # Changes to documentation, plans and stored measurements alone run nothing.
   pull_request:
     branches: [develop, main]
+    paths-ignore: ["**/*.md", "docs/**", "plans/**", "perf/runs/**", "security/scans/**"]
   push:
     branches: [develop, main]
+    paths-ignore: ["**/*.md", "docs/**", "plans/**", "perf/runs/**", "security/scans/**"]
   workflow_dispatch:
 
 concurrency:
@@ -97,10 +100,40 @@ jobs:
             e2e/results
           retention-days: 7
 
+  release-needed:
+    name: Does this push change what runs on the VPS?
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.decide.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compare with the running release
+        id: decide
+        run: |
+          running=$(curl -fsS --max-time 15 https://codi.hoangblue.dev/api/health | sed -n 's/.*"release":"\([^"]*\)".*/\1/p' || true)
+          # Only these paths reach the image or the release scripts; tests, CI config and docs do not.
+          paths="backend frontend Dockerfile .dockerignore package.json package-lock.json deploy/compose.yml deploy/release.sh deploy/rollback.sh deploy/release-lib.sh deploy/fastcheck.sh"
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            deploy=true; why="manual run"
+          elif [ -z "$running" ] || ! git cat-file -e "$running^{commit}" 2>/dev/null; then
+            deploy=true; why="running release '${running:-unknown}' is not in this history"
+          elif git diff --quiet "$running" HEAD -- $paths; then
+            deploy=false; why="nothing that reaches the VPS changed since $running"
+          else
+            deploy=true; why="changes since $running: $(git diff --name-only "$running" HEAD -- $paths | head -5 | tr '\n' ' ')"
+          fi
+          echo "deploy=$deploy ($why)"
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          echo "Deploy: **$deploy**, $why" >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: Deploy to the VPS
-    needs: [check, e2e]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, e2e, release-needed]
+    if: needs.release-needed.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:

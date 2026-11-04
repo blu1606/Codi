@@ -7,8 +7,14 @@ first through a pull request, then `develop` is merged into `main`; only a push 
 |---|---|---|---|
 | Pull request into `develop` or `main` | yes | yes | no |
 | Push to `develop` | yes | yes | no |
-| Push to `main` (a merged PR) | yes | yes | yes, after both pass |
-| Manual run (`workflow_dispatch`) | yes | yes | only when run on `main` |
+| Push to `main` (a merged PR) | yes | yes | after both pass, when the image or the release scripts changed |
+| Manual run (`workflow_dispatch`) | yes | yes | always when run on `main` |
+
+Changes that only touch `*.md`, `docs/`, `plans/`, `perf/runs/` or `security/scans/` run nothing (`paths-ignore`).
+On `main`, the **release-needed** job compares the push with the release the VPS is running (`/api/health`): it
+deploys only when `backend`, `frontend`, `Dockerfile`, `.dockerignore`, the lockfile or a deploy script differ, or
+when the running release is not in the history (a manual deploy). A change to tests or to the workflow is checked
+but not released. The run summary states the decision and why.
 
 ## Jobs
 
