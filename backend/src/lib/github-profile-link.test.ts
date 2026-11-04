@@ -35,9 +35,9 @@ describe("github profile link", () => {
   });
 
   it("always shows GitHub's account picker", () => {
-    const url = new URL(authorizeUrl("cid", "https://codi.test/api/auth/callback/github/profile", "st"));
+    const url = new URL(authorizeUrl("cid", "https://codi.test/api/auth/callback/github", "st"));
     expect(url.searchParams.get("prompt")).toBe("select_account");
-    expect(url.searchParams.get("redirect_uri")).toBe("https://codi.test/api/auth/callback/github/profile");
+    expect(url.searchParams.get("redirect_uri")).toBe("https://codi.test/api/auth/callback/github");
     expect(url.searchParams.get("state")).toBe("st");
   });
 

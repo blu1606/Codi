@@ -6,8 +6,8 @@
 // the same GitHub id, and Better Auth never resolves sign-ins through it (no such social provider is configured).
 //
 // Flow: GET /api/github-profile/connect → github.com/login/oauth/authorize (prompt=select_account, so GitHub always
-// shows its page and the learner can pick another account) → GET /api/auth/callback/github/profile. The callback
-// path sits under the OAuth app's registered callback URL (/api/auth/callback/github), which GitHub requires.
+// shows its page and the learner can pick another account) → GET /api/auth/callback/github, the GitHub app's registered
+// callback, which tells this flow from Better Auth's by the state in the link cookie.
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
@@ -17,7 +17,7 @@ export const PROFILE_PROVIDER = "github-profile";
 /** Rows that can back the skill profile: the Codi-owned link first, then a "Sign in with GitHub" account. */
 export const PROFILE_PROVIDERS = [PROFILE_PROVIDER, "github"] as const;
 export const LINK_COOKIE = "codi_gh_link";
-export const CALLBACK_PATH = "/api/auth/callback/github/profile";
+export const CALLBACK_PATH = "/api/auth/callback/github";
 const SCOPE = "read:user";
 const STATE_TTL_S = 600;
 
