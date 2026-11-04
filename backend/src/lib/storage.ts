@@ -79,18 +79,23 @@ export async function uploadToR2({
     }),
   );
 
-  // If a public domain is configured and it's not the internal S3 endpoint, use it directly.
-  // Otherwise, use our reliable proxy endpoint /api/avatar?key=...
-  const publicUrl = ENV.R2_PUBLIC_URL;
-  let finalUrl: string;
-
-  if (publicUrl && !publicUrl.includes(".r2.cloudflarestorage.com")) {
-    finalUrl = `${publicUrl.replace(/\/$/, "")}/${key}`;
-  } else {
-    finalUrl = `/api/avatar?key=${encodeURIComponent(key)}`;
-  }
+  // A public storage domain serves the file directly; otherwise our proxy endpoint /api/avatar?key=... does.
+  const publicBase = publicStorageBase();
+  const finalUrl = publicBase ? `${publicBase}/${key}` : `/api/avatar?key=${encodeURIComponent(key)}`;
 
   return { key, url: finalUrl };
+}
+
+/**
+ * Base URL (no trailing slash) that serves uploaded files to browsers directly, or null when they go through the
+ * same-origin proxies (/api/avatar, /api/lesson-media). R2_PUBLIC_URL counts only when it is a public domain: the
+ * S3 API endpoint (*.r2.cloudflarestorage.com) needs signed requests, so its files are always proxied. The page's
+ * Content-Security-Policy allows this origin (server.ts).
+ */
+export function publicStorageBase(): string | null {
+  const publicUrl = ENV.R2_PUBLIC_URL;
+  if (!publicUrl || publicUrl.includes(".r2.cloudflarestorage.com")) return null;
+  return publicUrl.replace(/\/$/, "");
 }
 
 /**
