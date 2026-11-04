@@ -8,6 +8,7 @@ dưới mỗi sơ đồ ghi rõ phần nào đã chạy thật (kiểm tra ngày
 | [01-cicd-pipeline.png](01-cicd-pipeline.png) | Đường đi của code từ pull request tới production |
 | [02-production-runtime.png](02-production-runtime.png) | Các thành phần chạy trên VPS và dịch vụ bên ngoài |
 | [03-observability-and-backup.png](03-observability-and-backup.png) | Giám sát, cảnh báo và sao lưu |
+| [04-observability-explained.png](04-observability-explained.png) | Giải thích giám sát cho người mới: 3 trụ cột, Alloy thu gì, Prometheus/Loki/Grafana, cảnh báo Discord |
 
 ## 1. CI/CD
 
@@ -48,6 +49,10 @@ dưới mỗi sơ đồ ghi rõ phần nào đã chạy thật (kiểm tra ngày
 | Backup 02:00 bằng `pg_dump`, giữ 7 ngày trên VPS, 30 ngày trên R2 | **Đã có** (`/etc/cron.d/codi-backup`, [backup-offsite.sh](../../deploy/backup-offsite.sh)) |
 | Cảnh báo về Discord | **Đã có** cho release, rollback và backup lỗi; báo cáo ngày lúc 08:00 ([daily-digest.sh](../../deploy/daily-digest.sh)) |
 | Dashboard và alert rule trên Grafana | Theo cấu hình [provision-grafana.mjs](../../deploy/monitoring/provision-grafana.mjs) |
+
+Bản giải thích từng phần (dùng khi thuyết trình):
+
+![Observability explained](04-observability-explained.png)
 
 Chi tiết vận hành: [deployment.md](../deployment.md). Hiệu năng và bảo mật đã đo: [README](../../README.md).
 
