@@ -1,0 +1,14 @@
+{
+  "name": "@codi-1/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "1.0.0-rc.4",
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
+  }
+}

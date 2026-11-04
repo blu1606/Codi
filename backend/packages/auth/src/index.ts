@@ -1,0 +1,204 @@
+import { eq } from "drizzle-orm";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+import type { Database } from "@codi-1/db";
+import * as schema from "@codi-1/db/schema/auth";
+import { userRoles } from "@codi-1/db/schema/roles";
+import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { nextCookies } from "better-auth/next-js";
+import { captcha, emailOTP } from "better-auth/plugins";
+import { Resend } from "resend";
+
+import { getChangeEmailOTPEmailHtml, getResetPasswordOTPEmailHtml, getVerificationOTPEmailHtml } from "./email-templates";
+import { ROLE } from "./rbac";
+import { getAuthOriginConfig, type AuthOriginConfig } from "./auth-origin";
+import { accountPasswordRecovery } from "./account-password-recovery";
+
+export * from "./rbac";
+export { createMailer, type Mailer, type MailMessage } from "./mailer";
+export { hashPassword, verifyPassword } from "better-auth/crypto";
+
+export type AuthConfig = AuthOriginConfig & {
+  BETTER_AUTH_URL: string;
+  BETTER_AUTH_SECRET: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  /** Cloudflare Turnstile secret. When set, email sign-up requires a solved Turnstile challenge. */
+  TURNSTILE_SECRET_KEY?: string;
+};
+
+export function createAuth(env: AuthConfig, database: Database) {
+  const resendApiKey = env.RESEND_API_KEY || process.env.RESEND_API_KEY;
+  const resend = resendApiKey ? new Resend(resendApiKey) : null;
+  const fromAddress = env.EMAIL_FROM || process.env.EMAIL_FROM || "Codi <noreply@hoangblue.dev>";
+
+  const otpPlugin = emailOTP({
+    otpLength: 6,
+    expiresIn: 120,
+    sendVerificationOnSignUp: true,
+    changeEmail: { enabled: true },
+    sendVerificationOTP: async ({ email, otp, type }) => {
+      if (type === "change-email" || type === "forget-password") {
+        // codi-rebuild: without a Resend key the code is logged instead of mailed, so local flows never block.
+        if (!resend) {
+          console.log(`[Auth OTP for ${email}]: ${otp} (Type: ${type}, Hết hạn sau 2 phút)`);
+          return;
+        }
+        const result = await resend.emails.send({
+          from: fromAddress,
+          to: email,
+          subject: type === "change-email" ? "Mã xác thực đổi email Codi" : "Mã OTP đặt lại mật khẩu Codi",
+          html: type === "change-email" ? getChangeEmailOTPEmailHtml({ otp }) : getResetPasswordOTPEmailHtml({ otp }),
+        });
+        if (result.error) throw new Error("Could not send the verification code.");
+        return;
+      }
+      if (resend) {
+        try {
+          const result = await resend.emails.send({
+            from: fromAddress,
+            to: email,
+            subject: "Mã OTP xác thực tài khoản Codi",
+            html: getVerificationOTPEmailHtml({ otp }),
+          });
+          if (result.error) {
+            console.warn(`\n⚠️ [Resend Error]: ${result.error.message}\n👉 [Fallback OTP for ${email}]: ${otp} (Hết hạn sau 2 phút)\n`);
+          }
+        } catch (error) {
+          console.error("[Resend] Failed to send OTP email:", error);
+          console.log(`👉 [Fallback OTP for ${email}]: ${otp}`);
+        }
+      } else {
+        console.log(`[Auth OTP for ${email}]: ${otp} (Type: ${type}, Hết hạn sau 2 phút)`);
+      }
+    },
+  });
+
+  return betterAuth({
+    database: drizzleAdapter(database, {
+      provider: "pg",
+      schema,
+    }),
+    ...getAuthOriginConfig(env),
+    emailAndPassword: {
+      enabled: true,
+      revokeSessionsOnPasswordReset: true,
+    },
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google", "github"],
+        // Linking GitHub for the skill profile happens from a signed-in session, and a
+        // learner's GitHub email rarely equals their Codi email. Better Auth only applies
+        // this to explicit linkSocial flows, not to sign-in auto-linking.
+        allowDifferentEmails: true,
+      },
+    },
+    secret: env.BETTER_AUTH_SECRET,
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/email-otp/request-email-change") return;
+        // Email-change requests must report delivery failures, rather than
+        // swallowing them through Better Auth's background-task helper.
+        return {
+          context: {
+            context: {
+              runInBackgroundOrAwait: async (promise: void | Promise<unknown>) => { await promise; },
+            },
+          },
+        };
+      }),
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/email-otp/request-email-change" || !ctx.context.session) return;
+        const response = ctx.context.returned;
+        if (!response || typeof response !== "object" || !("success" in response) || response.success !== true) return;
+        if (typeof ctx.body?.newEmail !== "string") return;
+        // The OTP plugin silently returns success for an occupied address.
+        // After its session checks, report that the email cannot be used so
+        // signed-in users are not asked to enter a code that was never sent.
+        const existingAccount = await ctx.context.internalAdapter.findUserByEmail(ctx.body.newEmail.toLowerCase());
+        if (existingAccount) {
+          throw new APIError("BAD_REQUEST", {
+            code: "EMAIL_UNAVAILABLE",
+            message: "This email cannot be used for an email change.",
+          });
+        }
+      }),
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            // idempotent via onConflictDoNothing, not check-then-insert: a retried hook
+            // call (or future OAuth account linking) can safely race this same insert.
+            await database
+              .insert(userRoles)
+              .values({ userId: user.id, roleId: ROLE.LEARNER, grantedBy: null })
+              .onConflictDoNothing();
+          },
+        },
+      },
+      session: {
+        create: {
+          before: async (session) => {
+            const [dbUser] = await database
+              .select({ banned: schema.user.banned })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId));
+
+            if (dbUser?.banned) {
+              throw new APIError("UNAUTHORIZED", { message: "Tài khoản đã bị vô hiệu hoá." });
+            }
+            return { data: session };
+          },
+          after: async (session) => {
+            // Re-check after insertion to close the race condition with concurrent bans
+            const [dbUser] = await database
+              .select({ banned: schema.user.banned })
+              .from(schema.user)
+              .where(eq(schema.user.id, session.userId));
+
+            if (dbUser?.banned) {
+              await database.delete(schema.session).where(eq(schema.session.id, session.id));
+              throw new APIError("UNAUTHORIZED", { message: "Tài khoản đã bị vô hiệu hoá." });
+            }
+          }
+        }
+      }
+    },
+    plugins: [
+      nextCookies(),
+      otpPlugin,
+      accountPasswordRecovery(otpPlugin),
+      // The plugin reads the Turnstile token from the x-captcha-response header and asks Cloudflare to verify it
+      // before Better Auth creates the account or mails the verification code.
+      ...(env.TURNSTILE_SECRET_KEY
+        ? [captcha({ provider: "cloudflare-turnstile", secretKey: env.TURNSTILE_SECRET_KEY, endpoints: ["/sign-up/email"] })]
+        : []),
+    ],
+    socialProviders: {
+      ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID,
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+            },
+          }
+        : {}),
+      ...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+        ? {
+            github: {
+              clientId: env.GITHUB_CLIENT_ID,
+              clientSecret: env.GITHUB_CLIENT_SECRET,
+            },
+          }
+        : {}),
+    },
+  });
+}
+
+export type Session = ReturnType<typeof createAuth>["$Infer"]["Session"];

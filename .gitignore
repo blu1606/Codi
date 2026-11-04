@@ -1,0 +1,17 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+.impeccable/hook.cache.json
+.vitest/
+
+# backend: generated seed input (built from backend/scripts/seed-source)
+backend/scripts/data/
+
+# performance and browser test output (load-test credentials never live in the repo)
+perf/k6/results/
+perf/k6/**/*.csv
+.lighthouseci/
+e2e/report/
+e2e/results/

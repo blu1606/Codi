@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-02T18:00:00+07:00",
+  "title": "Design System: Codi",
+  "extensions": {
+    "colorMeta": {
+      "accent-teal": { "role": "primary", "displayName": "Deep Lagoon Teal", "canonical": "#0e7490", "dark": "#22d3ee", "tonalRamp": ["#083344", "#164e63", "#155e75", "#0e7490", "#0891b2", "#22d3ee", "#a5f3fc", "#ecfeff"] },
+      "accent-teal-hover": { "role": "primary", "displayName": "Lagoon Teal Deep", "canonical": "#155e75", "dark": "#0891b2" },
+      "accent-teal-active": { "role": "primary", "displayName": "Lagoon Teal Deepest", "canonical": "#164e63", "dark": "#67e8f9" },
+      "accent-mist": { "role": "primary", "displayName": "Lagoon Mist", "canonical": "#ecfeff", "dark": "#164e63" },
+      "accent-mist-border": { "role": "primary", "displayName": "Lagoon Mist Edge", "canonical": "#a5f3fc", "dark": "#0e7490" },
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#ffffff", "dark": "#1e293b (surface) / #0f172a (page)" },
+      "slate-wash": { "role": "neutral", "displayName": "Slate Wash", "canonical": "#f1f5f9", "dark": "#273449", "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#f1f5f9"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#111827", "dark": "#f1f5f9" },
+      "slate-muted": { "role": "neutral", "displayName": "Slate Muted", "canonical": "#475569", "dark": "#cbd5e1" },
+      "slate-faint": { "role": "neutral", "displayName": "Slate Faint", "canonical": "#64748b", "dark": "#94a3b8" },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#e5e7eb", "dark": "#334155" },
+      "hairline-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "#cbd5e1", "dark": "#475569" },
+      "success": { "role": "semantic", "displayName": "Success Green", "canonical": "#15803d", "dark": "#4ade80" },
+      "warn": { "role": "semantic", "displayName": "Warn Amber", "canonical": "#b45309", "dark": "#eab308" },
+      "danger": { "role": "semantic", "displayName": "Danger Red", "canonical": "#b91c1c", "dark": "#f87171" },
+      "info": { "role": "semantic", "displayName": "Info Blue", "canonical": "#0369a1", "dark": "#60a5fa" },
+      "board-navy": { "role": "tertiary", "displayName": "Board Navy", "canonical": "#0f172a", "dark": "#131d33" },
+      "board-navy-raise": { "role": "tertiary", "displayName": "Board Raise", "canonical": "#1e293b", "dark": "#1d2a44" },
+      "board-rule": { "role": "tertiary", "displayName": "Board Rule", "canonical": "#334155", "dark": "#33435f" },
+      "board-ink": { "role": "tertiary", "displayName": "Board Ink", "canonical": "#f8fafc" },
+      "board-muted": { "role": "tertiary", "displayName": "Board Muted", "canonical": "#a8b5c8" },
+      "line-teal-on-board": { "role": "data", "displayName": "Line 1 Teal (board)", "canonical": "#22d3ee" },
+      "line-blue-on-board": { "role": "data", "displayName": "Line 2 Blue (board)", "canonical": "#60a5fa" },
+      "line-amber-on-board": { "role": "data", "displayName": "Line 3 Amber (board)", "canonical": "#fbbf24" },
+      "line-green-on-board": { "role": "data", "displayName": "Line 4 Green (board)", "canonical": "#4ade80" },
+      "line-teal-on-page": { "role": "data", "displayName": "Line 1 Teal (page)", "canonical": "#0e7490", "dark": "#22d3ee" },
+      "line-blue-on-page": { "role": "data", "displayName": "Line 2 Blue (page)", "canonical": "#1d4ed8", "dark": "#60a5fa" },
+      "line-amber-on-page": { "role": "data", "displayName": "Line 3 Amber (page)", "canonical": "#b45309", "dark": "#fbbf24" },
+      "line-green-on-page": { "role": "data", "displayName": "Line 4 Green (page)", "canonical": "#15803d", "dark": "#4ade80" },
+      "mastery-0": { "role": "data", "displayName": "Mastery 0 · Chưa học", "canonical": "#cbd5e1", "dark": "#475569" },
+      "mastery-1": { "role": "data", "displayName": "Mastery 1 · Đang học", "canonical": "#94a3b8", "dark": "#64748b" },
+      "mastery-2": { "role": "data", "displayName": "Mastery 2 · Đang học khá", "canonical": "#67b7c9", "dark": "#06b6d4" },
+      "mastery-3": { "role": "data", "displayName": "Mastery 3 · Thành thạo", "canonical": "#1f8fa8", "dark": "#0891b2" },
+      "mastery-4": { "role": "data", "displayName": "Mastery 4 · Thành thạo vững", "canonical": "#0e7490", "dark": "#06b6d4" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Course title on the path page; dashboard lesson title at clamp(22px, 2.2vw, 30px)." },
+      "headline": { "displayName": "Headline", "purpose": "Page H1." },
+      "title-lg": { "displayName": "Title Large", "purpose": "H2 section headings." },
+      "title": { "displayName": "Title", "purpose": "H3, dialog titles, board headings." },
+      "body": { "displayName": "Body", "purpose": "All reading text; 16px floor for the projected demo." },
+      "body-sm": { "displayName": "Body Small", "purpose": "Captions, dense table cells, nav links." },
+      "label": { "displayName": "Label", "purpose": "Buttons, tabs, field labels." },
+      "caption": { "displayName": "Caption", "purpose": "Badges, mastery labels, ledger column heads." },
+      "mono": { "displayName": "Mono", "purpose": "Code, minutes, prices, points, timecodes; tabular figures." }
+    },
+    "shadows": [
+      { "name": "elev-raised", "value": "0 1px 2px rgba(15,23,42,0.06), 0 1px 3px rgba(15,23,42,0.08)", "purpose": "Pressed segment of a segmented control." },
+      { "name": "elev-pop", "value": "0 8px 24px rgba(15,23,42,0.14), 0 2px 6px rgba(15,23,42,0.08)", "purpose": "Popovers, dialogs, sheets." },
+      { "name": "board-lift", "value": "0 12px 32px -12px rgba(15,23,42,0.45)", "purpose": "Navy transit diagram frame only (dark: 0 16px 40px -16px rgba(0,0,0,0.7))." },
+      { "name": "window-sheet", "value": "0 1px 2px rgba(15,23,42,0.04), 0 12px 32px rgba(15,23,42,0.08)", "purpose": "Home product window only." },
+      { "name": "focus-ring", "value": "0 0 0 2px #ffffff, 0 0 0 4px var(--accent)", "purpose": "Every focusable control (dark: inner ring #0f172a)." }
+    ],
+    "motion": [
+      { "name": "motion-fast", "value": "150ms", "purpose": "Colour, border and background state changes." },
+      { "name": "motion-base", "value": "200ms", "purpose": "Progress fills and width changes." },
+      { "name": "ease-out", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "Default easing; all durations drop to 0 under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "xs", "value": "420px" },
+      { "name": "phone", "value": "480px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "tablet", "value": "768px" },
+      { "name": "nav-collapse", "value": "860px" },
+      { "name": "ledger-stack", "value": "900px" },
+      { "name": "md", "value": "1024px" },
+      { "name": "timetable", "value": "1180px" },
+      { "name": "lg", "value": "1280px" },
+      { "name": "xl", "value": "1440px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one filled action per screen or docked panel.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Học tiếp</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid transparent; border-radius: 6px; font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); font-size: 14px; font-weight: 600; line-height: 1.2; cursor: pointer; transition: background-color 150ms cubic-bezier(0.2,0,0,1), border-color 150ms cubic-bezier(0.2,0,0,1); } .ds-btn-primary { background: var(--accent, #0e7490); border-color: var(--accent, #0e7490); color: var(--accent-on, #ffffff); } .ds-btn-primary:hover { background: var(--accent-hover, #155e75); border-color: var(--accent-hover, #155e75); } .ds-btn-primary:active { background: var(--accent-active, #164e63); } .ds-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--accent, #0e7490); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Every other action beside the primary.",
+      "html": "<button class=\"ds-btn-secondary\">Khám phá khóa học</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 6px; background: var(--surface, #ffffff); color: var(--fg, #111827); font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); font-size: 14px; font-weight: 600; cursor: pointer; transition: background-color 150ms cubic-bezier(0.2,0,0,1); } .ds-btn-secondary:hover { background: var(--subtle, #f1f5f9); } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--accent, #0e7490); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis tools and header actions.",
+      "html": "<button class=\"ds-btn-ghost\">Bỏ qua</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 16px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--fg, #111827); font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); font-size: 14px; font-weight: 600; cursor: pointer; transition: background-color 150ms cubic-bezier(0.2,0,0,1); } .ds-btn-ghost:hover { background: var(--subtle, #f1f5f9); } .ds-btn-ghost:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--accent, #0e7490); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Labelled field, 44px, teal stroke and ring on focus.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Email</span><input class=\"ds-input\" placeholder=\"ban@vidu.vn\" /></label>",
+      "css": ".ds-field { display: grid; gap: 8px; font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); } .ds-field-label { font-size: 14px; font-weight: 600; color: var(--fg, #111827); } .ds-input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border-strong, #cbd5e1); border-radius: 6px; background: var(--surface, #ffffff); color: var(--fg, #111827); font: inherit; font-size: 16px; transition: border-color 150ms cubic-bezier(0.2,0,0,1), box-shadow 150ms cubic-bezier(0.2,0,0,1); } .ds-input::placeholder { color: var(--faint, #64748b); } .ds-input:focus-visible { outline: none; border-color: var(--accent, #0e7490); box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--accent, #0e7490); }"
+    },
+    {
+      "name": "Header Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "64px paper header; current link carries a 3px teal rail on the bottom rule.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link\" href=\"#\" aria-current=\"page\">Bàn làm việc</a><a class=\"ds-nav-link\" href=\"#\">Khóa học</a><a class=\"ds-nav-link\" href=\"#\">Lộ trình</a></nav>",
+      "css": ".ds-nav { display: flex; align-items: center; gap: 2px; height: 64px; padding: 0 24px; background: var(--surface, #ffffff); border-bottom: 1px solid var(--border, #e5e7eb); font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); } .ds-nav-link { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 6px; color: var(--muted, #475569); font-size: 14px; font-weight: 500; text-decoration: none; transition: color 150ms cubic-bezier(0.2,0,0,1), background-color 150ms cubic-bezier(0.2,0,0,1); } .ds-nav-link:hover { color: var(--fg, #111827); background: var(--subtle, #f1f5f9); } .ds-nav-link[aria-current='page'] { color: var(--accent-active, #164e63); font-weight: 600; } .ds-nav-link[aria-current='page']::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -10px; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent, #0e7490); } .ds-nav-link:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--accent, #0e7490); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "Pill status, always icon plus word.",
+      "html": "<span class=\"ds-badge ds-badge-success\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"/><path d=\"M22 4 12 14.01l-3-3\"/></svg>Đã chấm</span> <span class=\"ds-badge ds-badge-warn\">Cần sửa</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 2px 10px; border-radius: 9999px; border: 1px solid transparent; font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; } .ds-badge-success { background: var(--success-soft, #f0fdf4); color: var(--success, #15803d); } .ds-badge-warn { background: var(--warn-soft, #fffbeb); color: var(--warn, #b45309); }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Removable filter pill.",
+      "html": "<span class=\"ds-chip\">Trình độ: Cơ bản <button aria-label=\"Bỏ lọc\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\"><path d=\"M18 6 6 18M6 6l12 12\"/></svg></button></span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 6px 4px 12px; border-radius: 9999px; border: 1px solid var(--border-strong, #cbd5e1); background: var(--surface, #ffffff); color: var(--fg, #111827); font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); font-size: 14px; } .ds-chip button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted, #475569); cursor: pointer; } .ds-chip button:hover { background: var(--subtle, #f1f5f9); color: var(--fg, #111827); } .ds-chip button:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--accent, #0e7490); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Paper surface, hairline edge, flat at rest.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\">Thay đổi</div><div class=\"ds-card-body\">Bài 6 được đưa lên sau bài kiểm tra gần nhất.</div></div>",
+      "css": ".ds-card { background: var(--surface, #ffffff); border: 1px solid var(--border, #e5e7eb); border-radius: 12px; font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); color: var(--fg, #111827); } .ds-card-header { padding: 16px 24px; border-bottom: 1px solid var(--border, #e5e7eb); font-family: var(--font-display, Lexend, sans-serif); font-weight: 600; font-size: 20px; } .ds-card-body { padding: 24px; font-size: 16px; line-height: 1.55; }"
+    },
+    {
+      "name": "Departure Board",
+      "kind": "custom",
+      "refersTo": "departure-board",
+      "description": "The one navy object: next lessons as departures with line chips; current row ringed.",
+      "html": "<section class=\"ds-board\"><h3 class=\"ds-board-h\">Chuyến tiếp theo</h3><ol class=\"ds-dep\"><li class=\"ds-dep-row is-current\"><span class=\"ds-line\" style=\"background:#22d3ee\">1</span><span>Biến và kiểu dữ liệu<small>JavaScript nền tảng</small></span><span class=\"ds-mono\">12 phút</span></li><li class=\"ds-dep-row\"><span class=\"ds-line\" style=\"background:#fbbf24\">3</span><span>Hàm và phạm vi<small>JavaScript nền tảng</small></span><span class=\"ds-mono\">18 phút</span></li></ol></section>",
+      "css": ".ds-board { background: #0f172a; color: #f8fafc; border-radius: 12px; padding: 24px; display: grid; gap: 16px; font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); } .ds-board-h { margin: 0; padding-bottom: 12px; border-bottom: 1px solid #334155; font-family: var(--font-display, Lexend, sans-serif); font-size: 20px; font-weight: 600; } .ds-dep { list-style: none; margin: 0; padding: 0; display: grid; } .ds-dep-row { display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: 16px; align-items: center; padding: 12px; margin: 0 -12px; border-bottom: 1px solid #334155; border-radius: 6px; font-size: 16px; } .ds-dep-row:last-child { border-bottom: 0; } .ds-dep-row small { display: block; color: #a8b5c8; font-size: 14px; } .ds-dep-row.is-current { background: rgba(255,255,255,0.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35); } .ds-line { width: 40px; height: 40px; border-radius: 6px; display: grid; place-items: center; color: #0f172a; font-family: var(--font-mono, 'JetBrains Mono', monospace); font-weight: 700; } .ds-mono { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Mastery Meter",
+      "kind": "custom",
+      "refersTo": "mastery-3",
+      "description": "Five-step mastery squares, always with the text label.",
+      "html": "<span class=\"ds-mastery\"><span class=\"ds-dots\"><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i class=\"on\"></i><i></i></span>Thành thạo</span>",
+      "css": ".ds-mastery { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-body, 'Be Vietnam Pro', system-ui, sans-serif); font-size: 12px; font-weight: 600; color: var(--muted, #475569); } .ds-dots { display: inline-flex; gap: 3px; } .ds-dots i { width: 8px; height: 8px; border-radius: 2px; background: var(--subtle, #f1f5f9); border: 1px solid var(--border-strong, #cbd5e1); } .ds-dots i.on { background: var(--mastery-3, #1f8fa8); border-color: transparent; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Concourse and the Board",
+    "overview": "Codi is a bright, quiet concourse of white paper and slate-wash panels divided by hairlines, and on each screen one navy board hangs in it: the transit diagram on the course path, the departure board on the learner dashboard, the video or code frame in the lesson, the code stage in the home product window. Everything you read for orientation lives on the concourse; the one thing you look up at lives on the board. Deep cyan-teal marks the single action to take and the place you are.\n\nDensity is working-product density for a projected demo: body text at 16 px, captions no smaller than 12 px, 44 px touch targets everywhere, status in words with an icon beside the colour. Structure is carried by hairline rules and tabular columns (comparison ledger, lesson timetable, rubric ledger, change list) rather than stacks of boxed cards. Learning is drawn as transit: chapters are coloured lines, lessons are stations, the current lesson is a white ring, the next lessons are departures.\n\nThe system refuses the generic course-site defaults the surfaces were redesigned away from: stock hero photo with three feature cards and a stats row, four equal stat cards over a card grid, a chat bubble floating over the lesson, and generic cards stacked inside generic cards.",
+    "keyCharacteristics": [
+      "White and slate-wash ground, 1px hairlines, almost no shadow at rest.",
+      "One navy object per screen; teal for one primary action, the current place and progress.",
+      "Transit vocabulary: four line colours, station dots, a white \"you are here\" ring.",
+      "Lexend headings, Be Vietnam Pro body, JetBrains Mono tabular figures for minutes, prices, points and timecodes.",
+      "Light and dark themes, both AA; status never by colour alone."
+    ],
+    "rules": [
+      { "name": "The One Dark Object Rule", "body": "A screen carries at most one navy board. Everything else is paper, slate wash and hairline; a second dark panel turns the board into decoration.", "section": "colors" },
+      { "name": "The One Filled Teal Rule", "body": "One filled teal button per screen or docked panel (\"Học tiếp\", \"Mua ngay\", \"Lưu điểm\"); every other action is secondary, ghost or a link.", "section": "colors" },
+      { "name": "The Two Line Sets Rule", "body": "Line colours on navy use the board set; line colours on paper use the page set. Never put a board-set colour on paper or a page-set colour on navy.", "section": "colors" },
+      { "name": "The Tabular Figures Rule", "body": "Any number compared down a column (minutes, VND, points, counts) uses tabular figures, in JetBrains Mono or tabular-nums, right-aligned in tables.", "section": "typography" },
+      { "name": "The Sentence Case Rule", "body": "No uppercase on Vietnamese text and no tracked-out labels; hierarchy comes from size and weight. Codes the user types (voucher codes) may display uppercase.", "section": "typography" },
+      { "name": "The Hairline Over Box Rule", "body": "Repeated items are rows separated by 1px hairlines inside one surface, not individual bordered cards.", "section": "layout" },
+      { "name": "The Flat-At-Rest Rule", "body": "Cards, panels, tables and the board rows have no shadow at rest; hover changes border or tint, not elevation.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep exactly one navy object (#0f172a light, #131d33 dark) per screen, and give it the departure or transit job.",
+      "Do keep one filled teal button per screen or docked panel; make everything else secondary, ghost or link.",
+      "Do separate repeated items with 1px hairlines (#e5e7eb) inside one surface; use tabular mono figures for minutes, prices and points.",
+      "Do pair every status colour with a word and an icon, and every mastery fill with its label.",
+      "Do keep text at 16 px for reading, 44 px minimum targets, and the two-ring focus shadow on every control.",
+      "Do use credited free-licence photographs (Pexels, recorded in public/images/CREDITS.json) for course and avatar imagery, and label product illustrations as sample data."
+    ],
+    "donts": [
+      "Don't put a second dark panel on a screen that already has its board.",
+      "Don't use board-set line colours on paper or page-set line colours on navy.",
+      "Don't uppercase or letter-space Vietnamese labels.",
+      "Don't add shadows to resting cards, panels or rows; elevation is for things that float.",
+      "Don't default to a stock hero with three feature cards and a stats row, or four equal stat cards over a course-card grid.",
+      "Don't convey state by colour alone, including the line colours, which always carry a lesson number or chapter name."
+    ]
+  }
+}

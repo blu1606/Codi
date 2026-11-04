@@ -1,0 +1,1 @@
+ALTER TABLE "student_study_clocks" ADD COLUMN "tracker_id" uuid;

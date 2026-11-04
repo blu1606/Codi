@@ -1,0 +1,16 @@
+{
+  "name": "next",
+  "version": "16.3.5",
+  "private": true,
+  "description": "Shim, not Next.js: minimal next/server, next/headers and next/cache so Codi route handlers and server actions run on Hono.",
+  "type": "module",
+  "exports": {
+    "./server": { "types": "./server.d.ts", "default": "./server.js" },
+    "./server.js": { "types": "./server.d.ts", "default": "./server.js" },
+    "./headers": { "types": "./headers.d.ts", "default": "./headers.js" },
+    "./headers.js": { "types": "./headers.d.ts", "default": "./headers.js" },
+    "./cache": { "types": "./cache.d.ts", "default": "./cache.js" },
+    "./cache.js": { "types": "./cache.d.ts", "default": "./cache.js" },
+    "./request-context": { "types": "./request-context.d.ts", "default": "./request-context.js" }
+  }
+}

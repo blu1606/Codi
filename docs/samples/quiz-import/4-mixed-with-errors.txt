@@ -1,0 +1,47 @@
+Câu 1 (hợp lệ). Hàm nào chuyển chuỗi "42" thành số?
+A. String
+* B. Number
+C. Boolean
+D. Array
+
+Câu 2 (lỗi: chưa đánh dấu đáp án đúng). Vòng lặp nào luôn chạy ít nhất một lần?
+A. for
+B. while
+C. do...while
+D. for...of
+
+Câu 3 (lỗi: hai đáp án có dấu *). Cách nào khai báo hàm?
+* A. function tinh() {}
+* B. const tinh = () => {}
+C. tinh => function
+
+Câu 4 (lỗi: chỉ có 1 phương án). JavaScript chạy được ở đâu?
+* A. Trình duyệt
+
+Câu 5 (lỗi: dòng không nhận dạng). Kết quả của 2 + "2"?
+A. 4
+* B. "22"
+Đây là một dòng ghi chú không đúng định dạng
+C. NaN
+
+Câu 6 (lỗi: phương án trống). Toán tử so sánh nghiêm ngặt là?
+A. ==
+* B. ===
+C.
+D. =
+
+Câu 7 (lỗi: quá 6 phương án). Đâu là kiểu dữ liệu nguyên thuỷ?
+* A. string
+B. object
+C. array
+D. function
+E. map
+F. set
+- weakmap
+
+Câu 8 (hợp lệ). Phương thức nào dừng sự kiện nổi bọt lên phần tử cha?
+A. preventDefault()
+* B. stopPropagation()
+C. removeEventListener()
+D. dispatchEvent()
+Giải thích: preventDefault chỉ chặn hành vi mặc định, không chặn nổi bọt.

@@ -1,0 +1,183 @@
+{
+  "target": "http://localhost:3101",
+  "loadRps": 40,
+  "loadStartedAt": 1793762932138,
+  "loadEndedAt": 1793763311555,
+  "phases": [
+    {
+      "label": "ramp",
+      "seconds": 60,
+      "rps": 40
+    },
+    {
+      "label": "load-40",
+      "seconds": 40,
+      "rps": 40
+    },
+    {
+      "label": "ramp-60",
+      "seconds": 10,
+      "rps": 60
+    },
+    {
+      "label": "step-60",
+      "seconds": 40,
+      "rps": 60
+    },
+    {
+      "label": "ramp-80",
+      "seconds": 10,
+      "rps": 80
+    },
+    {
+      "label": "step-80",
+      "seconds": 40,
+      "rps": 80
+    },
+    {
+      "label": "ramp-100",
+      "seconds": 10,
+      "rps": 100
+    },
+    {
+      "label": "step-100",
+      "seconds": 40,
+      "rps": 100
+    },
+    {
+      "label": "ramp-120",
+      "seconds": 10,
+      "rps": 120
+    },
+    {
+      "label": "step-120",
+      "seconds": 40,
+      "rps": 120
+    },
+    {
+      "label": "ramp-140",
+      "seconds": 10,
+      "rps": 140
+    },
+    {
+      "label": "step-140",
+      "seconds": 40,
+      "rps": 140
+    },
+    {
+      "label": "ramp-170",
+      "seconds": 10,
+      "rps": 170
+    },
+    {
+      "label": "step-170",
+      "seconds": 40,
+      "rps": 170
+    },
+    {
+      "label": "ramp-200",
+      "seconds": 10,
+      "rps": 200
+    },
+    {
+      "label": "step-200",
+      "seconds": 40,
+      "rps": 200
+    },
+    {
+      "label": "ramp-240",
+      "seconds": 10,
+      "rps": 240
+    },
+    {
+      "label": "step-240",
+      "seconds": 40,
+      "rps": 240
+    },
+    {
+      "label": "cooldown",
+      "seconds": 20,
+      "rps": 0
+    }
+  ],
+  "rows": [
+    {
+      "phase": "load-40",
+      "offeredRps": 40,
+      "seconds": 40,
+      "achievedRps": 40,
+      "requests": 1600,
+      "p50": 10.95645,
+      "p95": 97.75202999999995,
+      "p99": 137.84472699999998,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-60",
+      "offeredRps": 60,
+      "seconds": 40,
+      "achievedRps": 60,
+      "requests": 2400,
+      "p50": 15.05565,
+      "p95": 297.8452549999996,
+      "p99": 690.6729309999995,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-80",
+      "offeredRps": 80,
+      "seconds": 40,
+      "achievedRps": 76.85,
+      "requests": 3074,
+      "p50": 597.57905,
+      "p95": 4716.9875,
+      "p99": 6522.180239999999,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-100",
+      "offeredRps": 100,
+      "seconds": 40,
+      "achievedRps": 82.25,
+      "requests": 3290,
+      "p50": 993.43145,
+      "p95": 6076.021909999999,
+      "p99": 8787.151298,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-120",
+      "offeredRps": 120,
+      "seconds": 40,
+      "achievedRps": 92.7,
+      "requests": 3708,
+      "p50": 1356.6084,
+      "p95": 7604.758829999998,
+      "p99": 10391.514836999999,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-140",
+      "offeredRps": 140,
+      "seconds": 40,
+      "achievedRps": 101.4,
+      "requests": 4056,
+      "p50": 1613.8082,
+      "p95": 4238.4427749999995,
+      "p99": 11999.480834999998,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-170",
+      "offeredRps": 170,
+      "seconds": 19.416999999999973,
+      "achievedRps": 91.00272956687452,
+      "requests": 1767,
+      "p50": 74.3098,
+      "p95": 5494.5694,
+      "p99": 5822.313451999999,
+      "failedRate": 0
+    }
+  ],
+  "dropped": 1033
+}
