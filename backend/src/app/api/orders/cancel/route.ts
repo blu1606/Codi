@@ -4,6 +4,7 @@ import { and, eq, or, sql } from "drizzle-orm";
 import { auth, db } from "@/services";
 import { orderItems, orders } from "@codi-1/db";
 import { studentCart, studentTransactions } from "@codi-1/db/schema/student-profile";
+import { adminOrderUrl, DISCORD_COLOR, formatVnd, maskEmail, notifyDiscord } from "@/lib/discord-notify";
 
 export async function POST(req: Request) {
   try {
@@ -132,7 +133,7 @@ export async function POST(req: Request) {
           );
       }
 
-      return true;
+      return { orderId: lockedOrder.id, code: lockedOrder.code, receivedAmount: lockedOrder.receivedAmount };
     });
 
     if (!cancelled) {
@@ -140,6 +141,20 @@ export async function POST(req: Request) {
         { error: "Đơn hàng không tồn tại, đã hoàn tất thanh toán hoặc đã được huỷ trước đó." },
         { status: 404 },
       );
+    }
+
+    // A partial transfer already arrived for this order, so the shop now owes the buyer that money back.
+    if (typeof cancelled === "object" && cancelled.receivedAmount > 0) {
+      void notifyDiscord({
+        title: `↩️ Cần hoàn tiền · ${cancelled.code}`,
+        color: DISCORD_COLOR.attention,
+        url: adminOrderUrl(cancelled.orderId),
+        description: "Người mua huỷ đơn sau khi đã chuyển một phần tiền.",
+        fields: [
+          { name: "Đã nhận", value: formatVnd(cancelled.receivedAmount), inline: true },
+          { name: "Người mua", value: maskEmail(session.user.email), inline: true },
+        ],
+      });
     }
 
     return NextResponse.json({ success: true, message: "Đã hủy đơn hàng thành công" });

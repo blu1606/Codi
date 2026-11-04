@@ -45,6 +45,8 @@ export const ENV = {
   OPENAI_API_KEY: read("OPENAI_API_KEY"),
   RESEND_API_KEY: read("RESEND_API_KEY"),
   EMAIL_FROM: read("EMAIL_FROM"),
+  // Team Discord channel for sales, payments that need a human and refunds owed. Unset turns it off.
+  DISCORD_WEBHOOK_URL: read("DISCORD_WEBHOOK_URL"),
   GOOGLE_CLIENT_ID: read("GOOGLE_CLIENT_ID"),
   GOOGLE_CLIENT_SECRET: read("GOOGLE_CLIENT_SECRET"),
   GITHUB_CLIENT_ID: read("GITHUB_CLIENT_ID"),
