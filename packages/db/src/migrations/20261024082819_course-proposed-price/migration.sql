@@ -1,1 +1,0 @@
-ALTER TABLE "courses" ADD COLUMN "proposed_price" integer;
