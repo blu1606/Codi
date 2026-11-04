@@ -53,8 +53,8 @@ A failed release rolls back automatically. To go back after a release that passe
 `sh /opt/codi-rebuild/rollback.sh` (previous release) or `rollback.sh <sha>`, see [deployment.md](deployment.md).
 Reverting the commit on `main` and letting the workflow deploy the revert works too.
 
-## Requiring CI before merge
+## Merging
 
-The workflow does not block merges by itself. To make it a gate, protect `develop` and `main` (Settings → Branches)
-with the required status checks "Typecheck, unit tests, build, security check" and "E2E (Playwright) and security
-probe on the production image". Merge pull requests with **Create a merge commit**, which keeps each branch's commits.
+Branch protection is deliberately off (team decision, 2026-11-04): a red CI run does not block the merge button, so
+check the run before merging. It still blocks the release, because the deploy job needs both check jobs. Merge pull
+requests with **Create a merge commit**, which keeps each branch's commits.
