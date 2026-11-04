@@ -20,10 +20,13 @@ async function recordViolations(page: Page) {
   return { assertNone: () => expect(violations, "CSP violations").toEqual([]) };
 }
 
+// Pages with Cloudflare Turnstile (sign-up, when its keys are set) keep a connection open and never reach
+// "networkidle", so that wait is best effort: it only gives late requests time to report violations.
 async function visit(page: Page, path: string) {
   await page.goto(path);
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("load");
   await expect(page.locator("#app-main")).toBeVisible();
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => {});
 }
 
 test.describe("Content-Security-Policy", () => {
