@@ -1,5 +1,6 @@
 # Codi rebuild
 
+[![CI/CD](https://github.com/blu1606/Codi/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/blu1606/Codi/actions/workflows/ci-cd.yml)
 ![unit tests](https://img.shields.io/badge/unit%20tests-138%20passed-2ea44f)
 ![e2e](https://img.shields.io/badge/Playwright-15%2F15%20passed-2ea44f)
 ![npm audit](https://img.shields.io/badge/npm%20audit-0%20high%2Fcritical-2ea44f)
@@ -16,6 +17,7 @@ sang Hono) với PostgreSQL, đóng gói thành một Docker image.
 
 - Chạy trên máy: [docs/getting-started.md](docs/getting-started.md)
 - Deploy, release và rollback: [docs/deployment.md](docs/deployment.md)
+- CI/CD (kiểm tra mọi PR, deploy lên VPS khi merge vào `main`): [docs/ci-cd.md](docs/ci-cd.md)
 - Kiểm thử bảo mật: [docs/security-testing.md](docs/security-testing.md)
 - Kiểm thử hiệu năng (chi tiết): [docs/performance-testing.md](docs/performance-testing.md)
 
