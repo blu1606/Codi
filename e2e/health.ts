@@ -7,6 +7,9 @@ export function watchHealth(page: Page, baseURL: string) {
   const problems: string[] = [];
   page.on("pageerror", (error) => problems.push(`page error: ${error.message}`));
   page.on("console", (msg) => {
+    // Third-party frames (the Turnstile challenge on sign-up) log their own errors under their provider's policy.
+    const source = msg.location().url;
+    if (source && !source.startsWith(origin)) return;
     // The network copy of a failed request is recorded below with its URL; this one has no context.
     if (msg.type() === "error" && !/^Failed to load resource/.test(msg.text())) problems.push(`console: ${msg.text()}`);
   });
