@@ -10,10 +10,10 @@ import { Codi, useCodi } from '../../lib/codi';
 import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { LoadingRegion, ShellIcon, Skel } from './shell-ui';
+import { notificationPath } from './notification-link';
 
 const POLL_MS = 30000;
 const timeFmt = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
-const isSafeLink = (link) => typeof link === 'string' && link.startsWith('/') && !link.startsWith('//') && !/[\\\u0000- ]/.test(link);
 
 export default function NotificationMenu({ open, onToggle, onClose }) {
   useCodi();
@@ -64,7 +64,8 @@ export default function NotificationMenu({ open, onToggle, onClose }) {
     }
     setBusy(false);
     setRefresh((x) => x + 1);
-    if (item && isSafeLink(item.link)) { onClose(); Codi.go(item.link); }
+    const path = item ? notificationPath(item.link) : null;
+    if (path) { onClose(); Codi.go(path); }
   };
 
   return (

@@ -18,7 +18,7 @@ function nodeTestFiles() {
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["backend/src/**/*.test.ts", "backend/packages/*/src/**/*.test.ts"],
+    include: ["backend/src/**/*.test.ts", "backend/packages/*/src/**/*.test.ts", "frontend/src/features/shell/notification-link.test.js"],
     exclude: ["**/node_modules/**", ...nodeTestFiles()],
     alias: { "@/": path.join(root, "backend/src") + "/" },
   },
