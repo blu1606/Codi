@@ -7,6 +7,8 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { compress } from "hono/compress";
+import { secureHeaders } from "hono/secure-headers";
 import { aiWorkerEnabled, startAiWorker } from "./host/ai-worker";
 import { mountNextRoutes } from "./host/next-routes";
 import { mountServerActions } from "./host/server-actions";
@@ -18,6 +20,18 @@ const port = Number(process.env.API_PORT || 4100);
 
 async function main() {
   const app = new Hono();
+
+  // Security headers on every response (pages and API). HSTS is ignored by browsers over plain http, so local runs
+  // are unaffected. No Content-Security-Policy yet: the pages load Google Fonts, YouTube embeds, SePay QR images and
+  // R2 media, and a policy needs its own test pass. COOP/CORP keep Hono's same-origin defaults (no popups are used).
+  app.use(
+    "*",
+    secureHeaders({
+      strictTransportSecurity: "max-age=31536000",
+      xFrameOptions: "DENY",
+      referrerPolicy: "strict-origin-when-cross-origin",
+    }),
+  );
 
   // `release` is the image tag (git short sha) set by deploy/compose.yml, so release.sh, rollback.sh and the fast
   // check can confirm which build answers.
@@ -43,6 +57,19 @@ async function main() {
   const webDist = process.env.WEB_DIST;
   if (webDist) {
     const indexHtml = readFileSync(path.join(webDist, "index.html"), "utf8");
+    // Frontend only: gzip (the main bundle is ~1.3 MB raw, ~0.35 MB gzipped) and caching. Vite fingerprints
+    // /assets/* file names, so they never change and can be cached for a year; everything else (index.html, icons)
+    // is revalidated so a release shows up on the next load. API responses are left alone: compressing them would
+    // buffer the AI tutor's streamed answers.
+    const gzip = compress();
+    app.use("*", async (c, next) => {
+      if (c.req.path.startsWith("/api/")) return next();
+      await gzip(c, async () => {
+        await next();
+        if (c.res.status !== 200) return;
+        c.header("Cache-Control", c.req.path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
+      });
+    });
     app.use("*", serveStatic({ root: webDist }));
     app.get("*", (c, next) => (c.req.path.startsWith("/api/") ? next() : c.html(indexHtml)));
   }
