@@ -16,7 +16,7 @@ dưới mỗi sơ đồ ghi rõ phần nào đã chạy thật (kiểm tra ngày
 | Thành phần trong sơ đồ | Hiện trạng |
 |---|---|
 | CI trên mọi pull request: typecheck, unit test, E2E Playwright, quét bảo mật, Docker build | **Đã có** ([ci-cd.yml](../../.github/workflows/ci-cd.yml), [ci-cd.md](../ci-cd.md)). Quét bảo mật dùng `security:check` (secret, `npm audit`) và security probe; chưa có gitleaks và Trivy. Chưa có ESLint |
-| Branch protection (mọi check xanh, 1 review) | **Chưa bật**; tên các check cần bắt buộc ghi trong [ci-cd.md](../ci-cd.md) |
+| Branch protection (mọi check xanh, 1 review) | **Không bật** (quyết định của nhóm, 2026-11-04): CI vẫn chạy trên mọi PR và chặn deploy khi đỏ, nhưng không chặn nút merge |
 | Build image một lần, đẩy lên GHCR, staging và production kéo cùng image | **Chưa**: job deploy build image rồi truyền thẳng qua SSH lên VPS |
 | CD staging khi push `develop` | **Chưa** có môi trường staging; push `develop` chỉ chạy CI |
 | CD production khi push `main`: `release.sh` (backup, migrate, health, fastcheck) | **Đã có** |
@@ -53,8 +53,9 @@ Chi tiết vận hành: [deployment.md](../deployment.md). Hiệu năng và bả
 
 ## Việc còn lại để khớp sơ đồ
 
-1. Bật branch protection cho `develop` và `main`.
-2. Tắt đăng nhập SSH bằng mật khẩu, tạo user `deploy` cho CI thay cho `root`.
-3. Thêm người duyệt cho environment `production`.
-4. Đẩy image lên GHCR và dựng môi trường staging khi push `develop`.
-5. Thêm gitleaks, Trivy và ESLint vào CI.
+1. Tắt đăng nhập SSH bằng mật khẩu, tạo user `deploy` cho CI thay cho `root`.
+2. Thêm người duyệt cho environment `production`.
+3. Đẩy image lên GHCR và dựng môi trường staging khi push `develop`.
+4. Thêm gitleaks, Trivy và ESLint vào CI.
+
+Branch protection được cố ý không bật (xem bảng CI/CD ở trên).
