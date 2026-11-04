@@ -39,7 +39,18 @@ done
 
 [ -n "$PREV" ] && env_set PREVIOUS_RELEASE "$PREV"
 env_set RELEASE "$TAG"
-docker compose run --rm --no-deps app npx tsx scripts/migrate.ts 2>&1 | grep -v "npm notice" | tail -2
+# Not a pipeline: sh has no pipefail, so `migrate | tail` would hide a failed migration and the new image would start
+# on the old schema. The running app is untouched until switch_to, so a failure only has to point .env back at it.
+if ! docker compose run --rm --no-deps app npx tsx scripts/migrate.ts > migrate.log 2>&1; then
+  grep -v "npm notice" migrate.log | tail -20
+  env_set RELEASE "$CURRENT"
+  env_set PREVIOUS_RELEASE "$OLD_PREVIOUS"
+  log_release "deployed=$TAG previous=${PREV:-none} backup=$BACKUP result=migration-failed"
+  echo "migration of $TAG failed; ${CURRENT:-the current release} keeps running. Migrations that did apply stay; if"
+  echo "it misbehaves, restore the database: sh rollback.sh ${CURRENT:-<tag>} --restore-db $BACKUP"
+  exit 1
+fi
+grep -v "npm notice" migrate.log | tail -2
 
 if switch_to "$TAG"; then
   log_release "deployed=$TAG previous=${PREV:-none} backup=$BACKUP result=ok"
