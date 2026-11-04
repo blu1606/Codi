@@ -21,11 +21,11 @@
  * Focused time on this page is credited to the learner's study days on the server (study-time.js).
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon, Progress } from '../../components/ui/primitives';
-import { TYPE_LABEL, errorText, lessonBase, pathCourse, pathRows, postLesson } from './learning-store';
+import { TYPE_LABEL, errorText, lessonBase, pathCourse, pathRows, postLesson, postPath } from './learning-store';
 import { CompletionCard, LoadState, OfferCard, UpdateNotice, openReview } from './learning-shared';
 import { MaterialView, materialProgress } from './lesson-materials';
 import { AssignmentSection, QuizSection } from './lesson-assessments';
@@ -393,6 +393,10 @@ function TutorDock({ open, compact, onClose, children }) {
 }
 
 function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPath }) {
+  const navigate = useNavigate();
+  const live = useRef(true);
+  const currentLesson = useRef(null);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const compact = useMedia(COMPACT_QUERY);
   const narrow = useMedia(NARROW_QUERY);
   const [completing, setCompleting] = useState(false);
@@ -493,14 +497,34 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
   const review = () => openReview({ courseId, title: path.course.title, review: path.review, onSaved: setPath });
   const viewPath = () => openPathMap(path, rows, l.id);
 
+  // The path is re-planned in the background after a completion. Only a real change (order or skippable lessons)
+  // opens the animated before/after page; an unchanged path is just a notice here.
+  currentLesson.current = l.id;
+  const openPathUpdate = () => navigate(`/learn/${courseId}/path-update?after=${encodeURIComponent(l.id)}`);
+  const watchPathUpdate = async () => {
+    const lessonId = l.id;
+    for (let i = 0; i < 40 && live.current; i++) {
+      let v;
+      try { v = await postPath(courseId, { type: 'sync' }); } catch { return; }
+      if (!live.current || currentLesson.current !== lessonId) return;
+      setPath(v);
+      if (v.updating || v.status === 'generating') { await new Promise((r) => setTimeout(r, 2000)); continue; }
+      const u = v.update;
+      if (u && u.afterLessonId === lessonId && v.revertible) openPathUpdate();
+      else Codi.ui.toast('Codi đã xem lại lộ trình: thứ tự các bài vẫn phù hợp với bạn.', { type: 'info' });
+      return;
+    }
+  };
   const complete = async () => {
     if (completing) return;
     setCompleting(true);
     try {
       const res = await send({ type: 'complete' });
-      setOffer(res && res.adjustment ? res.adjustment : null);
+      const adjustment = res && res.adjustment ? res.adjustment : null;
+      setOffer(adjustment);
       Codi.ui.toast('Đã hoàn thành bài học.', { type: 'success' });
       requestAnimationFrame(() => { const h = document.getElementById('lesson-title'); if (h) h.focus(); });
+      if (res && res.path && !res.path.complete) watchPathUpdate();
     } catch (e) {
       Codi.ui.toast(errorText(e, 'Không thể lưu tiến độ bài học. Vui lòng thử lại.'), { type: 'danger' });
     } finally { setCompleting(false); }
@@ -562,7 +586,7 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
   const notices = (
     <>
       {lock && <PrerequisiteAdvice c={{ id: courseId }} advice={lock} />}
-      <OfferCard courseId={courseId} offer={offer} onView={setPath} onDone={() => setOffer(null)} onViewPath={viewPath} />
+      <OfferCard courseId={courseId} offer={offer} onView={setPath} onDone={() => setOffer(null)} onViewPath={viewPath} onApplied={openPathUpdate} />
     </>
   );
   const left = (

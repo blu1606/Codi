@@ -326,6 +326,31 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
         .orderBy(desc(courses.rating), asc(courses.id))
         .limit(1)
     : [];
+  // The order before the latest update, so the learner can see (and animate) what changed and choose to keep it.
+  const update = path?.updateDismissedAt ? null : (path?.updateSummary ?? null);
+  const revertible =
+    !!update?.changes.length &&
+    (path?.trigger === "lesson_completed" || path?.trigger === "manual");
+  const previous =
+    update && path && path.version > 1
+      ? await store
+          .select({
+            lessonId: pathItems.lessonId,
+            isSkippable: pathItems.isSkippable,
+          })
+          .from(pathItems)
+          .innerJoin(
+            personalizedLearningPaths,
+            eq(personalizedLearningPaths.id, pathItems.pathId),
+          )
+          .where(
+            and(
+              eq(personalizedLearningPaths.enrollmentId, e.id),
+              eq(personalizedLearningPaths.version, path.version - 1),
+            ),
+          )
+          .orderBy(asc(pathItems.position))
+      : null;
   return {
     ...selected,
     rows: selected.rows.map((row) => ({
@@ -350,7 +375,9 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     highlights: path?.highlightsSeenAt
       ? []
       : (path?.updateSummary?.changes.map((c) => c.lessonId) ?? []),
-    update: path?.updateDismissedAt ? null : (path?.updateSummary ?? null),
+    update,
+    previous,
+    revertible,
     review: review ?? null,
     recommendation: recommendation ?? null,
   };
@@ -775,15 +802,15 @@ async function applyAdjustment(
   });
 }
 
-// Restores the previous version only while the adjusted one is still the active path.
-// A restored path has no changes, so it cannot be undone again.
+// Restores the previous version only while the adjusted (or AI-updated after a lesson) one is still the active path:
+// the learner may keep the order they had. A restored path has no changes, so it cannot be undone again.
 async function undoAdjustment(store: Store, ctx: Context, pathId: number) {
   const { enrollment: e, path, input } = ctx;
   if (
     e.pathStatus !== "ready" ||
     !path ||
     path.id !== pathId ||
-    path.trigger !== "manual" ||
+    (path.trigger !== "manual" && path.trigger !== "lesson_completed") ||
     !path.updateSummary?.changes.length
   )
     throw new LearningPathError(
@@ -827,7 +854,10 @@ async function undoAdjustment(store: Store, ctx: Context, pathId: number) {
     model: path.aiModel ?? undefined,
     summary: {
       changes: [],
-      message: "Đã hoàn tác điều chỉnh. Thứ tự các bài trở về như trước.",
+      message:
+        path.trigger === "lesson_completed"
+          ? "Bạn đã giữ lộ trình trước đó. Codi sẽ đề xuất lại sau bài học tiếp theo."
+          : "Đã hoàn tác điều chỉnh. Thứ tự các bài trở về như trước.",
     },
   });
 }

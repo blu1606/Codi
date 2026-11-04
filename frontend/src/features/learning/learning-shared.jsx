@@ -104,7 +104,7 @@ export function UpdateNotice({ courseId, view, rows, inPlayer, onView }) {
     <section className="card ln-update" aria-live="polite"><div className="card-body stack-3">
       <div className="row-between"><span className="row strong"><Icon name="check-circle" className="text-success" /> Đã hoàn thành: {done ? done.title : ''}</span>
         <button type="button" className="btn btn-ghost btn-sm" onClick={dismiss}>Ẩn thông báo</button></div>
-      <div className="stack-2"><strong>Lộ trình đã được cập nhật</strong>
+      <div className="stack-2"><strong>{u.changes.length ? 'Lộ trình đã được cập nhật' : 'Lộ trình vẫn phù hợp'}</strong>
         {u.message && <p className="small muted">{u.message}</p>}
         {u.changes.length > 0 && <ul className="list ln-changes">{u.changes.map((ch, i) => <li key={i}><Icon name={UPDATE_ICONS[ch.type] || 'info'} className="icon-sm" /><span>{ch.text}</span></li>)}</ul>}
         {inPlayer && <Link className="small" to={`/learn/${courseId}`}>Xem lộ trình đầy đủ</Link>}
@@ -145,7 +145,7 @@ export function CompletionCard({ view, onView }) {
  * Non-blocking offer right after a completion (AdjustmentOffer from POST complete): an insight plus the options that
  * apply now. Applying writes the adjusted path; the toast offers "Hoàn tác" (undo-adjust).
  */
-export function OfferCard({ courseId, offer, onView, onDone, onViewPath }) {
+export function OfferCard({ courseId, offer, onView, onDone, onViewPath, onApplied }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   if (!offer) return null;
@@ -157,6 +157,8 @@ export function OfferCard({ courseId, offer, onView, onDone, onViewPath }) {
       const path = await postPath(courseId, { type: 'adjust', afterLessonId: offer.afterLessonId, option });
       onView(path);
       onDone();
+      // The caller shows the changed path itself (with its own keep/undo choice).
+      if (onApplied) { onApplied(path); return; }
       const undo = async () => {
         try { onView(await postPath(courseId, { type: 'undo-adjust', pathId: path.pathId })); Codi.ui.toast('Đã hoàn tác. Lộ trình trở về như trước.'); }
         catch (e) { Codi.ui.toast(errorText(e, 'Chưa thể hoàn tác.'), { type: 'danger' }); }
@@ -176,7 +178,7 @@ export function OfferCard({ courseId, offer, onView, onDone, onViewPath }) {
           <div className="stack-1 od-fill"><strong className="small">{o.label}</strong><span className="xsmall muted">{o.description}</span></div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => apply(o.type)} disabled={!!busy} aria-busy={busy === o.type || undefined}>Áp dụng</button></li>
       ))}</ul>}
-      <div className="row-between"><span className="xsmall muted">Áp dụng xong, bạn có thể hoàn tác ngay từ thông báo.</span><div className="row" style={{ gap: 4 }}>{onViewPath && <button type="button" className="btn btn-ghost btn-sm" onClick={onViewPath}>Xem lộ trình</button>}<button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>Giữ nguyên lộ trình</button></div></div>
+      <div className="row-between"><span className="xsmall muted">{onApplied ? 'Áp dụng để xem lộ trình mới, rồi chọn dùng hay giữ lộ trình cũ.' : 'Áp dụng xong, bạn có thể hoàn tác ngay từ thông báo.'}</span><div className="row" style={{ gap: 4 }}>{onViewPath && <button type="button" className="btn btn-ghost btn-sm" onClick={onViewPath}>Xem lộ trình</button>}<button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>Giữ nguyên lộ trình</button></div></div>
     </div></section>
   );
 }

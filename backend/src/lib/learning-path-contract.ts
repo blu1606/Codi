@@ -395,6 +395,10 @@ export type CoursePathView = {
     changes: ReturnType<typeof pathDiff>;
     message: string;
   };
+  /** Order of the version the latest update replaced (only while that update is shown). */
+  previous: null | { lessonId: string; isSkippable: boolean }[];
+  /** The latest update changed the order and can be turned back (undo-adjust keeps the previous version). */
+  revertible: boolean;
   review: null | { rating: number; text: string | null };
   recommendation: null | { title: string; slug: string };
 } & ReturnType<typeof selectPath>;
