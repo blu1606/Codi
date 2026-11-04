@@ -7,9 +7,9 @@
 ![p95](https://img.shields.io/badge/p95%20%40%20160%20req%2Fs-290%20ms-2a78d6)
 ![errors](https://img.shields.io/badge/l%E1%BB%97i-0%25-2ea44f)
 ![saturation](https://img.shields.io/badge/b%C3%A3o%20ho%C3%A0-~206%20req%2Fs-eb6834)
-[![Mozilla Observatory](https://img.shields.io/badge/Mozilla%20Observatory-B%20(75%2F100)-eb6834)](https://developer.mozilla.org/en-US/observatory/analyze?host=codi.hoangblue.dev)
+[![Mozilla Observatory](https://img.shields.io/badge/Mozilla%20Observatory-A%2B%20(135%2F100)-2ea44f)](https://developer.mozilla.org/en-US/observatory/analyze?host=codi.hoangblue.dev)
 [![SSL Labs](https://img.shields.io/badge/SSL%20Labs-A%2B-2ea44f)](https://www.ssllabs.com/ssltest/analyze.html?d=codi.hoangblue.dev&hideResults=on)
-![security probe](https://img.shields.io/badge/security%20probe-27%20pass%2C%200%20fail-2ea44f)
+![security probe](https://img.shields.io/badge/security%20probe-28%20pass%2C%200%20warn%2C%200%20fail-2ea44f)
 
 Nền tảng học lập trình Codi, bản dựng lại: frontend React (Vite) chạy trên backend của Codi (API Next.js chuyển
 sang Hono) với PostgreSQL, đóng gói thành một Docker image.
@@ -21,21 +21,23 @@ sang Hono) với PostgreSQL, đóng gói thành một Docker image.
 
 ## Bảo mật
 
-Quét ngày 2026-11-04 trên server dev `codi.hoangblue.dev` (bản `cc74269`) bằng hai công cụ chấm điểm của bên thứ ba,
+Quét ngày 2026-11-04 trên server dev `codi.hoangblue.dev` (bản `823225e`) bằng hai công cụ chấm điểm của bên thứ ba,
 cộng với bộ kiểm tra của dự án:
 
 | Công cụ | Đơn vị | Chấm gì | Kết quả |
 |---|---|---|---|
-| [HTTP Observatory](https://developer.mozilla.org/en-US/observatory/analyze?host=codi.hoangblue.dev) | Mozilla | Security header, cookie, HSTS, CSP | **B (75/100)**, đạt 11/12 mục |
+| [HTTP Observatory](https://developer.mozilla.org/en-US/observatory/analyze?host=codi.hoangblue.dev) | Mozilla | Security header, cookie, HSTS, CSP | **A+ (135/100)**, đạt 12/12 mục |
 | [SSL Labs](https://www.ssllabs.com/ssltest/analyze.html?d=codi.hoangblue.dev&hideResults=on) | Qualys | Cấu hình HTTPS/TLS | **A+**: chỉ TLS 1.2 và 1.3, có HSTS, không cảnh báo |
-| `npm run security:probe` | dự án | Probe hộp đen: header, file bí mật, lỗi lộ thông tin, input kiểu injection, Origin/CORS, API cần đăng nhập | 27 đạt, 1 cảnh báo (thiếu CSP), 0 lỗi |
+| `npm run security:probe` | dự án | Probe hộp đen: header, file bí mật, lỗi lộ thông tin, input kiểu injection, Origin/CORS, API cần đăng nhập | 28 đạt, 0 cảnh báo, 0 lỗi |
 | `npm run security:check` | dự án | Bí mật trong code, file nhạy cảm trong git, `npm audit` | Đạt, 0 lỗ hổng high/critical |
-| `npm test`, `npm run test:e2e` | dự án | Phân quyền, phiên đăng nhập, OTP, quyền sở hữu khoá học, chặn theo vai trò trên trình duyệt | 138/138 và 15/15 đạt |
+| `npm test`, `npm run test:e2e` | dự án | Phân quyền, phiên đăng nhập, OTP, quyền sở hữu khoá học, chặn theo vai trò và CSP trên trình duyệt | đạt toàn bộ |
 
-Mục duy nhất Observatory đánh trượt là **thiếu Content-Security-Policy** (−25 điểm); thêm CSP sẽ đưa hạng lên A hoặc
-A+. CSP chưa bật vì trang tải Google Fonts, YouTube, ảnh QR SePay và media trên R2, nên cần thử ở chế độ
-`Report-Only` trước. Kết quả quét gốc: [security/scans/2026-11-04/](security/scans/2026-11-04/). Chi tiết các lớp
-kiểm tra: [docs/security-testing.md](docs/security-testing.md).
+**Content-Security-Policy** chỉ cho phép tài nguyên cùng origin, cộng với đúng các nguồn bên ngoài app dùng: Google
+Fonts, trình phát YouTube, ảnh QR của SePay và ảnh đại diện Google/GitHub. Script không được chạy code inline hay
+`eval` (phần kiểm tra cú pháp của trình soạn code dùng `acorn` thay cho `new Function`). [e2e/csp.spec.ts](e2e/csp.spec.ts)
+mở các trang chính của cả bốn vai trò, kể cả bài học có video YouTube, và báo lỗi nếu trình duyệt chặn bất cứ thứ gì.
+Kết quả quét gốc: [security/scans/2026-11-04/](security/scans/2026-11-04/). Chi tiết các lớp kiểm tra:
+[docs/security-testing.md](docs/security-testing.md).
 
 Quét lại:
 
