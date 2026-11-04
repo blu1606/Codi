@@ -15,6 +15,7 @@ import {
 } from "@/lib/github-profile-store";
 import { projectGithubProfile } from "@/lib/github-profile-analysis-contract";
 import { githubProfileAiDiagnosticsSchema } from "@/lib/github-profile-ai";
+import { deleteProfileLink, isProfileLinkRow, readProfileLinkToken } from "@/lib/github-profile-link";
 
 export const runtime = "nodejs";
 export const maxDuration = 160;
@@ -130,7 +131,11 @@ export async function DELETE(request: NextRequest) {
         401,
       );
     const linked = await createGithubProfileStore(db).getLinkedAccount(userId);
-    if (linked) {
+    if (linked && (await isProfileLinkRow(db, linked.accountId))) {
+      // The Codi-owned link is never a sign-in method, so no last-account guard applies.
+      // Deleting it cascades to github_profiles; a "Sign in with GitHub" account stays.
+      await deleteProfileLink(db, userId);
+    } else if (linked) {
       // Better Auth rechecks ownership, session freshness and the last-account guard.
       // Account deletion cascades to github_profiles; no learning data is deleted.
       const result = await auth.api.unlinkAccount({
@@ -293,6 +298,9 @@ export async function POST(request: NextRequest) {
         },
         getAccessToken: async (accountRowId, phaseSignal) => {
           phaseSignal.throwIfAborted();
+          // A Codi-owned profile link is not a Better Auth provider; its token is read for this user only.
+          if (await isProfileLinkRow(db, accountRowId))
+            return readProfileLinkToken(db, userId, accountRowId);
           const token = await auth.api.getAccessToken({
             headers: request.headers,
             body: { accountId: accountRowId },

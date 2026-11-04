@@ -4,6 +4,7 @@ import {
   count,
   eq,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -16,6 +17,7 @@ import { finishAiJob, lockAiJob } from "@codi-1/db/ai-jobs";
 import { account, user } from "@codi-1/db/schema/auth";
 import { userRoles } from "@codi-1/db/schema/roles";
 import { ROLE } from "@codi-1/auth";
+import { PROFILE_PROVIDER, PROFILE_PROVIDERS } from "./github-profile-link";
 import {
   githubProfiles,
   githubGenerationReservations,
@@ -120,7 +122,7 @@ const accountWhere = (request: GithubProfileClaimInput) =>
   and(
     eq(account.id, request.accountId),
     eq(account.userId, request.userId),
-    eq(account.providerId, "github"),
+    inArray(account.providerId, [...PROFILE_PROVIDERS]),
     eq(account.accountId, request.githubUserId),
   );
 const requestWhere = (request: GithubProfileRequest) =>
@@ -217,20 +219,25 @@ export function createGithubProfileStore(
     ): Promise<GithubLinkedAccount | null> {
       parse(id, userId);
       return safe(async () => {
+        // The Codi-owned profile link wins over a "Sign in with GitHub" account: it is the GitHub the learner
+        // chose for the profile. At most one row of each provider is expected.
         const rows = await database
-          .select(accountFields)
+          .select({ ...accountFields, providerId: account.providerId })
           .from(account)
           .where(
-            and(eq(account.userId, userId), eq(account.providerId, "github")),
+            and(eq(account.userId, userId), inArray(account.providerId, [...PROFILE_PROVIDERS])),
           )
-          .limit(2);
+          .limit(3);
         if (!rows.length) return null;
+        const own = rows.filter((r) => r.providerId === PROFILE_PROVIDER);
+        const pick = own.length ? own : rows;
         if (
-          rows.length !== 1 ||
-          !githubId.safeParse(rows[0]!.githubUserId).success
+          pick.length !== 1 ||
+          !githubId.safeParse(pick[0]!.githubUserId).success
         )
           throw new GithubProfileStoreError("account_unavailable");
-        return rows[0]!;
+        const { providerId: _provider, ...linked } = pick[0]!;
+        return linked;
       });
     },
     async claim(input: GithubProfileClaimInput, job?: JobLease): Promise<GithubProfileRequest> {
@@ -413,7 +420,7 @@ export function createGithubProfileStore(
             and(
               eq(account.id, githubProfiles.accountId),
               eq(account.userId, userId),
-              eq(account.providerId, "github"),
+              inArray(account.providerId, [...PROFILE_PROVIDERS]),
             ),
           )
           .where(
@@ -461,7 +468,7 @@ export function createGithubProfileStore(
         const [owner] = await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
         if (!owner) throw new GithubProfileStoreError("account_unavailable");
         const [stored] = await tx.select({ accountId: githubProfiles.accountId, githubUserId: account.accountId, snapshot: githubProfiles.snapshot, analysis: githubProfiles.analysis, corrections: githubProfiles.corrections })
-          .from(githubProfiles).innerJoin(account, and(eq(account.id, githubProfiles.accountId), eq(account.userId, userId), eq(account.providerId, "github")))
+          .from(githubProfiles).innerJoin(account, and(eq(account.id, githubProfiles.accountId), eq(account.userId, userId), inArray(account.providerId, [...PROFILE_PROVIDERS])))
           .where(and(eq(githubProfiles.userId, userId), isNotNull(githubProfiles.publishedAt))).for("update");
         if (!stored) throw new GithubProfileStoreError("profile_not_found");
         try {

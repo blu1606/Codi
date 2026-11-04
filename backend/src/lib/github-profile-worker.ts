@@ -4,6 +4,7 @@ import type { AiJob } from "@codi-1/db/ai-jobs";
 import { auth, db } from "@/services";
 import { ENV } from "@/env.server";
 import { trustedBudget } from "./github-profile-budget";
+import { isProfileLinkRow, readProfileLinkToken } from "./github-profile-link";
 import { createGithubProfileStore, type GithubProfileRequest } from "./github-profile-store";
 import { parseGithubProfileInput, runGithubProfileRequest } from "./github-profile-service";
 import { generateGithubProfileAnalysis } from "./github-profile-ai";
@@ -80,6 +81,7 @@ export async function runGithubProfileJob(job: AiJob): Promise<void> {
       },
       getAccessToken: async (accountId, phaseSignal) => {
         phaseSignal.throwIfAborted();
+        if (await isProfileLinkRow(db, accountId)) return readProfileLinkToken(db, job.userId, accountId);
         // No session, HTTP request or client-controlled user id: Better Auth verifies
         // the account belongs to this server-owned job's user before returning a token.
         const token = await auth.api.getAccessToken({ body: { userId: job.userId, accountId } });

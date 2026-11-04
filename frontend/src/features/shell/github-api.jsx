@@ -1,9 +1,10 @@
 /**
  * "Hồ sơ năng lực" (GitHub skill profile) on the real backend — the flow of the real app's
  * components/profile/github-profile-panel.tsx and github-learner-card.tsx:
- *   linked?   GET /api/auth/list-accounts (a "github" account)
+ *   linked?   GET /api/auth/list-accounts (a "github-profile" or "github" account)
  *   profile   GET /api/github-profile → { profile | null }
- *   connect   POST /api/auth/link-social { provider:'github', callbackURL } → the browser goes to GitHub
+ *   connect   GET /api/github-profile/connect?returnTo= → the browser goes to GitHub (any GitHub account, even one
+ *             already linked to another Codi account)
  *   analyse   POST /api/github-profile { consentVersion:'public-github-v1' } (explicit consent) → { profile }, or 202 { job }
  *             when the AI worker runs it in the background; then GET /api/github-profile → { job, profile } until done
  *   correct   PATCH /api/github-profile/corrections { corrections: { excludedRepositoryIds, technologies[{ technologyId,
@@ -62,7 +63,8 @@ export async function loadGithub(force = false) {
   try {
     const [accounts, saved] = await Promise.all([api.get('/api/auth/list-accounts'), api.get('/api/github-profile')]);
     if (Codi.state.currentUserId !== uid) return;
-    const linked = Array.isArray(accounts) && accounts.some((a) => a && a.providerId === 'github');
+    // "github-profile" is the Codi-owned profile link; "github" is a Sign in with GitHub account.
+    const linked = Array.isArray(accounts) && accounts.some((a) => a && (a.providerId === 'github-profile' || a.providerId === 'github'));
     set({ status: 'ready', linked, profile: (saved && saved.profile) || null, aiGuidance: guidanceOf(saved) });
   } catch (e) {
     if (Codi.state.currentUserId === uid) set({ status: 'error', error: errText(e, 'Chưa tải được hồ sơ năng lực.') });
@@ -95,13 +97,16 @@ export function useGithub() {
   return gh.userId === uid ? gh : { userId: uid, status: 'idle', linked: false, profile: null, aiGuidance: null, error: null };
 }
 
-/** Starts GitHub account linking; the browser leaves for GitHub and comes back to `returnTo`. Throws on failure. */
+/**
+ * Starts GitHub linking: the browser goes straight to GitHub's authorize page (always shown, so another GitHub
+ * account can be picked) and comes back to `returnTo` with ?github=linked or ?error=<code>. One GitHub account may
+ * back the profile of several Codi accounts.
+ */
 export async function connectGithub(returnTo) {
-  const back = returnTo || Codi.path() + window.location.search;
-  const sep = back.includes('?') ? '&' : '?';
-  const res = await api.post('/api/auth/link-social', { provider: 'github', callbackURL: back, errorCallbackURL: `${back}${sep}error=failed` });
-  if (!res || !res.url) throw new Error('Không thể mở kết nối GitHub. Bạn có thể thử lại sau.');
-  window.location.assign(res.url);
+  const url = new URL(returnTo || Codi.path() + window.location.search, window.location.origin);
+  url.searchParams.delete('error');
+  url.searchParams.delete('github');
+  window.location.assign(`/api/github-profile/connect?returnTo=${encodeURIComponent(url.pathname + url.search)}`);
 }
 
 /**
@@ -325,7 +330,9 @@ function GuidanceSetting({ guidance }) {
 // ───────────────────────── panel (profile tab "Hồ sơ năng lực") ─────────────────────────
 const LINK_ERRORS = {
   denied: 'Bạn chưa kết nối GitHub. Codi chưa được GitHub cấp quyền.',
-  already_linked: 'Tài khoản GitHub đã liên kết với tài khoản Codi khác. Dùng tài khoản GitHub khác.',
+  session_changed: 'Phiên đăng nhập Codi đã thay đổi trong lúc kết nối. Hãy kết nối lại.',
+  not_configured: 'Máy chủ này chưa cấu hình kết nối GitHub.',
+  unauthorized: 'Chỉ tài khoản học viên mới kết nối được GitHub.',
   failed: 'Chưa hoàn tất kết nối GitHub. Bạn có thể thử lại.',
 };
 
