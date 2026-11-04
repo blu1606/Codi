@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Tuyên bố và bằng chứng · Codi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lexend:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--accent:#0e7490;--accent-hover:#155e75;--accent-soft:#ecfeff;--accent-border:#a5f3fc;--ink:#0f172a;--muted:#475569;--faint:#94a3b8;--page:#f8fafc;--surface:#ffffff;--hair:#e2e8f0;--success:#15803d;--warn:#b45309;--warn-bg:#fffbeb}
+html,body{width:1440px;height:900px;overflow:hidden;margin:0}
+body{background:var(--page);color:var(--ink);font:400 16px/1.5 "Be Vietnam Pro",system-ui,sans-serif}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.top{height:64px;background:var(--surface);border-bottom:1px solid var(--hair);display:flex;align-items:center;padding:0 40px;gap:40px;box-sizing:border-box}
+.brand{display:flex;align-items:center;gap:10px;font:600 20px Lexend,sans-serif}
+.logo{width:32px;height:32px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font:700 18px Lexend,sans-serif}
+nav{display:flex;gap:28px;height:64px;color:var(--muted)}
+nav a{display:flex;align-items:center;color:inherit;text-decoration:none;border-bottom:2px solid transparent}
+nav a.on{color:var(--accent);border-color:var(--accent);font-weight:600}
+.tools{margin-left:auto;display:flex;align-items:center;gap:20px;color:var(--muted)}
+.bell{position:relative;display:flex}
+.badge{position:absolute;top:-7px;right:-9px;background:var(--ink);color:#fff;font:600 12px Lexend,sans-serif;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
+.me{display:flex;align-items:center;gap:10px;color:var(--ink)}
+.av{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-border);display:grid;place-items:center;font:600 14px Lexend,sans-serif}
+.crumb{padding:20px 40px 12px;color:var(--muted)}
+.crumb b{font-weight:500;color:var(--ink)}
+.crumb span{margin:0 8px;color:var(--faint)}
+.wrap{display:grid;grid-template-columns:552px 1fr;gap:48px;padding:0 40px}
+.side{position:sticky;top:0;align-self:start}
+.course{margin:0 0 12px;font-weight:500;color:var(--muted)}
+.stmt{margin:0 0 14px;font:600 40px/1.2 Lexend,sans-serif;letter-spacing:-.01em}
+.meta{margin:0 0 20px;color:var(--muted)}
+.why{margin:0;color:var(--ink)}
+.sim{display:inline-block;margin-right:8px;padding:0 6px;border:1px solid var(--accent-border);border-radius:6px;background:var(--accent-soft);color:var(--accent);font-size:14px;line-height:22px;vertical-align:1px}
+.cta{display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 26px;margin:22px 0 24px;border-radius:10px;background:var(--accent);color:#fff;font:600 17px Lexend,sans-serif;text-decoration:none}
+.cta:hover{background:var(--accent-hover)}
+.cta .i{stroke-width:2}
+.hair{border:0;border-top:1px solid var(--hair);margin:0 0 20px}
+.prog{display:flex;align-items:baseline;justify-content:space-between;font:600 18px Lexend,sans-serif}
+.prog small{font:400 16px "Be Vietnam Pro",sans-serif;color:var(--muted)}
+.bar{height:8px;margin:10px 0 14px;border-radius:4px;background:var(--hair);overflow:hidden}
+.bar i{display:block;width:23%;height:100%;background:var(--accent)}
+.goal{margin:0 0 4px;color:var(--muted)}
+.goal a{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.mastery{list-style:none;margin:20px 0 0;padding:0}
+.mastery h2{margin:0 0 6px;font:600 18px Lexend,sans-serif}
+.mastery li{display:grid;grid-template-columns:110px 150px 1fr;align-items:center;height:32px}
+.mastery .cn{font-weight:500}
+.m{display:flex;gap:4px}
+.m i{width:26px;height:8px;border-radius:2px;background:var(--hair)}
+.m i.on{background:var(--accent)}
+.mastery .st{color:var(--muted)}
+.chapters{min-width:0;padding-top:0}
+.ch{border-top:1px solid var(--hair)}
+.chh{display:flex;align-items:center;gap:12px;height:52px;font:600 18px Lexend,sans-serif}
+.chh .cn{font:500 15px "Be Vietnam Pro",sans-serif;color:var(--muted)}
+.chh .cnt{margin-left:auto;font:400 16px "Be Vietnam Pro",sans-serif;color:var(--muted)}
+.ok{color:var(--success)}
+.ls{display:grid;grid-template-columns:36px 1fr 130px 200px;align-items:center;gap:8px;height:48px;border-top:1px solid var(--hair)}
+.num{font:500 16px Lexend,sans-serif;color:var(--muted)}
+.t{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tm{color:var(--muted)}
+.cur .t{font-weight:600;color:var(--accent)}
+.mute{color:var(--muted)}
+.mute .num{color:var(--muted);opacity:.8}
+.chip{display:inline-flex;align-items:center;gap:6px;justify-self:start;height:28px;padding:0 10px;border:1px solid var(--hair);border-radius:999px;font-size:14px;font-weight:500;white-space:nowrap;color:var(--muted);background:var(--surface)}
+.chip.now{color:var(--accent);background:var(--accent-soft);border-color:var(--accent-border)}
+.chip.warn{color:var(--warn);background:var(--warn-bg);border-color:#fde68a}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2.4 10.2a1 1 0 001 .8h8.9a1 1 0 001-.8L20 8H6"/><circle cx="9.5" cy="19" r="1.2"/><circle cx="17" cy="19" r="1.2"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4z"/><path d="M10 20a2 2 0 004 0"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand"><span class="logo">C</span>Codi</div>
+  <nav>
+    <a href="#">Khoá học</a>
+    <a class="on" href="#">Học tập của tôi</a>
+    <a href="#">AI</a>
+  </nav>
+  <div class="tools">
+    <svg class="i"><use href="#i-cart"/></svg>
+    <span class="bell"><svg class="i"><use href="#i-bell"/></svg><span class="badge">2</span></span>
+    <svg class="i"><use href="#i-sun"/></svg>
+    <span class="me"><span class="av">MA</span>Anh</span>
+  </div>
+</header>
+
+<div class="crumb">Học tập của tôi<span>›</span><b>React từ cơ bản đến dự án thực tế</b></div>
+
+<div class="wrap">
+  <aside class="side">
+    <p class="course">React từ cơ bản đến dự án thực tế</p>
+    <h1 class="stmt">Tiếp theo: Truyền dữ liệu bằng Props</h1>
+    <p class="meta">Chương 2 · Video · 20 phút</p>
+    <p class="why"><span class="sim">Mô phỏng</span>Bạn đã nắm Component (mức Thành thạo). Props là khái niệm tiên quyết của State và Xử lý sự kiện, nên học trước.</p>
+    <a class="cta" href="#">Học tiếp <svg class="i"><use href="#i-arrow"/></svg></a>
+    <hr class="hair">
+    <div class="prog"><span>3/13 bài</span><small>23% hoàn thành</small></div>
+    <div class="bar"><i></i></div>
+    <p class="goal">Mục tiêu: Làm được dự án React thực tế · 10 giờ/tuần · <a href="#">Chỉnh mục tiêu</a></p>
+    <p class="goal">Bài kiểm tra đầu vào: 6/10</p>
+    <ul class="mastery">
+      <h2>Mức nắm vững khái niệm</h2>
+      <li><span class="cn">JSX</span><span class="m"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><span class="st">Thành thạo</span></li>
+      <li><span class="cn">Component</span><span class="m"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><span class="st">Thành thạo</span></li>
+      <li><span class="cn">Props</span><span class="m"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span><span class="st">Đang học</span></li>
+      <li><span class="cn">State</span><span class="m"><i></i><i></i><i></i><i></i><i></i></span><span class="st">Chưa học</span></li>
+      <li><span class="cn">Sự kiện</span><span class="m"><i></i><i></i><i></i><i></i><i></i></span><span class="st">Chưa học</span></li>
+    </ul>
+  </aside>
+
+  <main class="chapters">
+    <section class="ch">
+      <div class="chh"><span class="cn">Chương 1</span>Nền tảng React<span class="cnt">3/3 bài</span><svg class="i ok"><use href="#i-check"/></svg><svg class="i"><use href="#i-down"/></svg></div>
+    </section>
+
+    <section class="ch">
+      <div class="chh"><span class="cn">Chương 2</span>Props, State và sự kiện<span class="cnt">0/4 bài</span><svg class="i"><use href="#i-up"/></svg></div>
+      <div class="ls cur"><span class="num">4</span><span class="t">Truyền dữ liệu bằng Props</span><span class="tm">Video · 20 phút</span><span class="chip now"><svg class="i"><use href="#i-play"/></svg>Tiếp theo</span></div>
+      <div class="ls"><span class="num">5</span><span class="t">State với useState</span><span class="tm">Video · 22 phút</span><span class="chip"><svg class="i"><use href="#i-lock"/></svg>Nên học trước (khoá)</span></div>
+      <div class="ls"><span class="num">6</span><span class="t">Xử lý sự kiện và form</span><span class="tm">PDF · 16 phút</span><span class="chip warn"><svg class="i"><use href="#i-swap"/></svg>Đã đổi thứ tự</span></div>
+      <div class="ls mute"><span class="num">7</span><span class="t">Thử thách: Reducer quản lý danh sách công việc</span><span class="tm">Code · 25 phút</span><span class="chip"><svg class="i"><use href="#i-clock"/></svg>Sắp tới</span></div>
+    </section>
+
+    <section class="ch">
+      <div class="chh"><span class="cn">Chương 3</span>Danh sách và hiệu ứng<span class="cnt">0/3 bài</span><svg class="i"><use href="#i-up"/></svg></div>
+      <div class="ls mute"><span class="num">8</span><span class="t">Render danh sách và key</span><span class="tm">Đọc · 14 phút</span><span class="chip"><svg class="i"><use href="#i-clock"/></svg>Sắp tới</span></div>
+      <div class="ls mute"><span class="num">9</span><span class="t">useEffect và vòng đời component</span><span class="tm">Video · 24 phút</span><span class="chip"><svg class="i"><use href="#i-clock"/></svg>Sắp tới</span></div>
+      <div class="ls mute"><span class="num">10</span><span class="t">Gọi API với fetch</span><span class="tm">Video · 26 phút</span><span class="chip"><svg class="i"><use href="#i-clock"/></svg>Sắp tới</span></div>
+    </section>
+
+    <section class="ch">
+      <div class="chh"><span class="cn">Chương 4</span>Dự án cuối khoá<span class="cnt">0/3 bài</span><svg class="i"><use href="#i-up"/></svg></div>
+      <div class="ls mute"><span class="num">11</span><span class="t">Thiết kế ứng dụng ghi chú</span><span class="tm">Đọc · 20 phút</span><span class="chip"><svg class="i"><use href="#i-clock"/></svg>Sắp tới</span></div>
+      <div class="ls mute"><span class="num">12</span><span class="t">Xây dựng ứng dụng</span><span class="tm">Code · 45 phút</span><span class="chip"><svg class="i"><use href="#i-clock"/></svg>Sắp tới</span></div>
+      <div class="ls mute"><span class="num">13</span><span class="t">Nộp dự án</span><span class="tm">Bài tập · 30 phút</span><span class="chip"><svg class="i"><use href="#i-clock"/></svg>Sắp tới</span></div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

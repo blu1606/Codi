@@ -1,0 +1,25 @@
+export type RunPhase = "done" | "syntax" | "runtime" | "timeout";
+export type RunnerInput = {
+  code: string;
+  /** TypeScript has its types erased inside the sandbox before it runs. Default: javascript. */
+  language?: "javascript" | "typescript";
+  tests: { id: number; input: string | null; isSample: boolean }[];
+  timeoutMs?: number;
+};
+export type RunnerResult = {
+  phase: RunPhase;
+  durationMs: number;
+  logs: string[];
+  outcomes: {
+    id: number;
+    actual: string | null;
+    phase: RunPhase;
+    error: string | null;
+    line: number | null;
+    durationMs?: number;
+  }[];
+};
+export function runJavaScript(input: RunnerInput): Promise<RunnerResult>;
+/** Worst-case wall clock of one runner call plus its database finalization; run leases must last at least this long. */
+export const RUN_LEASE_MS: number;
+export const RUN_FINALIZATION_MARGIN_MS: number;
