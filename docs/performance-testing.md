@@ -103,15 +103,31 @@ Lighthouse is read-only, so it may also be pointed at production (`LHCI_BASE_URL
   as ~0.37 MB instead of 1.27 MB, and repeat visits do not download it again. `fastcheck.sh` fails if an asset comes
   back uncompressed or uncacheable. The bundle is still a single chunk: route-level code splitting is the next step
   for Lighthouse.
-- **Lesson APIs are CPU-bound.** One `GET /api/learn/:courseId/lessons/:lessonId` runs 29 SQL statements and
-  `POST … (study)` 43, inside one REPEATABLE READ transaction; the access checks (session, banned, roles) repeat three
-  times and the enrollment/course/lessons reads twice. At 50 learners the app container sits at one full core
-  (~125% CPU) and Postgres at ~85%, so a larger connection pool does not help. This code is vendored unchanged from
-  Codi (`lesson-player-service.ts`, `learning-path-service.ts`), so the fix belongs upstream: memoise the per-request
-  access check and pass the loaded context into the path read instead of reloading it.
+- **Lesson APIs are CPU-bound, and the cost is per statement.** A CPU profile shows ~40% of the app's time in fixed
+  per-statement work (drizzle-orm query building 21%, `pg` ~8%, socket writes 10%) and ~2% in business logic, so
+  capacity follows the number of SQL statements per request. Three changes cut a 70/30 mix from ≈623 to ≈420
+  statements per 100 requests and raised the highest load meeting the SLO from 60 to 100 req/s in a same-machine A/B
+  (README, "Đã tối ưu"): a 30 s cache for the public catalogue and course detail
+  ([public-course-cache.ts](../backend/src/lib/public-course-cache.ts), cleared by `revalidatePath` and course edits),
+  one role lookup per request ([rbac.ts](../backend/packages/auth/src/rbac.ts), `withRoleCache` in the host), and
+  lesson lists without every lesson's body. Still loaded twice per lesson read: enrollment, course, lessons and
+  mastery (`loadLearningLessonAccess`, then the path read).
 
 To count statements per request, set `ALTER SYSTEM SET log_statement = 'all'` on the perf database, reload, send one
 request and count `LOG:  execute` lines in `docker logs codi-perf-db`; reset it afterwards.
+
+## Capacity test on the dev server
+
+[perf/k6/capacity.js](../perf/k6/capacity.js) is an open-model (arrival-rate) test with the real traffic mix (70%
+browsing, 30% signed-in learners): it holds a load level, then raises the rate step by step until the 500 ms p95 SLO
+breaks. It signs the learner accounts in during `setup()`, because the whole run comes from one IP and sign-in is
+rate-limited per IP. Production hosts are refused unless `ALLOW_DEV_SERVER=<host>` names a dev server you own.
+[perf/collect-server-stats.sh](../perf/collect-server-stats.sh) records the server's CPU, memory and database
+connections alongside; [scripts/perf-archive.mjs](../scripts/perf-archive.mjs) copies a run into `perf/runs/` (session
+cookies removed) and [scripts/perf-charts.mjs](../scripts/perf-charts.mjs) draws the README charts.
+
+Results, the reasons behind each technique and the full command sequence are in the [README](../README.md#hiệu-năng);
+the raw data of the 2026-11-04 runs is in [perf/runs/2026-11-04-dev-server/](../perf/runs/2026-11-04-dev-server/).
 
 ## 5. Clean up
 

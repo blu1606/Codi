@@ -24,8 +24,16 @@ if (__ENV.I_UNDERSTAND_TARGET !== "1") {
 }
 // The production VPS serves real users and shares one machine with its database: never a load-test target.
 const PRODUCTION_HOSTS = /(^|\/\/)(codi\.hoangblue\.dev|codi\.ddnsfree\.com|172\.93\.209\.12)(:|\/|$)/i;
-if (PRODUCTION_HOSTS.test(rawBase) || (__ENV.PRODUCTION_URL && rawBase.replace(/\/$/, "") === __ENV.PRODUCTION_URL.replace(/\/$/, ""))) {
-  throw new Error(`Refusing to load-test production (${rawBase}). Run the local Docker stack instead.`);
+// The owner may load-test that server while it is a dev server: ALLOW_DEV_SERVER must name the exact host.
+const targetHost = rawBase.replace(/^https?:\/\//, "").split(/[/:]/)[0].toLowerCase();
+const allowedDevServer = (__ENV.ALLOW_DEV_SERVER || "").trim().toLowerCase() === targetHost;
+if (
+  (PRODUCTION_HOSTS.test(rawBase) && !allowedDevServer) ||
+  (__ENV.PRODUCTION_URL && rawBase.replace(/\/$/, "") === __ENV.PRODUCTION_URL.replace(/\/$/, ""))
+) {
+  throw new Error(
+    `Refusing to load-test production (${rawBase}). Run the local Docker stack, or set ALLOW_DEV_SERVER=${targetHost} when that server is a dev server you own.`,
+  );
 }
 if (!/^https:\/\//.test(rawBase) && !/^http:\/\/localhost(:\d+)?$/.test(rawBase)) {
   throw new Error("BASE_URL must be https://... (or http://localhost for a local server)");
