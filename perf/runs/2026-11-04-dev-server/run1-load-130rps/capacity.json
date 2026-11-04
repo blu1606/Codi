@@ -1,0 +1,31 @@
+{
+  "target": "https://codi.hoangblue.dev",
+  "loadRps": 130,
+  "rows": [
+    {
+      "phase": "load-130",
+      "offeredRps": 130,
+      "achievedRps": 49.68666666666667,
+      "requests": 14906,
+      "p50": 828.64575,
+      "p95": 5558.6309249999995,
+      "p99": 8287.636805000002,
+      "failedRate": 0
+    }
+  ],
+  "dropped": 357,
+  "loadStartedAt": 1793757280913,
+  "loadEndedAt": 1793757473000,
+  "phases": [
+    {
+      "label": "ramp",
+      "seconds": 60,
+      "rps": 130
+    },
+    {
+      "label": "load-130",
+      "seconds": 300,
+      "rps": 130
+    }
+  ]
+}

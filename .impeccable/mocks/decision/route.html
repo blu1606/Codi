@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Lộ trình bài học · Codi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Lexend:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--accent:#0e7490;--accent-hover:#155e75;--accent-soft:#ecfeff;--accent-line:#a5f3fc;--ink:#0f172a;--muted:#475569;--faint:#94a3b8;--page:#f8fafc;--surface:#fff;--hair:#e2e8f0;--ok:#15803d;--warn:#b45309;--warn-bg:#fffbeb;--navy:#0f172a;--navy-2:#1e293b}
+*{box-sizing:border-box}
+html,body{width:1440px;height:900px;overflow:hidden;margin:0}
+body{font-family:"Be Vietnam Pro",system-ui,sans-serif;font-size:16px;line-height:1.5;color:var(--ink);background:var(--page);display:flex;flex-direction:column}
+button{font:inherit}
+svg{display:block;flex:none}
+.i{fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.brand,.logo,.course,h1,.ctl{font-family:Lexend,sans-serif}
+
+/* header */
+.hdr{height:64px;flex:none;background:var(--surface);border-bottom:1px solid var(--hair);display:flex;align-items:center;padding:0 24px;gap:40px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}
+.logo{width:32px;height:32px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700;font-size:18px}
+nav{display:flex;gap:28px;height:64px}
+nav a{display:flex;align-items:center;color:var(--muted);text-decoration:none;font-weight:500;border-bottom:2px solid transparent}
+nav a.on{color:var(--accent);border-color:var(--accent)}
+.hright{margin-left:auto;display:flex;align-items:center;gap:20px;color:var(--muted)}
+.bell{position:relative}
+.badge{position:absolute;top:-7px;right:-9px;background:var(--accent);color:#fff;font-size:12px;font-weight:600;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px}
+.me{display:flex;align-items:center;gap:10px;font-weight:500;color:var(--ink)}
+.av{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-line);display:grid;place-items:center;font-weight:600;font-size:16px}
+
+/* shell */
+.shell{display:flex;flex:1;min-height:0}
+.rail{width:260px;flex:none;padding:28px 24px}
+.course{margin:0 0 20px;font-size:18px;font-weight:600;line-height:1.35}
+.prog{display:flex;justify-content:space-between;color:var(--muted)}
+.bar{height:6px;background:var(--hair);border-radius:3px;margin:8px 0 24px;overflow:hidden}
+.bar i{display:block;height:100%;width:23.08%;background:var(--accent)}
+.lessons{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.lessons li{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid transparent;color:var(--muted);line-height:1.35}
+.n{width:24px;height:24px;flex:none;border-radius:50%;border:1.5px solid var(--faint);display:grid;place-items:center;font-size:16px;color:var(--muted)}
+.lessons .done .n{border-color:var(--ok);color:var(--ok)}
+.lessons .cur{background:var(--accent-soft);border-color:var(--accent-line);color:var(--ink);font-weight:600}
+.lessons .cur .n{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* main */
+.main{flex:1;display:flex;justify-content:center;padding-top:32px}
+.col{width:880px}
+h1{margin:0;font-size:36px;font-weight:600;line-height:1.2}
+.meta{margin:8px 0 0;color:var(--muted)}
+.warn{display:flex;align-items:center;gap:8px;width:fit-content;margin:16px 0 0;padding:8px 14px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-weight:500}
+
+/* route */
+.route{margin-top:28px}
+.leg{position:relative;padding-left:64px}
+.leg::before{content:"";position:absolute;left:19px;top:0;bottom:0;width:2px;background:var(--faint)}
+.leg:first-child::before{top:20px}
+.leg:last-child::before{bottom:calc(100% - 26px)}
+.leg.on::before{background:var(--accent)}
+.ctl{position:absolute;left:0;top:6px;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:18px;background:var(--surface);border:2px solid var(--faint);color:var(--muted)}
+.leg.on .ctl{top:0;background:var(--accent);border-color:var(--accent);color:#fff}
+.head{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:52px}
+.leg:not(.on) .head{border-bottom:1px solid var(--hair)}
+.leg.on .head{min-height:40px}
+.step{margin:0;font-size:18px;font-weight:600;line-height:1.3}
+.desc{margin:0;color:var(--muted);white-space:nowrap}
+.body{padding:14px 0 16px}
+.video{position:relative;width:100%;max-width:600px;aspect-ratio:16/9;background:var(--navy);border-radius:12px;overflow:hidden;color:#fff}
+.vtitle{position:absolute;left:16px;top:14px;font-weight:500;opacity:.9}
+.play{position:absolute;left:50%;top:50%;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center}
+.ctrl{position:absolute;left:16px;right:16px;bottom:14px;display:flex;align-items:center;gap:14px;font-family:"JetBrains Mono",monospace;font-size:16px}
+.track{flex:1;height:4px;border-radius:2px;background:var(--navy-2)}
+.track i{display:block;width:20%;height:100%;border-radius:2px;background:var(--accent-line)}
+.btn{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;margin-top:16px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--accent-hover)}
+
+/* floating AI */
+.ai{position:fixed;right:24px;bottom:24px;height:56px;padding:0 20px 0 16px;display:flex;align-items:center;gap:10px;border-radius:28px;border:1px solid var(--hair);background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 8px 24px rgba(15,23,42,.08);cursor:pointer}
+.ai small{font-size:14px;font-weight:500;color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="brand"><span class="logo">C</span>Codi</div>
+  <nav><a href="#">Khoá học</a><a href="#" class="on">Học tập của tôi</a><a href="#">AI</a></nav>
+  <div class="hright">
+    <svg class="i" width="22" height="22" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 7H6"/></svg>
+    <span class="bell"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span class="badge">2</span></span>
+    <svg class="i" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <span class="me"><span class="av">MA</span>Anh</span>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="rail">
+    <h2 class="course">React từ cơ bản đến dự án thực tế</h2>
+    <div class="prog"><span>Tiến độ</span><span>3/13 bài</span></div>
+    <div class="bar"><i></i></div>
+    <ol class="lessons">
+      <li class="done"><span class="n"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Giới thiệu React và cài đặt môi trường</li>
+      <li class="done"><span class="n"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>JSX hoạt động thế nào</li>
+      <li class="done"><span class="n"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>Component đầu tiên của bạn</li>
+      <li class="cur"><span class="n">4</span>Truyền dữ liệu bằng Props</li>
+      <li><span class="n">5</span>State với useState</li>
+      <li><span class="n">6</span>Xử lý sự kiện và form</li>
+      <li><span class="n">7</span>Thử thách: Reducer quản lý danh sách công việc</li>
+    </ol>
+  </aside>
+
+  <main class="main">
+    <div class="col">
+      <h1>Truyền dữ liệu bằng Props</h1>
+      <p class="meta">Chương Props, State và sự kiện · Video · 20 phút</p>
+      <p class="warn"><svg class="i" width="18" height="18" viewBox="0 0 24 24"><path d="M12 3.5L2.5 20h19L12 3.5z"/><path d="M12 10v4.5M12 17.5v.01"/></svg>Nên học Component trước (bài Component đầu tiên của bạn).</p>
+
+      <section class="route">
+        <div class="leg on">
+          <span class="ctl">1</span>
+          <div class="head"><h3 class="step">Xem video</h3><p class="desc">Video · 20 phút · đang xem</p></div>
+          <div class="body">
+            <div class="video">
+              <span class="vtitle">F8 · Props trong ReactJS</span>
+              <span class="play"><svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13l11-6.5z"/></svg></span>
+              <div class="ctrl"><div class="track"><i></i></div><span>04:00 / 20:00</span></div>
+            </div>
+            <button class="btn"><svg class="i" width="18" height="18" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Đánh dấu đã xem</button>
+          </div>
+        </div>
+
+        <div class="leg">
+          <span class="ctl">2</span>
+          <div class="head"><h3 class="step">Đọc tóm tắt · 4 phút</h3><p class="desc">Đọc · 4 phút · đọc hết là xong</p></div>
+        </div>
+
+        <div class="leg">
+          <span class="ctl">3</span>
+          <div class="head"><h3 class="step">Quiz · 5 câu · cần ≥ 70%</h3><p class="desc">Quiz · 5 câu · cần ≥ 70%</p></div>
+        </div>
+
+        <div class="leg">
+          <span class="ctl">4</span>
+          <div class="head"><h3 class="step">Bài tiếp theo: State với useState</h3><p class="desc">Video · 22 phút · mở sau bài 4</p></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<button class="ai">
+  <svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><path d="M19 17v4M17 19h4"/></svg>
+  AI trợ lý <small>Mô phỏng</small>
+</button>
+</body>
+</html>

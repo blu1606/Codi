@@ -1,0 +1,108 @@
+/* Lecturer AI: quiz review gate, grading draft, code editor result panel and lecturer code preview.
+   Builds on the shared tokens and the la-* / te-* / cp-* classes from styles/lecturer.css, app.css and coding.css. */
+
+/* Quiz review gate */
+.lai-review-bar { position: sticky; top: 0; z-index: 1; padding: var(--space-2) 0; background: var(--surface); flex-wrap: wrap; gap: var(--space-2); }
+.la-q.is-accepted { border-color: var(--accent); background: var(--accent-soft); }
+.lai-opt { padding: 2px var(--space-2); border-radius: var(--radius-sm); }
+.lai-opt.is-correct { background: var(--accent-soft); }
+.lai-confirm-list { margin: 0; padding-left: 1.25rem; display: grid; gap: 2px; }
+.lai-confirm-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lai-counter { display: block; text-align: right; font-variant-numeric: tabular-nums; }
+.lai-clamp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Grading draft */
+.lai-grade-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.lai-grade-list li { display: flex; justify-content: space-between; gap: var(--space-3); }
+.lai-grade-list li:last-child { padding-top: var(--space-1); border-top: 1px solid var(--border); }
+.lai-grade-list .num, .lai-grade-draft .num { font-variant-numeric: tabular-nums; }
+
+/* Code editor result panel */
+.lai-check-sum { justify-content: space-between; flex-wrap: wrap; padding: var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-md); }
+.lai-empty-run { display: grid; justify-items: center; gap: var(--space-1); padding: var(--space-5) var(--space-3); text-align: center; border: 1px dashed var(--border); border-radius: var(--radius-md); }
+.lai-empty-run p { margin: 0; }
+
+/* Lecturer code preview */
+.lai-preview { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--space-4); align-items: start; }
+.lai-steps { margin: 0; padding-left: 1.25rem; display: grid; gap: var(--space-2); }
+.lai-steps .md p { margin: 0; }
+.lai-sample { display: grid; gap: 2px; padding: var(--space-2) var(--space-3); background: var(--subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+.lai-hidden-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--subtle); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.lai-hidden-card .badge { margin-left: auto; }
+@media (max-width: 1023px) {
+  .lai-preview { grid-template-columns: minmax(0, 1fr); }
+}
+.lai-grade-draft > .row:last-child > .btn { flex: 1 1 auto; }
+/* .te-fieldset resets margin to 0, which cancels the parent stack gap; restore it and the legend inset. */
+.stack-3 > .lai-fieldset:not(:first-child) { margin-top: var(--space-3); }
+.stack-4 > .lai-fieldset:not(:first-child) { margin-top: var(--space-4); }
+.lai-fieldset > legend { padding: 0; margin-bottom: var(--space-2); }
+.lai-fieldset > legend + * { margin-top: 0; }
+/* A <p> empty state holds inline copy; grid would split each text run onto its own line. */
+p.lai-empty-run { display: block; }
+/* Step instructions grow with their text instead of clipping at two rows (browsers without field-sizing keep rows). */
+.lai-fieldset .te-row textarea { field-sizing: content; min-height: 4.5em; max-height: 16em; }
+
+/* AI grading job card (grading detail) */
+.lai-job-slot { display: grid; gap: var(--space-2); }
+.lai-job { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.lai-job.is-error { border-color: var(--danger); background: var(--danger-soft); }
+.lai-job.is-warn { border-color: var(--warn); background: var(--warn-soft); }
+.lai-job.is-error .lai-job-msg { color: var(--danger); }
+.lai-job.is-warn .lai-job-msg { color: var(--warn); }
+.lai-job-head { gap: var(--space-2); flex-wrap: wrap; }
+.lai-job-msg { align-items: flex-start; gap: var(--space-2); margin: 0; }
+.lai-job p { margin: 0; }
+.lai-job .num, .lai-meter .num { font-variant-numeric: tabular-nums; }
+.lai-meter { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); }
+.lai-meter .progress > span { transition: width 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+.lai-stages { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.lai-stage { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-2); }
+.lai-stage-body { display: grid; gap: 1px; min-width: 0; }
+.lai-stage-icon { margin-top: 2px; color: var(--muted); }
+.lai-stage.is-done .lai-stage-icon { color: var(--success, var(--accent)); }
+.lai-stage.is-running .lai-stage-icon { color: var(--accent); animation: lai-spin 1s linear infinite; }
+.lai-stage.is-running .lai-stage-body > .small { font-weight: 600; }
+.lai-stage.is-error .lai-stage-icon, .lai-stage.is-error .lai-stage-body { color: var(--danger); }
+.lai-stage.is-pending .lai-stage-body { color: var(--muted); }
+@keyframes lai-spin { to { transform: rotate(360deg); } }
+
+.lai-stages-wrap > summary { cursor: pointer; width: fit-content; border-radius: var(--radius-sm); }
+.lai-stages-wrap > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lai-stages-wrap[open] > summary { margin-bottom: var(--space-2); }
+
+.lai-crit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.lai-crit { display: grid; gap: var(--space-1); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+.lai-crit:last-child { padding-bottom: 0; border-bottom: 0; }
+.lai-crit-head { gap: var(--space-3); align-items: baseline; }
+.lai-crit-head .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lai-crit.is-waiting .lai-crit-head > .small { color: var(--muted); font-weight: 500; }
+.lai-crit:not(.is-waiting) { animation: lai-reveal 320ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes lai-reveal { from { opacity: 0.4; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+.lai-evidence { margin: 0; padding: var(--space-1) var(--space-2); background: var(--subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg); overflow-wrap: anywhere; }
+.lai-total { padding-top: var(--space-2); border-top: 1px solid var(--border); }
+.lai-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.lai-job-actions { flex-wrap: wrap; gap: var(--space-2); }
+.lai-list-badge { margin-top: var(--space-1); width: fit-content; }
+/* Per-item decision on an AI grading suggestion: accept, edit or ignore. */
+.lai-crit-actions { flex-wrap: wrap; gap: var(--space-2); }
+.lai-decision button { min-height: 32px; padding: 4px 10px; }
+.lai-score-input { width: 5.5rem; }
+.lai-crit.is-ignored .lai-crit-head, .lai-ignored-text { opacity: 0.6; text-decoration: line-through; }
+.lai-spin { animation: lai-spin 1s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lai-stage.is-running .lai-stage-icon, .lai-crit:not(.is-waiting), .lai-spin { animation: none; }
+  .lai-meter .progress > span { transition: none; }
+}
+
+/* Sheet content never grows past the sheet: grid/flex children default to min-width:auto, so a long unwrapped
+   line in the quiz review (option text, clamp rows) used to widen the whole import sheet and clip its right side. */
+.la, .la > *, .la-block, .la-block > * { min-width: 0; }
+.la-block textarea { width: 100%; max-width: 100%; }
+.la-q, .la-q > * { min-width: 0; }
+.la-q > .row-between { flex-wrap: wrap; gap: var(--space-2); }
+.la-q .lai-clamp { white-space: normal; overflow-wrap: anywhere; } /* the reviewer reads the whole explanation */
+.la-q .rv-opts li > span { min-width: 0; overflow-wrap: anywhere; }
+.la-q .rv-opts li.is-correct .xsmall { margin-left: 0; } /* keep the correct option left-aligned like the others */

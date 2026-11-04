@@ -1,40 +1,25 @@
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.dirname(fileURLToPath(import.meta.url));
 
+// Some backend tests are written for node:test and run with `tsx --test` (scripts/run-node-tests.mjs); Vitest would
+// report them as files without a suite, so they are left out here.
+function nodeTestFiles() {
+  return (readdirSync(path.join(root, "backend"), { recursive: true }) as string[])
+    .filter((file) => /\.test\.ts$/.test(file) && !file.includes("node_modules"))
+    .map((file) => path.posix.join("backend", file.split(path.sep).join("/")))
+    .filter((file) => /from ["']node:test["']/.test(readFileSync(path.join(root, file), "utf8")));
+}
+
+// Unit tests for the backend and its vendored packages (auth, ownership, upload tickets).
 export default defineConfig({
   test: {
     environment: "node",
-    include: [
-      "apps/web/src/**/*.test.ts",
-      "apps/web/scripts/**/*.test.ts",
-      "packages/auth/src/**/*.test.ts",
-      "packages/db/src/**/*.test.ts",
-    ],
-    coverage: {
-      provider: "v8",
-      reporter: ["text", "html", "lcov", "json-summary"],
-      reportsDirectory: "./coverage",
-      reportOnFailure: true,
-      include: [
-        "packages/auth/src/rbac.ts",
-        "apps/web/src/app/dashboard/admin/actions.ts",
-        "apps/web/src/app/api/user/profile/route.ts",
-        "apps/web/src/lib/filter-course-catalog.ts",
-        "apps/web/src/lib/add-course-to-cart.ts",
-        "apps/web/src/app/api/student/cart/route.ts",
-      ],
-      thresholds: {
-        statements: 80,
-        lines: 80,
-        functions: 80,
-        branches: 80,
-      },
-    },
-    alias: {
-      "@/": path.resolve(__dirname, "apps/web/src") + "/",
-    },
+    include: ["backend/src/**/*.test.ts", "backend/packages/*/src/**/*.test.ts", "frontend/src/features/shell/notification-link.test.js"],
+    exclude: ["**/node_modules/**", ...nodeTestFiles()],
+    alias: { "@/": path.join(root, "backend/src") + "/" },
   },
 });

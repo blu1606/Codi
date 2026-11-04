@@ -1,0 +1,66 @@
+Câu 1. Từ khoá nào khai báo một hằng không thể gán lại?
+A. var
+B. let
+* C. const
+D. static
+Giải thích: const không cho gán lại; let gán lại được; var có phạm vi hàm và nên tránh.
+
+Câu 2. typeof null trả về gì?
+A. "null"
+* B. "object"
+C. "undefined"
+D. "number"
+Giải thích: Đây là lỗi lịch sử của JavaScript, typeof null luôn trả về "object".
+
+Câu 3. Kết quả của 0.1 + 0.2 === 0.3 là gì?
+- true
+* - false
+- TypeError
+- NaN
+Giải thích: Số thực dấu phẩy động khiến 0.1 + 0.2 bằng 0.30000000000000004.
+
+Câu 4. Biểu thức nào trả về 10 khi soLuong = 0?
+* A. soLuong || 10
+B. soLuong ?? 10
+Giải thích: || thay thế mọi giá trị falsy (kể cả 0), còn ?? chỉ thay null và undefined.
+
+Câu 5. Phương thức mảng nào trả về MỘT giá trị gộp từ các phần tử?
+A. map
+B. filter
+* C. reduce
+D. forEach
+Giải thích: reduce cộng dồn các phần tử thành một giá trị duy nhất.
+
+Câu 6. Đoạn code const { ten } = sanPham; dùng kỹ thuật gì?
+A. Spread
+* B. Destructuring
+C. Hoisting
+D. Closure
+
+Câu 7. Arrow function khác function thường ở điểm nào?
+A. Không nhận tham số
+B. Luôn chạy bất đồng bộ
+* C. Không có this riêng
+D. Không trả về giá trị được
+Giải thích: Arrow function lấy this từ phạm vi bao ngoài.
+
+Câu 8. Muốn bắt lỗi khi dùng await fetch(...), ta đặt code trong khối nào?
+A. if / else
+* B. try / catch
+C. switch
+D. do / while
+Giải thích: Lỗi của Promise bị reject được ném ra tại await và bắt bằng catch.
+
+Câu 9. Event delegation là gì?
+A. Gắn một listener riêng cho từng phần tử con
+* B. Gắn một listener ở phần tử cha và xử lý sự kiện nổi bọt từ các con
+C. Huỷ sự kiện mặc định của trình duyệt
+D. Gọi sự kiện thủ công bằng dispatchEvent
+Giải thích: Nhờ event bubbling, phần tử cha nhận được sự kiện của các con, kể cả con được thêm sau.
+
+Câu 10. Một Promise có thể ở những trạng thái nào?
+A. start, run, stop
+* B. pending, fulfilled, rejected
+C. open, closed
+D. waiting, done
+Giải thích: Promise bắt đầu ở pending rồi chuyển sang fulfilled hoặc rejected và không đổi nữa.

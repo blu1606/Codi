@@ -1,0 +1,163 @@
+{
+  "target": "https://codi.hoangblue.dev",
+  "loadRps": 100,
+  "loadStartedAt": 1793766646410,
+  "loadEndedAt": 1793767207085,
+  "phases": [
+    {
+      "label": "ramp",
+      "seconds": 60,
+      "rps": 100
+    },
+    {
+      "label": "load-100",
+      "seconds": 60,
+      "rps": 100
+    },
+    {
+      "label": "ramp-120",
+      "seconds": 10,
+      "rps": 120
+    },
+    {
+      "label": "step-120",
+      "seconds": 60,
+      "rps": 120
+    },
+    {
+      "label": "ramp-140",
+      "seconds": 10,
+      "rps": 140
+    },
+    {
+      "label": "step-140",
+      "seconds": 60,
+      "rps": 140
+    },
+    {
+      "label": "ramp-160",
+      "seconds": 10,
+      "rps": 160
+    },
+    {
+      "label": "step-160",
+      "seconds": 60,
+      "rps": 160
+    },
+    {
+      "label": "ramp-180",
+      "seconds": 10,
+      "rps": 180
+    },
+    {
+      "label": "step-180",
+      "seconds": 60,
+      "rps": 180
+    },
+    {
+      "label": "ramp-200",
+      "seconds": 10,
+      "rps": 200
+    },
+    {
+      "label": "step-200",
+      "seconds": 60,
+      "rps": 200
+    },
+    {
+      "label": "ramp-240",
+      "seconds": 10,
+      "rps": 240
+    },
+    {
+      "label": "step-240",
+      "seconds": 60,
+      "rps": 240
+    },
+    {
+      "label": "cooldown",
+      "seconds": 20,
+      "rps": 0
+    }
+  ],
+  "rows": [
+    {
+      "phase": "load-100",
+      "offeredRps": 100,
+      "seconds": 60,
+      "achievedRps": 100,
+      "requests": 6000,
+      "p50": 69.87610000000001,
+      "p95": 217.16339500000004,
+      "p99": 426.83296000000007,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-120",
+      "offeredRps": 120,
+      "seconds": 60,
+      "achievedRps": 120,
+      "requests": 7200,
+      "p50": 75.93675,
+      "p95": 304.54484499999995,
+      "p99": 675.4217740000005,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-140",
+      "offeredRps": 140,
+      "seconds": 60,
+      "achievedRps": 140,
+      "requests": 8400,
+      "p50": 74.9017,
+      "p95": 320.53137499999985,
+      "p99": 838.0085220000008,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-160",
+      "offeredRps": 160,
+      "seconds": 60,
+      "achievedRps": 160,
+      "requests": 9600,
+      "p50": 71.8113,
+      "p95": 289.5204799999998,
+      "p99": 505.12590700000004,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-180",
+      "offeredRps": 180,
+      "seconds": 60,
+      "achievedRps": 178.7,
+      "requests": 10722,
+      "p50": 116.0519,
+      "p95": 1327.5184849999996,
+      "p99": 1928.8010579999986,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-200",
+      "offeredRps": 200,
+      "seconds": 60,
+      "achievedRps": 187.03333333333333,
+      "requests": 11222,
+      "p50": 102.1762,
+      "p95": 3810.7760599999992,
+      "p99": 4997.347534999993,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-240",
+      "offeredRps": 240,
+      "seconds": 60,
+      "achievedRps": 205.9,
+      "requests": 12354,
+      "p50": 109.0738,
+      "p95": 4512.145069999989,
+      "p99": 5827.356731999997,
+      "failedRate": 0
+    }
+  ],
+  "dropped": 579
+}

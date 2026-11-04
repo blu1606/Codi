@@ -1,20 +1,41 @@
-FROM node:24-bookworm-slim AS build
-WORKDIR /app
-RUN corepack enable
-COPY . .
-RUN pnpm install --frozen-lockfile
-# Build-only placeholders; runtime values come from /etc/codi/codi.env.
-# Never use the production database or credentials during the build.
-RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build \
-    BETTER_AUTH_SECRET=build-only-not-a-production-secret-1234567890 \
-    BETTER_AUTH_URL=https://example.invalid \
-    NODE_ENV=production pnpm --filter web build
+# syntax=docker/dockerfile:1
+# One image: Hono backend serving /api and the built Vite frontend on the same port.
 
-FROM node:24-bookworm-slim AS runtime
+# 1. All workspace dependencies (dev included, needed for the Vite build).
+FROM node:22-alpine AS deps
 WORKDIR /app
-ENV NODE_ENV=production PORT=3001 HOSTNAME=0.0.0.0
-COPY --from=build --chown=node:node /app /app
-WORKDIR /app/apps/web
+COPY package.json package-lock.json ./
+COPY frontend/package.json frontend/
+COPY backend/package.json backend/
+COPY backend/shims backend/shims
+COPY backend/packages backend/packages
+RUN npm ci --no-audit --no-fund
+
+# 2. Frontend production build.
+FROM deps AS web
+COPY frontend frontend
+RUN npm run build -w frontend
+
+# 3. Backend source with runtime dependencies only.
+FROM deps AS backend
+COPY backend backend
+RUN npm prune --omit=dev --no-audit --no-fund \
+ && rm -rf frontend node_modules/.cache
+
+# 4. Runtime.
+FROM node:22-alpine AS runtime
+# ffmpeg/ffprobe: lecture video upload (duration) and the AI import (audio for Whisper, key frames).
+RUN apk add --no-cache ffmpeg
+# The AI background worker (src/host/ai-worker.ts) runs inside the app process.
+ENV NODE_ENV=production \
+    API_PORT=3001 \
+    WEB_DIST=/app/frontend/dist \
+    AI_BACKGROUND_WORKER_ENABLED=true
+WORKDIR /app/backend
+COPY --from=backend --chown=node:node /app /app
+COPY --from=web --chown=node:node /app/frontend/dist /app/frontend/dist
 USER node
 EXPOSE 3001
-CMD ["./node_modules/.bin/varlock", "run", "--", "./node_modules/.bin/next", "start", "--port", "3001"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3001/api/health >/dev/null || exit 1
+CMD ["node", "--import", "tsx", "src/server.ts"]

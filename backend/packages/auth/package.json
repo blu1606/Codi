@@ -1,0 +1,17 @@
+{
+  "name": "@codi-1/auth",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.15",
+    "@codi-1/db": "file:../db",
+    "better-auth": "1.7.15",
+    "drizzle-orm": "1.0.0-rc.4",
+    "resend": "^6.28.1",
+    "zod": "^4.6.5"
+  }
+}
