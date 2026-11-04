@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "roboto",
+        "files": [
+          "backend/src/lib/order-email-templates.ts"
+        ],
+        "createdAt": "2026-11-03T16:05:38.998Z",
+        "reason": "agent: HTML email uses the same system font stack as the existing auth OTP emails; web fonts are unreliable in mail clients"
+      }
+    ]
+  }
+}

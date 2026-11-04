@@ -28,6 +28,10 @@ if (accounts.length === 0) {
 }
 
 // Each VU gets its own account; with fewer accounts than VUs the accounts are shared round-robin.
+export function allAccounts() {
+  return Array.from({ length: accounts.length }, (_, i) => accounts[i]);
+}
+
 export function accountForVu() {
   return accounts[(__VU - 1) % accounts.length];
 }

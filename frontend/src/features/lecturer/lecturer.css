@@ -1,0 +1,93 @@
+/* Scoped lecturer styles from docs/mockup/js/lecturer.js (the rest lives in src/styles/lecturer.css). */
+.tc-h { font-size: var(--text-lg); }
+.tc-add { position: relative; }
+.tc-add > summary { list-style: none; }
+.tc-add > summary::-webkit-details-marker { display: none; }
+.tc-chapter .card-header { gap: var(--space-2); flex-wrap: wrap; }
+.tc-lessons { padding: var(--space-2); }
+.tc-lesson { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); flex-wrap: wrap; }
+.tc-lesson:hover { background: var(--canvas); }
+.tc-grip { cursor: grab; color: var(--faint); display: inline-grid; }
+.tc-type { width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--subtle); display: grid; place-items: center; color: var(--muted); flex: none; }
+.tc-row-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+/* Lesson rows keep fixed action slots so every row lines up: text links left, icon tools right. */
+.tc-row-links { display: flex; align-items: center; gap: var(--space-1); }
+.tc-row-links .btn, .tc-ch-actions > .btn:not(.btn-icon) { justify-content: flex-start; color: var(--muted); }
+.tc-row-tools { display: grid; grid-template-columns: repeat(5, 36px); align-items: center; padding-left: var(--space-2); border-left: 1px solid var(--border); }
+.tc-row-tools .btn, .tc-ch-actions .btn-icon { color: var(--muted); }
+.tc-row-links .btn:hover, .tc-row-tools .btn:hover:not(:disabled), .tc-ch-actions .btn:hover:not(:disabled) { color: var(--fg); }
+.tc-row-tools .tc-del:hover, .tc-ch-actions .tc-del:hover { color: var(--danger); background: var(--danger-soft); }
+.tc-ch-actions { gap: 0; }
+/* Timetable (from 1180 px): one column rhythm for every chapter; below it the same row wraps into stacked cells. */
+.tc-cols, .tc-lesson { column-gap: var(--space-3); align-items: center; }
+.tc-cols { display: none; }
+.tc-cols > span { font-weight: 600; }
+.tc-no { color: var(--muted); font-size: var(--text-sm); }
+.tc-lesson-main { min-width: 0; flex: 1 1 240px; }
+.tc-cell { min-width: 0; }
+.tc-dur { white-space: nowrap; }
+.tc-ok { color: var(--success); font-weight: 600; }
+.tc-mark { justify-self: start; }
+.tc-lesson + .tc-lesson { border-top: 1px solid var(--border); }
+@media (min-width: 1180px) {
+  .tc-cols, .tc-lesson { display: grid; grid-template-columns: 16px 44px minmax(0, 1fr) 96px 64px 150px 128px 232px; }
+  .tc-cols { padding: var(--space-2) calc(var(--space-2) + var(--space-3)); border-bottom: 1px solid var(--border); }
+  .tc-lesson { flex-wrap: nowrap; }
+  .tc-lesson .tc-row-actions { justify-self: end; }
+  .tc-lesson-main { flex: none; }
+}
+@media (max-width: 1179px) {
+  .tc-lesson .tc-row-actions { flex-basis: 100%; justify-content: space-between; padding-left: calc(16px + 44px + var(--space-3) * 2); }
+}
+.tc-reader.is-blocked { border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.tc-reader.is-ready { border-color: color-mix(in srgb, var(--success) 40%, var(--border)); }
+.tc-reader-head { flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
+.tc-blockers { list-style: none; margin: 0; padding: 0; display: grid; }
+.tc-blocker { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.tc-blocker:first-child { border-top: 0; }
+.tc-blocker .list-main { display: grid; gap: 2px; min-width: 0; }
+@media (max-width: 640px) {
+  .tc-blocker { grid-template-columns: auto minmax(0, 1fr); }
+  .tc-blocker .btn { grid-column: 2; justify-self: start; }
+}
+@media (max-width: 640px) {
+  .tc-chapter .card-header { padding: var(--space-3) var(--space-4); }
+  .tc-chapter .card-header > .od-fill { flex-basis: 100%; }
+  .tc-ch-actions { margin-left: auto; }
+  .tc-lesson { padding: var(--space-3) var(--space-2); border-bottom: 1px solid var(--border); border-radius: 0; }
+  .tc-lesson:last-child { border-bottom: 0; }
+  .tc-lesson .tc-row-actions { padding-left: 0; flex-wrap: wrap; row-gap: var(--space-1); }
+  .tc-row-links { grid-template-columns: repeat(3, auto); }
+  .tc-row-tools { border-left: 0; padding-left: 0; margin-left: auto; }
+}
+.tc-empty-drop { padding: var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); text-align: center; }
+.is-dragging { opacity: .5; }
+.is-drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.tc-danger { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+.tc-declined { opacity: .6; }
+.tc-order { display: grid; gap: var(--space-1); }
+.tc-qb { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-4); align-items: start; }
+.tc-qb-side { position: sticky; top: calc(var(--header-h) + var(--space-4)); }
+@media (max-width: 1024px) { .tc-qb { grid-template-columns: minmax(0, 1fr); } .tc-qb-side { position: static; } }
+.tc-opt { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-1); border-radius: var(--radius-sm); }
+.tc-opt.is-correct { background: var(--success-soft); }
+.tc-correct { display: inline-flex; align-items: center; gap: 6px; min-width: 76px; flex: none; min-height: 44px; font-size: var(--text-sm); font-weight: 600; cursor: pointer; }
+.tc-correct input { accent-color: var(--success); width: 18px; height: 18px; }
+.tc-probs { padding-left: 18px; }
+.tc-savebar { position: sticky; bottom: 0; background: var(--surface); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+/* Grading: the submission is the stage; the grade is a dock beside it (see .impeccable/surfaces). */
+.tc-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 360px); gap: var(--space-4); align-items: start; }
+@media (max-width: 1100px) { .tc-grade { grid-template-columns: minmax(0, 1fr); } }
+.tc-stage > .card-body { gap: var(--space-5); }
+.tc-dock { position: sticky; top: calc(var(--header-h) + var(--space-4)); max-height: calc(100vh - var(--header-h) - var(--space-8)); overflow-y: auto; overscroll-behavior: contain; }
+.tc-dock-body { padding-bottom: var(--space-4); }
+.tc-grade-actions { position: sticky; bottom: 0; z-index: 2; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--border); background: var(--surface); }
+.tc-grade-state { margin: 0; display: flex; align-items: center; gap: var(--space-2); color: var(--muted); }
+.tc-state-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--warn); }
+@media (max-width: 1100px) { .tc-dock { position: static; max-height: none; overflow: visible; } }
+.tc-reply { margin-left: var(--space-4); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--subtle); }
+@media (max-width: 640px) { .tc-chapter .tc-grip, .tc-lesson .tc-grip { display: none; } }
+/* Quiz options: border/padding reset only, so the parent stack still spaces the fieldset. */
+.tc-opts { border: 0; padding: 0; min-width: 0; }
+.tc-opts > legend { padding: 0; }
+.tc-opts > legend + * { margin-top: 0; }

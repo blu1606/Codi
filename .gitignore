@@ -1,105 +1,26 @@
-# ---- local working files, not published ----
-# schema, migrations and scripts ARE tracked; only generated artefacts are not
-database/exports/
-*.drawio
-*.drawio.bkp
-
-# agent scratch, not a deliverable — except the shared project skill
-.claude/*
-!.claude/skills/
-.claude/skills/*
-!.claude/skills/codi-mockup-parity/
-
-# ---- secrets ----
+node_modules
+dist
 .env
-.env.*
-!.env.example
-*.pem
-*.key
-
-# ---- node / next.js ----
-node_modules/
-.next/
-out/
-build/
-dist/
-.turbo/
-*.tsbuildinfo
-next-env.d.ts
-
-# ---- package managers ----
-.pnpm-store/
-.yarn/*
-!.yarn/patches
-!.yarn/releases
-!.yarn/versions
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# ---- test / coverage ----
-coverage/
-.nyc_output/
-playwright-report/
-test-results/
-blob-report/
-.playwright/
+.env.local
+*.log
+.impeccable/hook.cache.json
 .vitest/
 
-# ---- python tooling (database scripts) ----
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
+# backend: generated seed input (built from backend/scripts/seed-source)
+backend/scripts/data/
 
-# ---- docker / local data ----
-.docker-data/
-postgres-data/
-
-# ---- local uploads (avatars in dev, before object storage) ----
-/public/uploads/
-/storage/
-
-
-# ---- editor / os ----
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-.idea/
-.DS_Store
-Thumbs.db
-desktop.ini
-*.swp
-
-# ---- office lock files ----
-~$*.docx
-~$*.xlsx
-~$*.pptx
-
-# ---- vercel & better-t-stack ----
-.vercel/
-.alchemy
-local.db
-local.db-*
-.pnp
-.pnp.js
-.nx
-.evlog/
-apps/web/src/routeTree.gen.ts
-.vercel
-.env*
-
-# Working notes for this session/agent — not a shared deliverable
-plans/
-
-# Playwright e2e (apps/web/e2e): signed-in storage states
-apps/web/e2e/.auth/
-
-# Performance tests: account credentials stay out of git; results and Lighthouse output are regenerated
-perf/k6/**/*.csv
+# performance and browser test output (load-test credentials never live in the repo)
 perf/k6/results/
+perf/k6/**/*.csv
 .lighthouseci/
+e2e/report/
+e2e/results/
+
+# release image archive written by scripts/build-image.sh --save
+image.tar.gz
+
+# monitoring stack secrets (Grafana, Discord webhook) live only on the VPS
+deploy/monitoring/.env
+
+# unit test coverage reports
+coverage/

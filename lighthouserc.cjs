@@ -2,11 +2,11 @@
 // baseline is recorded (see docs/performance-testing.md).
 //
 // Environment:
-//   LHCI_BASE_URL     origin to audit, e.g. a Vercel preview URL (default: local dev server)
+//   LHCI_BASE_URL     origin to audit (default: the local production image on :3001)
 //   LHCI_COURSE_SLUG  optional published course slug for the course detail page
-//                     (CI resolves it with scripts/lhci-resolve-course.mjs)
+//                     (resolve it with node scripts/lhci-resolve-course.mjs <base-url>)
 
-const base = (process.env.LHCI_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+const base = (process.env.LHCI_BASE_URL || "http://localhost:3001").replace(/\/$/, "");
 const slug = process.env.LHCI_COURSE_SLUG;
 
 const paths = ["/", "/courses", ...(slug ? [`/courses/${encodeURIComponent(slug)}`] : []), "/login"];

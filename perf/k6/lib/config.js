@@ -1,7 +1,8 @@
 // Shared target, guard, ramp and threshold settings for every k6 script.
 //
 // Required environment:
-//   BASE_URL=https://<preview>.vercel.app   explicit target, never a default
+//   BASE_URL=http://localhost:3001          explicit target, never a default (the local Docker stack, see
+//                                           docs/performance-testing.md)
 //   I_UNDERSTAND_TARGET=1                   confirms the target has its own database
 //
 // Optional:
@@ -14,11 +15,24 @@
 const rawBase = (__ENV.BASE_URL || "").trim();
 
 if (!rawBase) {
-  throw new Error("BASE_URL is required. Pass it explicitly, e.g. -e BASE_URL=https://<preview>.vercel.app");
+  throw new Error("BASE_URL is required. Pass it explicitly, e.g. -e BASE_URL=http://localhost:3001");
 }
 if (__ENV.I_UNDERSTAND_TARGET !== "1") {
   throw new Error(
     "Refusing to run: set I_UNDERSTAND_TARGET=1 to confirm the target is a load-test environment with its own database.",
+  );
+}
+// The production VPS serves real users and shares one machine with its database: never a load-test target.
+const PRODUCTION_HOSTS = /(^|\/\/)(codi\.hoangblue\.dev|codi\.ddnsfree\.com|172\.93\.209\.12)(:|\/|$)/i;
+// The owner may load-test that server while it is a dev server: ALLOW_DEV_SERVER must name the exact host.
+const targetHost = rawBase.replace(/^https?:\/\//, "").split(/[/:]/)[0].toLowerCase();
+const allowedDevServer = (__ENV.ALLOW_DEV_SERVER || "").trim().toLowerCase() === targetHost;
+if (
+  (PRODUCTION_HOSTS.test(rawBase) && !allowedDevServer) ||
+  (__ENV.PRODUCTION_URL && rawBase.replace(/\/$/, "") === __ENV.PRODUCTION_URL.replace(/\/$/, ""))
+) {
+  throw new Error(
+    `Refusing to load-test production (${rawBase}). Run the local Docker stack, or set ALLOW_DEV_SERVER=${targetHost} when that server is a dev server you own.`,
   );
 }
 if (!/^https:\/\//.test(rawBase) && !/^http:\/\/localhost(:\d+)?$/.test(rawBase)) {
@@ -27,6 +41,11 @@ if (!/^https:\/\//.test(rawBase) && !/^http:\/\/localhost(:\d+)?$/.test(rawBase)
 
 export const BASE_URL = rawBase.replace(/\/$/, "");
 export const ENABLE_WRITES = __ENV.ENABLE_WRITES === "1";
+// Local targets only: one X-Forwarded-For per VU, as the VPS proxy would send (see lib/http.js).
+export const SIMULATE_CLIENT_IPS = __ENV.SIMULATE_CLIENT_IPS === "1";
+if (SIMULATE_CLIENT_IPS && !/^http:\/\/localhost(:\d+)?$/.test(BASE_URL)) {
+  throw new Error("SIMULATE_CLIENT_IPS=1 is only for a local target (http://localhost:<port>)");
+}
 export const COURSE_SLUG = __ENV.COURSE_SLUG || "";
 export const SUMMARY_DIR = __ENV.SUMMARY_DIR || "perf/k6/results";
 
@@ -50,8 +69,28 @@ export function thresholds({ writes = false } = {}) {
     checks: ["rate>0.99"],
   };
   if (writes) result["http_req_duration{type:write}"] = [`p(95)<${WRITE_P95_MS}`];
+  // Always-true thresholds: they only make k6 keep a latency trend per endpoint, which the summary prints, so a slow
+  // run says which endpoint is slow.
+  for (const name of ENDPOINTS) result[`http_req_duration{name:${name}}`] = ["max>=0"];
   return result;
 }
+
+// Request names used by lib/journey.js and lib/auth.js.
+const ENDPOINTS = [
+  "POST /api/auth/sign-in/email",
+  "GET /",
+  "GET /courses",
+  "GET /api/courses",
+  "GET /api/courses/:slug",
+  "GET /api/learn/:courseId/path",
+  "GET /api/learn/:courseId/access/:lessonId",
+  "GET /api/learn/:courseId/lessons/:lessonId",
+  "POST /api/learn/:courseId/lessons/:lessonId (study)",
+  "GET /api/learn/:courseId/lessons/:lessonId/assessments/:assessmentId",
+  "POST /api/learn/:courseId/lessons/:lessonId/assessments/:assessmentId (quiz-open)",
+  "POST /api/learn/:courseId/lessons/:lessonId/assessments/:assessmentId (quiz-answer)",
+  "POST /api/learn/:courseId/lessons/:lessonId/assessments/:assessmentId (quiz-submit)",
+];
 
 function positiveInt(value, fallback) {
   const parsed = Number.parseInt(value ?? "", 10);

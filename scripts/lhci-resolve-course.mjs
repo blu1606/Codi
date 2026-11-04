@@ -2,7 +2,7 @@
 // so the Lighthouse run can audit a real course detail page. Prints nothing when the
 // catalogue is empty; lighthouserc.cjs then audits the static pages only.
 //
-// Usage: node scripts/lhci-resolve-course.mjs <base-url> >> "$GITHUB_ENV"
+// Usage: node scripts/lhci-resolve-course.mjs <base-url>
 
 const base = process.argv[2]?.replace(/\/$/, "");
 if (!base) {

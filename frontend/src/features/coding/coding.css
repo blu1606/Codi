@@ -1,0 +1,96 @@
+/* Coding-practice rules the mockup injects at runtime (coding-practice.js cpStyle); they load after the global CSS. */
+.cp-tests-head { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
+.cp-filter-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.cp-filter-tab { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; font-size: var(--text-sm); display: flex; align-items: center; gap: var(--space-1); transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
+.cp-filter-tab:hover { background: var(--subtle); color: var(--fg); }
+.cp-filter-tab.is-active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 500; }
+.cp-filter-tab:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.cp-test-details { list-style: none; }
+.cp-test-summary { display: flex; gap: var(--space-3); align-items: center; min-height: 44px; cursor: pointer; padding: var(--space-2) 0; width: 100%; text-align: left; background: none; border: none; font-size: inherit; }
+.cp-test-summary:hover { opacity: 0.85; }
+.cp-test-body { display: flex; gap: var(--space-2); align-items: center; flex: 1; }
+.cp-test-name { flex: 1; }
+.cp-test-state { white-space: nowrap; font-size: var(--text-sm); color: var(--muted); }
+.cp-test-detail { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: var(--space-2); }
+.cp-test-io { padding: var(--space-2); background: var(--canvas); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+.cp-test-io strong { display: block; color: var(--muted); font-size: var(--text-xs); margin-bottom: var(--space-1); }
+.cp-test-io code { word-break: break-all; }
+.cp-test-io.is-fail { background: var(--danger-soft); }
+.cp-test-io.is-error { background: var(--danger-soft); }
+.cp-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; padding-top: var(--space-3); border-top: 1px solid var(--border); margin-top: var(--space-3); }
+
+/* ───────────── Real-app workspace pieces (lesson-coding / lesson-tutorial) ───────────── */
+.cp-gutter > span { display: block; }
+.cp-gutter > .is-error { margin-right: calc(-1 * var(--space-2)); padding-right: var(--space-2); background: var(--code-bar); color: var(--code-err); font-weight: 700; }
+.cp-bar-tools { display: inline-flex; align-items: center; gap: var(--space-1); }
+.cp-bar-btn { min-height: 32px; color: var(--code-fg); }
+.cp-bar-btn:hover:not(:disabled) { background: var(--code-bg); color: var(--code-fg); }
+.cp-bar-btn:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft-border); }
+@container (max-width: 759px) { .cp-bar-label { display: none; } }
+.cp-kbd { padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5; }
+.cp-num { color: var(--fg); font-variant-numeric: tabular-nums; }
+.cp-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.cp-meta { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.cp-meta p { margin: 0; }
+.cp-keys summary { cursor: pointer; }
+.cp-keys p { padding-top: var(--space-2); }
+.cp-solution { padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.cp-solution-summary { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; font-weight: 600; cursor: pointer; }
+.cp-solution-body { padding-top: var(--space-2); }
+
+/* output: tabs "Kết quả kiểm thử" | "Console" */
+.cp-out-panel { padding: 0; gap: 0; overflow: hidden; }
+.cp-out-tabs.tabs { margin-bottom: 0; padding: 0 var(--space-3); }
+.cp-out-body { padding: var(--space-4); min-width: 0; }
+.cp-out-body.cp-console { border-radius: 0; }
+.cp-console-head { margin: 0; font-family: var(--font-body); font-size: var(--text-sm); font-weight: 600; color: var(--code-fg); }
+.cp-busy { padding: var(--space-4) 0; }
+.cp-spin { animation: spin 0.8s linear infinite; }
+.cp-tests-head p { margin: 0; }
+
+/* test rows: collapsed details with input / expected / actual */
+.cp-test-summary { list-style: none; }
+.cp-test-summary::-webkit-details-marker { display: none; }
+.cp-test-summary:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.cp-test-chevron { flex: none; margin-left: auto; color: var(--muted); transition: transform var(--motion-fast) var(--ease-out); }
+.cp-test-details[open] .cp-test-chevron { transform: rotate(180deg); }
+.cp-test-details { flex: 1 1 auto; min-width: 0; }
+dl.cp-test-detail { display: grid; gap: var(--space-2); margin: 0; }
+.cp-test-io dt { margin-bottom: var(--space-1); font-size: var(--text-xs); font-weight: 600; color: var(--muted); }
+.cp-test-io dd { margin: 0; white-space: pre-wrap; }
+.cp-test-io.is-fail { border: 1px solid var(--danger); }
+.cp-test-io.is-fail code { color: var(--danger); }
+.cp-test-fail { padding: var(--space-2) 0 var(--space-2) var(--space-5); }
+.cp-test-fail p { margin: 0; }
+
+/* tutorial console outcomes */
+.cp-tut-outcome { display: grid; gap: 2px; padding-top: var(--space-2); border-top: 1px solid var(--code-bar); font-family: var(--font-mono); }
+.cp-tut-outcome p { display: flex; align-items: center; gap: var(--space-2); margin: 0; }
+.cp-tut-outcome.is-pass > p:first-child { color: var(--code-ok); }
+.cp-tut-outcome.is-fail > p:first-child { color: var(--code-err); }
+.cp-tut-outcome-detail { color: var(--code-muted); overflow-wrap: anywhere; }
+.cp-tut-next { height: auto; min-height: 44px; white-space: normal; text-align: left; }
+.cp-tut-title:focus { outline: none; }
+.cp-tut-head .od-nowrap { white-space: nowrap; }
+.cp-gate-pane p { margin: 0; }
+
+/* ───────────── Split lesson page: view(c, l, {part}) ───────────── */
+/* brief (left pane): requirements or tutorial guide + test results, flat on the pane */
+.cp-part-brief { display: grid; gap: var(--space-4); }
+.cp-part-brief .cp-tut-guide { position: static; padding: 0; border: 0; }
+.cp-tests-panel { gap: var(--space-3); }
+/* work (right pane): status, editor, console; Chạy / Nộp bài pinned to the bottom of the scroller */
+.cp-part-work { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.cp-part-work .cp-tut-work { flex: 1 0 auto; display: flex; flex-direction: column; gap: var(--space-4); }
+.cp-part-work .cp-console-lines { max-height: 220px; }
+.cp-dock { position: sticky; bottom: 0; z-index: 2; margin-top: auto; padding: var(--space-3) 0; background: var(--surface); border-top: 1px solid var(--border); }
+.cp-dock .cp-actions { margin-top: 0; padding-top: 0; border-top: 0; }
+/* code assignment: editor + console with its own "Chạy" (the form's "Nộp bài tập" stays the one primary) */
+.cp-assignment { min-width: 0; }
+.cp-console-bar { gap: var(--space-3); flex-wrap: wrap; }
+.cp-assignment .cp-console-lines { max-height: 240px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-spin { animation: none; }
+  .cp-test-chevron, .cp-filter-tab { transition: none; }
+}

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" width="720" height="380" role="img" aria-label="Thời gian phản hồi theo tải">
+<style>
+  svg { --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#8a8984; --grid:#e6e5e1; --s1:#2a78d6; --s2:#eb6834; }
+  @media (prefers-color-scheme: dark) {
+    svg { --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e88; --grid:#33322f; --s1:#3987e5; --s2:#d95926; }
+  }
+  text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: var(--ink2); font-size: 12px; }
+  .title { fill: var(--ink); font-size: 15px; font-weight: 600; }
+  .axis { fill: var(--muted); font-size: 11px; }
+  .label { fill: var(--ink); font-size: 12px; font-weight: 600; }
+  .grid { stroke: var(--grid); stroke-width: 1; }
+</style>
+<rect width="720" height="380" rx="8" fill="var(--surface)"/>
+<text class="title" x="64" y="26">Thời gian phản hồi theo tải</text>
+<text x="64" y="45">Server dev 2 vCPU / 4 GB · 70% khách xem, 30% học viên đăng nhập · đo từ Việt Nam, gồm ~75 ms mạng</text>
+<line x1="64" x2="82" y1="68" y2="68" stroke="var(--s1)" stroke-width="2"/><text x="88" y="72">p50 (trung vị)</text><line x1="199.60000000000002" x2="217.60000000000002" y1="68" y2="68" stroke="var(--s2)" stroke-width="2"/><text x="223.60000000000002" y="72">p95</text><line x1="264.8" x2="282.8" y1="68" y2="68" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/><text x="288.8" y="72">SLO p95</text>
+<line class="grid" x1="64" x2="628" y1="328" y2="328"/><text class="axis" x="56" y="332" text-anchor="end">50 ms</text><line class="grid" x1="64" x2="628" y1="296.07893896193366" y2="296.07893896193366"/><text class="axis" x="56" y="300.07893896193366" text-anchor="end">100 ms</text><line class="grid" x1="64" x2="628" y1="264.1578779238674" y2="264.1578779238674"/><text class="axis" x="56" y="268.1578779238674" text-anchor="end">200 ms</text><line class="grid" x1="64" x2="628" y1="221.96053051903317" y2="221.96053051903317"/><text class="axis" x="56" y="225.96053051903317" text-anchor="end">500 ms</text><line class="grid" x1="64" x2="628" y1="190.03946948096683" y2="190.03946948096683"/><text class="axis" x="56" y="194.03946948096683" text-anchor="end">1.0 s</text><line class="grid" x1="64" x2="628" y1="158.11840844290052" y2="158.11840844290052"/><text class="axis" x="56" y="162.11840844290052" text-anchor="end">2.0 s</text><line class="grid" x1="64" x2="628" y1="115.92106103806631" y2="115.92106103806631"/><text class="axis" x="56" y="119.92106103806631" text-anchor="end">5.0 s</text><line class="grid" x1="64" x2="628" y1="84" y2="84"/><text class="axis" x="56" y="88" text-anchor="end">10.0 s</text><text class="axis" x="80" y="346" text-anchor="middle">100</text><text class="axis" x="232" y="346" text-anchor="middle">140</text><text class="axis" x="308" y="346" text-anchor="middle">160</text><text class="axis" x="384" y="346" text-anchor="middle">180</text><text class="axis" x="460" y="346" text-anchor="middle">200</text><text class="axis" x="612" y="346" text-anchor="middle">240</text>
+<text class="axis" x="346" y="370" text-anchor="middle">tải gửi tới (request mỗi giây) · trục dọc thang log</text>
+<text class="axis" transform="translate(16 206) rotate(-90)" text-anchor="middle">thời gian phản hồi</text>
+<line x1="64" x2="628" y1="221.96053051903317" y2="221.96053051903317" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text class="axis" x="634" y="225.96053051903317">SLO 500 ms</text>
+<line x1="308" x2="308" y1="84" y2="328" stroke="var(--muted)" stroke-width="1"/><text class="label" x="302" y="98" text-anchor="end">đạt SLO tới 160 req/s</text>
+<path d="M80.0,312.6L232.0,309.4L308.0,311.3L384.0,289.2L460.0,295.1L612.0,292.1" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="80" cy="312.5862455152678" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/><circle cx="232" cy="309.3877751880835" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/><circle cx="308" cy="311.3281793417726" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/><circle cx="384" cy="289.2232481290017" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/><circle cx="460" cy="295.0874967556271" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/><circle cx="612" cy="292.079083123771" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<path d="M80.0,260.4L232.0,242.4L308.0,247.1L384.0,177.0L460.0,128.4L612.0,120.6" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="80" cy="260.3662641803931" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/><circle cx="232" cy="242.4366945785132" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/><circle cx="308" cy="247.1227119668825" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/><circle cx="384" cy="176.99231195864303" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/><circle cx="460" cy="128.42911378951771" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/><circle cx="612" cy="120.64903757584673" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<text class="label" x="620" y="124.64903757584673">4.5 s</text>
+<text class="label" x="620" y="296.079083123771">109 ms</text>
+</svg>

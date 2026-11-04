@@ -1,0 +1,152 @@
+# CI on every pull request and push to develop and main; deploy to the VPS on every push to main.
+#
+#   pull request → develop or main : check + e2e
+#   push to develop                : check + e2e
+#   push to main                   : check + e2e, then deploy (release.sh on the VPS) and verify production
+#
+# The deploy job runs in the "production" environment, whose secrets are DEPLOY_HOST, DEPLOY_SSH_KEY and
+# DEPLOY_SSH_KNOWN_HOSTS (docs/ci-cd.md). release.sh backs up the database, applies migrations, switches to the new
+# image and rolls back by itself when the health check or the fast check fails.
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  E2E_BASE_URL: http://localhost:3101
+
+jobs:
+  check:
+    name: Typecheck, unit tests, build, security check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck backend
+        run: npm run typecheck -w backend
+      - name: Unit tests (Vitest and node:test)
+        run: npm test
+      - name: Build frontend
+        run: npm run build
+      - name: Secret scan and npm audit
+        run: npm run security:check
+
+  e2e:
+    name: E2E (Playwright) and security probe on the production image
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PERF_IMAGE_TAG: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Build the production image
+        run: docker build -t codi-rebuild:ci .
+      - name: Start the app with its own database (deploy/compose.perf.yml)
+        run: |
+          # The image runs with NODE_ENV=production, which requires a real auth secret.
+          printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)" > backend/.env
+          docker compose -f deploy/compose.perf.yml up -d db
+          docker compose -f deploy/compose.perf.yml run --rm --no-deps -e NODE_ENV=development app \
+            npx tsx scripts/seed.ts --no-backup
+          docker compose -f deploy/compose.perf.yml up -d app
+          for i in $(seq 1 60); do curl -sf "$E2E_BASE_URL/api/health" && exit 0; sleep 2; done
+          docker compose -f deploy/compose.perf.yml logs app
+          exit 1
+      - name: Fast check (curl)
+        run: sh deploy/fastcheck.sh "$E2E_BASE_URL" perf
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Playwright (fast check, role guards, Content-Security-Policy)
+        run: npx playwright test
+      - name: Security probe (passive and active checks)
+        run: npm run security:probe -- "$E2E_BASE_URL"
+      - name: App logs
+        if: failure()
+        run: docker compose -f deploy/compose.perf.yml logs app --tail 200
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/report
+            e2e/results
+          retention-days: 7
+
+  deploy:
+    name: Deploy to the VPS
+    needs: [check, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://codi.hoangblue.dev
+    # One release at a time; a newer push waits instead of interrupting a release half way.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      PUBLIC_URL: https://codi.hoangblue.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Release tag
+        id: tag
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: SSH access
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host vps\n  HostName %s\n  User root\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n  ServerAliveInterval 30\n' \
+            "$DEPLOY_HOST" > ~/.ssh/config
+          ssh vps true
+      - name: Build the image
+        run: docker build -t "codi-rebuild:${{ steps.tag.outputs.sha }}" .
+      - name: Upload the image and the deploy scripts
+        run: |
+          docker save "codi-rebuild:${{ steps.tag.outputs.sha }}" | gzip -1 | ssh vps 'cat > /opt/codi-rebuild/image.tar.gz'
+          scp deploy/compose.yml deploy/release.sh deploy/rollback.sh deploy/release-lib.sh deploy/fastcheck.sh \
+            vps:/opt/codi-rebuild/
+      - name: Release (backs up the database, migrates, rolls back on failure)
+        run: ssh vps "sh /opt/codi-rebuild/release.sh ${{ steps.tag.outputs.sha }}"
+      - run: npm ci --no-audit --no-fund
+      - name: Verify production (fast check through Caddy)
+        run: sh deploy/fastcheck.sh "$PUBLIC_URL" "${{ steps.tag.outputs.sha }}"
+      - name: Verify production (browser fast check, read-only)
+        run: |
+          npx playwright install --with-deps chromium
+          E2E_BASE_URL="$PUBLIC_URL" npx playwright test --grep @fast
+      - name: Security probe on production (passive only)
+        run: npm run security:probe -- "$PUBLIC_URL"

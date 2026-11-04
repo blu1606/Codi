@@ -97,6 +97,9 @@ function submitQuiz(courseId, lessonId, assessmentId) {
   if (!submissionId || questions.length === 0) {
     throw new Error("quiz state has no submission or questions; check the assessment response shape");
   }
+  // Once an account has used its attempts (or waits out a retry delay), quiz-open returns the graded attempt
+  // instead of a new one; answering it would only measure 409s. The read above still counts.
+  if (state.submission.submittedAt || state.unavailableReason) return;
 
   for (const question of questions) {
     const option = question.options?.[0];

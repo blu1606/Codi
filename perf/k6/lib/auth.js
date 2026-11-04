@@ -17,6 +17,11 @@ export function invalidateSession() {
   signedIn = false;
 }
 
+// capacity.js signs the accounts in during setup() and gives each VU its session cookies.
+export function useExistingSession() {
+  signedIn = true;
+}
+
 function retryAfterSeconds(res) {
   const header = Number(res.headers["X-Retry-After"] || res.headers["Retry-After"]);
   // Jitter spreads VUs that were throttled together across the next window.

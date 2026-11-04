@@ -2,7 +2,7 @@
 // summary and thresholds group dynamic URLs (slugs, ids) under one label.
 import http from "k6/http";
 import { Rate } from "k6/metrics";
-import { BASE_URL } from "./config.js";
+import { BASE_URL, SIMULATE_CLIENT_IPS } from "./config.js";
 
 // Routes that must never be called from load tests: AI generation (quota and cost), GitHub
 // profile analysis, payments and order flows, and tutor/discussion threads.
@@ -32,6 +32,9 @@ export function call(method, path, { type, name, body, origin = false, headers =
   if (body !== undefined) allHeaders["Content-Type"] = "application/json";
   // Mutating routes check that Origin matches the site origin.
   if (origin) allHeaders.Origin = BASE_URL;
+  // On the VPS, Caddy gives every visitor their own X-Forwarded-For, so each has a separate sign-in rate-limit
+  // bucket. A local run has no proxy; this stands in for it with one address per VU.
+  if (SIMULATE_CLIENT_IPS) allHeaders["X-Forwarded-For"] = `10.77.${Math.floor(__VU / 250)}.${(__VU % 250) + 1}`;
   const payload = body === undefined ? null : JSON.stringify(body);
   const res = http.request(method, `${BASE_URL}${path}`, payload, {
     headers: allHeaders,
