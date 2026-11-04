@@ -1,6 +1,7 @@
 import { Component, useEffect } from 'react';
 import { Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Codi, bindRouter, useCodi } from './lib/codi';
+import { reloadIfStale, watchRelease } from './lib/release-check';
 import { allRoutes } from './features';
 import AppLayout from './components/layout/app-layout';
 import { NotFoundPage, ForbiddenPage, SignInRequiredPage } from './components/layout/guard-pages';
@@ -11,6 +12,9 @@ function RouterBridge() {
   const navigate = useNavigate();
   const location = useLocation();
   bindRouter(navigate, location);
+  useEffect(() => { watchRelease(); }, []);
+  // A tab opened before the latest deploy loads the new build on its next page change.
+  useEffect(() => { reloadIfStale(); }, [location.pathname]);
   return null;
 }
 
