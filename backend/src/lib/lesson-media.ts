@@ -11,7 +11,7 @@ import { pipeline } from "node:stream/promises";
 import { spawn } from "node:child_process";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { ENV } from "@/env";
-import { getR2Client, R2_BUCKET } from "@/lib/storage";
+import { getR2Client, publicStorageBase, R2_BUCKET } from "@/lib/storage";
 
 export class LessonMediaError extends Error {
   constructor(message: string, readonly status: number) {
@@ -146,9 +146,8 @@ export async function probeDuration(file: string): Promise<number | null> {
 }
 
 export function mediaUrl(key: string) {
-  const publicUrl = ENV.R2_PUBLIC_URL;
-  if (publicUrl && !publicUrl.includes(".r2.cloudflarestorage.com")) return `${publicUrl.replace(/\/$/, "")}/${key}`;
-  return `/api/lesson-media?key=${encodeURIComponent(key)}`;
+  const publicBase = publicStorageBase();
+  return publicBase ? `${publicBase}/${key}` : `/api/lesson-media?key=${encodeURIComponent(key)}`;
 }
 
 /** The R2 key behind a URL this module produced, or null for any other URL (YouTube, external links). */

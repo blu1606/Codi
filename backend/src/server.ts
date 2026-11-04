@@ -13,6 +13,7 @@ import { aiWorkerEnabled, startAiWorker } from "./host/ai-worker";
 import { mountNextRoutes } from "./host/next-routes";
 import { mountServerActions } from "./host/server-actions";
 import { ENV } from "./env";
+import { publicStorageBase } from "./lib/storage";
 import { db } from "./services";
 
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "app");
@@ -23,14 +24,26 @@ const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "app");
 // Google / GitHub profile pictures. Scripts allow no inline code and no
 // eval (the code editor's syntax check parses with acorn). Inline styles stay allowed: components set style
 // attributes. Sent on HTML responses only, so lecture PDFs keep opening in the browser's own viewer.
+// When R2_PUBLIC_URL names a public storage domain, uploaded avatars, lecture videos and PDFs are linked there instead
+// of through the same-origin proxies (storage.ts publicStorageBase), so that origin is allowed for those three.
+function storageOrigin() {
+  const base = publicStorageBase();
+  try {
+    return base ? ` ${new URL(base).origin}` : "";
+  } catch {
+    console.error("[csp] R2_PUBLIC_URL is not a URL; uploaded media will be blocked until it is fixed");
+    return "";
+  }
+}
+const STORAGE = storageOrigin();
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' https://www.youtube.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://qr.sepay.vn https://i.ytimg.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com",
-  "media-src 'self' blob:",
-  "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://challenges.cloudflare.com",
+  `img-src 'self' data: blob: https://qr.sepay.vn https://i.ytimg.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com${STORAGE}`,
+  `media-src 'self' blob:${STORAGE}`,
+  `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://challenges.cloudflare.com${STORAGE}`,
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",
