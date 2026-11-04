@@ -4,6 +4,7 @@ import { assessments, codingExercises, codingTestCases, courseChapters, courseDe
 import type { CourseDataForReview } from "./publication-service";
 import { db } from "@/services";
 import { readConfirmedKnowledgeMap } from "./confirmed-knowledge-map";
+import { parseRubric } from "./assignment-rubric";
 
 function parseInstructions(value: string | null): string[] {
   if (!value) return [];
@@ -182,19 +183,9 @@ export async function fetchCourseDataForReview(courseId: string, store: Pick<typ
 
         let assignmentObj = null;
         if (lAssignmentAssessment) {
-          let rubric: any[] = [];
-          if (lAssignmentAssessment.rubric) {
-            try {
-              rubric = typeof lAssignmentAssessment.rubric === "string"
-                ? JSON.parse(lAssignmentAssessment.rubric)
-                : (lAssignmentAssessment.rubric as any);
-            } catch {
-              rubric = [];
-            }
-          }
           assignmentObj = {
             instructions: lAssignmentAssessment.instructions || "",
-            rubric: Array.isArray(rubric) ? rubric : [],
+            rubric: parseRubric(lAssignmentAssessment.rubric),
           };
         }
 
