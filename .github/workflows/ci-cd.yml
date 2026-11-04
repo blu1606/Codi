@@ -68,7 +68,8 @@ jobs:
         run: |
           # The image runs with NODE_ENV=production, which requires a real auth secret.
           printf 'BETTER_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)" > backend/.env
-          docker compose -f deploy/compose.perf.yml up -d db
+          # --wait returns once the database healthcheck passes; `run --no-deps` below would not wait for it.
+          docker compose -f deploy/compose.perf.yml up -d --wait db
           docker compose -f deploy/compose.perf.yml run --rm --no-deps -e NODE_ENV=development app \
             npx tsx scripts/seed.ts --no-backup
           docker compose -f deploy/compose.perf.yml up -d app
