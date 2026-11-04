@@ -19,17 +19,18 @@ const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "app");
 
 // Content-Security-Policy of the frontend pages. Everything is same-origin (API, uploads, lesson media, covers)
 // except what is listed: Google Fonts, the YouTube player (iframe on youtube-nocookie.com plus the iframe_api script
-// and thumbnails), SePay's VietQR image and Google / GitHub profile pictures. Scripts allow no inline code and no
+// and thumbnails), Cloudflare Turnstile on the sign-up form (script and challenge iframe), SePay's VietQR image and
+// Google / GitHub profile pictures. Scripts allow no inline code and no
 // eval (the code editor's syntax check parses with acorn). Inline styles stay allowed: components set style
 // attributes. Sent on HTML responses only, so lecture PDFs keep opening in the browser's own viewer.
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' https://www.youtube.com",
+  "script-src 'self' https://www.youtube.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: https://qr.sepay.vn https://i.ytimg.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com",
   "media-src 'self' blob:",
-  "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
+  "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://challenges.cloudflare.com",
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",
@@ -67,7 +68,11 @@ async function main() {
   });
 
   // Public runtime switches the frontend reads once at boot (same image for demo and real-shop deploys).
-  app.get("/api/config", (c) => c.json({ demoTools: ENV.DEMO_TOOLS }));
+  // turnstileSiteKey is null unless both Turnstile keys are set, matching when the backend enforces the captcha.
+  app.get("/api/config", (c) => c.json({
+    demoTools: ENV.DEMO_TOOLS,
+    turnstileSiteKey: ENV.TURNSTILE_SITE_KEY && ENV.TURNSTILE_SECRET_KEY ? ENV.TURNSTILE_SITE_KEY : null,
+  }));
 
   const routes = await mountNextRoutes(app, appDir);
   const actionModules = await mountServerActions(app, appDir);

@@ -5,6 +5,7 @@
  * Backend (Better Auth): POST /api/auth/sign-in/email · sign-up/email (signs in and emails a 6-digit code) ·
  * email-otp/verify-email · email-otp/send-verification-otp · sign-in/social (redirects to Google / GitHub; the
  * provider returns to /login?social=ok|<provider>&error=…). Without Resend the codes are printed to the backend console.
+ * When the backend has Turnstile keys (Codi.turnstileSiteKey), sign-up/email carries the token in x-captcha-response.
  *
  * One view store (authView) drives both the full pages (/login, /register) and the modal. Forms keep their own
  * field state; authView carries only the mode, the email/name between steps, the course context and the intent.
@@ -17,6 +18,7 @@ import { api } from '../../lib/api';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { GithubMark, ShellIcon } from './shell-ui';
 import OtpInput from './otp-input';
+import TurnstileWidget from './turnstile-widget';
 import { DEMO_PASSWORD, EMAIL_RE, authCode, authMessage, logActivity } from './account-store';
 import { safeNext } from './github-onboarding-page';
 
@@ -264,8 +266,11 @@ function RegisterForm({ view }) {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState(view.error);
   const [busy, setBusy] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const [captchaRun, setCaptchaRun] = useState(0); // bumping it remounts the widget for a fresh, unused token
   const mounted = useMounted();
   const on = (k) => (e) => setV((x) => ({ ...x, [k]: e.target.value }));
+  const siteKey = Codi.turnstileSiteKey;
 
   const submit = async (ev) => {
     ev.preventDefault();
@@ -275,16 +280,20 @@ function RegisterForm({ view }) {
     if (name.length < 2) next.name = 'Tên người dùng phải có ít nhất 2 ký tự';
     if (!EMAIL_RE.test(email)) next.email = 'Địa chỉ email không hợp lệ';
     if (v.password.length < 8) next.password = 'Mật khẩu phải có ít nhất 8 ký tự';
+    if (siteKey && !captchaToken) next.captcha = 'Vui lòng hoàn thành bước xác minh captcha.';
     setErrors(next);
     if (Object.keys(next).length) return;
     setServerError(null);
     setBusy(true);
     try {
       // Better Auth creates the account, signs it in and sends the email-verification code.
-      await api.post('/api/auth/sign-up/email', { name, email, password: v.password });
+      await api.post('/api/auth/sign-up/email', { name, email, password: v.password },
+        siteKey ? { headers: { 'x-captcha-response': captchaToken } } : undefined);
     } catch (e) {
       if (!mounted.current) return;
       setBusy(false);
+      // Cloudflare accepts each token once, so any failed attempt needs a new challenge.
+      if (siteKey) { setCaptchaToken(null); setCaptchaRun((n) => n + 1); }
       const code = authCode(e);
       if (code === 'USER_ALREADY_EXISTS' || code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' || e.status === 422) {
         setServerError({ title: 'Email đã được dùng', body: 'Email này đã có tài khoản. Hãy đăng nhập hoặc dùng "Quên mật khẩu?".' });
@@ -316,6 +325,12 @@ function RegisterForm({ view }) {
           <input id="reg-email" name="email" type="email" autoComplete="email" placeholder="name@example.com" value={v.email} onChange={on('email')} aria-invalid={errors.email ? true : undefined} /><FieldError msg={errors.email} /></div>
         <div className={`field ${errors.password ? 'is-invalid' : ''}`}><label htmlFor="reg-pass">Mật khẩu</label>
           <input id="reg-pass" name="password" type="password" autoComplete="new-password" placeholder="Ít nhất 8 ký tự" value={v.password} onChange={on('password')} aria-invalid={errors.password ? true : undefined} /><FieldError msg={errors.password} /></div>
+        {siteKey && (
+          <div className={`field ${errors.captcha ? 'is-invalid' : ''}`}>
+            <TurnstileWidget key={captchaRun} siteKey={siteKey} onToken={(t) => { setCaptchaToken(t); if (t) setErrors((x) => ({ ...x, captcha: undefined })); }} />
+            <FieldError msg={errors.captcha} />
+          </div>
+        )}
         <button className="btn btn-primary btn-block" type="submit" disabled={busy}>{busy ? 'Đang tạo tài khoản...' : 'Đăng ký tài khoản'}</button>
       </form>
       <p className="small muted" style={{ textAlign: 'center' }}>Đã có tài khoản? <button type="button" className="btn-link" onClick={() => setMode('login')}>Đăng nhập</button></p>

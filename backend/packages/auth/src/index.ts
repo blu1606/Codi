@@ -6,7 +6,7 @@ import { userRoles } from "@codi-1/db/schema/roles";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
-import { emailOTP } from "better-auth/plugins";
+import { captcha, emailOTP } from "better-auth/plugins";
 import { Resend } from "resend";
 
 import { getChangeEmailOTPEmailHtml, getResetPasswordOTPEmailHtml, getVerificationOTPEmailHtml } from "./email-templates";
@@ -27,6 +27,8 @@ export type AuthConfig = AuthOriginConfig & {
   GOOGLE_CLIENT_SECRET?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  /** Cloudflare Turnstile secret. When set, email sign-up requires a solved Turnstile challenge. */
+  TURNSTILE_SECRET_KEY?: string;
 };
 
 export function createAuth(env: AuthConfig, database: Database) {
@@ -172,6 +174,11 @@ export function createAuth(env: AuthConfig, database: Database) {
       nextCookies(),
       otpPlugin,
       accountPasswordRecovery(otpPlugin),
+      // The plugin reads the Turnstile token from the x-captcha-response header and asks Cloudflare to verify it
+      // before Better Auth creates the account or mails the verification code.
+      ...(env.TURNSTILE_SECRET_KEY
+        ? [captcha({ provider: "cloudflare-turnstile", secretKey: env.TURNSTILE_SECRET_KEY, endpoints: ["/sign-up/email"] })]
+        : []),
     ],
     socialProviders: {
       ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET

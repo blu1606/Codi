@@ -12,6 +12,7 @@
  * STATE (browser only, never domain data)
  *  Codi.state = { currentUserId, scenario }   scenario = Alt+K test flags + resolved theme, kept in localStorage.
  *  Codi.demoTools                             backend switch (GET /api/config); when false the flags stay default.
+ *  Codi.turnstileSiteKey                      Cloudflare Turnstile site key (GET /api/config); null = sign-up has no captcha.
  *  Codi.set(fnOrPatch, { render:false })      fn(state) mutates in place, or an object is merged; re-renders.
  *
  * SESSION     Codi.session = { user, roles } from GET /api/auth/get-session + /api/user/roles (Better Auth cookie).
@@ -58,10 +59,16 @@ function readScenario(demoTools) {
   }
 }
 
-/** GET /api/config → whether the backend runs with demo tools (dev, or production with DEMO_TOOLS=true). */
-async function fetchDemoTools() {
+/**
+ * GET /api/config → whether the backend runs with demo tools (dev, or production with DEMO_TOOLS=true) and the
+ * Turnstile site key the sign-up form needs when the backend enforces the captcha.
+ */
+async function fetchConfig() {
   const config = await api('/api/config');
-  return !!(config && config.demoTools === true);
+  return {
+    demoTools: !!(config && config.demoTools === true),
+    turnstileSiteKey: (config && typeof config.turnstileSiteKey === 'string' && config.turnstileSiteKey) || null,
+  };
 }
 
 function applyTheme() {
@@ -98,8 +105,9 @@ export function loadSession() {
 }
 
 async function loadSessionOnce() {
-  const [auth, demoTools] = await Promise.all([fetchSession(), fetchDemoTools()]);
+  const [auth, { demoTools, turnstileSiteKey }] = await Promise.all([fetchSession(), fetchConfig()]);
   Codi.demoTools = demoTools;
+  Codi.turnstileSiteKey = turnstileSiteKey;
   Codi.state = { currentUserId: null, scenario: readScenario(demoTools) };
   applySession(auth);
   applyTheme();

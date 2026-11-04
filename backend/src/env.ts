@@ -49,6 +49,10 @@ export const ENV = {
   GOOGLE_CLIENT_SECRET: read("GOOGLE_CLIENT_SECRET"),
   GITHUB_CLIENT_ID: read("GITHUB_CLIENT_ID"),
   GITHUB_CLIENT_SECRET: read("GITHUB_CLIENT_SECRET"),
+  // Cloudflare Turnstile on email sign-up. Both keys are needed; with either one missing, sign-up has no captcha.
+  // The site key is public and reaches the frontend through GET /api/config.
+  TURNSTILE_SITE_KEY: read("TURNSTILE_SITE_KEY"),
+  TURNSTILE_SECRET_KEY: read("TURNSTILE_SECRET_KEY"),
   R2_ACCOUNT_ID: read("R2_ACCOUNT_ID"),
   R2_ACCESS_KEY_ID: read("R2_ACCESS_KEY_ID"),
   R2_SECRET_ACCESS_KEY: read("R2_SECRET_ACCESS_KEY"),

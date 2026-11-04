@@ -28,6 +28,12 @@ SePay calls the webhook: in the SePay dashboard the webhook URL must be
 Demo tools are always on outside production; `DEMO_TOOLS=true` turns them back on in production with the same image.
 The app rebuilds request URLs as https when Caddy sends `X-Forwarded-Proto: https`, so the routes' Origin checks pass.
 
+Email sign-up asks for a Cloudflare Turnstile challenge when `rebuild.env` has both `TURNSTILE_SITE_KEY` and
+`TURNSTILE_SECRET_KEY` (a Turnstile widget for `codi.hoangblue.dev` in the Cloudflare dashboard). The frontend reads the
+site key from `GET /api/config`, and Better Auth's `captcha` plugin rejects `POST /api/auth/sign-up/email` without a
+valid token (400 `MISSING_RESPONSE`, 403 `VERIFICATION_FAILED`). With either key missing, sign-up has no captcha.
+After changing the keys, run `docker compose up -d --force-recreate app`.
+
 ## Release a new version
 
 From the repo root on a dev machine:

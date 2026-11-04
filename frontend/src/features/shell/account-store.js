@@ -46,6 +46,8 @@ const AUTH_CODES = {
   TOKEN_EXPIRED: 'Không thể đặt lại mật khẩu. Token có thể đã hết hạn.',
   SESSION_EXPIRED: 'Phiên đăng nhập đã lâu. Vui lòng đăng xuất, đăng nhập lại rồi thử lại.',
   USER_NOT_FOUND: 'Mã OTP không hợp lệ hoặc đã hết hạn 2 phút.',
+  MISSING_RESPONSE: 'Vui lòng hoàn thành bước xác minh captcha.',
+  VERIFICATION_FAILED: 'Xác minh captcha thất bại. Vui lòng thử lại.',
   CREDENTIAL_ACCOUNT_NOT_FOUND: 'Tài khoản này chưa có mật khẩu (đăng nhập bằng Google/GitHub). Dùng "Quên mật khẩu hiện tại?" để đặt mật khẩu.',
 };
 
