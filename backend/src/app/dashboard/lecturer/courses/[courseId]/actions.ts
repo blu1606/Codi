@@ -37,6 +37,7 @@ import {
 import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
 import { AI_QUIZ_MAX_MATERIAL_CHARS, AI_QUIZ_MAX_QUESTIONS, aiQuizFailure, generateQuizDraft } from "@/lib/quiz-ai-generation";
+import { AI_QUIZ_MAX_COURSE_MATERIAL_CHARS, loadCourseQuizMaterial } from "@/lib/quiz-ai-course-material";
 
 export interface UpdateCourseInfoInput {
   title: string;
@@ -1083,12 +1084,17 @@ export async function generateAiQuizQuestions(
     .map((part) => part?.trim())
     .filter(Boolean)
     .join("\n\n");
-  const material = (source.sourceText?.trim() || lessonText).slice(0, AI_QUIZ_MAX_MATERIAL_CHARS);
+  // The entry test has no lesson: it reads the whole course (outline, outcomes, every lesson's text).
+  const material = isEntry
+    ? (source.sourceText?.trim() || await loadCourseQuizMaterial(db, course)).slice(0, AI_QUIZ_MAX_COURSE_MATERIAL_CHARS)
+    : (source.sourceText?.trim() || lessonText).slice(0, AI_QUIZ_MAX_MATERIAL_CHARS);
 
   if (!material) {
     return aiQuizFailure(
       "no_material",
-      "Bài học chưa có nội dung văn bản để AI đọc. Hãy dán nội dung vào ô bên dưới rồi tạo lại.",
+      isEntry
+        ? "Khoá học chưa có nội dung văn bản để AI đọc. Hãy dán nội dung vào ô bên dưới rồi tạo lại."
+        : "Bài học chưa có nội dung văn bản để AI đọc. Hãy dán nội dung vào ô bên dưới rồi tạo lại.",
       false,
     );
   }
@@ -1101,6 +1107,7 @@ export async function generateAiQuizQuestions(
     focus: source.focus,
     materialTitles: materials.map((row) => row.title),
     material,
+    diagnostic: isEntry,
   });
   if (!generated.success) return generated;
   const { questions } = generated;

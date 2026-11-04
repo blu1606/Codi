@@ -224,7 +224,8 @@ function QuizAiDialog({ open, onClose, courseId, lessonId, lessonTitle, maxOptio
   const nextKey = useRef(1);
   const run = useRef(0);
 
-  const title = lessonTitle || (lessonId === 'entry' ? 'Bài kiểm tra đầu vào' : '');
+  const isEntry = lessonId === 'entry';
+  const title = lessonTitle || (isEntry ? 'Bài kiểm tra đầu vào' : '');
   const close = () => { if (onClose) onClose(); };
 
   const runGeneration = async () => {
@@ -288,17 +289,19 @@ function QuizAiDialog({ open, onClose, courseId, lessonId, lessonTitle, maxOptio
             ) : null} />
         )}
         {generating && (
-          <div className="ai-thinking-row" role="status" aria-busy="true"><span className="typing" aria-hidden="true"><i /><i /><i /></span><span>AI đang tạo {count} câu hỏi từ nội dung bài học…</span></div>
+          <div className="ai-thinking-row" role="status" aria-busy="true"><span className="typing" aria-hidden="true"><i /><i /><i /></span><span>AI đang tạo {count} câu hỏi từ nội dung {isEntry ? 'cả khoá học' : 'bài học'}…</span></div>
         )}
         {!showResults && (
           <fieldset className="stack-3 te-fieldset lai-fieldset" disabled={generating}>
             <legend className="field-label">Nguồn nội dung</legend>
             <div className="row" style={{ gap: 16 }} role="radiogroup" aria-label="Nguồn nội dung">
-              <label className="check"><input type="radio" name="ai-quiz-source" checked={sourceMode === 'lesson'} onChange={() => setSourceMode('lesson')} /> Nội dung bài học</label>
+              <label className="check"><input type="radio" name="ai-quiz-source" checked={sourceMode === 'lesson'} onChange={() => setSourceMode('lesson')} /> {isEntry ? 'Nội dung cả khoá học' : 'Nội dung bài học'}</label>
               <label className="check"><input type="radio" name="ai-quiz-source" checked={sourceMode === 'paste'} onChange={() => setSourceMode('paste')} /> Dán nội dung</label>
             </div>
             {sourceMode === 'lesson' ? (
-              <p className="field-help">AI đọc mô tả và nội dung đọc của bài học. Nếu bài chưa có nội dung đọc, hãy chọn &quot;Dán nội dung&quot;.</p>
+              <p className="field-help">{isEntry
+                ? 'AI đọc tên, mô tả, mục tiêu, chương và nội dung đọc của mọi bài trong khoá học, chia đều cho các chương. Câu hỏi bao quát các khái niệm cốt lõi của khoá. Nếu khoá học chưa có nội dung đọc, hãy chọn &quot;Dán nội dung&quot;.'
+                : 'AI đọc mô tả và nội dung đọc của bài học. Nếu bài chưa có nội dung đọc, hãy chọn &quot;Dán nội dung&quot;.'}</p>
             ) : (
               <div className="field">
                 <label htmlFor="ai-quiz-paste">Nội dung để tạo câu hỏi</label>

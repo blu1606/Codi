@@ -7,6 +7,7 @@ import { db } from "@/services";
 import { user } from "@codi-1/db/schema/auth";
 import { userRoles } from "@codi-1/db/schema/roles";
 import { AI_QUIZ_MAX_MATERIAL_CHARS, generateQuizDraft } from "@/lib/quiz-ai-generation";
+import { AI_QUIZ_MAX_COURSE_MATERIAL_CHARS, loadCourseQuizMaterial } from "@/lib/quiz-ai-course-material";
 
 export const quizJobInput = z.object({
   courseId: z.string().min(1).max(200),
@@ -33,10 +34,14 @@ export async function processQuizJob(job: AiJob) {
   const materials = lesson ? await db.select({ title: lessonMaterials.title }).from(lessonMaterials)
     .where(eq(lessonMaterials.lessonId, input.lessonId)) : [];
   const lessonText = [lesson?.lesson.description, lesson?.lesson.body].map((part) => part?.trim()).filter(Boolean).join("\n\n");
-  const material = (input.sourceText?.trim() || lessonText).slice(0, AI_QUIZ_MAX_MATERIAL_CHARS);
+  const isEntry = input.lessonId === "entry";
+  const material = isEntry
+    ? (input.sourceText?.trim() || await loadCourseQuizMaterial(db, course)).slice(0, AI_QUIZ_MAX_COURSE_MATERIAL_CHARS)
+    : (input.sourceText?.trim() || lessonText).slice(0, AI_QUIZ_MAX_MATERIAL_CHARS);
   if (!material) throw new Error("no_material");
   const generated = await generateQuizDraft({ courseTitle: course.title, lessonTitle: lesson?.lesson.title ?? null,
-    count: input.count, difficulty: input.difficulty, focus: input.focus, materialTitles: materials.map((row) => row.title), material }, "background");
+    count: input.count, difficulty: input.difficulty, focus: input.focus, materialTitles: materials.map((row) => row.title), material,
+    diagnostic: isEntry }, "background");
   if (!generated.success) throw new Error(generated.code);
   await db.transaction(async (tx) => {
     await lockAiJob(tx, job.id, job.leaseToken);
