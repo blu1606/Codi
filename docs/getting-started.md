@@ -5,7 +5,8 @@ ported to Hono), with PostgreSQL in Docker. Every page reads and writes through 
 
 ## Requirements
 
-Node 22+, Docker Desktop.
+Node 22+, Docker Desktop, and `ffmpeg` / `ffprobe` on the PATH for lecture videos (Windows: `winget install Gyan.FFmpeg`;
+the Docker image installs it). `FFMPEG_PATH` / `FFPROBE_PATH` in `backend/.env` point at other binaries.
 
 ## Run
 
@@ -78,6 +79,8 @@ and `R2_*` keys, codes are real emails and uploads go to Codi's real R2 buckets.
 | Tutor (`/ai` advisor, in-lesson AI tab, Tutor page), AI quiz questions | `GOOGLE_GENERATIVE_AI_API_KEY` (or `AI_PROVIDER=openai` + `OPENAI_API_KEY`) | The screens show the backend's "Tutor đang tạm nghỉ" / "AI không khả dụng" error |
 | Checkout | `SEPAY_WEBHOOK_SECRET`, `SEPAY_BANK_CODE`, `SEPAY_ACCOUNT_NUMBER` | Paid checkout answers 503 |
 | Avatar and assignment file uploads | Cloudflare `R2_*` | Uploads fail with the server's error |
+| Lecture uploads ("Thêm bài học" → Video / Slide / PDF, "Thêm tài liệu"): stored under `lesson-media/` in `R2_BUCKET`, served by `GET /api/lesson-media` with byte ranges | Cloudflare `R2_*`, `ffprobe` for the video length | The file is not attached; the AI import can still read it |
+| AI import from a file ("Tạo bằng AI → Từ tài liệu / video"): PDF text + Tesseract OCR for image pages, PPTX/DOCX text, video → Whisper transcript + key frames → summary and quiz draft | The AI provider key; `OPENAI_API_KEY` + `ffmpeg` for video speech (Whisper). Tesseract downloads its Vietnamese/English data once into the temp folder | Without `OPENAI_API_KEY` a video is read from its key frames only |
 | Google sign-in | `GOOGLE_CLIENT_ID/SECRET` with `http://localhost:3001/api/auth/callback/google` allowed on the OAuth client | Google shows a redirect error |
 | GitHub sign-in and "Hồ sơ năng lực" | `GITHUB_CLIENT_ID/SECRET` with callback `http://localhost:3001/api/auth/callback/github`; the analysis also needs `OPENAI_API_KEY` and the `GITHUB_PROFILE_BUDGET_*` keys | Linking or analysis shows GitHub's or the backend's error |
 

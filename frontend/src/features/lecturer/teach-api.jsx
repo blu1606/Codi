@@ -198,14 +198,19 @@ export function promptReason(o) {
 }
 
 /** Backend writes used by the lecturer-ai feature (they refresh the cached course afterwards). */
-async function saveLessonBody(courseId, lessonId, body) {
+/** Changes some fields of a saved lesson and keeps the rest: { title?, body?, durationMinutes?, addMaterial? }. */
+async function patchLesson(courseId, lessonId, patch) {
   const det = await act('course', 'getLessonDetails', courseId, lessonId);
   const l = det.lesson;
+  const materials = (det.materials || []).map((m) => ({ id: m.id, type: m.type, title: m.title, url: m.url, fileSizeKb: m.fileSizeKb || undefined, durationSeconds: m.durationSeconds || undefined }));
+  if (patch.addMaterial && !materials.some((m) => m.url === patch.addMaterial.url)) materials.push(patch.addMaterial);
   await act('course', 'updateLesson', courseId, lessonId, {
-    title: l.title, description: l.description || '', durationMinutes: Math.round((l.durationSeconds || 0) / 60), body, isFreePreview: !!l.isFreePreview,
-    materials: (det.materials || []).map((m) => ({ id: m.id, type: m.type, title: m.title, url: m.url, fileSizeKb: m.fileSizeKb || undefined, durationSeconds: m.durationSeconds || undefined })),
+    title: patch.title || l.title, description: l.description || '',
+    durationMinutes: patch.durationMinutes || Math.round((l.durationSeconds || 0) / 60),
+    body: patch.body != null ? patch.body : l.body || '', isFreePreview: !!l.isFreePreview, materials,
   });
 }
+const saveLessonBody = (courseId, lessonId, body) => patchLesson(courseId, lessonId, { body });
 async function appendQuizQuestions(courseId, lessonId, questions) {
   const q = await act('course', 'getQuizBuilderData', courseId, lessonId);
   const keep = (q.questions || []).map((x) => ({ text: x.text, explanation: x.explanation || '', correctIndex: x.correctIndex, options: x.options }));
@@ -215,4 +220,4 @@ async function appendQuizQuestions(courseId, lessonId, questions) {
   });
 }
 
-Object.assign(Codi, { teach: { shell, isMine, notMine, findLesson, contentChanged, persist, course: cachedCourse, reloadCourse, act, saveLessonBody, appendQuizQuestions } });
+Object.assign(Codi, { teach: { shell, isMine, notMine, findLesson, contentChanged, persist, course: cachedCourse, reloadCourse, act, saveLessonBody, patchLesson, appendQuizQuestions } });

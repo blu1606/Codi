@@ -24,6 +24,8 @@ RUN npm prune --omit=dev --no-audit --no-fund \
 
 # 4. Runtime.
 FROM node:22-alpine AS runtime
+# ffmpeg/ffprobe: lecture video upload (duration) and the AI import (audio for Whisper, key frames).
+RUN apk add --no-cache ffmpeg
 # The AI background worker (src/host/ai-worker.ts) runs inside the app process.
 ENV NODE_ENV=production \
     API_PORT=3001 \

@@ -96,3 +96,13 @@ p.lai-empty-run { display: block; }
   .lai-stage.is-running .lai-stage-icon, .lai-crit:not(.is-waiting), .lai-spin { animation: none; }
   .lai-meter .progress > span { transition: none; }
 }
+
+/* Sheet content never grows past the sheet: grid/flex children default to min-width:auto, so a long unwrapped
+   line in the quiz review (option text, clamp rows) used to widen the whole import sheet and clip its right side. */
+.la, .la > *, .la-block, .la-block > * { min-width: 0; }
+.la-block textarea { width: 100%; max-width: 100%; }
+.la-q, .la-q > * { min-width: 0; }
+.la-q > .row-between { flex-wrap: wrap; gap: var(--space-2); }
+.la-q .lai-clamp { white-space: normal; overflow-wrap: anywhere; } /* the reviewer reads the whole explanation */
+.la-q .rv-opts li > span { min-width: 0; overflow-wrap: anywhere; }
+.la-q .rv-opts li.is-correct .xsmall { margin-left: 0; } /* keep the correct option left-aligned like the others */

@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
+import { isStoredMedia } from '../lecturer/lesson-media-api';
 
 // ───────────────────────── YouTube helpers (real lib/youtube.ts) ─────────────────────────
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -202,6 +203,33 @@ function SimulatedVideo({ m, progress, lessonMin, save }) {
   );
 }
 
+// ───────────────────────── uploaded video (file stored on Codi) ─────────────────────────
+/** Native player for a lecturer-uploaded video: resumes, saves on pause / end / every 10 s / leaving the lesson. */
+function FileVideo({ m, progress, save, onFail }) {
+  const ref = useRef(null);
+  const start = useRef(Math.floor((progress && progress.seconds) || 0));
+  const lastSaved = useRef(0);
+  const send = useCallback((ended) => {
+    const v = ref.current; if (!v || !Number.isFinite(v.currentTime)) return;
+    lastSaved.current = Date.now();
+    save({ type: 'video', materialId: m.id, seconds: Math.floor(ended && Number.isFinite(v.duration) ? v.duration : v.currentTime), ended: !!ended });
+  }, [m.id, save]);
+  useEffect(() => () => { const v = ref.current; if (v && v.currentTime > 0 && !v.ended) send(false); }, [send]);
+  return (
+    <section className="stack-3" aria-label={m.title}>
+      <div className="ln-frame">
+        <video ref={ref} className="ln-file-video" src={m.url} controls preload="metadata" playsInline
+          onLoadedMetadata={(e) => { const v = e.currentTarget; if (start.current > 0 && start.current < (v.duration || 0) - 2) v.currentTime = start.current; }}
+          onPause={(e) => { if (!e.currentTarget.ended) send(false); }} onEnded={() => send(true)} onError={onFail}
+          onTimeUpdate={() => { if (Date.now() - lastSaved.current >= 10000) send(false); }}>
+          Trình duyệt không phát được video này.
+        </video>
+      </div>
+      <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{start.current > 0 ? ` Tiếp tục từ giây ${start.current}.` : ''}</p>
+    </section>
+  );
+}
+
 // ───────────────────────── YouTube material ─────────────────────────
 function YouTubeMaterial({ m, videoId, progress, save, onFail }) {
   const [status, setStatus] = useState('loading');
@@ -282,8 +310,9 @@ export function MaterialView({ m, progress, lessonMin, save }) {
   const retrySave = async () => { if (!last.current) return; setSaving(true); await persist(last.current); setSaving(false); };
   const onFail = useCallback(() => setFailed(true), []);
   const videoId = m.type === 'video' && m.url ? youtubeVideoId(m.url) : null;
-  // A URL that is neither YouTube nor a simulated material cannot be played here.
-  const unplayable = m.type === 'video' && m.url && !videoId;
+  const stored = isStoredMedia(m.url);
+  // A URL that is neither YouTube, a file uploaded to Codi nor a simulated material cannot be played here.
+  const unplayable = m.type === 'video' && m.url && !videoId && !stored;
 
   if (failed || unplayable) {
     const retry = () => {
@@ -303,7 +332,10 @@ export function MaterialView({ m, progress, lessonMin, save }) {
   if (m.type === 'video') {
     body = videoId
       ? <YouTubeMaterial key={attempt} m={m} videoId={videoId} progress={progress} save={persist} onFail={onFail} />
-      : <SimulatedVideo key={attempt} m={m} progress={progress} lessonMin={lessonMin} save={persist} />;
+      : stored ? <FileVideo key={attempt} m={m} progress={progress} save={persist} onFail={onFail} />
+        : <SimulatedVideo key={attempt} m={m} progress={progress} lessonMin={lessonMin} save={persist} />;
+  } else if ((m.type === 'pdf' || m.type === 'slide') && stored && /\.pdf$/i.test(decodeURIComponent(m.url))) {
+    body = <>{<iframe className="ln-file-pdf" src={m.url} title={m.title} />}<PdfMaterial key={attempt} m={m} progress={progress} save={persist} /></>;
   } else if (m.type === 'pdf' || m.type === 'slide') {
     body = <PdfMaterial key={attempt} m={m} progress={progress} save={persist} />;
   } else if (m.url) {

@@ -387,3 +387,7 @@ body.is-split-resizing iframe { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .ln-chip, .ln-grip, .ln-play, .ln-track > span { transition: none; }
 }
+
+/* Lecturer-uploaded media (stored on Codi): native video player and embedded PDF. */
+.ln-file-video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--code-bg); border-radius: var(--radius-md); }
+.ln-file-pdf { display: block; width: 100%; height: min(75vh, 900px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
