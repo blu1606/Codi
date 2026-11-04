@@ -39,10 +39,28 @@ docker save codi-rebuild:$sha | gzip -1 > image.tar.gz
 scp image.tar.gz root@172.93.209.12:/opt/codi-rebuild/
 ```
 
-Copy [deploy/compose.yml](../deploy/compose.yml) and [deploy/release.sh](../deploy/release.sh) to `/opt/codi-rebuild/`
-as well, then on the server run `sh /opt/codi-rebuild/release.sh <sha>`. It loads the image, backs up the database to
-`/opt/codi-rebuild/backups/`, keeps `AI_DAILY_JOB_LIMIT=50` in `rebuild.env`, applies migrations, restarts the app and
-waits for it to be healthy. Then check `curl -s https://codi.hoangblue.dev/api/health`.
+Copy the deploy scripts to the server as well (they change rarely, but always together):
+
+```bash
+scp deploy/compose.yml deploy/release.sh deploy/rollback.sh deploy/release-lib.sh deploy/fastcheck.sh \
+  root@172.93.209.12:/opt/codi-rebuild/
+```
+
+Then on the server run `sh /opt/codi-rebuild/release.sh <sha>`. It:
+
+1. loads the image and refuses to continue when `codi-rebuild:<sha>` is missing;
+2. checks the release it replaces (`RELEASE` in `.env`): when that image is still on disk it becomes the rollback
+   target and is recorded as `PREVIOUS_RELEASE`; otherwise it warns that this release cannot roll back automatically;
+3. backs up the database to `/opt/codi-rebuild/backups/`, keeps `AI_DAILY_JOB_LIMIT=50` in `rebuild.env` and applies
+   migrations;
+4. starts the new image, waits for the Docker health check, then runs [deploy/fastcheck.sh](../deploy/fastcheck.sh)
+   against `http://127.0.0.1:3001` expecting `/api/health` to report the new `release`;
+5. on success, appends to `releases.log` and deletes release images older than the three newest (never the running or
+   previous one); on failure, **switches back to the previous image automatically** and prints the
+   `rollback.sh … --restore-db` command for the backup it just took (migrations of the failed release stay applied).
+
+Then check from your machine: `npm run fastcheck -- https://codi.hoangblue.dev <sha>` (curl-level) and
+`E2E_BASE_URL=https://codi.hoangblue.dev npm run fastcheck:ui` (real browser, desktop and mobile). Both are read-only.
 
 Schema changes: back up (below), then `docker compose run --rm --no-deps app npx tsx scripts/migrate.ts` before
 `docker compose up -d app`. Migrations are tracked by folder name, so a migration that sorts before one already
@@ -78,6 +96,14 @@ password hashes: keep `data.sql` out of git.
 ## Logs and rollback
 
 - Logs: `docker logs -f codi-rebuild-app`.
+- Which builds can I go back to? `sh rollback.sh --list` shows the release images (running and previous marked), the
+  five newest backups and the end of `releases.log`.
+- Back to the previous release: `sh rollback.sh` (uses `PREVIOUS_RELEASE`; running it again returns to the release
+  just left). A specific build: `sh rollback.sh <sha>`. Both check that the image exists, wait for health and run the
+  fast check.
+- Also restore the data: `sh rollback.sh <sha> --restore-db backups/codi-<stamp>.dump`. It backs up the current data
+  first, stops the app, recreates the `public` and `drizzle` schemas empty and restores the dump, so tables added by
+  newer migrations do not survive. Needed only when the old code cannot run on the newer schema.
 - Back to the original Codi: the old stack is stopped but kept (`/etc/codi/compose.yml`, `/etc/codi/codi.env`,
   images `codi-web:*`, `/opt/codi/current` → release). Run
   `cd /opt/codi-rebuild && docker compose stop app`, then

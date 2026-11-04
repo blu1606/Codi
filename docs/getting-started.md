@@ -54,6 +54,13 @@ route answers 404 when `NODE_ENV=production`.
 | `npm run build` | Production build of the frontend |
 | `npm run db:down` | Stop the Postgres container (data volume `codi_rebuild_pg` is kept) |
 | `npm run typecheck -w backend` | Type-check the backend |
+| `npm test` | Vitest unit tests (auth, RBAC, ownership, upload tickets, …), then the backend `node:test` files |
+| `npm run test:e2e` | Playwright: interface fast check and role guards against `E2E_BASE_URL` (default `http://localhost:3001`) |
+| `npm run fastcheck -- <url> [release]` | curl-level check that a running app serves its shell, assets and APIs (read-only) |
+| `npm run fastcheck:ui` | The browser fast check alone (desktop and mobile, read-only, safe on production) |
+| `npm run security:check` | Secret scan and `npm audit` ([security-testing.md](security-testing.md)) |
+| `npm run security:probe -- <url>` | Black-box security probe; passive only against production |
+| `npm run perf:lighthouse` | Lighthouse budgets; k6 load tests are in [performance-testing.md](performance-testing.md) |
 
 ## Configuration and keys
 
