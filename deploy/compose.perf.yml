@@ -1,0 +1,51 @@
+# Local performance and security test stack: the production image with its own throwaway database, on this machine
+# only (never on the VPS). Ports differ from `npm start` (3001/4100) and the dev database (5544), so both can run.
+#   docker build -t codi-rebuild:perf .
+#   docker compose -f deploy/compose.perf.yml up -d
+#   app http://localhost:3101, database postgresql://codi:codi@localhost:5545/codi
+# See docs/performance-testing.md for seeding, k6, Lighthouse and the security probe.
+name: codi-perf
+services:
+  app:
+    image: codi-rebuild:${PERF_IMAGE_TAG:-perf}
+    container_name: codi-perf-app
+    env_file:
+      - path: ../backend/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://codi:codi@db:5432/codi
+      BETTER_AUTH_URL: http://localhost:3101
+      API_PORT: "3001"
+      APP_RELEASE: perf
+      # No AI jobs and no real payments from a load test.
+      AI_BACKGROUND_WORKER_ENABLED: "false"
+      DEMO_TOOLS: "false"
+      RESEND_API_KEY: ""
+    ports:
+      - "127.0.0.1:3101:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Same limit as the VPS (deploy/compose.yml), so the numbers resemble production.
+    mem_limit: 1g
+
+  db:
+    image: postgres:16-alpine
+    container_name: codi-perf-db
+    environment:
+      POSTGRES_DB: codi
+      POSTGRES_USER: codi
+      POSTGRES_PASSWORD: codi
+    ports:
+      - "127.0.0.1:5545:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "codi", "-d", "codi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    volumes:
+      - perfdata:/var/lib/postgresql/data
+
+volumes:
+  perfdata:
