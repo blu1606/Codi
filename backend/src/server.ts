@@ -13,7 +13,7 @@ import { aiWorkerEnabled, startAiWorker } from "./host/ai-worker";
 import { mountNextRoutes } from "./host/next-routes";
 import { mountServerActions } from "./host/server-actions";
 import { ENV } from "./env";
-import { publicStorageBase } from "./lib/storage";
+import { assignmentUploadOrigin, publicStorageBase } from "./lib/storage";
 import { db } from "./services";
 
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "app");
@@ -36,6 +36,8 @@ function storageOrigin() {
   }
 }
 const STORAGE = storageOrigin();
+const uploadOrigin = assignmentUploadOrigin();
+const UPLOAD = uploadOrigin ? ` ${uploadOrigin}` : "";
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' https://www.youtube.com https://challenges.cloudflare.com",
@@ -44,7 +46,8 @@ const CONTENT_SECURITY_POLICY = [
   `img-src 'self' data: blob: https://qr.sepay.vn https://i.ytimg.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com${STORAGE}`,
   `media-src 'self' blob:${STORAGE}`,
   `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://challenges.cloudflare.com${STORAGE}`,
-  "connect-src 'self'",
+  // Learners upload assignment files straight to R2 with a presigned PUT (lesson-assessments.jsx).
+  `connect-src 'self'${UPLOAD}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
