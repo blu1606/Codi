@@ -173,6 +173,9 @@ describe("F1-2 validateVoucherForm(data, isUpdate)", () => {
   it("F1-2 UTCID21: invalid expiry date text is rejected", () => {
     expect(errors({ expiresAt: "not-a-date" }).expiresAt).toBeDefined();
   });
+  it("F1-2 UTCID23: no expiry date means the voucher never expires", () => {
+    expect(errors({ expiresAt: null })).toEqual({});
+  });
   it("F1-2 UTCID22: several invalid fields are all reported", () => {
     const result = validateVoucherForm(form({ code: "x", value: -5, minOrderAmount: "abc", usageLimit: "abc", expiresAt: "2020-01-01" }));
     expect(result.valid).toBe(false);
