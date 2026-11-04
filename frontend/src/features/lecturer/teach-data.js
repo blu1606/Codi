@@ -16,6 +16,7 @@
  */
 import { useEffect, useSyncExternalStore } from 'react';
 import { api } from '../../lib/api';
+import { Codi } from '../../lib/codi';
 
 const MODULES = {
   lecturer: 'dashboard/lecturer',
@@ -42,24 +43,43 @@ const subs = new Set();
 const bump = () => { version += 1; subs.forEach((f) => f()); };
 const useStore = () => useSyncExternalStore((f) => { subs.add(f); return () => subs.delete(f); }, () => version);
 
+// ───────────────────────── account scope ─────────────────────────
+// Both caches below belong to the signed-in account. After a sign-out, or when another lecturer signs in in the same
+// tab, they start empty, and responses still in flight for the previous account are dropped (generation check), so
+// one lecturer never sees another's courses or editor content.
+const EMPTY_MINE = { list: null, stats: null, loading: false, error: null, promise: null };
+let owner = null;
+let generation = 0;
+function ensureOwner() {
+  const id = Codi.state.currentUserId ?? null;
+  if (id === owner) return;
+  owner = id;
+  generation += 1;
+  mine = EMPTY_MINE;
+  cache.clear();
+}
+
 // ───────────────────────── my courses + counts ─────────────────────────
-let mine = { list: null, stats: null, loading: false, error: null, promise: null };
+let mine = EMPTY_MINE;
 export function reloadMine() {
+  ensureOwner();
+  const gen = generation;
   mine = { ...mine, loading: true, error: null };
   bump();
   const p = Promise.all([act('lecturer', 'getLecturerCourses', 'all'), act('lecturer', 'getLecturerDashboardStats')])
-    .then(([list, stats]) => { mine = { list, stats, loading: false, error: null, promise: null }; })
-    .catch((error) => { mine = { ...mine, loading: false, error, promise: null }; })
+    .then(([list, stats]) => { if (gen === generation) mine = { list, stats, loading: false, error: null, promise: null }; })
+    .catch((error) => { if (gen === generation) mine = { ...mine, loading: false, error, promise: null }; })
     .finally(bump);
   mine.promise = p;
   return p;
 }
 /** Current list state without subscribing. */
-export const mineNow = () => mine;
+export const mineNow = () => { ensureOwner(); return mine; };
 /** Lecturer's courses (LecturerCourseItem[]) and dashboard counts; loaded once, refreshed by reloadMine(). */
 export function useMine() {
   useStore();
-  useEffect(() => { if (!mine.list && !mine.loading && !mine.error) reloadMine(); }, []);
+  ensureOwner();
+  useEffect(() => { if (!mine.list && !mine.loading && !mine.error) reloadMine(); }, [owner]);
   return mine;
 }
 
@@ -104,6 +124,8 @@ export function toCourse(editor, outline, pub) {
 }
 
 export async function reloadCourse(id) {
+  ensureOwner();
+  const gen = generation;
   const prev = cache.get(id);
   cache.set(id, { c: prev ? prev.c : null, loading: true, error: null });
   bump();
@@ -113,22 +135,23 @@ export async function reloadCourse(id) {
       api.get(`/api/lecturer/courses/${encodeURIComponent(id)}`),
       act('publish', 'getPublicationData', id),
     ]);
-    cache.set(id, { c: toCourse(editor, outline, pub), loading: false, error: null });
+    if (gen === generation) cache.set(id, { c: toCourse(editor, outline, pub), loading: false, error: null });
   } catch (error) {
-    cache.set(id, { c: null, loading: false, error });
+    if (gen === generation) cache.set(id, { c: null, loading: false, error });
   }
   bump();
-  return cache.get(id).c;
+  return (cache.get(id) || {}).c || null;
 }
 /** Cached course for the editor screens; fetches on first use. */
 export function useCourse(id) {
   useStore();
-  useEffect(() => { if (id && !cache.has(id)) reloadCourse(id); }, [id]);
+  ensureOwner();
+  useEffect(() => { if (id && !cache.has(id)) reloadCourse(id); }, [id, owner]);
   const s = (id && cache.get(id)) || { c: null, loading: !!id, error: null };
   return s;
 }
 /** Last loaded course (no fetch), for helpers that run outside React. */
-export const cachedCourse = (id) => (cache.get(id) || {}).c || null;
+export const cachedCourse = (id) => { ensureOwner(); return (cache.get(id) || {}).c || null; };
 /** Drops a course from the cache (after delete). */
 export function forgetCourse(id) { cache.delete(id); bump(); }
 
