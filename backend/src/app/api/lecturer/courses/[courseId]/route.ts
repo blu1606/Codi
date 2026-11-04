@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authoringErrorResponse, deleteLecturerCourse, getLecturerCourseOutline } from "@/lib/lecturer-authoring";
+import { clearPublicCourseCache } from "@/lib/public-course-cache";
 
 type Ctx = { params: Promise<{ courseId: string }> };
 
@@ -17,7 +18,9 @@ export async function GET(_request: Request, { params }: Ctx) {
 export async function DELETE(_request: Request, { params }: Ctx) {
   try {
     const { courseId } = await params;
-    return NextResponse.json(await deleteLecturerCourse(courseId));
+    const result = await deleteLecturerCourse(courseId);
+    clearPublicCourseCache();
+    return NextResponse.json(result);
   } catch (error) {
     return authoringErrorResponse(error);
   }

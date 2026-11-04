@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import type { Context, Hono } from "hono";
 import { NextRequest } from "next/server";
 import { applyResponseCookies, currentRequestStore, runWithRequest } from "next/request-context";
+import { withRoleCache } from "@codi-1/auth";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 type Method = (typeof METHODS)[number];
@@ -68,12 +69,17 @@ function toNextRequest(raw: Request) {
   } as RequestInit);
 }
 
-/** Runs fn with the request context and returns its Response with any cookies().set() values appended. */
+/**
+ * Runs fn with the request context and returns its Response with any cookies().set() values appended. Role lookups
+ * are cached for the length of the request (see withRoleCache).
+ */
 export async function runInRequestContext(request: Request, fn: () => Promise<Response>) {
-  return runWithRequest(request, async () => {
-    const response = await fn();
-    return applyResponseCookies(response, currentRequestStore());
-  });
+  return withRoleCache(() =>
+    runWithRequest(request, async () => {
+      const response = await fn();
+      return applyResponseCookies(response, currentRequestStore());
+    }),
+  );
 }
 
 export async function mountNextRoutes(app: Hono, appDir: string): Promise<MountedRoute[]> {

@@ -98,6 +98,9 @@ async function context(
   courseId: string,
   lock = false,
   accessOnly = false,
+  // The one lesson whose reading text (body, description) the caller needs; other lessons come without it, so a
+  // course's full text is not read on every request.
+  textLessonId: string | null = null,
 ) {
   await requireLearner(store, userId);
   const query = store
@@ -118,9 +121,24 @@ async function context(
     .from(courses)
     .where(eq(courses.id, courseId));
   if (!course) throw new LearningPathError("Không tìm thấy khoá học.", 404);
+  const textOf = (column: typeof courseLessons.body | typeof courseLessons.description) =>
+    textLessonId
+      ? sql<string | null>`case when ${courseLessons.id} = ${textLessonId} then ${column} end`
+      : sql<string | null>`null`;
   const lessons = await store
     .select({
-      lesson: courseLessons,
+      lesson: {
+        id: courseLessons.id,
+        chapterId: courseLessons.chapterId,
+        title: courseLessons.title,
+        description: textOf(courseLessons.description),
+        durationSeconds: courseLessons.durationSeconds,
+        position: courseLessons.position,
+        isPublished: courseLessons.isPublished,
+        body: textOf(courseLessons.body),
+        isFreePreview: courseLessons.isFreePreview,
+        isRemedial: courseLessons.isRemedial,
+      },
       chapter: courseChapters,
       progress: lessonProgress,
     })
@@ -226,7 +244,7 @@ export async function loadLearningLessonAccess(
   lessonId: string,
   lockEnrollment = false,
 ) {
-  const ctx = await context(store, userId, courseId, lockEnrollment, true);
+  const ctx = await context(store, userId, courseId, lockEnrollment, true, lessonId);
   if (ctx.enrollment.pathStatus === "none")
     throw new LearningPathError("Hãy thiết lập lộ trình trước khi học.");
   const lesson = ctx.input.lessons.find((l) => l.id === lessonId);

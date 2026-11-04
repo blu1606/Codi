@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { userRoles } from "@codi-1/db/schema/roles";
@@ -6,27 +7,46 @@ import { user } from "@codi-1/db/schema/auth";
 import type { RoleId } from "./roles";
 export { ROLE, ROLE_LABEL, getPrimaryRole, getRoleHome, type RoleId } from "./roles";
 
-export async function getActiveRoles(db: Database, userId: string): Promise<RoleId[]> {
-  const userRecord = await db
-    .select({ banned: user.banned })
+// One request often asks for the same user's roles several times (the route, then each service it calls; a lesson
+// read did it three times). Inside withRoleCache() the first answer is reused for the rest of that request.
+const roleCache = new AsyncLocalStorage<Map<string, Promise<RoleId[]>>>();
+
+/** Runs fn with a role cache that lives for this call only (the host wraps every request in it). */
+export function withRoleCache<T>(fn: () => T): T {
+  return roleCache.run(new Map(), fn);
+}
+
+/** Drops the cached roles of a user, for code that changes roles or bans and then checks them in the same request. */
+export function forgetActiveRoles(userId: string): void {
+  roleCache.getStore()?.delete(userId);
+}
+
+/** Active roles of a user; none when the user is banned or missing. */
+export function getActiveRoles(db: Database, userId: string): Promise<RoleId[]> {
+  const cache = roleCache.getStore();
+  if (!cache) return loadActiveRoles(db, userId);
+  let roles = cache.get(userId);
+  if (!roles) {
+    roles = loadActiveRoles(db, userId);
+    cache.set(userId, roles);
+    // A failed lookup must not be reused.
+    roles.catch(() => {
+      if (cache.get(userId) === roles) cache.delete(userId);
+    });
+  }
+  return roles;
+}
+
+// One query: the user's ban flag with each active role (a user without roles still returns one row).
+async function loadActiveRoles(db: Database, userId: string): Promise<RoleId[]> {
+  const rows = await db
+    .select({ banned: user.banned, roleId: userRoles.roleId })
     .from(user)
+    .leftJoin(userRoles, and(eq(userRoles.userId, user.id), isNull(userRoles.revokedAt)))
     .where(eq(user.id, userId));
 
-  if (userRecord.length === 0 || userRecord[0]?.banned) {
-    return [];
-  }
-
-  const result = await db
-    .select({ roleId: userRoles.roleId })
-    .from(userRoles)
-    .where(
-      and(
-        eq(userRoles.userId, userId),
-        isNull(userRoles.revokedAt)
-      )
-    );
-
-  return result.map((r) => r.roleId as RoleId);
+  if (rows.length === 0 || rows[0]?.banned) return [];
+  return rows.flatMap((r) => (r.roleId ? [r.roleId as RoleId] : []));
 }
 
 export async function countActiveHolders(db: Database, roleId: RoleId): Promise<number> {

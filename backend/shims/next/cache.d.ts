@@ -1,3 +1,4 @@
+export declare function onRevalidate(listener: () => void): void;
 export declare function revalidatePath(path: string, type?: "page" | "layout"): void;
 export declare function revalidateTag(tag: string, profile?: unknown): void;
 export declare function updateTag(tag: string): void;

@@ -3,11 +3,12 @@
 import { and, count, eq, inArray, isNull, ne } from "drizzle-orm";
 import { headers } from "next/headers";
 
-import { requireRole, ROLE, type RoleId } from "@codi-1/auth";
+import { forgetActiveRoles, requireRole, ROLE, type RoleId } from "@codi-1/auth";
 import { userRoles } from "@codi-1/db/schema/roles";
 import { user } from "@codi-1/db/schema/auth";
 import { session as session_table } from "@codi-1/db/schema/auth";
 import { auth, db } from "@/services";
+import { clearPublicCourseCache } from "@/lib/public-course-cache";
 
 export async function updateUserRole(targetUserId: string, newRoleId: RoleId): Promise<void> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -73,6 +74,7 @@ export async function updateUserRole(targetUserId: string, newRoleId: RoleId): P
       grantedBy: session.user.id,
     });
   });
+  forgetActiveRoles(targetUserId);
 }
 
 export async function toggleUserBan(
@@ -141,6 +143,7 @@ export async function toggleUserBan(
       await tx.delete(session_table).where(eq(session_table.userId, targetUserId));
     }
   });
+  forgetActiveRoles(targetUserId);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -156,7 +159,9 @@ export async function hideCourseAction(
   await requireRole(db, session.user.id, ROLE.ADMIN);
 
   const { adminHideCourse } = await import("@/lib/admin-courses-service");
-  return await adminHideCourse(db, courseId, reason, session.user.id);
+  const result = await adminHideCourse(db, courseId, reason, session.user.id);
+  clearPublicCourseCache(); // the public catalogue and course page show status and price
+  return result;
 }
 
 export async function unhideCourseAction(
@@ -167,7 +172,9 @@ export async function unhideCourseAction(
   await requireRole(db, session.user.id, ROLE.ADMIN);
 
   const { adminUnhideCourse } = await import("@/lib/admin-courses-service");
-  return await adminUnhideCourse(db, courseId, session.user.id);
+  const result = await adminUnhideCourse(db, courseId, session.user.id);
+  clearPublicCourseCache();
+  return result;
 }
 
 export async function updateCoursePriceAction(
@@ -179,7 +186,9 @@ export async function updateCoursePriceAction(
   await requireRole(db, session.user.id, ROLE.ADMIN);
 
   const { adminUpdateCoursePrice } = await import("@/lib/admin-courses-service");
-  return await adminUpdateCoursePrice(db, courseId, newPrice, session.user.id);
+  const result = await adminUpdateCoursePrice(db, courseId, newPrice, session.user.id);
+  clearPublicCourseCache();
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────
