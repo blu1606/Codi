@@ -1,0 +1,8 @@
+document.querySelector('.nut') trả về gì?	Mảng mọi phần tử .nut	Phần tử đầu tiên khớp, hoặc null	Luôn là undefined	Một NodeList	B	querySelectorAll mới trả về NodeList chứa mọi phần tử.
+Thuộc tính nào gán văn bản mà KHÔNG diễn giải HTML?	innerHTML	textContent	outerHTML	B	textContent an toàn hơn trước XSS.
+Mảng [1, 2, 3].map((x) => x * 2) cho kết quả gì?	[1, 2, 3]	[2, 4, 6]	12	undefined	2
+Câu lệnh nào thêm phần tử vào cuối mảng?	push	shift	unshift	pop	A	push thêm vào cuối, unshift thêm vào đầu.
+"5" === 5 cho kết quả gì?	true	false	B	Khác kiểu (string và number) nên === trả về false.
+async function luôn trả về gì?	Một Promise	Một callback	undefined	1	Giá trị return được gói trong Promise đã fulfilled.
+Cách nào sao chép mảng không sửa mảng gốc?	const b = a	const b = [...a]	a.length = 0	B
+JSON.parse('{"a":1}').a bằng bao nhiêu?	"1"	1	undefined	null	2	JSON.parse chuyển chuỗi JSON thành đối tượng; số vẫn là number.
