@@ -46,8 +46,9 @@ const CONTENT_SECURITY_POLICY = [
   `img-src 'self' data: blob: https://qr.sepay.vn https://i.ytimg.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com${STORAGE}`,
   `media-src 'self' blob:${STORAGE}`,
   `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://challenges.cloudflare.com${STORAGE}`,
-  // Learners upload assignment files straight to R2 with a presigned PUT (lesson-assessments.jsx).
-  `connect-src 'self'${UPLOAD}`,
+  // Learners upload assignment files straight to R2 with a presigned PUT (lesson-assessments.jsx). The Turnstile
+  // script fetches data: URLs (inline content, nothing leaves the page).
+  `connect-src 'self' data:${UPLOAD}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
