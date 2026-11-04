@@ -15,6 +15,7 @@
 Nền tảng học lập trình Codi, bản dựng lại: frontend React (Vite) chạy trên backend của Codi (API Next.js chuyển
 sang Hono) với PostgreSQL, đóng gói thành một Docker image.
 
+- Kiến trúc hệ thống (CI/CD, production runtime, giám sát và sao lưu): [docs/system-architecture/](docs/system-architecture/README.md)
 - Chạy trên máy: [docs/getting-started.md](docs/getting-started.md)
 - Deploy, release và rollback: [docs/deployment.md](docs/deployment.md)
 - CI/CD (kiểm tra mọi PR, deploy lên VPS khi merge vào `main`): [docs/ci-cd.md](docs/ci-cd.md)

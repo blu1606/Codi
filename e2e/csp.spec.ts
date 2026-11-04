@@ -11,6 +11,8 @@ async function recordViolations(page: Page) {
   const violations: string[] = [];
   await page.exposeFunction("__reportCspViolation", (text: string) => violations.push(text));
   await page.addInitScript(() => {
+    // The app's own page only: third-party frames (the Turnstile challenge) run under their provider's policy.
+    if (window.top !== window) return;
     document.addEventListener("securitypolicyviolation", (e) => {
       (window as unknown as { __reportCspViolation: (t: string) => void }).__reportCspViolation(
         `${e.effectiveDirective} blocked ${e.blockedURI || "(inline)"} on ${location.pathname}`,
