@@ -1,5 +1,6 @@
 /**
- * "Tạo bằng AI" for whole lessons and code exercises (simulated, deterministic).
+ * "Tạo bằng AI" for whole lessons and code exercises. Lessons are written by the real AI (backend ai-draft, topic
+ * mode); code exercises still come from the templates below, with expected values from running the real solution.
  * Port of docs/mockup/js/lecturer-ai-create.js. Installs one member on Codi.lecturerAI:
  *
  *   openCreate(courseId, kind: 'lesson'|'code', chapterId?) → void
@@ -16,6 +17,7 @@ import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
 import './lecturer-ai-api';
 import { seedCodeDraft } from './code-editor-page';
+import { draftLesson } from '../lecturer/lesson-media-api';
 
 const AI = () => Codi.lecturerAI;
 
@@ -135,19 +137,12 @@ async function codeDraft(c, f) {
 
 // ───────────────────────── lesson draft ─────────────────────────
 const LENGTH = { short: ['Ngắn', 5, 3], medium: ['Vừa', 10, 4], long: ['Dài', 20, 6] };
-function lessonDraft(c, f) {
-  const topic = f.topic.trim(); const [, minutes, n] = LENGTH[f.length];
-  const facts = AI().factsFor(c, topic).slice(0, n);
-  const points = facts.length ? facts.map((x) => `- **${x.a}** — ${x.e}`) : [`- Định nghĩa và vai trò của ${topic}`, `- Cách dùng ${topic} trong một ví dụ nhỏ`, `- Khi nào không nên dùng ${topic}`];
-  const reading = [
-    `## ${topic}`,
-    `**Mục tiêu:** ${f.goal.trim() || `sau bài này, bạn giải thích được ${topic} là gì và áp dụng được vào một ví dụ nhỏ.`}`,
-    '### Khái niệm chính', points.join('\n'),
-    '### Lỗi thường gặp', facts.length ? facts.slice(0, 2).map((x) => `- Nhầm "${x.w[0]}" với "${x.a}".`).join('\n') : `- Áp dụng ${topic} khi chưa nắm rõ yêu cầu bài toán.\n- Bỏ qua trường hợp biên khi thử ví dụ.`,
-    '### Tự kiểm tra', `- Giải thích ${topic} bằng lời của bạn trong 2–3 câu.\n- Viết lại ví dụ trong bài mà không nhìn tài liệu.`,
-  ].join('\n\n');
-  const lesson = { title: topic.charAt(0).toUpperCase() + topic.slice(1), durationMin: minutes, reading, type: f.lessonType };
-  const questions = f.quiz ? AI().generateQuestions(c, { title: topic, conceptIds: [] }, { count: 3, difficulty: 'medium' }).map((q) => Object.assign(q, { state: 'pending' })) : [];
+/** Real AI draft (POST …/ai-draft in topic mode): reading in Markdown + up to 3 quiz questions for review. */
+async function lessonDraft(c, f) {
+  const [, minutes] = LENGTH[f.length];
+  const { draft } = await draftLesson(c.id, { topic: f.topic.trim(), goal: f.goal.trim(), minutes, quizCount: f.quiz ? 3 : 0, difficulty: 'medium' });
+  const lesson = { title: draft.title, durationMin: minutes, reading: draft.summary, type: f.lessonType };
+  const questions = (draft.questions || []).map((q) => ({ ...q, id: Codi.uid('q'), conceptId: null, state: 'pending' }));
   return { lesson, questions };
 }
 
@@ -205,7 +200,7 @@ function FormBody() {
           <button type="button" className="btn btn-ghost btn-sm" onClick={stop}><Icon name="x" className="icon-sm" /> Dừng</button></div>
       )}
       {cr.step === 'error' && (
-        <Alert type="danger" title="AI chưa soạn được bản nháp" body="Thông tin bạn nhập vẫn được giữ."
+        <Alert type="danger" title="AI chưa soạn được bản nháp" body={`${cr.errMsg ? cr.errMsg + ' ' : ''}Thông tin bạn nhập vẫn được giữ.`}
           actions={<button type="button" className="btn btn-secondary btn-sm" onClick={generate}>Thử lại</button>} />
       )}
       {cr.step === 'limit' && <Alert type="warn" title="Đã dùng hết lượt tạo bằng AI trong giờ này" body={'Thử lại sau ít phút hoặc soạn thủ công từ "Thêm nội dung".'} />}
@@ -318,9 +313,9 @@ function generate() {
   job = AI().task({
     onLimit() { cur.step = 'limit'; refresh(); },
     onStart() { cur.step = 'generating'; refresh(); },
-    onError() { cur.step = 'error'; refresh(); },
+    onError(e) { if (cr !== cur) return; cur.errMsg = (e && e.message) || null; cur.step = e && e.status === 429 ? 'limit' : 'error'; refresh(); },
     onDone(res) { if (cr !== cur) return; cur.result = res; cur.step = 'review'; refresh(); },
-  }, () => (kind === 'code' ? codeDraft(c, f) : lessonDraft(c, f)), 1500);
+  }, () => (kind === 'code' ? codeDraft(c, f) : lessonDraft(c, f)), kind === 'code' ? 1500 : 1);
 }
 /** Adds the reviewed draft through the backend: addLesson, then updateLesson + saveQuizData (lesson) or a seeded
  * code-editor draft (code: the editor saves it, after the server re-verifies the solution). */
