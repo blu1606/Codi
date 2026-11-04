@@ -24,7 +24,7 @@ image with its own throwaway database on this machine.
 ## 1. Start the perf stack
 
 ```bash
-docker build -t codi-rebuild:perf .
+npm run image -- perf
 docker compose -f deploy/compose.perf.yml up -d db
 docker compose -f deploy/compose.perf.yml run --rm --no-deps -e NODE_ENV=development app npx tsx scripts/seed.ts --no-backup
 docker compose -f deploy/compose.perf.yml up -d app
