@@ -16,14 +16,35 @@ import { ENV } from "./env";
 import { db } from "./services";
 
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "app");
+
+// Content-Security-Policy of the frontend pages. Everything is same-origin (API, uploads, lesson media, covers)
+// except what is listed: Google Fonts, the YouTube player (iframe on youtube-nocookie.com plus the iframe_api script
+// and thumbnails), SePay's VietQR image and Google / GitHub profile pictures. Scripts allow no inline code and no
+// eval (the code editor's syntax check parses with acorn). Inline styles stay allowed: components set style
+// attributes. Sent on HTML responses only, so lecture PDFs keep opening in the browser's own viewer.
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' https://www.youtube.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https://qr.sepay.vn https://i.ytimg.com https://lh3.googleusercontent.com https://avatars.githubusercontent.com",
+  "media-src 'self' blob:",
+  "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
 const port = Number(process.env.API_PORT || 4100);
 
 async function main() {
   const app = new Hono();
 
   // Security headers on every response (pages and API). HSTS is ignored by browsers over plain http, so local runs
-  // are unaffected. No Content-Security-Policy yet: the pages load Google Fonts, YouTube embeds, SePay QR images and
-  // R2 media, and a policy needs its own test pass. COOP/CORP keep Hono's same-origin defaults (no popups are used).
+  // are unaffected. The Content-Security-Policy is added to the HTML pages only (see CONTENT_SECURITY_POLICY).
+  // COOP/CORP keep Hono's same-origin defaults (no popups are used).
   // Uploaded lecture PDFs are embedded in the lesson page (an iframe on the same origin), so that one route allows
   // SAMEORIGIN framing; everything else stays DENY.
   const headersFor = (xFrameOptions: "DENY" | "SAMEORIGIN") =>
@@ -65,6 +86,9 @@ async function main() {
       if (c.req.path.startsWith("/api/")) return next();
       await gzip(c, async () => {
         await next();
+        if (c.res.headers.get("content-type")?.startsWith("text/html")) {
+          c.header("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+        }
         if (c.res.status !== 200) return;
         c.header("Cache-Control", c.req.path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
       });

@@ -2,6 +2,7 @@
  * Pure (DOM-free) text helpers of the coding UI: key-order-independent JSON, plain-language error explanations, a
  * syntax check used before formatting, and syntax highlighting. Code runs only in the backend sandbox.
  */
+import { parse } from 'acorn';
 import { esc } from '../../components/ui/primitives';
 
 // Key-order-independent JSON so {paid:2,pending:1} equals {pending:1,paid:2}.
@@ -27,9 +28,18 @@ export function explain(err) {
   return '';
 }
 
-/** Syntax check used before formatting ('' when the code parses). JavaScript only. */
+/**
+ * Syntax check used before formatting ('' when the code parses). JavaScript only. It parses with acorn instead of
+ * compiling with new Function, so the page's Content-Security-Policy needs no 'unsafe-eval'. The options mirror a
+ * function body, which is what the learner's code was previously checked as.
+ */
 export function syntaxError(code) {
-  try { new Function(String(code || '')); return ''; } catch (err) { return err instanceof SyntaxError ? err.message : ''; }
+  try {
+    parse(String(code || ''), { ecmaVersion: 'latest', sourceType: 'script', allowReturnOutsideFunction: true });
+    return '';
+  } catch (err) {
+    return err instanceof SyntaxError ? err.message : '';
+  }
 }
 
 // ───────────────────────── syntax highlighting ─────────────────────────

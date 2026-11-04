@@ -80,6 +80,13 @@ E2E_BASE_URL=http://localhost:3101 npm run test:e2e      # report in e2e/report/
   `secureHeaders`): HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
   `Referrer-Policy: strict-origin-when-cross-origin`, same-origin COOP/CORP. They ship with the image, so the VPS
   needs no Caddy change; `fastcheck.sh` fails if they disappear.
+- Content-Security-Policy on the HTML pages ([backend/src/server.ts](../backend/src/server.ts),
+  `CONTENT_SECURITY_POLICY`): same-origin by default; only Google Fonts, the YouTube player, SePay's QR image and
+  Google / GitHub profile pictures are allowed from elsewhere; no inline script and no eval (the code editor's syntax
+  check parses with `acorn` instead of `new Function`); `object-src 'none'`, `frame-ancestors 'none'`. API and media
+  responses do not carry it, so lecture PDFs still open in the browser's viewer.
+  [e2e/csp.spec.ts](../e2e/csp.spec.ts) opens the main pages of every role, including a lesson with a YouTube video,
+  and fails on any `securitypolicyviolation`; run it after adding an external resource.
 - `safeNext` (the `?next=` sanitizer behind sign-in and GitHub onboarding) refuses `/\…` and control characters, the
   backslash open redirect that react-router 6 itself does not block (GHSA-wrjc-x8rr-h8h6, fixed only in 7.x).
 - `release.sh` writes `DEMO_TOOLS=false` into `rebuild.env` on every release, so the payment simulator cannot stay on
@@ -89,8 +96,8 @@ E2E_BASE_URL=http://localhost:3101 npm run test:e2e      # report in e2e/report/
 
 ## Open items
 
-- **No Content-Security-Policy yet.** The pages load Google Fonts, YouTube embeds, SePay QR images and R2 media; a
-  policy needs its own browser test pass (start with `Content-Security-Policy-Report-Only`).
+- `style-src` keeps `'unsafe-inline'`: components set style attributes. Moving them to classes would allow a strict
+  style policy.
 - `backend/src/lib/rate-limit.ts` (AI chat) and Better Auth key their rate limits on `X-Forwarded-For`. That is safe
   only because the app port is bound to `127.0.0.1` and Caddy replaces the header with the real client address by
   default; do not add `trusted_proxies` to Caddy without revisiting this. The probe's WARN on a direct (proxy-less)
