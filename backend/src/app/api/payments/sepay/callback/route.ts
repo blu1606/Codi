@@ -5,6 +5,7 @@ import { db } from "@/services";
 import { orders, orderEvents, orderItems, vouchers, payments } from "@codi-1/db";
 import { studentTransactions, studentEnrollments } from "@codi-1/db/schema/student-profile";
 import { createNotificationService } from "@/lib/notification-service";
+import { sendOrderPaidEmails } from "@/lib/order-emails";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 function verifyApiKey(authHeader: string | null, secret: string): boolean {
@@ -397,6 +398,8 @@ export async function POST(req: Request) {
       }
 
       let courseIdsToEnroll: string[] = [tx.courseId];
+      // Set when this delivery moved an order to paid; its emails go out after commit.
+      let paidOrderId: number | null = null;
 
       // 3. Atomically settle orders table
       if (existingOrder && (existingOrder.status === "pending" || isLateHonoured)) {
@@ -417,6 +420,7 @@ export async function POST(req: Request) {
 
         const matchedOrder = updatedOrders[0];
         if (matchedOrder) {
+          paidOrderId = matchedOrder.id;
           await txDB.insert(orderEvents).values({
             orderId: matchedOrder.id,
             label: isLateHonoured ? "Thanh toán muộn được chấp nhận" : "Đã nhận tiền",
@@ -545,6 +549,7 @@ export async function POST(req: Request) {
             if (!allFreshOwned) {
               // Auto-honour: transition from failed to paid
               const isOverpaid = newAccumulated > freshOrder.totalAmount;
+              paidOrderId = freshOrder.id;
               await txDB
                 .update(orders)
                 .set({
@@ -715,7 +720,7 @@ export async function POST(req: Request) {
         }
       }
 
-      return { success: true };
+      return { success: true, paidOrderId };
     });
 
     if (processResult.invalidReceiptIdentity) {
@@ -751,6 +756,9 @@ export async function POST(req: Request) {
     }
 
     console.log(`Successfully processed transaction ${txId}`);
+
+    // Purchase confirmation + invoice; delivery runs in the background and never fails the webhook.
+    if (processResult.paidOrderId) void sendOrderPaidEmails(processResult.paidOrderId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

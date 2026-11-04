@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { ForbiddenError, requireRole, ROLE } from "@codi-1/auth";
 import { createOrderFromCart } from "@/lib/checkout-cart";
+import { sendOrderPaidEmails } from "@/lib/order-emails";
 import { auth, db } from "@/services";
 
 export async function POST(request: Request) {
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
       typeof body?.replaceOrderId === "number" ? body.replaceOrderId : undefined;
 
     const result = await createOrderFromCart(db, userId, voucherCode, forceReplaceOrderId);
+    // A 0 ₫ order (voucher covers the total) is paid on creation; others are confirmed by the SePay webhook.
+    if (result.totalAmount === 0) void sendOrderPaidEmails(result.orderId);
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     if (error instanceof ForbiddenError) {
