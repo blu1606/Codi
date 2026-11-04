@@ -16,14 +16,25 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "migrate": "npm run migrate -w backend",
-    "seed": "npm run seed -w backend"
+    "seed": "npm run seed -w backend",
+    "test": "vitest run && node scripts/run-node-tests.mjs",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "fastcheck": "sh deploy/fastcheck.sh",
+    "fastcheck:ui": "playwright test --grep @fast",
+    "security:check": "sh scripts/security-check.sh",
+    "security:probe": "node scripts/security-probe.mjs",
+    "perf:lighthouse": "lhci autorun --upload.target=filesystem"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@lhci/cli": "^0.15.1",
+    "@playwright/test": "^1.56.1",
+    "concurrently": "^9.1.2",
+    "vitest": "^5.1.0"
   },
   "overrides": {
-    "@better-auth/core": "1.7.5",
-    "@better-auth/utils": "0.4.2",
-    "better-call": "1.4.0"
+    "@better-auth/core": "1.7.15",
+    "@better-auth/utils": "0.5.1",
+    "better-call": "1.4.4"
   }
 }
