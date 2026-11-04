@@ -17,6 +17,7 @@ import { rerender, useView } from './view-store';
 import { act, forgetCourse, reloadCourse, reloadMine, useCourse, write } from './teach-data';
 import { KmapTab } from './kmap-tab';
 import { openLessonEditor, openAddLesson } from './lesson-editor';
+import { AiAssist } from './course-ai-write';
 import { aiImport } from './quiz-builder';
 import { ReviewNotes, NoteCard, flagHref, useFlagFocus } from './review-notes';
 import { INFO_FIELDS } from '../admin/publication-rules';
@@ -438,7 +439,7 @@ function InfoTab({ c, query }) {
       <div className="card-body stack-4">
         {notes(null)}
         <div className={`field ${e.title ? 'is-invalid' : ''}`}><label htmlFor="in-title">Tên khoá học</label><input id="in-title" name="title" value={d.title} onChange={onInput} disabled={ro} aria-invalid={!!e.title} /><FieldError>{e.title}</FieldError>{notes('title')}</div>
-        <div className={`field ${e.summary ? 'is-invalid' : ''}`}><label htmlFor="in-sum">Mô tả ngắn</label><textarea id="in-sum" name="summary" rows={3} value={d.summary} onChange={onInput} disabled={ro} aria-invalid={!!e.summary} /><FieldError>{e.summary}</FieldError>{notes('summary')}</div>
+        <div className={`field ${e.summary ? 'is-invalid' : ''}`}><label htmlFor="in-sum">Mô tả ngắn</label><textarea id="in-sum" name="summary" rows={3} value={d.summary} onChange={onInput} disabled={ro} aria-invalid={!!e.summary} /><FieldError>{e.summary}</FieldError>{!ro && <AiAssist courseId={c.id} field="summary" value={d.summary} title={d.title} level={d.level} onApply={(v) => onInput({ target: { name: 'summary', value: v } })} />}{notes('summary')}</div>
         <div className="grid-3" style={{ alignItems: 'start' }}>
           <div className={`field ${e.category ? 'is-invalid' : ''}`}><label htmlFor="in-cat">Danh mục</label><select id="in-cat" name="category" value={d.category} onChange={onInput} disabled={ro}>{categoryOptions(d.originalCategory).map((x) => <option key={x} value={x}>{x}</option>)}</select><FieldError>{e.category}</FieldError></div>
           <div className={`field ${e.level ? 'is-invalid' : ''}`}><label htmlFor="in-level">Trình độ</label><select id="in-level" name="level" value={d.level} onChange={onInput} disabled={ro}>{LEVELS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select><FieldError>{e.level}</FieldError></div>
@@ -446,8 +447,8 @@ function InfoTab({ c, query }) {
             <p className="field-help">Quản trị viên xác nhận giá cuối cùng khi duyệt. Nhập 0 cho khoá miễn phí.{c.status === 'published' ? ` Giá đang bán: ${fmt.vnd(c.price)}.` : ''}</p><FieldError>{e.proposedPrice}</FieldError></div>
         </div>
         {notes('category')}{notes('price')}
-        <div className="field"><label htmlFor="in-out">Học viên sẽ học được gì? (Mỗi dòng một ý)</label><textarea id="in-out" name="outcomes" rows={4} value={d.outcomes} onChange={onInput} disabled={ro} />{notes('outcomes')}</div>
-        <div className="field"><label htmlFor="in-req">Yêu cầu trước khi học (Mỗi dòng một ý)</label><textarea id="in-req" name="requirements" rows={3} value={d.requirements} onChange={onInput} disabled={ro} />{notes('requirements')}</div>
+        <div className="field"><label htmlFor="in-out">Học viên sẽ học được gì? (Mỗi dòng một ý)</label><textarea id="in-out" name="outcomes" rows={4} value={d.outcomes} onChange={onInput} disabled={ro} />{!ro && <AiAssist courseId={c.id} field="outcomes" value={d.outcomes} title={d.title} level={d.level} onApply={(v) => onInput({ target: { name: 'outcomes', value: v } })} />}{notes('outcomes')}</div>
+        <div className="field"><label htmlFor="in-req">Yêu cầu trước khi học (Mỗi dòng một ý)</label><textarea id="in-req" name="requirements" rows={3} value={d.requirements} onChange={onInput} disabled={ro} />{!ro && <AiAssist courseId={c.id} field="requirements" value={d.requirements} title={d.title} level={d.level} onApply={(v) => onInput({ target: { name: 'requirements', value: v } })} />}{notes('requirements')}</div>
         {!ro && guard.dirty && (
           <div className="row tc-savebar"><button className="btn btn-primary" type="submit" disabled={infoSaving}>{infoSaving ? <><Icon name="loader" className="icon-sm" /> Đang lưu...</> : <><Icon name="check" className="icon-sm" /> Lưu thay đổi</>}</button><span className="small muted"><Icon name="alert-circle" className="icon-sm text-warn" /> Có thay đổi chưa lưu</span></div>
         )}
