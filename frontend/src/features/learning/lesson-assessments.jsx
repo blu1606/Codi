@@ -185,6 +185,14 @@ const CODE_LANG = { javascript: 'JavaScript', typescript: 'TypeScript' };
 // What a code assignment's editor opens with; submitting it unchanged is not a submission.
 const CODE_STARTER = '// Viết code bài làm ở đây, rồi bấm “Chạy” để xem kết quả.\n';
 const hasCode = (code) => !!code && !!code.trim() && code.trim() !== CODE_STARTER.trim();
+// A code assignment's instructions may carry a ```js block (sample data, a skeleton): the editor opens with it,
+// so the learner's code can use what the brief refers to, and the brief shows only the text around it.
+const CODE_FENCE = /```(?:js|javascript|ts|typescript)?[^\S\n]*\n([\s\S]*?)```/;
+const starterOf = (instructions) => {
+  const m = CODE_FENCE.exec(instructions || '');
+  return m ? `${CODE_STARTER}${m[1].replace(/\s+$/, '')}\n` : CODE_STARTER;
+};
+const briefOf = (instructions) => (instructions || '').replace(CODE_FENCE, '(Code mẫu đã có sẵn trong trình soạn thảo bên dưới.)').trim();
 
 function SubmissionContent({ sub }) {
   return (
@@ -247,7 +255,8 @@ function AssignmentBody({ a, url, bare, setData, onChange, courseId, lessonId })
   const maxScore = Number(a.maxScore) || 10;
   const passPct = a.passingScore != null ? Number(a.passingScore) : 50;
   const stored = draftOf(sub);
-  const [fields, setFields] = useState({ link: stored.linkUrl, note: stored.answerText, code: stored.code || (codeLang ? CODE_STARTER : '') });
+  const starter = codeLang ? starterOf(a.instructions) : '';
+  const [fields, setFields] = useState({ link: stored.linkUrl, note: stored.answerText, code: stored.code || starter });
   const [editing, setEditing] = useState(!sub || sub.status === 'draft' || !!(sub && sub.draft));
   const [saved, setSaved] = useState(stored.linkUrl || stored.answerText || stored.fileName || hasCode(stored.code) ? 'Đã khôi phục bản nháp.' : 'Bản nháp được lưu tự động.');
   const [busy, setBusy] = useState(false);
@@ -345,7 +354,7 @@ function AssignmentBody({ a, url, bare, setData, onChange, courseId, lessonId })
     if (busy || !sub) return;
     setBusy(true); setError(null);
     try {
-      const reopened = { link: sub.linkUrl || '', note: sub.answerText || '', code: sub.code || (codeLang ? CODE_STARTER : '') };
+      const reopened = { link: sub.linkUrl || '', note: sub.answerText || '', code: sub.code || starter };
       setData(await post({ type: 'assignment-draft', ...payload(reopened) }));
       setFields(reopened);
       setSaved('Bản nháp được lưu tự động.');
@@ -448,7 +457,7 @@ function AssignmentBody({ a, url, bare, setData, onChange, courseId, lessonId })
   return (
     <Shell id="assignment" label={a.title || 'Bài tập'} bare={bare} busy={busy}>
       <h2 className="ln-h">{a.title || 'Bài tập'}</h2>
-      {a.instructions && <div className="panel stack-1"><span className="xsmall muted">Yêu cầu</span><p className="small ln-pre">{a.instructions}</p></div>}
+      {a.instructions && <div className="panel stack-1"><span className="xsmall muted">Yêu cầu</span><p className="small ln-pre">{codeLang ? briefOf(a.instructions) : a.instructions}</p></div>}
       <p className="small muted">Thang điểm {maxScore} · điểm đạt {passPct}%{a.dueDays ? ` · hạn nộp ${a.dueDays} ngày sau khi mở bài` : ''}</p>
       {a.rubric && (
         <details className="panel ln-rubric" open={!!graded}><summary className="small strong">Thang chấm</summary>

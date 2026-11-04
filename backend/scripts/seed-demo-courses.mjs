@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { applyDemoCodeTasks } from "./demo-code-tasks.mjs";
 
 const SRC = "course-js-001";
 const [pdfPath, lecturerEmail = "dongthanhquandtq+gv@gmail.com", learners = "dongthanhquandtq+student@gmail.com,minhanh@codi.vn"] = process.argv.slice(2);
@@ -132,6 +133,8 @@ try {
       await q(`insert into coding_test_cases (exercise_id, name, input, expected_output, is_sample, position, points) values ($1,$2,$3,$4,$5,$6,$7)`,
         [exercises.get(String(t.exercise_id)), t.name, t.input, t.expected_output, t.is_sample, t.position, t.points]);
     }
+
+    await applyDemoCodeTasks(q, copy.id, true);
 
     // Extra lessons at the end of chapter 1: a slide deck (PDF on R2) and a reading-only lesson.
     const firstChapter = (await one(`select id from course_chapters where course_id = $1 order by position limit 1`, [copy.id])).id;
