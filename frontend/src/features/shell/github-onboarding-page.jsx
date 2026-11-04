@@ -19,8 +19,11 @@ import {
 const STEPS = ['Kết nối GitHub', 'Phân tích', 'Hồ sơ năng lực'];
 
 /** In-app path only; anything else (absent, external, protocol-relative) continues to the role home. */
+// Same-site paths only. Browsers read "/\" like "//" (protocol-relative), so "/\evil.com" would leave the site;
+// control characters are refused because browsers strip them before parsing.
 export function safeNext(v) {
-  return typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/onboarding/github') ? v : Codi.homeFor(Codi.role());
+  const sameSite = typeof v === 'string' && /^\/(?![/\\])/.test(v) && !/[\u0000-\u001f\\]/.test(v);
+  return sameSite && !v.startsWith('/onboarding/github') ? v : Codi.homeFor(Codi.role());
 }
 const nextFromUrl = () => safeNext(Codi.query().next);
 
