@@ -4,6 +4,15 @@ import { user } from "@codi-1/db/schema/auth";
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import { ENV } from "@/env.server";
+import {
+  adminOrderUrl,
+  DISCORD_COLOR,
+  type DiscordEvent,
+  type DiscordField,
+  formatVnd,
+  maskEmail,
+  notifyDiscord,
+} from "@/lib/discord-notify";
 import { db } from "@/services";
 import {
   getInvoiceEmailHtml,
@@ -96,4 +105,38 @@ export async function sendOrderPaidEmails(orderId: number, mailer: Mailer | null
   } catch (error) {
     console.error(`[Order email] order ${orderId}: could not send paid-order emails:`, error);
   }
+}
+
+/** Builds the team's "new sale" Discord message; an overpaid order is flagged because the surplus must be refunded. */
+export function orderPaidDiscordEvent(data: OrderEmailData, simulated = false): DiscordEvent {
+  const overpaid = data.receivedAmount - data.totalAmount;
+  const fields: DiscordField[] = [
+    { name: "Số tiền", value: data.totalAmount === 0 ? "Miễn phí" : formatVnd(data.totalAmount), inline: true },
+    { name: "Thanh toán", value: data.totalAmount === 0 ? "Đơn 0 ₫" : `SePay${data.transactionCode ? ` · ${data.transactionCode}` : ""}`, inline: true },
+    { name: "Người mua", value: maskEmail(data.buyerEmail), inline: true },
+    { name: `Khoá học (${data.items.length})`, value: data.items.map((item) => `• ${item.title} — ${formatVnd(item.unitPrice)}`).join("\n") },
+  ];
+  if (data.voucherCode) fields.push({ name: "Mã giảm giá", value: `${data.voucherCode} (−${formatVnd(data.discountAmount)})`, inline: true });
+  if (overpaid > 0) fields.push({ name: "⚠️ Chuyển thừa", value: `${formatVnd(overpaid)} — cần hoàn lại cho người mua`, inline: true });
+  return {
+    title: `💰 Đơn mới ${data.orderCode} · ${formatVnd(data.totalAmount)}`,
+    color: overpaid > 0 ? DISCORD_COLOR.attention : DISCORD_COLOR.sale,
+    url: adminOrderUrl(data.orderId),
+    fields,
+    simulated,
+  };
+}
+
+/**
+ * Everything that follows an order becoming paid: the buyer's confirmation and invoice emails and the team's Discord
+ * message. Call after the settling transaction commits and do not await it; failures are logged, never thrown.
+ */
+export async function announceOrderPaid(orderId: number, { simulated = false } = {}): Promise<void> {
+  await Promise.allSettled([
+    sendOrderPaidEmails(orderId),
+    (async () => {
+      const data = await loadOrderEmailData(orderId);
+      if (data) await notifyDiscord(orderPaidDiscordEvent(data, simulated));
+    })().catch((error) => console.error(`[Discord] order ${orderId}: could not build the sale message:`, error)),
+  ]);
 }

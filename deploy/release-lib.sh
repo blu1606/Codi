@@ -56,4 +56,22 @@ backup_db() {
   echo "$file"
 }
 
-log_release() { echo "$(date -Iseconds) $*" >> "$DIR/releases.log"; }
+# notify_discord TEXT: posts TEXT to the team channel when /opt/monitoring/.env has DISCORD_WEBHOOK_URL. Best effort:
+# never fails a release or rollback.
+notify_discord() {
+  url=$(sed -n 's/^DISCORD_WEBHOOK_URL=//p' /opt/monitoring/.env 2>/dev/null | tail -1)
+  [ -n "$url" ] || return 0
+  text=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  curl -sS -m 10 -H "Content-Type: application/json" -d "{\"content\":\"$text\"}" "$url" >/dev/null 2>&1 || true
+}
+
+# Every release and rollback outcome is logged here, so this is also where the team hears about it.
+log_release() {
+  echo "$(date -Iseconds) $*" >> "$DIR/releases.log"
+  case "$*" in
+    *result=ok*) icon=":rocket:" ;;
+    *result=rolled-back*) icon=":warning:" ;;
+    *) icon=":red_circle:" ;;
+  esac
+  notify_discord "$icon Codi $(basename "$0" .sh): $*"
+}

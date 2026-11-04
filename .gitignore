@@ -15,3 +15,12 @@ perf/k6/**/*.csv
 .lighthouseci/
 e2e/report/
 e2e/results/
+
+# release image archive written by scripts/build-image.sh --save
+image.tar.gz
+
+# monitoring stack secrets (Grafana, Discord webhook) live only on the VPS
+deploy/monitoring/.env
+
+# unit test coverage reports
+coverage/

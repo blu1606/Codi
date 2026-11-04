@@ -7,6 +7,8 @@ import { defineConfig, devices } from "@playwright/test";
 //   npm run test:e2e                                             fast check + role guards (signs in seeded accounts)
 export default defineConfig({
   testDir: "e2e",
+  // e2e/system holds the data-writing system tests; they have their own config (playwright.system.config.ts).
+  testIgnore: ["system/**"],
   timeout: 30_000,
   expect: { timeout: 10_000 },
   retries: 0,

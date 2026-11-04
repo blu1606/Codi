@@ -40,10 +40,14 @@ From the repo root on a dev machine:
 
 ```bash
 sha=$(git rev-parse --short HEAD)
-docker build -t codi-rebuild:$sha .
-docker save codi-rebuild:$sha | gzip -1 > image.tar.gz
+npm run image -- --save   # builds codi-rebuild:$sha and writes image.tar.gz
 scp image.tar.gz root@172.93.209.12:/opt/codi-rebuild/
 ```
+
+[scripts/build-image.sh](../scripts/build-image.sh) also keeps the dev machine's Docker disk bounded: it removes
+`codi-rebuild` images older than the two newest (`KEEP_IMAGES`), unless a container uses them, plus dangling layers,
+and caps the build cache at 5 GB (`BUILD_CACHE_MAX`). Build with it rather than plain `docker build -t codi-rebuild:<tag>`,
+because Docker Desktop's disk file never shrinks once per-commit images have filled it.
 
 Copy the deploy scripts to the server as well (they change rarely, but always together):
 
@@ -114,6 +118,36 @@ password hashes: keep `data.sql` out of git.
   images `codi-web:*`, `/opt/codi/current` → release). Run
   `cd /opt/codi-rebuild && docker compose stop app`, then
   `cd /etc/codi && CODI_RELEASE=$(basename "$(readlink /opt/codi/current)") docker compose --profile ai-worker up -d`.
+
+## Monitoring and backups
+
+Metrics, logs, dashboards and alerts live in Grafana Cloud (free tier, stack `https://scarletavocado2886.grafana.net`,
+folder **Codi**). The VPS only runs the agent, [Grafana Alloy](../deploy/monitoring/compose.yml), from
+`/opt/monitoring` (about 90 MB RAM, nothing published). Alloy ships host, container and Postgres metrics, an HTTPS probe of
+`/api/health` and the logs of every container plus Caddy ([config.alloy](../deploy/monitoring/config.alloy)).
+
+- Secrets: `/opt/monitoring/.env` (mode 600; keys in [.env.example](../deploy/monitoring/.env.example)).
+  `PG_MONITOR_PASSWORD` belongs to the read-only `codi_monitor` role and comes from `/opt/monitoring/.env.pg`.
+- Change the agent: edit `config.alloy`, copy it to `/opt/monitoring/` and run
+  `docker compose up -d --force-recreate` there. `docker logs codi-alloy` shows rejected config or push errors.
+- Dashboards (Codi overview, Node Exporter Full, PostgreSQL), the Discord contact point and the alert rules are created
+  by `node --env-file=deploy/monitoring/.env deploy/monitoring/provision-grafana.mjs`. It replaces them each run, so
+  change them in the script, not in the UI.
+- Alerts go to Discord: site down 3 min, app container missing, Postgres down, disk above 85%, RAM available below 10%,
+  TLS certificate under 14 days, and no metrics for 5 min (VPS or agent down).
+- Nightly backup: `/etc/cron.d/codi-backup` runs [backup-offsite.sh](../deploy/backup-offsite.sh) at 02:00 (VPS time,
+  Asia/Ho_Chi_Minh). It dumps the database, uploads it to the private assignment bucket under `db-backups/postgres/`,
+  keeps 30 days there and 7 days in `/opt/codi-rebuild/backups/`, and posts to Discord on failure. Output is in
+  `/var/log/codi-backup.log`. Never point it at the avatar bucket: `/api/avatar` serves any key in it.
+- Team notifications share the same Discord webhook:
+  - The app (`DISCORD_WEBHOOK_URL` in `rebuild.env`) posts each paid order, each bank transfer that needs a human
+    (no or unknown CODI code, underpaid, order no longer pending, receipt conflict, webhook error) and each cancelled
+    order that already received money, so a refund is owed. Buyer emails are masked; simulated transfers are tagged.
+  - `release.sh` and `rollback.sh` post every outcome through `log_release`.
+  - `/etc/cron.d/codi-digest` runs [daily-digest.sh](../deploy/daily-digest.sh) at 08:00: yesterday's paid orders and
+    revenue, sign-ups, failed AI jobs, and orders waiting for reconciliation. Output is in `/var/log/codi-digest.log`.
+- Restore from R2: download the dump with the same rclone image and variables as the script
+  (`rclone copyto r2:<bucket>/db-backups/postgres/<name> /data/<name>`), then use `rollback.sh … --restore-db`.
 
 ## Known gaps
 

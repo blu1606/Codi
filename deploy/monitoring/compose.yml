@@ -1,0 +1,53 @@
+# Monitoring agent on the VPS: one Grafana Alloy container that ships host, container and Postgres metrics, an
+# HTTPS health probe and all container + Caddy logs to Grafana Cloud. Storage, dashboards and alerting live in the
+# cloud, so nothing here is published. Runs from /opt/monitoring (see docs/deployment.md, "Monitoring and backups").
+#   cd /opt/monitoring && docker compose up -d
+name: codi-monitoring
+services:
+  alloy:
+    image: grafana/alloy:v1.21.2
+    container_name: codi-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    # Only the variables Alloy needs, interpolated from .env next to this file (never in git).
+    environment:
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:?missing}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:?missing}
+      GRAFANA_CLOUD_LOKI_URL: ${GRAFANA_CLOUD_LOKI_URL:?missing}
+      GRAFANA_CLOUD_LOKI_USER: ${GRAFANA_CLOUD_LOKI_USER:?missing}
+      GRAFANA_CLOUD_TOKEN: ${GRAFANA_CLOUD_TOKEN:?missing}
+      PG_DSN: postgresql://codi_monitor:${PG_MONITOR_PASSWORD:?missing}@codi-rebuild-db:5432/codi?sslmode=disable
+      HEALTH_URL: ${HEALTH_URL:-https://codi.hoangblue.dev/api/health}
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+      # Host and container metrics (node exporter and cAdvisor built into Alloy).
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+      - /run/udev/data:/run/udev/data:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Caddy runs on the host; its logs are in the systemd journal.
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    # cAdvisor reads cgroup stats of every container, which needs the host PID namespace and privileges.
+    pid: host
+    privileged: true
+    networks: [codi]
+    mem_limit: 256m
+
+networks:
+  # The production stack's network, so Alloy reaches Postgres by container name without a published port.
+  codi:
+    name: codi-rebuild_default
+    external: true
+
+volumes:
+  alloy-data:

@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { hashPassword } from "better-auth/crypto";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { account, courses, createDb, roles, studentEnrollments, user, userRoles } from "@codi-1/db";
 
@@ -164,6 +164,8 @@ async function cleanup() {
       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
       WHERE c.contype = 'f' AND c.confrelid = '"user"'::regclass AND c.confdeltype <> 'c'`);
     await db.transaction(async (tx) => {
+      // A paid enrolment points at its order item, so enrolments go before the orders they reference.
+      await tx.delete(studentEnrollments).where(inArray(studentEnrollments.userId, ids));
       for (const ref of references.rows) {
         // Drizzle expands an array parameter into a ($1, $2, ...) list, which IN accepts and ANY does not.
         await tx.execute(sql`DELETE FROM ${sql.raw(ref.tbl)} WHERE ${sql.raw(`"${ref.col}"`)} IN ${ids}`);

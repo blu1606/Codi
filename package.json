@@ -13,6 +13,7 @@
     "start": "concurrently -k -n API,WEB -c cyan,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "dev": "npm start",
     "build": "npm run build -w frontend",
+    "image": "sh scripts/build-image.sh",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "migrate": "npm run migrate -w backend",
@@ -24,11 +25,14 @@
     "fastcheck:ui": "playwright test --grep @fast",
     "security:check": "sh scripts/security-check.sh",
     "security:probe": "node scripts/security-probe.mjs",
-    "perf:lighthouse": "lhci autorun --upload.target=filesystem"
+    "perf:lighthouse": "lhci autorun --upload.target=filesystem",
+    "test:system": "playwright test -c playwright.system.config.ts",
+    "test:unit:coverage": "vitest run backend/src/lib/cart-voucher.unit.test.ts backend/src/lib/checkout-cart.test.ts backend/src/lib/learning-path-adjustment.test.ts --coverage --coverage.provider=v8 \"--coverage.include=backend/src/lib/{add-course-to-cart,checkout-cart,learning-path-adjustment,cart-service,admin-vouchers-service}.ts\" --coverage.reporter=text --coverage.reporter=html --coverage.reporter=json --coverage.reportsDirectory=coverage/unit"
   },
   "devDependencies": {
     "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.56.1",
+    "@vitest/coverage-v8": "^5.1.0",
     "concurrently": "^9.1.2",
     "vitest": "^5.1.0"
   },

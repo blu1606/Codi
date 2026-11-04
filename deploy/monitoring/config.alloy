@@ -1,0 +1,134 @@
+// Grafana Alloy pipeline for the Codi VPS. Everything is pushed to Grafana Cloud.
+// Metrics are scraped every 60s: Grafana Cloud bills active series at one data point per minute, so a faster
+// interval would multiply the series count against the free tier's 10k limit.
+
+// ---------- destinations ----------
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_PROM_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+  external_labels = { host = "codi-vps" }
+}
+
+loki.write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_CLOUD_LOKI_URL")
+    basic_auth {
+      username = sys.env("GRAFANA_CLOUD_LOKI_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+  external_labels = { host = "codi-vps" }
+}
+
+// ---------- host: CPU, memory, disk, network ----------
+prometheus.exporter.unix "host" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/host/root"
+  disable_collectors = ["btrfs", "bonding", "fibrechannel", "infiniband", "ipvs", "nfs", "nfsd", "powersupplyclass", "tapestats", "thermal_zone", "xfs", "zfs"]
+  filesystem {
+    mount_points_exclude = "^/(dev|proc|run|sys|host/root/(proc|sys|run|dev|var/lib/docker/.+))($|/)"
+    fs_types_exclude     = "^(overlay|tmpfs|squashfs|nsfs|proc|sysfs|cgroup2?|autofs|devpts|mqueue|tracefs|debugfs|fusectl|securityfs|pstore|bpf|configfs|binfmt_misc|hugetlbfs|ramfs|rpc_pipefs)$"
+  }
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  job_name        = "integrations/node_exporter"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.remote_write.cloud.receiver]
+}
+
+// ---------- containers: CPU, memory, restarts ----------
+prometheus.exporter.cadvisor "containers" {
+  docker_host      = "unix:///var/run/docker.sock"
+  docker_only      = true
+  storage_duration = "2m"
+}
+
+prometheus.scrape "containers" {
+  targets         = prometheus.exporter.cadvisor.containers.targets
+  job_name        = "integrations/docker"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.containers.receiver]
+}
+
+// cAdvisor's per-CPU, per-device and task-state series are not used by the dashboards or alerts; drop them.
+prometheus.relabel "containers" {
+  forward_to = [prometheus.remote_write.cloud.receiver]
+  rule {
+    source_labels = ["__name__"]
+    regex         = "container_(cpu_usage_seconds_total|cpu_cfs_.*|memory_working_set_bytes|memory_usage_bytes|memory_rss|spec_memory_limit_bytes|network_(receive|transmit)_bytes_total|last_seen|start_time_seconds|fs_usage_bytes|oom_events_total)|machine_.*"
+    action        = "keep"
+  }
+}
+
+// ---------- Postgres: connections, size, locks ----------
+prometheus.exporter.postgres "codi" {
+  data_source_names = [sys.env("PG_DSN")]
+}
+
+prometheus.scrape "postgres" {
+  targets         = prometheus.exporter.postgres.codi.targets
+  job_name        = "integrations/postgres_exporter"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.remote_write.cloud.receiver]
+}
+
+// ---------- public health check through Caddy (TLS, DNS, app) ----------
+prometheus.exporter.blackbox "site" {
+  config = "{ modules: { http_2xx: { prober: http, timeout: 10s, http: { valid_status_codes: [200], fail_if_body_not_matches_regexp: ['\"ok\":true'] } } } }"
+
+  target {
+    name    = "codi"
+    address = sys.env("HEALTH_URL")
+    module  = "http_2xx"
+  }
+}
+
+prometheus.scrape "site" {
+  targets         = prometheus.exporter.blackbox.site.targets
+  job_name        = "integrations/blackbox"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.remote_write.cloud.receiver]
+}
+
+// ---------- logs: every container ----------
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  labels        = { job = "docker" }
+  forward_to    = [loki.write.cloud.receiver]
+}
+
+// ---------- logs: Caddy (host service, systemd journal) ----------
+loki.source.journal "caddy" {
+  path       = "/var/log/journal"
+  matches    = "_SYSTEMD_UNIT=caddy.service"
+  labels     = { job = "caddy" }
+  forward_to = [loki.write.cloud.receiver]
+}

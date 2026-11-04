@@ -5,7 +5,8 @@ import { db } from "@/services";
 import { orders, orderEvents, orderItems, vouchers, payments } from "@codi-1/db";
 import { studentTransactions, studentEnrollments } from "@codi-1/db/schema/student-profile";
 import { createNotificationService } from "@/lib/notification-service";
-import { sendOrderPaidEmails } from "@/lib/order-emails";
+import { announceOrderPaid } from "@/lib/order-emails";
+import { adminReconciliationUrl, DISCORD_COLOR, formatVnd, notifyDiscord } from "@/lib/discord-notify";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 function verifyApiKey(authHeader: string | null, secret: string): boolean {
@@ -57,6 +58,21 @@ function isReceiptKeyConflict(error: unknown): boolean {
     && "constraint" in value && value.constraint === "payments_transaction_code_idx");
 }
 
+// Money reached the shop's account but could not settle an order on its own, so a person has to reconcile it.
+function notifyNeedsHuman(reason: string, data: { id?: unknown; content?: unknown; description?: unknown; transferAmount?: unknown; amountIn?: unknown }, extra: { name: string; value: string; inline?: boolean }[] = []) {
+  void notifyDiscord({
+    title: `⚠️ Tiền về cần xử lý tay · ${reason}`,
+    color: DISCORD_COLOR.attention,
+    url: adminReconciliationUrl(),
+    fields: [
+      { name: "Số tiền", value: formatVnd(Number(data.transferAmount || data.amountIn || 0)), inline: true },
+      { name: "Nội dung chuyển khoản", value: String(data.content || data.description || "—"), inline: true },
+      ...extra,
+    ],
+    simulated: String(data.id ?? "").startsWith("SIM-"),
+  });
+}
+
 export async function POST(req: Request) {
   try {
     // Authenticate the webhook request
@@ -91,6 +107,7 @@ export async function POST(req: Request) {
 
     if (!match) {
       console.log("No valid CODI transaction ID found in content:", content);
+      notifyNeedsHuman("không có mã CODI", data);
       return NextResponse.json({ success: true, message: "No matching ID, ignored" });
     }
 
@@ -101,6 +118,7 @@ export async function POST(req: Request) {
 
     if (!tx) {
       console.log("Transaction not found for ID:", txId);
+      notifyNeedsHuman(`mã ${txId} không khớp đơn nào`, data);
       return NextResponse.json({ success: true, message: "Transaction not found" });
     }
 
@@ -724,6 +742,7 @@ export async function POST(req: Request) {
     });
 
     if (processResult.invalidReceiptIdentity) {
+      notifyNeedsHuman(`${txId} thiếu mã giao dịch ngân hàng`, data);
       return NextResponse.json(
         { success: false, message: "Order receipts require a valid provider transaction identifier" },
         { status: 400 },
@@ -731,6 +750,7 @@ export async function POST(req: Request) {
     }
 
     if (processResult.receiptIdentityConflict) {
+      notifyNeedsHuman(`${txId} trùng giao dịch, không đối soát tự động được`, data);
       return NextResponse.json(
         { success: false, message: "Receipt identity cannot be reconciled automatically" },
         { status: 409 },
@@ -742,6 +762,9 @@ export async function POST(req: Request) {
     }
 
     if (processResult.underpaid) {
+      notifyNeedsHuman(`${txId} chuyển thiếu`, data, [
+        { name: "Đã nhận / cần", value: `${formatVnd(Number(processResult.receivedAmount))} / ${formatVnd(Number(processResult.targetTotal))}`, inline: true },
+      ]);
       return NextResponse.json({
         success: true,
         underpaid: true,
@@ -752,17 +775,27 @@ export async function POST(req: Request) {
 
     if (processResult.orderNotPending) {
       console.warn(`Order ${txId} is not in pending state (was ${processResult.orderStatus ?? "non-pending"}). Ignored enrollment, marked for reconciliation.`);
+      notifyNeedsHuman(`${txId} đơn không còn chờ thanh toán (${processResult.orderStatus ?? "không rõ"})`, data);
       return NextResponse.json({ success: true, message: "Order not pending, marked for reconciliation" });
     }
 
     console.log(`Successfully processed transaction ${txId}`);
 
     // Purchase confirmation + invoice; delivery runs in the background and never fails the webhook.
-    if (processResult.paidOrderId) void sendOrderPaidEmails(processResult.paidOrderId);
+    if (processResult.paidOrderId) {
+      void announceOrderPaid(processResult.paidOrderId, { simulated: String(data.id ?? "").startsWith("SIM-") });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Webhook processing error:", error);
+    // SePay retries, but a transfer may now be sitting unsettled: tell the team without echoing the payload.
+    void notifyDiscord({
+      title: "🔴 Lỗi xử lý webhook SePay",
+      color: DISCORD_COLOR.error,
+      url: adminReconciliationUrl(),
+      description: `Một giao dịch chuyển khoản có thể chưa được ghi nhận. Xem log app: ${error instanceof Error ? error.message : "lỗi không rõ"}`,
+    });
     if (isReceiptKeyConflict(error)) {
       return NextResponse.json(
         { success: false, message: "Receipt identity cannot be reconciled automatically" },

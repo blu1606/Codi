@@ -101,7 +101,14 @@ async function passive() {
     report(res.status < 500 && !looksLikeStack(res.text) ? "PASS" : "FAIL", `injection-shaped input handled: ${decodeURIComponent(q)}`, `HTTP ${res.status}`);
   }
 
-  const crossSignIn = await http("/api/auth/sign-in/email", { method: "POST", origin: EVIL, body: { email: "probe@codi.test", password: "x".repeat(12) } });
+  // A 429 only says the sign-in limit was reached (e.g. by an e2e run just before), not how a foreign Origin is
+  // treated: wait out the window and ask again.
+  let crossSignIn;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    crossSignIn = await http("/api/auth/sign-in/email", { method: "POST", origin: EVIL, body: { email: "probe@codi.test", password: "x".repeat(12) } });
+    if (crossSignIn.status !== 429) break;
+    await sleep((Number(crossSignIn.headers.get("x-retry-after")) || 10) * 1000 + 500);
+  }
   report(crossSignIn.status === 403 ? "PASS" : "FAIL", "sign-in from a foreign Origin is refused", `HTTP ${crossSignIn.status}`);
 
   const cors = await http("/api/courses?limit=1", { origin: EVIL });
