@@ -6,8 +6,8 @@
 //   docs/assets/perf-latency.svg   response time (p50, p95) against offered load, with the 500 ms SLO
 //   docs/assets/perf-cpu.svg       app and database CPU against offered load
 //   <first run's parent>/levels.json   the merged numbers behind both charts
-// A level is left out when anything other than the app and database containers ran on the server during it (a
-// deploy, a migration), and a level measured by an earlier run is not replaced by a later one.
+// A level is left out when a container that was not running at the start of the load appears during it (a deploy, a
+// migration, a one-off job), and a level measured by an earlier run is not replaced by a later one.
 // Static SVG so GitHub renders them; colours follow the viewer's light/dark setting.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -35,6 +35,9 @@ for (const dir of runs) {
     .map((l) => l.split(","))
     .map(([t, name, cpu, mem]) => ({ t: +t, name, cpu: +cpu, mem: +mem }));
   let start = capacity.loadStartedAt / 1000;
+  // Containers already running when the load started (app, database, a monitoring agent) are the server's normal
+  // state; one that appears later (a deploy, a migration, a one-off job) disturbs the level it lands in.
+  const baseline = new Set(stats.filter((s) => s.t >= start - 15 && s.t < start + 5).map((s) => s.name));
   const windows = new Map();
   for (const p of capacity.phases) {
     windows.set(p.label, [start, start + p.seconds]);
@@ -48,8 +51,9 @@ for (const dir of runs) {
       return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
     };
     const run = path.basename(dir);
-    if (inside.some((s) => s.name !== APP && s.name !== DB)) {
-      skipped.push(`${run} ${row.phase}: another container ran on the server`);
+    const intruder = inside.find((s) => !baseline.has(s.name));
+    if (intruder) {
+      skipped.push(`${run} ${row.phase}: container "${intruder.name}" started on the server during this level`);
       continue;
     }
     if (row.seconds !== undefined && row.seconds < 50) {

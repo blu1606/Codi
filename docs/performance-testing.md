@@ -106,8 +106,9 @@ Lighthouse is read-only, so it may also be pointed at production (`LHCI_BASE_URL
 - **Lesson APIs are CPU-bound, and the cost is per statement.** A CPU profile shows ~40% of the app's time in fixed
   per-statement work (drizzle-orm query building 21%, `pg` ~8%, socket writes 10%) and ~2% in business logic, so
   capacity follows the number of SQL statements per request. Three changes cut a 70/30 mix from ≈623 to ≈420
-  statements per 100 requests and raised the highest load meeting the SLO from 60 to 100 req/s in a same-machine A/B
-  (README, "Đã tối ưu"): a 30 s cache for the public catalogue and course detail
+  statements per 100 requests and raised the dev server's highest load meeting the SLO from 100 to 160 req/s (README;
+  same-machine A/B in [perf/runs/2026-11-04-local-ab/](../perf/runs/2026-11-04-local-ab/)): a 30 s cache for the public
+  catalogue and course detail
   ([public-course-cache.ts](../backend/src/lib/public-course-cache.ts), cleared by `revalidatePath` and course edits),
   one role lookup per request ([rbac.ts](../backend/packages/auth/src/rbac.ts), `withRoleCache` in the host), and
   lesson lists without every lesson's body. Still loaded twice per lesson read: enrollment, course, lessons and

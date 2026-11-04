@@ -1,0 +1,9 @@
+{
+  "GET /api/courses?limit=20": 1,
+  "GET /api/courses/javascript-nen-tang": 4,
+  "GET /api/auth/get-session": 2,
+  "GET /api/learn/:courseId/path": 18,
+  "GET /api/learn/:courseId/access/:lessonId": 12,
+  "GET /api/learn/:courseId/lessons/:lessonId": 29,
+  "POST /api/learn/:courseId/lessons/:lessonId": 43
+}

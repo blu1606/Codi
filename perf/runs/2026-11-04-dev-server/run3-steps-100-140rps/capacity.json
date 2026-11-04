@@ -1,0 +1,131 @@
+{
+  "target": "https://codi.hoangblue.dev",
+  "loadRps": 100,
+  "loadStartedAt": 1793758826304,
+  "loadEndedAt": 1793759192379,
+  "phases": [
+    {
+      "label": "ramp",
+      "seconds": 60,
+      "rps": 100
+    },
+    {
+      "label": "load-100",
+      "seconds": 60,
+      "rps": 100
+    },
+    {
+      "label": "ramp-110",
+      "seconds": 10,
+      "rps": 110
+    },
+    {
+      "label": "step-110",
+      "seconds": 60,
+      "rps": 110
+    },
+    {
+      "label": "ramp-120",
+      "seconds": 10,
+      "rps": 120
+    },
+    {
+      "label": "step-120",
+      "seconds": 60,
+      "rps": 120
+    },
+    {
+      "label": "ramp-130",
+      "seconds": 10,
+      "rps": 130
+    },
+    {
+      "label": "step-130",
+      "seconds": 60,
+      "rps": 130
+    },
+    {
+      "label": "ramp-140",
+      "seconds": 10,
+      "rps": 140
+    },
+    {
+      "label": "step-140",
+      "seconds": 60,
+      "rps": 140
+    },
+    {
+      "label": "ramp-160",
+      "seconds": 10,
+      "rps": 160
+    },
+    {
+      "label": "step-160",
+      "seconds": 60,
+      "rps": 160
+    },
+    {
+      "label": "cooldown",
+      "seconds": 20,
+      "rps": 0
+    }
+  ],
+  "rows": [
+    {
+      "phase": "load-100",
+      "offeredRps": 100,
+      "seconds": 60,
+      "achievedRps": 100,
+      "requests": 6000,
+      "p50": 95.17875000000001,
+      "p95": 291.9643250000003,
+      "p99": 658.4728910000031,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-110",
+      "offeredRps": 110,
+      "seconds": 60,
+      "achievedRps": 110,
+      "requests": 6600,
+      "p50": 213.05734999999999,
+      "p95": 1339.7097649999998,
+      "p99": 1813.8488530000006,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-120",
+      "offeredRps": 120,
+      "seconds": 60,
+      "achievedRps": 115.41666666666667,
+      "requests": 6925,
+      "p50": 480.2259,
+      "p95": 3357.9663199999995,
+      "p99": 5278.151168000003,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-130",
+      "offeredRps": 130,
+      "seconds": 60,
+      "achievedRps": 113.25,
+      "requests": 6795,
+      "p50": 1072.0262,
+      "p95": 6667.903409999997,
+      "p99": 10722.396947999998,
+      "failedRate": 0
+    },
+    {
+      "phase": "step-140",
+      "offeredRps": 140,
+      "seconds": 26.07499999999999,
+      "achievedRps": 93.88302972195594,
+      "requests": 2448,
+      "p50": 845.9545,
+      "p95": 3979.5187,
+      "p99": 8137.294852000021,
+      "failedRate": 0.004084967320261438
+    }
+  ],
+  "dropped": 468
+}
