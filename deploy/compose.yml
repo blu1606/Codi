@@ -8,6 +8,8 @@ services:
     env_file: [./rebuild.env]
     environment:
       DATABASE_URL: postgresql://codi:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@db:5432/codi
+      # Reported by /api/health so release.sh, rollback.sh and fastcheck.sh can tell which image answers.
+      APP_RELEASE: ${RELEASE:-latest}
       # AI jobs (GitHub analysis, knowledge map, quiz generation, learning paths) run in this container; rebuild.env is a
       # copy of Codi's env, so its own value is overridden here. Set it in .env next to this file to turn the worker off.
       AI_BACKGROUND_WORKER_ENABLED: ${AI_BACKGROUND_WORKER_ENABLED:-true}
