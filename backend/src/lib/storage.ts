@@ -92,6 +92,18 @@ export async function uploadToR2({
  * S3 API endpoint (*.r2.cloudflarestorage.com) needs signed requests, so its files are always proxied. The page's
  * Content-Security-Policy allows this origin (server.ts).
  */
+/**
+ * Origin of the presigned URLs learners PUT assignment files to (assignmentFiles.presign): the R2 S3 endpoint in
+ * virtual-host style, https://<bucket>.<account>.r2.cloudflarestorage.com (R2 bucket names are DNS-safe). The page's
+ * Content-Security-Policy allows it in connect-src (server.ts). Null when assignment storage is not configured.
+ */
+export function assignmentUploadOrigin(): string | null {
+  const account = ENV.R2_ACCOUNT_ID;
+  const bucket = ENV.R2_ASSIGNMENT_BUCKET;
+  if (!account || !bucket || bucket === R2_BUCKET) return null;
+  return `https://${bucket}.${account}.r2.cloudflarestorage.com`;
+}
+
 export function publicStorageBase(): string | null {
   const publicUrl = ENV.R2_PUBLIC_URL;
   if (!publicUrl || publicUrl.includes(".r2.cloudflarestorage.com")) return null;
