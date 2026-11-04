@@ -4,7 +4,7 @@
  * courses (GET /api/courses?sort=popular&limit=4: loading / error / empty), AI Mentor, closing band, footer.
  * The product window shows the first chapter of the most popular course (GET /api/courses/:slug).
  */
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { useApi } from '../../lib/use-api';
 import { Icon, Thumb } from '../../components/ui/primitives';
@@ -142,6 +142,10 @@ export default function HomePage() {
   useCodi();
   const popular = useCatalog('sort=popular&limit=4');
   const top = popular.courses && popular.courses[0];
+  // The landing page is for guests: a signed-in learner, lecturer or admin goes to their own home (also right after
+  // signing in from the modal opened on this page).
+  const home = Codi.homeFor(Codi.role());
+  if (Codi.session.user && home !== '/') return <Navigate to={home} replace />;
   return (
     <>
       <div className="page cm-home">
