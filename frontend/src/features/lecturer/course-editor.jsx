@@ -3,7 +3,7 @@
 // Data and rules come from Codi's actions (dashboard/lecturer/courses/[courseId]/actions.ts, publish/actions.ts)
 // through teach-data.js; the curriculum outline and course delete use /api/lecturer/courses/:courseId.
 // Drag and drop reorders within a chapter or the chapter list (the backend moves one step at a time).
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { api } from '../../lib/api';
@@ -45,7 +45,7 @@ const STEPS = [
   { key: 'publish', label: 'Xuất bản', hint: 'gửi yêu cầu khi đủ điều kiện', labels: null },
 ];
 /** Readiness checks from Codi's publication service (getPublicationData). */
-export const readiness = (c) => c.readiness || [];
+const readiness = (c) => c.readiness || [];
 /** Per-step missing counts. Content takes every readiness check not owned by Thông tin or Bản đồ kiến thức. */
 function stepMissing(c) {
   const items = readiness(c);
@@ -121,7 +121,7 @@ const materialCount = (l) => (l.materials || []).length;
  * rubric block submission; an open "must" review flag does too. Kind 'fix' means the lecturer must change content,
  * 'review' means a decision is still open.
  */
-export function lessonIssues(c, l) {
+function lessonIssues(c, l) {
   const issues = [];
   if (l.code && l.code.kind === 'challenge' && !l.code.verified) issues.push({ kind: 'fix', text: l.code.tests ? 'Lời giải chưa đạt test' : 'Chưa có test' });
   if (l.assignment && !l.assignment.rubricCount) issues.push({ kind: 'fix', text: 'Thiếu thang chấm' });
@@ -132,17 +132,37 @@ export function lessonIssues(c, l) {
 }
 
 function RenameForm({ c, id, value, label }) {
+  const [val, setVal] = useState(value);
   const submit = async (e) => {
     e.preventDefault();
-    const name = String(new FormData(e.currentTarget).get('title') || '').trim();
+    const name = val.trim();
     if (!name) return; // real: empty rename is a silent no-op
     const isChapter = c.chapters.some((x) => x.id === id);
-    renaming = null; rerender();
-    await write(c.id, () => act('course', isChapter ? 'renameChapter' : 'renameLesson', c.id, id, name), { toast, okMessage: isChapter ? 'Đã đổi tên chương.' : 'Đã đổi tên bài học.' });
+    if (isChapter) {
+      const ch = c.chapters.find((x) => x.id === id);
+      if (ch) ch.title = name;
+    } else {
+      const f = findLesson(c, id);
+      if (f && f.l) f.l.title = name;
+    }
+    renaming = null;
+    rerender();
+    await write(c.id, () => act('course', isChapter ? 'renameChapter' : 'renameLesson', c.id, id, name), {
+      toast,
+      okMessage: isChapter ? 'Đã đổi tên chương.' : 'Đã đổi tên bài học.'
+    });
   };
   return (
-    <form className="input-group od-fill" onSubmit={submit}>
-      <input className="input" name="title" defaultValue={value} aria-label={label} autoFocus onFocus={(e) => e.target.select()} />
+    <form className="input-group tc-rename-form" onSubmit={submit} onKeyDown={(e) => { if (e.key === 'Escape') { renaming = null; rerender(); } }}>
+      <input
+        className="input"
+        name="title"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        aria-label={label}
+        autoFocus
+        onFocus={(e) => e.target.select()}
+      />
       <button className="btn btn-primary btn-sm" type="submit">Lưu</button>
       <button className="btn btn-ghost btn-sm" type="button" onClick={() => { renaming = null; rerender(); }}>Huỷ</button>
     </form>
@@ -248,25 +268,133 @@ function dndHandlers(c) {
   };
 }
 
+let closeActiveMenu = null;
+
 /**
- * Rare row actions behind one labelled ⋯ control. Native <details> keeps it keyboard-operable without a menu
- * primitive; the panel closes itself after an action runs.
+ * Rare row actions behind one labelled ⋯ control.
+ * Only one menu can be open at a time; clicking outside or scrolling closes it.
+ * Uses viewport-clamped positioning (fixed) so it is NEVER clipped by parent card/overflow,
+ * and never requires the user to scroll up or down to see any action.
  */
 function RowMenu({ label, items }) {
-  const ref = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ left: 0, top: 0 });
+  const menuRef = useRef(null);
   const shown = items.filter(Boolean);
+
+  const closeThis = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const toggle = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (open) {
+      setOpen(false);
+      if (closeActiveMenu === closeThis) closeActiveMenu = null;
+    } else {
+      if (closeActiveMenu && closeActiveMenu !== closeThis) {
+        closeActiveMenu();
+      }
+      closeActiveMenu = closeThis;
+
+      if (menuRef.current) {
+        const rect = menuRef.current.getBoundingClientRect();
+        const menuWidth = 210;
+        const menuHeight = shown.length * 36 + 10;
+        const left = Math.max(10, Math.min(window.innerWidth - menuWidth - 10, rect.right - menuWidth));
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+
+        let top;
+        if (spaceBelow >= menuHeight + 10) {
+          // Plenty of room below: open downwards
+          top = rect.bottom + 4;
+        } else if (spaceAbove >= menuHeight + 10) {
+          // Plenty of room above: open upwards
+          top = rect.top - menuHeight - 4;
+        } else {
+          // Clamp within screen
+          top = Math.max(10, window.innerHeight - menuHeight - 10);
+        }
+        setCoords({ left, top });
+      }
+      setOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target) && !e.target.closest('.tc-menu-panel')) {
+        setOpen(false);
+        if (closeActiveMenu === closeThis) closeActiveMenu = null;
+      }
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        if (closeActiveMenu === closeThis) closeActiveMenu = null;
+      }
+    };
+    const onScroll = () => {
+      setOpen(false);
+      if (closeActiveMenu === closeThis) closeActiveMenu = null;
+    };
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('click', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, closeThis]);
+
   return (
-    <details className="tc-menu" ref={ref}>
-      <summary className="btn btn-ghost btn-sm tc-menu-trigger" aria-label={label} title={label}><Icon name="more-horizontal" className="icon-sm" /><span className="sr-only">{label}</span></summary>
-      <div className="tc-menu-panel" role="group">
-        {shown.map((it) => (
-          <button key={it.label} type="button" className={`tc-menu-item ${it.danger ? 'is-danger' : ''}`} disabled={it.disabled}
-            onClick={() => { if (ref.current) ref.current.open = false; it.run(); }}>
-            <Icon name={it.icon} className="icon-sm" /> {it.label}
-          </button>
-        ))}
-      </div>
-    </details>
+    <div className={`tc-menu ${open ? 'is-open' : ''}`} ref={menuRef}>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm tc-menu-trigger"
+        aria-label={label}
+        title={label}
+        aria-expanded={open}
+        onClick={toggle}
+      >
+        <Icon name="more-horizontal" className="icon-sm" />
+        <span className="sr-only">{label}</span>
+      </button>
+      {open && (
+        <div
+          className="tc-menu-panel"
+          style={{
+            position: 'fixed',
+            left: `${coords.left}px`,
+            top: `${coords.top}px`,
+            zIndex: 9999,
+          }}
+          role="group"
+        >
+          {shown.map((it) => (
+            <button
+              key={it.label}
+              type="button"
+              className={`tc-menu-item ${it.danger ? 'is-danger' : ''}`}
+              disabled={it.disabled}
+              onClick={() => {
+                setOpen(false);
+                if (closeActiveMenu === closeThis) closeActiveMenu = null;
+                it.run();
+              }}
+            >
+              <Icon name={it.icon} className="icon-sm" /> {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -291,42 +419,57 @@ function ContentTab({ c, query }) {
     const mark = issues[0];
     return (
     <li key={l.id} className={`tc-lesson ${hl === l.id ? 'is-target' : ''}`} {...dragAttrs('lesson', l.id)} data-drop="lesson" data-id={l.id}>
-      <span className="tc-grip" aria-hidden="true">{ro ? null : <Icon name="grip-vertical" className="icon-sm" />}</span>
+      <span className="tc-drag-grip" aria-hidden="true">{ro ? null : <Icon name="grip-vertical" className="icon-sm" />}</span>
       <span className="tc-no mono" aria-hidden="true">{ci + 1}.{li + 1}</span>
-      <div className="tc-lesson-main">
-        {renaming === l.id ? <RenameForm c={c} id={l.id} value={l.title} label="Tên bài học" /> : (
-          <div className="stack-1"><span className="row small strong" style={{ gap: 8, flexWrap: 'wrap' }}><span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span>{l.title}{l.isFreePreview && <span className="badge badge-info">Học thử</span>}</span>
-            <span className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>{materialCount(l) ? `${materialCount(l)} tài liệu` : ''}{codeBadge(l)}</span></div>
-        )}
-      </div>
-      <span className="tc-cell tc-type-cell small">{TYPE_LABEL[l.type] || 'Bài đọc'}</span>
-      <span className="tc-cell tc-dur small mono">{Math.round(Number(l.durationMin) || 0)} phút</span>
-      <span className="tc-cell tc-checks">
-        {l.quiz && <span className="badge badge-neutral">Quiz {l.quiz.count} câu</span>}
-        {l.assignment && <span className="badge badge-neutral">Bài tập</span>}
-        {!l.quiz && !l.assignment && !l.code && <span className="xsmall muted">—</span>}
-      </span>
-      <span className="tc-cell tc-mark">{mark
-        ? <span className={`badge ${mark.kind === 'fix' ? 'badge-warn' : 'badge-info'}`}><Icon name={mark.kind === 'fix' ? 'alert-triangle' : 'info'} />{mark.text}{issues.length > 1 ? ` +${issues.length - 1}` : ''}</span>
-        : <span className="tc-ok small"><Icon name="check" className="icon-sm" /> Đạt</span>}</span>
-      {renaming === l.id ? null : (
-        <div className="tc-row-actions">
-          <div className="tc-row-links">
-            {l.code ? <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/code/${l.id}`}><Icon name="code" className="icon-sm" /> Code</Link>
-              : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id)}><Icon name="file-text" className="icon-sm" /> Chi tiết</button>}
-            <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/quiz/${l.id}`}><Icon name="clipboard-check" className="icon-sm" /> Quiz</Link>
-          </div>
-          {ro ? null : (
-            <RowMenu label={`Thao tác khác với ${l.title}`} items={[
-              l.code ? null : { icon: 'sparkles', label: 'Tạo bằng AI từ tài liệu', run: () => aiImport(c.id, l.id) },
-              { icon: 'pencil', label: 'Đổi tên', run: () => startRename(l.id) },
-              l.code || l.assignment ? null : { icon: 'clipboard-check', label: 'Thêm bài tập', run: () => openLessonEditor(c.id, l.id, { withAssignment: true }) },
-              { icon: 'arrow-up', label: 'Chuyển lên', disabled: li === 0, run: () => move(c, 'lesson', l.id, -1) },
-              { icon: 'arrow-down', label: 'Chuyển xuống', disabled: li === ch.lessons.length - 1, run: () => move(c, 'lesson', l.id, 1) },
-              { icon: 'trash', label: 'Xoá bài học', danger: true, run: () => removeLesson(c, l.id) },
-            ]} />
-          )}
+      {renaming === l.id ? (
+        <div className="tc-lesson-renaming">
+          <RenameForm c={c} id={l.id} value={l.title} label="Tên bài học" />
         </div>
+      ) : (
+        <>
+          <div className="tc-lesson-main">
+            <div className="stack-1">
+              <div className="tc-lesson-title-row">
+                <span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span>
+                <span className="tc-lesson-title" title={l.title}>{l.title}</span>
+                {l.isFreePreview && <span className="badge badge-info tc-preview-badge">Học thử</span>}
+              </div>
+              <div className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>
+                {materialCount(l) ? `${materialCount(l)} tài liệu` : ''}
+                {codeBadge(l)}
+              </div>
+            </div>
+          </div>
+          <span className="tc-cell tc-type-cell small">{TYPE_LABEL[l.type] || 'Bài đọc'}</span>
+          <span className="tc-cell tc-dur small mono">{Math.round(Number(l.durationMin) || 0)} phút</span>
+          <span className="tc-cell tc-checks">
+            {l.quiz && <span className="badge badge-neutral">Quiz {l.quiz.count} câu</span>}
+            {l.assignment && <span className="badge badge-neutral">Bài tập</span>}
+            {!l.quiz && !l.assignment && !l.code && <span className="xsmall muted">—</span>}
+          </span>
+          <span className="tc-cell tc-mark">
+            {mark
+              ? <span className={`badge ${mark.kind === 'fix' ? 'badge-warn' : 'badge-info'}`}><Icon name={mark.kind === 'fix' ? 'alert-triangle' : 'info'} />{mark.text}{issues.length > 1 ? ` +${issues.length - 1}` : ''}</span>
+              : <span className="tc-ok small"><Icon name="check" className="icon-sm" /> Đạt</span>}
+          </span>
+          <div className="tc-row-actions">
+            <div className="tc-row-links">
+              {l.code ? <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/code/${l.id}`}><Icon name="code" className="icon-sm" /> Code</Link>
+                : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id)}><Icon name="file-text" className="icon-sm" /> Chi tiết</button>}
+              <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/quiz/${l.id}`}><Icon name="clipboard-check" className="icon-sm" /> Quiz</Link>
+            </div>
+            {ro ? null : (
+              <RowMenu label={`Thao tác khác với ${l.title}`} items={[
+                { icon: 'pencil', label: 'Đổi tên', run: () => startRename(l.id) },
+                l.code || l.assignment ? null : { icon: 'clipboard-check', label: 'Thêm bài tập', run: () => openLessonEditor(c.id, l.id, { withAssignment: true }) },
+                l.code ? null : { icon: 'sparkles', label: 'Tạo bằng AI từ tài liệu', run: () => aiImport(c.id, l.id) },
+                { icon: 'arrow-up', label: 'Chuyển lên', disabled: li === 0, run: () => move(c, 'lesson', l.id, -1) },
+                { icon: 'arrow-down', label: 'Chuyển xuống', disabled: li === ch.lessons.length - 1, run: () => move(c, 'lesson', l.id, 1) },
+                { icon: 'trash', label: 'Xoá bài học', danger: true, run: () => removeLesson(c, l.id) },
+              ]} />
+            )}
+          </div>
+        </>
       )}
       <div className="tc-lesson-notes">{lessonNotes(l)}</div>
     </li>
@@ -356,7 +499,7 @@ function ContentTab({ c, query }) {
       {c.chapters.map((ch, ci) => (
         <section key={ch.id} className="card tc-chapter" {...dragAttrs('chapter', ch.id)} data-drop="chapter" data-id={ch.id}>
           <div className="card-header">
-            <div className="row od-fill">{!ro && <span className="tc-grip" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
+            <div className="row od-fill">{!ro && <span className="tc-drag-grip" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
               {renaming === ch.id ? <RenameForm c={c} id={ch.id} value={ch.title} label="Tên chương" /> : (
                 <div className="stack-1" style={{ minWidth: 0 }}><h2 className="tc-h">Chương {ci + 1}: {ch.title}</h2>
                   <ReviewNotes courseId={c.id} title="Góp ý cho chương này" match={(a) => a.type === 'chapter' && a.itemId === String(ch.id)} />
@@ -391,7 +534,7 @@ function ContentTab({ c, query }) {
 let infoDraft = null;
 let infoSaving = false;
 /** Real handleSaveInfo + updateCourseInfo: title ≥ 5, summary ≥ 20, price a non-blank integer 0…2,147,483,647. */
-export function validateInfo(d) {
+function validateInfo(d) {
   const err = {};
   if (d.title.trim().length < 5) err.title = 'Tên khoá học cần ít nhất 5 ký tự.';
   if (d.summary.trim().length < 20) err.summary = 'Mô tả cần ít nhất 20 ký tự.';
@@ -459,7 +602,7 @@ function InfoTab({ c, query }) {
 
 // ───────────────────────── Xuất bản ─────────────────────────
 /** Advisory notes that never gate submission (real publication-service advisory items). */
-export function readinessAdvice(c) {
+function readinessAdvice(c) {
   const weak = ls(c).filter((l) => l.code && l.code.kind === 'challenge' && (l.code.tests < 3 || !l.code.hiddenTests));
   return weak.map((l) => ({ label: l.title, text: 'Bài code nên có ít nhất 3 test, trong đó có test ẩn cho trường hợp biên.', href: `/teach/courses/${c.id}/code/${l.id}` }));
 }
@@ -570,7 +713,7 @@ function PublishTab({ c }) {
 }
 
 /** Loading / not-found / error frame shared by the course-scoped lecturer screens. */
-export function courseGate(state, retry) {
+function courseGate(state, retry) {
   if (state.c) return null;
   if (state.error) {
     const st = state.error.status;
