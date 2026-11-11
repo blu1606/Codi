@@ -81,7 +81,7 @@ function OrderSummary({ order }) {
       <ul className="list">{order.items.map((i) => {
         return (
           <li key={i.courseId} className="list-row" style={{ paddingInline: 0 }}>
-            <span className="list-main"><span>{i.title || i.courseId}</span><span className="xsmall muted">Khóa học</span></span>
+            <span className="list-main"><span>{i.title || i.courseId}</span><span className="xsmall muted">Khoá học</span></span>
             <span className="price od-nowrap">{fmt.vnd(i.price)}</span>
           </li>
         );
@@ -216,7 +216,7 @@ function PendingCheckout({ order, bank, checkedAt, reload }) {
   const showQr = !qrFailed && !!qrUrl;
   return (
     <div className="page stack-4">
-      <div className="stack-1"><h1>Thanh toán khóa học</h1><p className="muted">Quét mã bằng ứng dụng ngân hàng, hoặc chuyển khoản theo thông tin bên dưới.</p></div>
+      <div className="stack-1"><h1>Thanh toán khoá học</h1><p className="muted">Quét mã bằng ứng dụng ngân hàng, hoặc chuyển khoản theo thông tin bên dưới.</p></div>
       <Stepper steps={['Đã tạo đơn', 'Đang chờ thanh toán', 'Đã nhận tiền']} current={1} />
       {underpaid && (
         <Alert type="warn" title={`Đã nhận ${fmt.vnd(order.received)} / cần ${fmt.vnd(order.total)}`}>
@@ -296,7 +296,7 @@ function FailedCheckout({ order, summary }) {
     }
   };
   return (
-    <div className="page page-narrow stack-4"><h1>Thanh toán khóa học</h1>
+    <div className="page page-narrow stack-4"><h1>Thanh toán khoá học</h1>
       <Alert type="danger" title={order.failReason === 'expired' ? 'Mã thanh toán đã hết hạn' : 'Thanh toán không thành công'}
         actions={<>
           <button type="button" className="btn btn-primary btn-sm" onClick={newCode} disabled={busy} aria-busy={busy ? 'true' : undefined}><Icon name={busy ? 'loader' : 'refresh'} className={`icon-sm ${busy ? 'cm-spin' : ''}`} /> Tạo mã mới</button>
@@ -350,7 +350,7 @@ export function CheckoutPage({ query: q }) {
   const summary = <OrderSummary order={order} />;
   if (order.status === 'paid') {
     return (
-      <div className="page page-narrow stack-4"><h1>Thanh toán khóa học</h1>
+      <div className="page page-narrow stack-4"><h1>Thanh toán khoá học</h1>
         <Alert type="success" title="Đơn hàng đã được thanh toán" body={`Codi đã nhận đủ tiền lúc ${fmt.datetime(order.paidAt)}.`}
           actions={<Link className="btn btn-primary btn-sm" to={`/checkout/success?order=${order.code}`}>Xem kết quả và bắt đầu học</Link>} />
         {summary}
@@ -359,7 +359,7 @@ export function CheckoutPage({ query: q }) {
   }
   if (order.status === 'cancelled') {
     return (
-      <div className="page page-narrow stack-4"><h1>Thanh toán khóa học</h1>
+      <div className="page page-narrow stack-4"><h1>Thanh toán khoá học</h1>
         <Alert type="info" title="Đơn hàng đã huỷ" actions={<Link className="btn btn-primary btn-sm" to="/cart">Về giỏ hàng</Link>}>
           <span className="stack-1" style={{ display: 'grid' }}>
             <span>Các khoá học đã được đưa lại vào giỏ hàng của bạn.</span>
@@ -371,7 +371,7 @@ export function CheckoutPage({ query: q }) {
     );
   }
   if (order.status === 'refunded') {
-    return <div className="page page-narrow stack-4"><h1>Thanh toán khóa học</h1><Alert type="info" title={orderStatusLabel(order.status)} />{summary}</div>;
+    return <div className="page page-narrow stack-4"><h1>Thanh toán khoá học</h1><Alert type="info" title={orderStatusLabel(order.status)} />{summary}</div>;
   }
   if (order.status === 'failed') return <FailedCheckout order={order} summary={summary} />;
   return <PendingCheckout key={order.code} order={order} bank={res.data.bank} checkedAt={checkedAt} reload={res.reload} />;
@@ -408,11 +408,11 @@ export function CheckoutSuccessPage({ query: q }) {
         <h1>Thanh toán thành công!</h1>
         <p className="muted">Đơn <span className="mono strong">{order.code}</span> · {fmt.vnd(order.total)} · {fmt.datetime(order.paidAt)}</p>
       </div>
-      <div className="card"><div className="card-body stack-3"><h2 className="h-card">Bạn đã sở hữu khóa học</h2>
+      <div className="card"><div className="card-body stack-3"><h2 className="h-card">Bạn đã sở hữu khoá học</h2>
         <ul className="list">{courses.map((c) => (
           <li key={c.id} className="list-row" style={{ paddingInline: 0 }}>
             <Thumb course={c} small />
-            <span className="list-main"><strong>{c.title}</strong><span className="small muted">Khóa học tại Codi</span></span>
+            <span className="list-main"><strong>{c.title}</strong><span className="small muted">Khoá học tại Codi</span></span>
             {courses.length > 1 && <Link className="btn btn-secondary btn-sm" to={`/learn/${c.id}/onboarding`}>Bắt đầu</Link>}
           </li>
         ))}</ul>

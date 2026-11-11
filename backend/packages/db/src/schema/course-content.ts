@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { courses } from "./courses";
+
+/** One line of a video transcript: start (and optional end) in seconds from the beginning of the video. */
+export type LessonTranscriptCue = { start: number; end?: number; text: string };
 
 export const courseDetails = pgTable.withRLS("course_details", {
   courseId: text("course_id").primaryKey().references(() => courses.id, { onDelete: "cascade" }),
@@ -55,6 +58,8 @@ export const lessonMaterials = pgTable.withRLS("lesson_materials", {
   fileSizeKb: integer("file_size_kb"),
   durationSeconds: integer("duration_seconds"),
   position: integer("position").notNull(),
+  // Playback transcript of a video: cues in time order, start/end in seconds. Null when the material has none.
+  transcript: jsonb("transcript").$type<LessonTranscriptCue[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("lesson_materials_lesson_position_idx").on(table.lessonId, table.position),

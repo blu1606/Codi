@@ -19,10 +19,10 @@ function Dashboard({ d }) {
     ['Doanh thu', fmt.vnd(k.revenue30d), `${fmt.num(k.paidOrders30d)} đơn đã thanh toán`],
     ['Đơn hàng', fmt.num(k.allOrders30d), 'Mọi trạng thái'],
     ['Học viên mới', fmt.num(k.newLearners30d), 'Tài khoản đăng ký mới'],
-    ['Khóa học đang bán', fmt.num(k.publishedCourses), 'Trạng thái Đã xuất bản'],
+    ['Khoá học đang bán', fmt.num(k.publishedCourses), 'Trạng thái Đã xuất bản'],
   ];
   const todo = [
-    ['/admin/publication?tab=pending', t.pendingCoursesCount, 'Khóa học chờ duyệt', 'Xem và duyệt yêu cầu xuất bản'],
+    ['/admin/publication?tab=pending', t.pendingCoursesCount, 'Khoá học chờ duyệt', 'Xem và duyệt yêu cầu xuất bản'],
     ['/admin/orders?status=pending&overdue=1&range=all', t.overdueOrdersCount, 'Đơn chờ thanh toán quá hạn', 'Đơn chờ thanh toán từ 24 giờ trở lên, có thể cần đối soát'],
     ['/admin/vouchers?filter=expiring', t.expiringVouchersCount, 'Voucher sắp hết lượt', 'Đã dùng từ 90% số lượt'],
     ['/admin/users?status=inactive', t.inactiveUsersCount, 'Tài khoản bị vô hiệu hoá', 'Xem lý do hoặc kích hoạt lại'],

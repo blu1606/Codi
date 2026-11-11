@@ -31,7 +31,7 @@ export function InsightsPage({ query }) {
     try { setSt({ d: await act('insights', 'getLecturerInsightsData', period), error: null, period }); } catch (error) { setSt((x) => ({ ...x, error })); }
   }, [period]);
   useEffect(() => { load(); }, [load]);
-  const head = <div className="page-header"><div><h1>Doanh thu khóa học của tôi</h1><p className="muted">Theo dõi doanh thu và đơn hàng. Dữ liệu lọc theo khoá học bạn dạy.</p></div></div>;
+  const head = <div className="page-header"><div><h1>Doanh thu khoá học của tôi</h1><p className="muted">Theo dõi doanh thu và đơn hàng. Dữ liệu lọc theo khoá học bạn dạy.</p></div></div>;
   const note = (title, body) => <div className="card"><Empty icon="trending-up" title={title} body={body} /></div>;
   if (!st.d) return shell('/teach/insights', <>{head}{st.error ? <LoadError error={st.error} onRetry={load} /> : <Loading rows={4} />}</>);
   const raw = st.d;

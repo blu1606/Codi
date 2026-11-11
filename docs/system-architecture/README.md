@@ -34,6 +34,7 @@ dưới mỗi sơ đồ ghi rõ phần nào đã chạy thật (kiểm tra ngày
 | Caddy là cổng public duy nhất, TLS tự động, HSTS | **Đã có** |
 | `codi-rebuild-app` (Hono API, React SPA, AI worker) lắng nghe `127.0.0.1:3001`, giới hạn 1 GB | **Đã có** |
 | Postgres 16 không mở cổng ra ngoài, giới hạn 512 MB | **Đã có** |
+| Kho tri thức cho AI Tutor (RAG): AI worker index bài đã xuất bản, PDF/slide (OCR), lời giảng video tải lên (Whisper) và video YouTube (phụ đề; không có phụ đề thì Gemini đọc URL nếu có `GOOGLE_GENERATIVE_AI_API_KEY`, bất kể `AI_PROVIDER`) vào `course_knowledge_sources`/`course_knowledge_chunks` (embedding `real[]`, không cần pgvector). Mỗi câu hỏi trong bài tự chèn 4 đoạn gần nhất vào prompt; tool `search_course_material` tìm thêm, chưa index thì quay về tìm từ khoá. UI hiện các bước (tài liệu đã đọc, suy nghĩ, tool call kèm tham số/kết quả) trong một dropdown. Chạy tay: `npm run index:knowledge -w backend` | **Đã có** (chưa vẽ trên sơ đồ) |
 | UFW chỉ mở 22, 443, 123/udp | **Đã có**. SSH vẫn nhận mật khẩu và đăng nhập `root` (sơ đồ ghi "key only") |
 | Môi trường staging (`staging.codi.hoangblue.dev`, network riêng) | **Chưa có** |
 | User `deploy` riêng cho CI | **Chưa**: CI dùng key riêng `github-actions-codi-deploy` nhưng đăng nhập bằng `root` |

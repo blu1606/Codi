@@ -90,9 +90,9 @@ async function approve(ctx, c, item, blocking) {
   const price = parsePrice(priceDraft[c.id] !== undefined ? priceDraft[c.id] : String(proposed(c, item) ?? ''));
   if (price === null || !Number.isSafeInteger(price) || price > MAX_PRICE) { priceDraft.err = 'Giá bán phải là số nguyên không âm (VND), không vượt quá 2.147.483.647.'; rerender(); return; }
   priceDraft.err = null; rerender();
-  const res = await Codi.ui.confirm({ title: `Duyệt và xuất bản "${c.title}"?`, body: `Giá bán: ${price ? fmt.vnd(price) : 'Miễn phí'}.`, consequence: 'Khóa học xuất hiện ngay trong danh mục và học viên mua được với giá này. Giảng viên nhận thông báo.', confirmLabel: 'Duyệt và xuất bản' });
+  const res = await Codi.ui.confirm({ title: `Duyệt và xuất bản "${c.title}"?`, body: `Giá bán: ${price ? fmt.vnd(price) : 'Miễn phí'}.`, consequence: 'Khoá học xuất hiện ngay trong danh mục và học viên mua được với giá này. Giảng viên nhận thông báo.', confirmLabel: 'Duyệt và xuất bản' });
   if (!res.ok) return;
-  if (!(await attempt(() => pubAction('approvePublication', c.id, ctx.requestId, price), 'Đã xuất bản khóa học.'))) return;
+  if (!(await attempt(() => pubAction('approvePublication', c.id, ctx.requestId, price), 'Đã xuất bản khoá học.'))) return;
   delete priceDraft[c.id];
   Codi.go('/admin/publication?tab=approved&id=' + c.id);
 }
@@ -100,13 +100,13 @@ async function requestChanges(ctx, c, r) {
   const fixes = CRITERIA.filter((k) => r.criteria[k.id] && r.criteria[k.id].status === 'fix');
   const open = r.flags.filter((f) => f.status !== 'closed');
   if (!fixes.length && !open.length) { Codi.ui.toast('Chưa có tiêu chí "Cần sửa" hay cờ nào để gửi. Gắn cờ trước khi yêu cầu sửa.', { type: 'warn' }); return; }
-  const res = await confirmImpact({ title: `Yêu cầu sửa "${c.title}"?`, body: <p>{`Gửi ${fixes.length} tiêu chí cần sửa và ${open.length} cờ (${open.filter((f) => f.severity === 'must').length} bắt buộc) cho giảng viên.`}</p>, consequence: 'Khóa học chuyển sang "Bị từ chối" và không được bán. Giảng viên sửa theo từng cờ rồi gửi lại thành vòng duyệt mới.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lời nhắn chung cho giảng viên (ít nhất 5 ký tự).', reasonLabel: 'Lời nhắn chung cho giảng viên', reasonPlaceholder: 'Ví dụ: Nội dung tốt, cần bổ sung tài liệu bài 4 và sửa đáp án quiz.', confirmLabel: 'Gửi yêu cầu sửa' });
+  const res = await confirmImpact({ title: `Yêu cầu sửa "${c.title}"?`, body: <p>{`Gửi ${fixes.length} tiêu chí cần sửa và ${open.length} cờ (${open.filter((f) => f.severity === 'must').length} bắt buộc) cho giảng viên.`}</p>, consequence: 'Khoá học chuyển sang "Bị từ chối" và không được bán. Giảng viên sửa theo từng cờ rồi gửi lại thành vòng duyệt mới.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lời nhắn chung cho giảng viên (ít nhất 5 ký tự).', reasonLabel: 'Lời nhắn chung cho giảng viên', reasonPlaceholder: 'Ví dụ: Nội dung tốt, cần bổ sung tài liệu bài 4 và sửa đáp án quiz.', confirmLabel: 'Gửi yêu cầu sửa' });
   if (!res.ok) return;
   if (!(await attempt(() => pubAction('requestChanges', c.id, ctx.requestId, res.reason), 'Đã gửi yêu cầu sửa cho giảng viên.'))) return;
   Codi.go('/admin/publication?tab=changes&id=' + c.id);
 }
 async function reject(ctx, c) {
-  const res = await confirmImpact({ title: `Từ chối "${c.title}"?`, body: <p>Dùng khi khóa học không phù hợp chính sách hoặc chất lượng chung chưa đạt. Nếu chỉ cần sửa vài chỗ, hãy dùng &quot;Yêu cầu sửa&quot;.</p>, consequence: 'Khóa học chuyển sang "Bị từ chối" và không được bán. Giảng viên thấy lý do và vẫn có thể sửa rồi gửi lại.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).', reasonLabel: 'Lý do từ chối', danger: true, confirmLabel: 'Từ chối' });
+  const res = await confirmImpact({ title: `Từ chối "${c.title}"?`, body: <p>Dùng khi khoá học không phù hợp chính sách hoặc chất lượng chung chưa đạt. Nếu chỉ cần sửa vài chỗ, hãy dùng &quot;Yêu cầu sửa&quot;.</p>, consequence: 'Khoá học chuyển sang "Bị từ chối" và không được bán. Giảng viên thấy lý do và vẫn có thể sửa rồi gửi lại.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).', reasonLabel: 'Lý do từ chối', danger: true, confirmLabel: 'Từ chối' });
   if (!res.ok) return;
   if (!(await attempt(() => pubAction('rejectPublication', c.id, ctx.requestId, res.reason), 'Đã từ chối và gửi lý do cho giảng viên.'))) return;
   Codi.go('/admin/publication?tab=changes&id=' + c.id);
@@ -207,7 +207,7 @@ function decisionCard(d, item, ctx) {
       <h3 className="tc-h">Kết luận vòng {r.round}</h3>
       <div className={`field ${priceDraft.err ? 'is-invalid' : ''}`} style={{ maxWidth: 320 }}><label htmlFor="pub-price">Giá bán (VND) <span className="req">*</span></label>
         <input key={c.id} id="pub-price" inputMode="numeric" defaultValue={price} onChange={(e) => { priceDraft[c.id] = e.target.value; }} />
-        <span className="field-help">Giảng viên đề xuất: {c.proposedPrice == null ? 'chưa đề xuất' : fmt.vnd(c.proposedPrice)}. Nhập 0 cho khóa miễn phí.</span>
+        <span className="field-help">Giảng viên đề xuất: {c.proposedPrice == null ? 'chưa đề xuất' : fmt.vnd(c.proposedPrice)}. Nhập 0 cho khoá miễn phí.</span>
         {priceDraft.err && <p className="field-error"><Icon name="alert-circle" className="icon-sm" /><span>{priceDraft.err}</span></p>}</div>
       {why.length
         ? <div className="rv-why"><strong className="small">Chưa thể duyệt:</strong><ul className="small">{why.map((x) => <li key={x}>{x}</li>)}</ul></div>
@@ -234,15 +234,15 @@ function Detail({ tab, item, q }) {
     setTimeout(() => el.classList.remove('is-focus'), 1600);
   });
   if (!d) {
-    if (res.loading) return <SpinnerBlock text="Đang tải khóa học…" />;
+    if (res.loading) return <SpinnerBlock text="Đang tải khoá học…" />;
     if (item.status !== 'pending') {
       // Published before the detailed review flow existed: no publication request to show.
       return (
-        <section className="card"><div className="card-body stack-3"><h2 className="tc-h">{item.title}</h2><p className="small muted">Khóa học được duyệt trước khi có quy trình duyệt chi tiết. Giá đang bán: {fmt.vnd(item.price)}.</p>
-          <Link className="btn btn-secondary" style={{ width: 'fit-content' }} to="/admin/courses">Mở Khóa học đã xuất bản</Link></div></section>
+        <section className="card"><div className="card-body stack-3"><h2 className="tc-h">{item.title}</h2><p className="small muted">Khoá học được duyệt trước khi có quy trình duyệt chi tiết. Giá đang bán: {fmt.vnd(item.price)}.</p>
+          <Link className="btn btn-secondary" style={{ width: 'fit-content' }} to="/admin/courses">Mở Khoá học đã xuất bản</Link></div></section>
       );
     }
-    return <Alert type="danger" title="Không tải được khóa học" body={res.error ? res.error.message : ''} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => res.reload()}>Thử lại</button>} />;
+    return <Alert type="danger" title="Không tải được khoá học" body={res.error ? res.error.message : ''} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => res.reload()}>Thử lại</button>} />;
   }
   const v = forCourse(item.id);
   if (q.view && VIEWS.includes(q.view)) v.tab = q.view;
@@ -286,7 +286,7 @@ export function PublicationPage({ query: q }) {
       ? <Alert type="danger" title="Không tải được hàng chờ duyệt" body={res.error.message} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => res.reload()}>Thử lại</button>} />
       : <SpinnerBlock text="Đang tải hàng chờ duyệt…" />;
   } else if (!sel) {
-    detail = <div className="card"><Empty icon="clipboard-check" title={tab === 'pending' ? 'Không có khóa học chờ duyệt' : 'Không có khóa học'} body={tab === 'pending' ? 'Yêu cầu mới từ giảng viên sẽ xuất hiện ở đây.' : ''} /></div>;
+    detail = <div className="card"><Empty icon="clipboard-check" title={tab === 'pending' ? 'Không có khoá học chờ duyệt' : 'Không có khoá học'} body={tab === 'pending' ? 'Yêu cầu mới từ giảng viên sẽ xuất hiện ở đây.' : ''} /></div>;
   } else {
     detail = <Detail key={sel.id} tab={tab} item={sel} q={q} />;
   }
@@ -303,7 +303,7 @@ export function PublicationPage({ query: q }) {
         <div className="split-list">{list.length ? list.map((c) => (
           <Link key={c.id} className="split-list-item" to={`/admin/publication?tab=${tab}&id=${c.id}`} aria-current={String(!!sel && sel.id === c.id)}>
             <strong className="small od-clamp-2">{c.title}</strong><span className="xsmall muted">{c.instructorName} · vòng {c.round}{c.openFlagsCount ? ` · ${c.openFlagsCount} cờ mở` : ''}</span></Link>
-        )) : <p className="small muted" style={{ padding: 16 }}>{queue ? 'Không có khóa học.' : 'Đang tải…'}</p>}</div>
+        )) : <p className="small muted" style={{ padding: 16 }}>{queue ? 'Không có khoá học.' : 'Đang tải…'}</p>}</div>
         <div className="split-detail">{detail}</div>
       </div>
     </AdminShell>

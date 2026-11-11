@@ -68,7 +68,8 @@ export function StepDetail({ c, row, number, isCurrent }) {
   );
 }
 
-const LineChip = ({ line }) => <span className={`pt-chip is-line-${line.slot}`} aria-hidden="true">{line.no}</span>;
+// `chapter`: beside a lesson title the chip reads "C1" (chapter 1), so it is not taken for the lesson's rank.
+const LineChip = ({ line, chapter }) => <span className={`pt-chip is-line-${line.slot}`} aria-hidden="true" title={chapter ? `Chương ${line.no}` : undefined}>{chapter ? `C${line.no}` : line.no}</span>;
 
 // ───────────────────────── "Chuyến tiếp theo" ─────────────────────────
 /** The next three open lessons in path order, required ones first (the same rule as currentLessonId). */
@@ -89,7 +90,7 @@ export function Departures({ c, r, rows, lines, currentId, onOpen }) {
           const line = lineOf.get(row.id); const isCur = row.id === currentId; const number = rows.indexOf(row) + 1;
           return (
             <li key={row.id} className={`pt-dep-item ${isCur ? 'is-current' : ''}`}>
-              {line ? <LineChip line={line} /> : <span aria-hidden="true" />}
+              {line ? <LineChip line={line} chapter /> : <span aria-hidden="true" />}
               <p className="pt-dep-title">
                 <button type="button" className="pt-link" aria-haspopup="dialog" onClick={() => onOpen(row.id)}><span className="sr-only">Bài {number}: </span>{row.title}</button>
               </p>
@@ -129,7 +130,7 @@ export function LineAlerts({ c, rows, lines, moves, onSeen, onOpen }) {
       <li key={key} className="pt-alert">
         <span className={`pt-alert-icon is-${kind} ${tint}`} aria-hidden="true"><Icon name={kind === 'moved' ? 'arrow-up' : 'lock'} className="icon-sm" /></span>
         <div className="pt-alert-body">
-          <p className="pt-alert-title">{line && <LineChip line={line} />}
+          <p className="pt-alert-title">{line && <LineChip line={line} chapter />}
             <button type="button" className="pt-link" aria-haspopup="dialog" onClick={() => onOpen(row.id)}>Bài {number}: {row.title}</button></p>
           {body}
         </div>
@@ -145,7 +146,7 @@ export function LineAlerts({ c, rows, lines, moves, onSeen, onOpen }) {
             <p className="pt-alert-count">
               {moved.length > 0 && <><span className="pt-mono">{moved.length}</span> đổi thứ tự</>}
               {moved.length > 0 && locked.length > 0 && ' · '}
-              {locked.length > 0 && <><span className="pt-mono">{locked.length}</span> bài khóa</>}
+              {locked.length > 0 && <><span className="pt-mono">{locked.length}</span> bài khoá</>}
             </p>
           )}
         </div>
@@ -156,7 +157,7 @@ export function LineAlerts({ c, rows, lines, moves, onSeen, onOpen }) {
           {moved.map((m) => item(m.row, m.number, <p className="small pt-alert-text">{m.by ? `Đã đổi thứ tự · lên ${m.by} bậc` : 'Đã đổi thứ tự'}</p>, 'moved', 'm-' + m.id))}
           {locked.slice(0, LOCKED_SHOWN).map((row) => item(row, byId.get(row.id).number,
             <p className="small muted pt-alert-text">Chưa đủ tiên quyết · nên học {row.lock.concept} trước (bài <Link to={lessonUrl(c, row.lock.lessonId)}>{row.lock.lessonTitle}</Link>).</p>, 'locked', 'l-' + row.id))}
-          {extra > 0 && <li className="pt-alert-more small muted">Còn {extra} bài chưa đủ tiên quyết khác trong bảng bên dưới.</li>}
+          {extra > 0 && <li className="pt-alert-more small muted">Còn {extra} bài chưa đủ tiên quyết khác, xem ở “Danh sách bài”.</li>}
         </ul>
       ) : <p className="pt-empty small muted">Không có thay đổi nào. Mọi bài trên lộ trình đều đã đủ tiên quyết.</p>}
     </section>

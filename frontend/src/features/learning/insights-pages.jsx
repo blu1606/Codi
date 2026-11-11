@@ -51,9 +51,9 @@ function Toolbar({ courses, p, setPref }) {
       <div className="viz-seg-ctrl" role="group" aria-label="Khoảng thời gian">{[['7', 'Tuần'], ['month', 'Tháng'], ['30', '30 ngày']].map(([v, l]) => (
         <button key={v} type="button" aria-pressed={String(p.period === v)} onClick={() => setPref({ period: v })}>{l}</button>
       ))}</div>
-      <label className="sr-only" htmlFor="li-course">Khóa học</label>
+      <label className="sr-only" htmlFor="li-course">Khoá học</label>
       <select id="li-course" className="input" style={{ width: 'auto', minHeight: 40 }} value={p.course} onChange={(e) => setPref({ course: e.target.value, quiz: null })}>
-        <option value="all">Tất cả khóa học</option>
+        <option value="all">Tất cả khoá học</option>
         {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
       </select>
     </div>
@@ -72,7 +72,7 @@ export function StatsPanel() {
   }
   const all = d.courses || [];
   if (!all.length) {
-    return <div className="card"><Empty icon="bar-chart" title="Chưa có số liệu học tập" body="Đăng ký một khóa học, số liệu sẽ xuất hiện sau buổi học đầu tiên." actions={<Link className="btn btn-primary" to="/courses">Khám phá khóa học</Link>} /></div>;
+    return <div className="card"><Empty icon="bar-chart" title="Chưa có số liệu học tập" body="Đăng ký một khoá học, số liệu sẽ xuất hiện sau buổi học đầu tiên." actions={<Link className="btn btn-primary" to="/courses">Khám phá khoá học</Link>} /></div>;
   }
   // Window: [start, end) instants of Vietnam calendar days → inclusive local dates; "kỳ trước" = same length before.
   const start = localDate(d.window.start); const end = addDays(localDate(d.window.end), -1);
@@ -154,7 +154,7 @@ export function StatsPanel() {
   return (
     <div className="stack-4">
       <div className="stack-2"><Toolbar courses={all} p={p} setPref={setPref} />
-      <p className="small muted">{dm(w.start)} – {dm(w.end)} · so với {dm(w.prevStart)} – {dm(w.prevEnd)}{p.course !== 'all' ? ' · Giờ học tính trên mọi khóa (thời gian học chưa tách theo khóa).' : ''}{loading ? ' · Đang cập nhật…' : ''}</p></div>
+      <p className="small muted">{dm(w.start)} – {dm(w.end)} · so với {dm(w.prevStart)} – {dm(w.prevEnd)}{p.course !== 'all' ? ' · Giờ học tính trên mọi khoá (thời gian học chưa tách theo khoá).' : ''}{loading ? ' · Đang cập nhật…' : ''}</p></div>
       {error && <Alert type="danger" body={errorText(error, 'Không thể tải số liệu học tập.')} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={reload}>Thử lại</button>} />}
       {activeDays > 0 && activeDays < 3 && <p className="viz-warn"><span aria-hidden="true">▲</span> Mới có {activeDays} ngày học trong khoảng này — biểu đồ sẽ rõ hơn sau vài buổi học nữa.</p>}
       <Html html={ch.card({ title: 'Tóm tắt kỳ này', body: c1, wide: true })} style={{ display: 'contents' }} />
@@ -214,7 +214,7 @@ export function KnowledgeMap({ initialCourseId, embedded, onCourseChange }) {
   const courseId = km.courseId;
   if (!courseId) {
     return (
-      <div className="card"><Empty icon="map" title="Chưa có bản đồ kiến thức" body="Hãy đăng ký một khoá học để theo dõi các khái niệm của bạn." actions={<Link className="btn btn-secondary" to="/courses">Khám phá khóa học</Link>} /></div>
+      <div className="card"><Empty icon="map" title="Chưa có bản đồ kiến thức" body="Hãy đăng ký một khoá học để theo dõi các khái niệm của bạn." actions={<Link className="btn btn-secondary" to="/courses">Khám phá khoá học</Link>} /></div>
     );
   }
   const picker = !embedded && all.length > 1 && (

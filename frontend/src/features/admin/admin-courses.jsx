@@ -1,5 +1,5 @@
 /**
- * S33 "Khóa học đã xuất bản" — hide / unhide with consequence dialogs, price change dialog.
+ * S33 "Khoá học đã xuất bản" — hide / unhide with consequence dialogs, price change dialog.
  * Data: GET /api/admin/courses; writes: hideCourseAction, unhideCourseAction, updateCoursePriceAction (the backend
  * notifies the lecturer).
  */
@@ -14,15 +14,15 @@ const { fmt } = Codi;
 const priceText = (p) => (p ? fmt.vnd(p) : 'Miễn phí');
 
 async function hideCourse(c) {
-  const r = await Codi.ui.confirm({ title: `Ẩn "${c.title}"?`, consequence: `Học viên mới sẽ không tìm thấy và không mua được khóa học. ${c.learnersCount} học viên đã mua vẫn tiếp tục học bình thường. Giảng viên nhận thông báo kèm lý do.`, reversible: 'Có thể hiện lại bất cứ lúc nào.', requireReason: true, reasonLabel: 'Lý do ẩn (gửi cho giảng viên)', confirmLabel: 'Ẩn khóa học', danger: true });
+  const r = await Codi.ui.confirm({ title: `Ẩn "${c.title}"?`, consequence: `Học viên mới sẽ không tìm thấy và không mua được khoá học. ${c.learnersCount} học viên đã mua vẫn tiếp tục học bình thường. Giảng viên nhận thông báo kèm lý do.`, reversible: 'Có thể hiện lại bất cứ lúc nào.', requireReason: true, reasonLabel: 'Lý do ẩn (gửi cho giảng viên)', confirmLabel: 'Ẩn khoá học', danger: true });
   if (!r.ok) return;
-  await attempt(() => adminAction('hideCourseAction', c.id, r.reason), 'Đã ẩn khóa học.');
+  await attempt(() => adminAction('hideCourseAction', c.id, r.reason), 'Đã ẩn khoá học.');
 }
 
 async function unhideCourse(c) {
-  const r = await Codi.ui.confirm({ title: `Hiện lại "${c.title}"?`, consequence: 'Khóa học xuất hiện lại trong danh sách và mở bán.', reversible: true, confirmLabel: 'Hiện lại' });
+  const r = await Codi.ui.confirm({ title: `Hiện lại "${c.title}"?`, consequence: 'Khoá học xuất hiện lại trong danh sách và mở bán.', reversible: true, confirmLabel: 'Hiện lại' });
   if (!r.ok) return;
-  await attempt(() => adminAction('unhideCourseAction', c.id), 'Khóa học đã mở bán trở lại.');
+  await attempt(() => adminAction('unhideCourseAction', c.id), 'Khoá học đã mở bán trở lại.');
 }
 
 function PriceDialog({ handle, c }) {
@@ -67,9 +67,9 @@ function PriceDialog({ handle, c }) {
 const changePrice = (c) => Codi.ui.modal({ title: `Đổi giá "${c.title}"`, raw: true, body: (h) => <PriceDialog handle={h} c={c} /> });
 
 function CoursesTable({ list }) {
-  if (!list.length) return <div className="viz-empty">Chưa có khóa học nào được xuất bản.</div>;
+  if (!list.length) return <div className="viz-empty">Chưa có khoá học nào được xuất bản.</div>;
   return (
-    <div className="table-wrap"><table className="table"><thead><tr><th>Khóa học</th><th>Giảng viên</th><th className="num">Giá</th><th className="num">Học viên</th><th>Đánh giá</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
+    <div className="table-wrap"><table className="table"><thead><tr><th>Khoá học</th><th>Giảng viên</th><th className="num">Giá</th><th className="num">Học viên</th><th>Đánh giá</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
       {list.map((c) => (
         <tr key={c.id}>
           <td className="ad-col-title"><Link to={`/courses/${c.slug}`}>{c.title}</Link></td>
@@ -80,7 +80,7 @@ function CoursesTable({ list }) {
           <td><CourseStatus status={c.status} />{c.status === 'hidden' && <span className="xsmall muted" style={{ display: 'block', maxWidth: 220 }}>{c.hiddenReason}</span>}</td>
           <td><div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
             {c.status === 'published'
-              ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => hideCourse(c)}>Ẩn khóa học</button>
+              ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => hideCourse(c)}>Ẩn khoá học</button>
               : <button type="button" className="btn btn-secondary btn-sm" onClick={() => unhideCourse(c)}>Hiện lại</button>}
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => changePrice(c)}>Đổi giá</button>
           </div></td>
@@ -94,8 +94,8 @@ export function CoursesPage() {
   const res = useAdminGet('/api/admin/courses');
   return (
     <AdminShell active="/admin/courses">
-      <div className="page-header"><div><h1>Khóa học đã xuất bản</h1><p className="muted">Ẩn khóa học hoặc đổi giá. Mọi thay đổi đều được thông báo cho giảng viên.</p></div></div>
-      <Loaded res={res} text="Đang tải khóa học…">{(d) => <CoursesTable list={d.courses} />}</Loaded>
+      <div className="page-header"><div><h1>Khoá học đã xuất bản</h1><p className="muted">Ẩn khoá học hoặc đổi giá. Mọi thay đổi đều được thông báo cho giảng viên.</p></div></div>
+      <Loaded res={res} text="Đang tải khoá học…">{(d) => <CoursesTable list={d.courses} />}</Loaded>
     </AdminShell>
   );
 }

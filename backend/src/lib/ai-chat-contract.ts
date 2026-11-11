@@ -57,6 +57,8 @@ export type AiChatMetadata = {
   diffs?: Record<string, TutorDiff["state"]>;
   vote?: (typeof TUTOR_VOTES)[number] | null;
   voteReason?: string | null;
+  /** Course passages read automatically before a lesson answer (shown in the answer's thinking steps). */
+  retrieved?: MaterialHit[];
 };
 export type AiChatMessage = UIMessage<AiChatMetadata>;
 

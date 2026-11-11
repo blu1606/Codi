@@ -63,7 +63,8 @@ function VoucherForm({ handle, v, codes }) {
   const radio = (name, val, label) => (
     <label className="check"><input type="radio" name={name} value={val} checked={d[name] === val} onChange={() => set(name, val)} /> {label}</label>
   );
-  const fs = { border: 0, padding: 0, margin: 0 };
+  // No `margin` here: the form's stack spacing is a margin-top, and an inline margin would erase it.
+  const fs = { border: 0, padding: 0, minWidth: 0 };
   return (
     <>
       <div className="sheet-body">
@@ -71,7 +72,7 @@ function VoucherForm({ handle, v, codes }) {
         <form className="stack-4" id="vf" noValidate onSubmit={(ev) => { ev.preventDefault(); save(); }}>
           <div className={`field ${e.code ? 'is-invalid' : ''}`}><label htmlFor="vf-code">Mã voucher <span className="req">*</span></label>
             <input id="vf-code" name="code" value={d.code} placeholder="Ví dụ: CODI2026" style={{ textTransform: 'uppercase' }} readOnly={!!d.id} onChange={(ev) => set('code', ev.target.value)} />
-            <span className="field-help">{d.id ? 'Không thể đổi mã sau khi tạo.' : '4–20 ký tự, chữ in hoa và chữ số.'}</span>{fe('code')}</div>
+            {e.code ? fe('code') : <span className="field-help">{d.id ? 'Không thể đổi mã sau khi tạo.' : '4–20 ký tự, chữ in hoa và chữ số.'}</span>}</div>
           <fieldset className="field" style={fs}><legend className="field-label">Loại giảm giá</legend><div className="row">{radio('type', 'percent', 'Phần trăm (%)')}{radio('type', 'amount', 'Số tiền (VND)')}</div></fieldset>
           <div className={`field ${e.value ? 'is-invalid' : ''}`}><label htmlFor="vf-value">{d.type === 'percent' ? 'Mức giảm (%)' : 'Số tiền giảm (VND)'} <span className="req">*</span></label>
             <input id="vf-value" name="value" inputMode="numeric" placeholder={d.type === 'percent' ? 'Ví dụ: 20' : 'Ví dụ: 100000'} value={d.value} onChange={(ev) => set('value', ev.target.value)} />{fe('value')}</div>

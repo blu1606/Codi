@@ -38,7 +38,10 @@ export type LessonMaterial = {
   title: string;
   url: string | null;
   durationSeconds: number | null;
+  // Video transcript cues (seconds), or null when the material has none.
+  transcript: TranscriptCue[] | null;
 };
+export type TranscriptCue = { start: number; end?: number; text: string };
 export type ChecklistAssessment = {
   id: number;
   type: "quiz" | "assignment" | "coding";
@@ -178,6 +181,33 @@ export function lessonMaterialUrl(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+const MAX_TRANSCRIPT_CUES = 5000;
+const MAX_CUE_TEXT = 2000;
+const MAX_CUE_SECONDS = 24 * 60 * 60;
+
+/**
+ * The stored transcript (jsonb, written outside this service) as cues the reader can trust: only cues with a finite
+ * start in [0, 24 h] and non-empty text, an end kept only when it follows the start, sorted by start. Returns null
+ * when nothing usable remains.
+ */
+export function lessonTranscript(value: unknown): TranscriptCue[] | null {
+  if (!Array.isArray(value)) return null;
+  const cues: TranscriptCue[] = [];
+  for (const raw of value.slice(0, MAX_TRANSCRIPT_CUES)) {
+    if (!raw || typeof raw !== "object") continue;
+    const { start, end, text } = raw as Record<string, unknown>;
+    if (typeof start !== "number" || !Number.isFinite(start) || start < 0 || start > MAX_CUE_SECONDS) continue;
+    if (typeof text !== "string") continue;
+    const line = text.replace(/\s+/g, " ").trim().slice(0, MAX_CUE_TEXT);
+    if (!line) continue;
+    const cue: TranscriptCue = { start, text: line };
+    if (typeof end === "number" && Number.isFinite(end) && end > start && end <= MAX_CUE_SECONDS) cue.end = end;
+    cues.push(cue);
+  }
+  cues.sort((a, b) => a.start - b.start);
+  return cues.length ? cues : null;
 }
 
 export function recordPdfPage(

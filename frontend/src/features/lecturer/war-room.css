@@ -1,0 +1,65 @@
+/* "Hội đồng AI" War Room (lecturer). Shares the classroom avatar and bubble styles (classroom.css). */
+
+.wr-head { margin-bottom: var(--space-4); }
+.wr-intro { max-width: 72ch; }
+.wr-h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; line-height: var(--leading-tight); }
+.wr-grid { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+@media (max-width: 1023px) { .wr-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.wr-controls { gap: var(--space-2); flex-wrap: wrap; }
+.wr-count { width: 76px; }
+
+/* Phase stepper */
+.wr-phases { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.wr-phase {
+  display: inline-flex; align-items: center; gap: var(--space-1); min-height: 32px; padding: 4px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); font-size: var(--text-sm); color: var(--muted);
+}
+.wr-phase.is-done { color: var(--success); border-color: var(--border-strong); }
+.wr-phase.is-current { color: var(--accent-active); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.wr-phase.is-current .icon { animation: spin 1.2s linear infinite; }
+
+/* Council members */
+.wr-agents { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.wr-agents li { display: flex; align-items: center; gap: var(--space-2); padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.wr-agents li.is-speaking { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Log */
+.wr-thoughts { min-height: 36px; padding: 0; }
+.wr-log { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); max-height: 640px; overflow-y: auto; padding-right: var(--space-1); }
+.wr-entry { display: flex; gap: var(--space-2); align-items: flex-start; }
+.wr-entry-body { min-width: 0; flex: 1; padding: 8px 12px; border-radius: var(--radius-md); background: var(--subtle); }
+.wr-entry.is-thought .wr-entry-body { background: transparent; border: 1px dashed var(--border-strong); }
+.wr-entry.is-thought .cr-text { color: var(--muted); font-style: italic; }
+.wr-entry.is-verdict .wr-entry-body { background: var(--info-soft); }
+.wr-entry.is-checkpoint .wr-entry-body { background: var(--accent-soft); border: 1px solid var(--accent-soft-border); }
+.wr-entry .cr-text { white-space: pre-line; }
+.wr-sys { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--text-sm); color: var(--muted); padding: 4px 0; }
+.wr-sys.is-error { color: var(--danger); }
+
+/* Draft editor */
+.wr-summary { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-3); border-radius: var(--radius-md); background: var(--accent-soft); }
+.wr-cp { display: grid; gap: var(--space-3); margin: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); min-width: 0; }
+.wr-cp-title { padding: 0 var(--space-1); font-weight: 600; font-size: var(--text-sm); }
+.wr-cp-row { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.wr-time { width: 130px; }
+.wr-cp-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 639px) { .wr-cp-grid { grid-template-columns: minmax(0, 1fr); } }
+.wr-text { min-height: 72px; }
+.wr-opt { display: flex; align-items: center; gap: var(--space-2); }
+.wr-opt input[type="radio"] { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+
+/* Side column */
+.wr-applied { margin: 0; padding-left: var(--space-5); display: grid; gap: var(--space-2); }
+.wr-applied li { display: grid; gap: 2px; }
+.wr-runs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.wr-run {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px var(--space-2); width: 100%; min-height: 44px; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--fg); font: inherit; cursor: pointer;
+}
+.wr-run .xsmall { grid-column: 1 / -1; }
+.wr-run:hover { background: var(--subtle); }
+.wr-run.is-active { border-color: var(--accent); }
+.wr-run:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+@media (prefers-reduced-motion: reduce) { .wr-phase.is-current .icon { animation: none; } }
