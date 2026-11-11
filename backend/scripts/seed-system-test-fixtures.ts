@@ -23,7 +23,8 @@ const FREE = {
 };
 
 async function main() {
-  const db = createDb({ DATABASE_URL: assertTestDatabase() });
+  const url = assertTestDatabase();
+  const db = createDb({ DATABASE_URL: url });
   await db.transaction(async (tx) => {
     const git = await tx.execute(sql`UPDATE courses SET price = ${GIT_PRICE}, updated_at = now() WHERE id = ${GIT_ID}`);
     if (git.rowCount !== 1) throw new Error(`${GIT_ID} not found: run npm run seed first`);
