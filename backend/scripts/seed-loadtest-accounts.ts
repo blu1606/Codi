@@ -20,6 +20,8 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { account, courses, createDb, roles, studentEnrollments, user, userRoles } from "@codi-1/db";
 
+import { assertTestDatabase } from "./local-test-database";
+
 const EMAIL_DOMAIN = "codi.test";
 const EMAIL_PATTERN = /^loadtest\+\d{3,}@codi\.test$/;
 const DEFAULT_COUNT = 200;
@@ -55,19 +57,6 @@ function emailFor(index: number) {
 function isOutsideRepo(file: string) {
   const relative = path.relative(process.cwd(), file);
   return relative.startsWith("..") || path.isAbsolute(relative);
-}
-
-// The VPS runs the production app and its database on one host, so only a local database is accepted.
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "host.docker.internal"]);
-
-function assertTestDatabase() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
-  const host = new URL(databaseUrl).hostname.replace(/^\[|\]$/g, "");
-  if (!LOCAL_HOSTS.has(host) || process.env.NODE_ENV === "production") {
-    throw new Error(`Refusing to touch database host "${host}": load-test accounts belong in a local test database only.`);
-  }
-  return databaseUrl;
 }
 
 async function seed(options: Options) {

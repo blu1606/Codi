@@ -291,11 +291,11 @@ function ContentTab({ c, query }) {
     const mark = issues[0];
     return (
     <li key={l.id} className={`tc-lesson ${hl === l.id ? 'is-target' : ''}`} {...dragAttrs('lesson', l.id)} data-drop="lesson" data-id={l.id}>
-      <span className="tc-grip" aria-hidden="true">{ro ? null : <Icon name="grip-vertical" className="icon-sm" />}</span>
+      <span className="tc-drag" aria-hidden="true">{ro ? null : <Icon name="grip-vertical" className="icon-sm" />}</span>
       <span className="tc-no mono" aria-hidden="true">{ci + 1}.{li + 1}</span>
       <div className="tc-lesson-main">
         {renaming === l.id ? <RenameForm c={c} id={l.id} value={l.title} label="Tên bài học" /> : (
-          <div className="stack-1"><span className="row small strong" style={{ gap: 8, flexWrap: 'wrap' }}><span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span>{l.title}{l.isFreePreview && <span className="badge badge-info">Học thử</span>}</span>
+          <div className="stack-1"><span className="row small strong" style={{ gap: 8, flexWrap: 'wrap' }}><span className="tc-type"><Icon name={TYPE_ICON[l.type] || 'book-open'} className="icon-sm" /></span><span className="tc-title">{l.title}</span>{l.isFreePreview && <span className="badge badge-info">Học thử</span>}</span>
             <span className="row xsmall muted" style={{ gap: 8, flexWrap: 'wrap' }}>{materialCount(l) ? `${materialCount(l)} tài liệu` : ''}{codeBadge(l)}</span></div>
         )}
       </div>
@@ -308,7 +308,7 @@ function ContentTab({ c, query }) {
       </span>
       <span className="tc-cell tc-mark">{mark
         ? <span className={`badge ${mark.kind === 'fix' ? 'badge-warn' : 'badge-info'}`}><Icon name={mark.kind === 'fix' ? 'alert-triangle' : 'info'} />{mark.text}{issues.length > 1 ? ` +${issues.length - 1}` : ''}</span>
-        : <span className="tc-ok small"><Icon name="check" className="icon-sm" /> Đạt</span>}</span>
+        : <span className="tc-pass small"><Icon name="check" className="icon-sm" /> Đạt</span>}</span>
       {renaming === l.id ? null : (
         <div className="tc-row-actions">
           <div className="tc-row-links">
@@ -319,6 +319,7 @@ function ContentTab({ c, query }) {
           {ro ? null : (
             <RowMenu label={`Thao tác khác với ${l.title}`} items={[
               l.code ? null : { icon: 'sparkles', label: 'Tạo bằng AI từ tài liệu', run: () => aiImport(c.id, l.id) },
+              { icon: 'users', label: 'Hội đồng AI (điểm dừng video)', run: () => Codi.go(`/teach/courses/${c.id}/warroom/${l.id}`) },
               { icon: 'pencil', label: 'Đổi tên', run: () => startRename(l.id) },
               l.code || l.assignment ? null : { icon: 'clipboard-check', label: 'Thêm bài tập', run: () => openLessonEditor(c.id, l.id, { withAssignment: true }) },
               { icon: 'arrow-up', label: 'Chuyển lên', disabled: li === 0, run: () => move(c, 'lesson', l.id, -1) },
@@ -342,7 +343,7 @@ function ContentTab({ c, query }) {
   const dnd = dndHandlers(c);
   const enrolled = c.enrolledCount;
   return (
-    <div className="stack-4" onDragStart={dnd.onDragStart} onDragEnd={dnd.onDragEnd} onDragOver={dnd.onDragOver} onDrop={dnd.onDrop}>
+    <div className="stack-4 tc-content" onDragStart={dnd.onDragStart} onDragEnd={dnd.onDragEnd} onDragOver={dnd.onDragOver} onDrop={dnd.onDrop}>
       <div className="card"><div className="card-body compact row-between" style={{ flexWrap: 'wrap', gap: 12 }}>
         <div className="stack-1 small muted"><p>Dùng nút mũi tên để sắp xếp thứ tự chương và bài học. Bấm &quot;Chi tiết&quot; để biên tập nội dung bài và tài liệu.{ro ? '' : ' Bạn cũng có thể kéo thả biểu tượng ⋮⋮ để sắp xếp trong cùng chương.'}</p>
           <p>Bài kiểm tra đầu vào (Diagnostic Test): {c.entryTest
@@ -356,7 +357,7 @@ function ContentTab({ c, query }) {
       {c.chapters.map((ch, ci) => (
         <section key={ch.id} className="card tc-chapter" {...dragAttrs('chapter', ch.id)} data-drop="chapter" data-id={ch.id}>
           <div className="card-header">
-            <div className="row od-fill">{!ro && <span className="tc-grip" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
+            <div className="row od-fill">{!ro && <span className="tc-drag" aria-hidden="true"><Icon name="grip-vertical" className="icon-sm" /></span>}
               {renaming === ch.id ? <RenameForm c={c} id={ch.id} value={ch.title} label="Tên chương" /> : (
                 <div className="stack-1" style={{ minWidth: 0 }}><h2 className="tc-h">Chương {ci + 1}: {ch.title}</h2>
                   <ReviewNotes courseId={c.id} title="Góp ý cho chương này" match={(a) => a.type === 'chapter' && a.itemId === String(ch.id)} />

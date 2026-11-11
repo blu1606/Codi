@@ -9,6 +9,7 @@ import { runLearningPathWorkerOnce } from "../lib/learning-path-worker";
 import { createLearningPathService } from "../lib/learning-path-service";
 import { generateLearningPath } from "../lib/learning-path-ai";
 import { processQuizJob } from "../lib/quiz-ai-worker";
+import { indexNextKnowledgeSource } from "../lib/course-knowledge";
 
 export const aiWorkerEnabled = () => process.env.AI_BACKGROUND_WORKER_ENABLED === "true";
 
@@ -25,7 +26,8 @@ export async function startAiWorker(signal: AbortSignal): Promise<void> {
         knowledge_map: { run: (job) => runKnowledgeMapJob(db, job), onFailure: reconcileKnowledgeMapFailure },
         quiz_generation: { run: processQuizJob },
       },
-      idle: () => runLearningPathWorkerOnce(db, learningPathService),
+      // Pending learning paths first; otherwise index one course source (lesson text, PDF/slide OCR, video transcript).
+      idle: async () => (await runLearningPathWorkerOnce(db, learningPathService)) || (await indexNextKnowledgeSource(db)),
     });
   } catch {
     // Provider/database errors may contain credentials; do not print their details.

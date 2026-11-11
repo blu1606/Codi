@@ -33,7 +33,7 @@ env:
 jobs:
   check:
     name: Typecheck, unit tests, build, security check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
   e2e:
     name: E2E (Playwright) and security probe on the production image
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       PERF_IMAGE_TAG: ci
@@ -103,7 +103,7 @@ jobs:
   release-needed:
     name: Does this push change what runs on the VPS?
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       deploy: ${{ steps.decide.outputs.deploy }}
@@ -134,7 +134,7 @@ jobs:
     name: Deploy to the VPS
     needs: [check, e2e, release-needed]
     if: needs.release-needed.outputs.deploy == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:
       name: production

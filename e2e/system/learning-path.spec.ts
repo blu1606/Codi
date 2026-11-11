@@ -47,7 +47,7 @@ test.describe.serial("Learning path", () => {
     const next = page.getByRole("button", { name: "Tiếp tục" });
     await expect(page.getByRole("heading", { name: "Bạn muốn đạt được gì với khoá học này?" })).toBeVisible();
     await expect(next).toBeDisabled();
-    await page.getByText("Hoàn thành khóa học").click();
+    await page.getByText("Hoàn thành khoá học").click();
     await next.click();
     await expect(page.getByRole("heading", { name: "Bạn đang ở mức nào với chủ đề này?" })).toBeVisible();
     await expect(next).toBeDisabled();
@@ -65,6 +65,8 @@ test.describe.serial("Learning path", () => {
     await page.getByRole("button", { name: "Học từ bài 1" }).click();
     await page.waitForURL((url) => url.pathname === pathUrl);
     await expect(page.getByRole("link", { name: /Học tiếp\s*:\s*Biến, hằng và kiểu dữ liệu/ })).toBeVisible();
+    // Every lesson of the path is listed in the "Danh sách bài" view (the map is the other view).
+    await page.getByRole("button", { name: "Danh sách bài" }).click();
     const lessons = page.getByRole("link", { name: /^Bài \d+: / });
     await expect(lessons).toHaveCount(11);
     const titles = await lessons.allInnerTexts();
@@ -80,6 +82,8 @@ test.describe.serial("Learning path", () => {
   });
 
   test("TC_PATH_007 Each lesson explains why it is at its place in the path", async ({}, testInfo) => {
+    // The lesson list is the second view of the path page, beside the map.
+    await page.getByRole("button", { name: "Danh sách bài" }).click();
     await page.getByRole("button", { name: "Vì sao? : Hàm và phạm vi" }).click();
     await expect(page.getByText("Theo thứ tự mặc định của giảng viên.").first()).toBeVisible();
     await evidence(page, testInfo);

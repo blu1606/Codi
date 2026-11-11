@@ -9,7 +9,9 @@
     "migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
     "typecheck": "tsc --noEmit",
-    "seed:loadtest": "tsx --env-file-if-exists=.env scripts/seed-loadtest-accounts.ts"
+    "index:knowledge": "tsx --env-file-if-exists=.env scripts/index-course-knowledge.ts",
+    "seed:loadtest": "tsx --env-file-if-exists=.env scripts/seed-loadtest-accounts.ts",
+    "seed:system-test": "tsx --env-file-if-exists=.env scripts/seed-system-test-fixtures.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.76",

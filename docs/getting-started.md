@@ -77,6 +77,7 @@ and `R2_*` keys, codes are real emails and uploads go to Codi's real R2 buckets.
 |---|---|---|
 | Email codes (register, change email, reset password) | `RESEND_API_KEY`, `EMAIL_FROM` | The code is printed to the backend console: `[Auth OTP for <email>]: 123456` |
 | Tutor (`/ai` advisor, in-lesson AI tab, Tutor page), AI quiz questions | `GOOGLE_GENERATIVE_AI_API_KEY` (or `AI_PROVIDER=openai` + `OPENAI_API_KEY`) | The screens show the backend's "Tutor đang tạm nghỉ" / "AI không khả dụng" error |
+| AI classroom: lecturer "Hội đồng AI" (lesson row ⋯ menu → `/teach/courses/:courseId/warroom/:lessonId`) drafts video checkpoints from the lesson transcript or reading text; learners debate Bo at each checkpoint and chat with the six characters (`frontend/src/features/classroom/classroom-panel.jsx`) | The same AI provider key as the Tutor | The screens show "AI không khả dụng…"; skipping a checkpoint still works |
 | Checkout | `SEPAY_WEBHOOK_SECRET`, `SEPAY_BANK_CODE`, `SEPAY_ACCOUNT_NUMBER` | Paid checkout answers 503 |
 | Avatar and assignment file uploads | Cloudflare `R2_*` | Uploads fail with the server's error |
 | Lecture uploads ("Thêm bài học" → Video / Slide / PDF, "Thêm tài liệu"): stored under `lesson-media/` in `R2_BUCKET`, served by `GET /api/lesson-media` with byte ranges | Cloudflare `R2_*`, `ffprobe` for the video length | The file is not attached; the AI import can still read it |

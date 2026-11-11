@@ -171,6 +171,27 @@
 .tc-sources a { color: var(--accent); font-weight: 600; }
 .tc-sources p { margin: 2px 0 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
+/* Thinking steps: one dropdown per answer; open, a timeline of passages read, reasoning and tool calls */
+.tc-think { font-size: var(--text-sm); color: var(--muted); }
+.tc-think-head { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 32px; padding: 0 var(--space-2); margin-left: calc(-1 * var(--space-2)); border: 0; border-radius: 999px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.tc-think-head:hover, .tc-think.is-open .tc-think-head { background: var(--subtle); color: var(--fg); }
+.tc-think-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tc-think-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); margin: var(--space-2) 0 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); list-style: none; }
+.tc-think-step { position: relative; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--space-2); }
+.tc-think-step:not(:last-child)::before { content: ""; position: absolute; top: 22px; bottom: calc(-1 * var(--space-3)); left: 9.5px; width: 1px; background: var(--border-strong); }
+.tc-think-dot { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--subtle); color: var(--fg); }
+.tc-think-step.is-failed .tc-think-dot { color: var(--warn); }
+.tc-think-body { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); overflow-wrap: anywhere; }
+.tc-think-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 0; min-height: 20px; color: var(--fg); }
+.tc-think-title code { padding: 0 5px; border-radius: 4px; background: var(--subtle); font-size: 0.85em; color: var(--muted); }
+.tc-think-sub { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.tc-think-sub > span { font-size: var(--text-xs, 0.75rem); font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+.tc-think-sub > p { margin: 0; }
+.tc-think-sub.is-error > p { color: var(--warn); }
+.tc-think-json { max-height: 220px; margin: 0; padding: var(--space-2); overflow: auto; border-radius: var(--radius-sm); background: var(--subtle); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.tc-think .tc-reasoning { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .tc-think .tc-spin { animation: none; } }
+
 /* Course cards (search_courses): rows in one hairline surface */
 .tc-courses { display: grid; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); list-style: none; }
 .tc-courses > li + li { border-top: 1px solid var(--border); }

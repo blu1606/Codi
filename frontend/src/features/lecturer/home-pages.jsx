@@ -39,7 +39,7 @@ export function TeachHomePage() {
     {m.error ? <LoadError error={m.error} onRetry={reloadMine} /> : <Loading rows={4} />}
   </>);
   return shell('/teach', <>
-    <div className="page-header"><div><h1>Tổng quan giảng dạy</h1><p className="muted">Chào {(me() || {}).name || "bạn"}. Đây là những việc đang chờ bạn.</p></div><Link className="btn btn-primary" to="/teach/new"><Icon name="plus" /> Tạo khóa học</Link></div>
+    <div className="page-header"><div><h1>Tổng quan giảng dạy</h1><p className="muted">Chào {(me() || {}).name || "bạn"}. Đây là những việc đang chờ bạn.</p></div><Link className="btn btn-primary" to="/teach/new"><Icon name="plus" /> Tạo khoá học</Link></div>
     {rejected && <div style={{ marginBottom: 24 }}><Alert type="danger" title={`“${rejected.title}” bị từ chối xuất bản`} body={`Lý do từ chối: ${rejected.rejectReason || 'Chưa nêu'}`} actions={<Link className="btn btn-secondary btn-sm" to={`/teach/courses/${rejected.id}/publish`}>Sửa và gửi lại <Icon name="arrow-right" className="icon-sm" /></Link>} /></div>}
     <div className="grid-3">
       <Tile href="/teach/grading" v={n.grading} label="Bài chờ chấm" meta="Mở hàng chờ" />
@@ -55,7 +55,7 @@ export function TeachHomePage() {
     </div>
     <div className="section-title section"><h2 style={{ fontSize: 'var(--text-lg)' }}>Khoá học của tôi</h2><Link to="/teach/courses">Xem tất cả ({mine.length})</Link></div>
     {mine.length ? <ul className="list stack-3">{mine.slice(0, 4).map((c) => <CourseRow key={c.id} c={c} />)}</ul>
-      : <div className="card"><Empty icon="book-open" title="Bạn chưa có khoá học nào" body="Tạo khoá học đầu tiên chỉ với tên, mô tả ngắn, danh mục và trình độ. Bạn có thể bổ sung nội dung sau." actions={<Link className="btn btn-primary" to="/teach/new">Tạo khóa học</Link>} /></div>}
+      : <div className="card"><Empty icon="book-open" title="Bạn chưa có khoá học nào" body="Tạo khoá học đầu tiên chỉ với tên, mô tả ngắn, danh mục và trình độ. Bạn có thể bổ sung nội dung sau." actions={<Link className="btn btn-primary" to="/teach/new">Tạo khoá học</Link>} /></div>}
   </>);
 }
 
@@ -67,7 +67,7 @@ export function CourseListPage({ query }) {
   const mine = m.list || [];
   const list = mine.filter((c) => status === 'all' || c.status === status);
   const label = (STATUS_OPTS.find(([v]) => v === status) || [])[1] || 'này';
-  const head = <div className="page-header"><div><h1>Khoá học của tôi</h1></div><Link className="btn btn-primary" to="/teach/new"><Icon name="plus" /> Tạo khóa học</Link></div>;
+  const head = <div className="page-header"><div><h1>Khoá học của tôi</h1></div><Link className="btn btn-primary" to="/teach/new"><Icon name="plus" /> Tạo khoá học</Link></div>;
   if (!m.list) return shell('/teach/courses', <>{head}{m.error ? <LoadError error={m.error} onRetry={reloadMine} /> : <Loading rows={4} />}</>);
   return shell('/teach/courses', <>
     {head}
@@ -76,7 +76,7 @@ export function CourseListPage({ query }) {
     ))}</div>
     {list.length ? <ul className="list stack-3">{list.map((c) => <CourseRow key={c.id} c={c} />)}</ul>
       : <div className="card"><Empty icon="book-open" title="Không có khoá học ở trạng thái này"
-        body={status === 'all' ? "Bạn chưa có khoá học nào. Hãy bấm 'Tạo khóa học' để bắt đầu." : `Hiện tại bạn không có khoá học nào ở trạng thái "${label}".`} /></div>}
+        body={status === 'all' ? "Bạn chưa có khoá học nào. Hãy bấm 'Tạo khoá học' để bắt đầu." : `Hiện tại bạn không có khoá học nào ở trạng thái "${label}".`} /></div>}
   </>);
 }
 
@@ -124,7 +124,7 @@ export function CreateCoursePage() {
   const e = createErr; const v = createVals; const saving = createState === 'saving';
   const on = (k) => (ev) => { createVals = { ...createVals, [k]: ev.target.value }; if (createState === 'error') createState = null; rerender(); };
   return shell('/teach/courses', <>
-    <div className="page-header"><div><h1>Tạo khóa học</h1><p className="muted">Chỉ cần 4 thông tin. Khoá học được tạo ở trạng thái Bản nháp.</p></div></div>
+    <div className="page-header"><div><h1>Tạo khoá học</h1><p className="muted">Chỉ cần 4 thông tin. Khoá học được tạo ở trạng thái Bản nháp.</p></div></div>
     <ol className="steps" aria-label="Các bước sau khi tạo khoá học" style={{ maxWidth: 760, marginBottom: 24 }}>
       {[['Thông tin', 'Mô tả, giá đề xuất'], ['Nội dung', 'Chương, bài học, quiz'], ['Bản đồ kiến thức', 'Phân tích và xác nhận'], ['Xuất bản', 'Gửi khi đủ điều kiện']].map(([t, h], i) => (
         <li key={t} className="step-item"><div className="step-link"><span className="step-num" aria-hidden="true">{i + 1}</span><span className="step-text"><strong className="small">{t}</strong><span className="xsmall muted">{h}</span></span></div></li>

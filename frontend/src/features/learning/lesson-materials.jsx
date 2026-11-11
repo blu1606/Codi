@@ -4,7 +4,8 @@
  * - YouTube URL: privacy-enhanced embed with the IFrame Player API; position saved on pause, every 10 s while
  *   playing, on end and when the page hides. Blocked API → "Không theo dõi được tiến độ video" (still watchable).
  * - Video without a URL: a simulated player (same 90% rule and saved position).
- * - PDF/slide: simulated pages (pdf.js is not bundled); every page must be seen to count as studied (real
+ * - PDF/slide: one page at a time with a pager (an uploaded PDF in the browser's viewer opened at that page, otherwise
+ *   a simulated page; pdf.js is not bundled); every page must be seen to count as studied (real
  *   recordPdfPage), with the page text view and the "Mở PDF trong trình duyệt" escape hatch when a URL exists.
  * Progress writes are lesson commands ({type:'video'|'pdf-page'}) sent through `save`; a failed write shows
  * "Chưa lưu được tiến độ tài liệu" + "Thử lưu lại". The server decides "studied" (90% watched, every page seen).
@@ -13,6 +14,40 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { isStoredMedia } from '../lecturer/lesson-media-api';
+
+// ───────────────────────── video bridge (transcript ↔ player) ─────────────────────────
+/**
+ * Link between the playing video and the transcript: the video attaches a player ({ seek(seconds), time() }) and
+ * publishes its position while it plays; the transcript seeks through it and subscribes to the position. One bridge
+ * per lesson pane; the video that is mounted owns it.
+ */
+export function createVideoBridge() {
+  let player = null;
+  let last = 0;
+  const subs = new Set();
+  return {
+    attach(p) { player = p; return () => { if (player === p) player = null; }; },
+    /** Seeks the attached video and plays it; false when no video is ready to seek. */
+    seek(seconds) {
+      if (!player) return false;
+      try { return player.seek(seconds) !== false; } catch { return false; }
+    },
+    publish(seconds) {
+      if (!Number.isFinite(seconds) || seconds === last) return;
+      last = seconds;
+      subs.forEach((fn) => fn(seconds));
+    },
+    currentTime() {
+      if (player) { try { const t = player.time(); if (Number.isFinite(t)) return t; } catch { /* player gone */ } }
+      return last;
+    },
+    /** Pauses / resumes the attached video (the AI classroom stops it at a checkpoint and resumes it after). */
+    pause() { if (player && player.pause) { try { player.pause(); } catch { /* player gone */ } } },
+    play() { if (player && player.play) { try { player.play(); } catch { /* player gone */ } } },
+    subscribe(fn) { subs.add(fn); return () => { subs.delete(fn); }; },
+  };
+}
+const TIME_POLL_MS = 250;
 
 // ───────────────────────── YouTube helpers (real lib/youtube.ts) ─────────────────────────
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -65,17 +100,21 @@ function loadYouTubeApi() {
   return api;
 }
 
-function YouTubeFrame({ videoId, title, startSeconds, onTracked, onUntracked, onLoaded, onPosition, onError }) {
+function YouTubeFrame({ videoId, title, startSeconds, bridge, onTracked, onUntracked, onLoaded, onPosition, onError }) {
   const frame = useRef(null);
-  const cb = useRef({ onTracked, onUntracked, onPosition, onError });
-  cb.current = { onTracked, onUntracked, onPosition, onError };
+  const cb = useRef({ onTracked, onUntracked, onPosition, onError, bridge });
+  cb.current = { onTracked, onUntracked, onPosition, onError, bridge };
   // Origin and start are fixed for the life of this iframe; changing src would reload it.
   const [src] = useState(() => youtubeEmbedUrl(videoId, { origin: window.location.origin, start: startSeconds }));
   useEffect(() => {
     const el = frame.current;
     if (!el) return undefined;
     let cancelled = false; let player = null; let ready = false; let ended = false; let interval = null;
+    let poll = null; let detach = null;
     const stopInterval = () => { if (interval) clearInterval(interval); interval = null; };
+    // The IFrame API has no time event: while playing, the position is read a few times a second for the transcript.
+    const publish = () => { const b = cb.current.bridge; if (b && player && ready) b.publish(player.getCurrentTime()); };
+    const stopPoll = () => { if (poll) clearInterval(poll); poll = null; };
     const read = () => {
       if (!player || !ready) return null;
       const seconds = player.getCurrentTime();
@@ -89,13 +128,29 @@ function YouTubeFrame({ videoId, title, startSeconds, onTracked, onUntracked, on
       if (cancelled) return;
       player = new YT.Player(el, {
         events: {
-          onReady: () => { if (cancelled) return; ready = true; cb.current.onTracked(); },
+          onReady: () => {
+            if (cancelled) return;
+            ready = true;
+            const b = cb.current.bridge;
+            if (b) {
+              detach = b.attach({
+                seek: (seconds) => { player.seekTo(seconds, true); player.playVideo(); b.publish(seconds); return true; },
+                time: () => player.getCurrentTime(),
+                pause: () => player.pauseVideo(),
+                play: () => player.playVideo(),
+              });
+            }
+            cb.current.onTracked();
+          },
           onStateChange: ({ data }) => {
             if (!ready) return;
-            if (data === YT.PlayerState.PLAYING) { ended = false; if (!interval) interval = setInterval(savePos, 10000); }
-            else if (data === YT.PlayerState.PAUSED) { stopInterval(); savePos(); }
+            if (data === YT.PlayerState.PLAYING) {
+              ended = false;
+              if (!interval) interval = setInterval(savePos, 10000);
+              if (!poll) poll = setInterval(publish, TIME_POLL_MS);
+            } else if (data === YT.PlayerState.PAUSED) { stopInterval(); stopPoll(); publish(); savePos(); }
             else if (data === YT.PlayerState.ENDED) {
-              stopInterval(); ended = true;
+              stopInterval(); stopPoll(); publish(); ended = true;
               const duration = player.getDuration();
               cb.current.onPosition(Math.max(player.getCurrentTime(), Number.isFinite(duration) ? duration : 0), true, duration);
             }
@@ -108,6 +163,8 @@ function YouTubeFrame({ videoId, title, startSeconds, onTracked, onUntracked, on
     return () => {
       cancelled = true;
       stopInterval();
+      stopPoll();
+      if (detach) detach();
       savePos();
       window.removeEventListener('pagehide', savePos);
       document.removeEventListener('visibilitychange', onHide);
@@ -154,7 +211,7 @@ export function materialProgress(media, m) {
 }
 
 // ───────────────────────── simulated video (material without a URL) ─────────────────────────
-function SimulatedVideo({ m, progress, lessonMin, save }) {
+function SimulatedVideo({ m, progress, lessonMin, save, bridge }) {
   const total = m.durationSeconds || (lessonMin || 0) * 60;
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(() => Math.min(total, (progress && progress.seconds) || 0));
@@ -162,6 +219,22 @@ function SimulatedVideo({ m, progress, lessonMin, save }) {
   posRef.current = pos;
   const startPos = useRef(pos);
   const lastSaved = useRef(Date.now());
+  useEffect(() => { if (bridge) bridge.publish(pos); }, [bridge, pos]);
+  useEffect(() => {
+    if (!bridge) return undefined;
+    return bridge.attach({
+      seek: (seconds) => {
+        const next = Math.max(0, Math.min(total, seconds));
+        posRef.current = next; setPos(next);
+        lastSaved.current = Date.now();
+        if (next < total) setPlaying(true);
+        return true;
+      },
+      time: () => posRef.current,
+      pause: () => { setPlaying(false); },
+      play: () => { if (posRef.current < total) { lastSaved.current = Date.now(); setPlaying(true); } },
+    });
+  }, [bridge, total]);
   const send = useCallback((ended) => save({ type: 'video', materialId: m.id, seconds: Math.floor(posRef.current), ended: !!ended }), [m.id, save]);
   useEffect(() => {
     if (!playing || !total) return undefined;
@@ -205,10 +278,30 @@ function SimulatedVideo({ m, progress, lessonMin, save }) {
 
 // ───────────────────────── uploaded video (file stored on Codi) ─────────────────────────
 /** Native player for a lecturer-uploaded video: resumes, saves on pause / end / every 10 s / leaving the lesson. */
-function FileVideo({ m, progress, save, onFail }) {
+function FileVideo({ m, progress, save, onFail, bridge }) {
   const ref = useRef(null);
   const start = useRef(Math.floor((progress && progress.seconds) || 0));
   const lastSaved = useRef(0);
+  useEffect(() => {
+    if (!bridge) return undefined;
+    return bridge.attach({
+      seek: (seconds) => {
+        const v = ref.current; if (!v) return false;
+        v.currentTime = seconds;
+        const played = v.play();
+        if (played && typeof played.catch === 'function') played.catch(() => { /* autoplay refused: the position is still set */ });
+        bridge.publish(seconds);
+        return true;
+      },
+      time: () => (ref.current ? ref.current.currentTime : 0),
+      pause: () => { if (ref.current) ref.current.pause(); },
+      play: () => {
+        const v = ref.current; if (!v) return;
+        const played = v.play();
+        if (played && typeof played.catch === 'function') played.catch(() => { /* autoplay refused */ });
+      },
+    });
+  }, [bridge]);
   const send = useCallback((ended) => {
     const v = ref.current; if (!v || !Number.isFinite(v.currentTime)) return;
     lastSaved.current = Date.now();
@@ -221,7 +314,8 @@ function FileVideo({ m, progress, save, onFail }) {
         <video ref={ref} className="ln-file-video" src={m.url} controls preload="metadata" playsInline
           onLoadedMetadata={(e) => { const v = e.currentTarget; if (start.current > 0 && start.current < (v.duration || 0) - 2) v.currentTime = start.current; }}
           onPause={(e) => { if (!e.currentTarget.ended) send(false); }} onEnded={() => send(true)} onError={onFail}
-          onTimeUpdate={() => { if (Date.now() - lastSaved.current >= 10000) send(false); }}>
+          onTimeUpdate={(e) => { if (bridge) bridge.publish(e.currentTarget.currentTime); if (Date.now() - lastSaved.current >= 10000) send(false); }}
+          onSeeked={(e) => { if (bridge) bridge.publish(e.currentTarget.currentTime); }}>
           Trình duyệt không phát được video này.
         </video>
       </div>
@@ -231,7 +325,7 @@ function FileVideo({ m, progress, save, onFail }) {
 }
 
 // ───────────────────────── YouTube material ─────────────────────────
-function YouTubeMaterial({ m, videoId, progress, save, onFail }) {
+function YouTubeMaterial({ m, videoId, progress, save, onFail, bridge }) {
   const [status, setStatus] = useState('loading');
   const [untracked, setUntracked] = useState(false);
   const saved = useRef(Math.floor((progress && progress.seconds) || 0));
@@ -254,7 +348,7 @@ function YouTubeMaterial({ m, videoId, progress, save, onFail }) {
   return (
     <section className="stack-3" aria-label={m.title}>
       {status === 'loading' && <p className="row small muted" role="status"><Icon name="loader" className="icon-sm ln-spin" /> Đang tải video…</p>}
-      <YouTubeFrame videoId={videoId} title={m.title} startSeconds={saved.current}
+      <YouTubeFrame videoId={videoId} title={m.title} startSeconds={saved.current} bridge={bridge}
         onTracked={() => setStatus('ready')} onUntracked={() => { setUntracked(true); setStatus('ready'); }}
         onLoaded={() => setStatus((s) => (s === 'loading' ? 'ready' : s))} onPosition={onPosition} onError={onFail} />
       {untracked
@@ -266,18 +360,51 @@ function YouTubeMaterial({ m, videoId, progress, save, onFail }) {
 
 // ───────────────────────── simulated PDF ─────────────────────────
 const pageCaption = (page, total) => (page === 1 ? 'Mục tiêu bài học' : page === total ? 'Tóm tắt và bài tập về nhà' : 'Nội dung chính · phần ' + (page - 1));
-function PdfMaterial({ m, progress, save }) {
-  const total = pdfPageTotal(m, progress);
+/**
+ * Page count of a PDF file: the largest /Count of its page tree. A PDF whose page tree sits in a compressed object
+ * stream does not expose it; that returns null and the stored or default count is kept.
+ */
+async function readPdfPageCount(url) {
+  try {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) return null;
+    const text = new TextDecoder('latin1').decode(await res.arrayBuffer());
+    const counts = [...text.matchAll(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)|\/Count\s+(\d+)[^>]*?\/Type\s*\/Pages\b/g)].map((x) => Number(x[1] || x[2]));
+    const n = counts.length ? Math.max(...counts) : 0;
+    return n > 0 && n <= 2000 ? n : null;
+  } catch { return null; }
+}
+
+/**
+ * One viewer per PDF/slide. A real PDF file (fileUrl) shows the current page in the browser's viewer, opened at that
+ * page and driven by the pager below; without a file the page is a placeholder card. Either way each page shown is
+ * recorded, so seeing every page marks the material studied.
+ */
+function PdfMaterial({ m, progress, save, fileUrl }) {
+  const needsCount = !!fileUrl && !Number(m.pages);
+  // undefined: still reading the file; 0: unknown (stored or default count used); n: pages in the file
+  const [fileTotal, setFileTotal] = useState(undefined);
+  useEffect(() => {
+    if (!needsCount) return undefined;
+    let live = true;
+    readPdfPageCount(fileUrl).then((n) => { if (live) setFileTotal(n || 0); });
+    return () => { live = false; };
+  }, [needsCount, fileUrl]);
+  const total = fileTotal || pdfPageTotal(m, progress);
   const page = Math.min(total, (progress && progress.lastPage) || 1);
   const seen = progress && progress.pageCount === total ? progress.pages || [] : [];
   const view = useCallback((p) => save({ type: 'pdf-page', materialId: m.id, page: p, pages: total }), [m.id, total, save]);
-  // Opening the material records the page on screen, like the real render of the current page.
-  useEffect(() => { if (!seen.includes(page)) view(page); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Opening the material records the page on screen, like the real render of the current page. A file waits for its
+  // page count, so the first record already carries the real total.
+  const ready = !needsCount || fileTotal !== undefined;
+  useEffect(() => { if (ready && !seen.includes(page)) view(page); }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
   const text = `${m.title}. ${pageCaption(page, total)}.`;
   return (
     <section className="stack-3" aria-label={m.title}>
       <div className="ln-media ln-pdf">
-        <div className="ln-slide" role="img" aria-label={`${m.title}, trang ${page}`}><span className="xsmall muted">Trang {page}</span><strong>{m.title}</strong><span className="small muted">{pageCaption(page, total)}</span></div>
+        {fileUrl
+          ? <iframe key={page} className={`ln-file-pdf ${m.type === 'slide' ? 'is-slide' : ''}`.trim()} src={`${fileUrl}#page=${page}&view=Fit&toolbar=0&navpanes=0`} title={`${m.title}, trang ${page}`} />
+          : <div className="ln-slide" role="img" aria-label={`${m.title}, trang ${page}`}><span className="xsmall muted">Trang {page}</span><strong>{m.title}</strong><span className="small muted">{pageCaption(page, total)}</span></div>}
         <div className="row-between ln-pdf-nav">
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => view(page - 1)} disabled={page <= 1}><Icon name="chevron-left" className="icon-sm" /> Trang trước</button>
           <span className="small strong">Trang {page}/{total}</span>
@@ -285,7 +412,7 @@ function PdfMaterial({ m, progress, save }) {
         </div>
       </div>
       <p className="small muted">Đã xem {seen.length}/{total} trang. Xem đủ các trang để đánh dấu học xong tự động.</p>
-      <details className="ln-pdf-text"><summary className="small">Đọc nội dung trang dưới dạng văn bản</summary><p className="small">{text}</p></details>
+      {!fileUrl && <details className="ln-pdf-text"><summary className="small">Đọc nội dung trang dưới dạng văn bản</summary><p className="small">{text}</p></details>}
       {m.url && <a className="small row" href={m.url} target="_blank" rel="noopener noreferrer">Mở PDF trong trình duyệt <Icon name="external-link" className="icon-sm" /></a>}
     </section>
   );
@@ -295,8 +422,9 @@ function PdfMaterial({ m, progress, save }) {
 /**
  * m: LessonMaterial {id, type, title, url, durationSeconds}; progress: media[m.id]; lessonMin: lesson length.
  * save(command) → Promise: sends a video / pdf-page command; a rejection shows the save warning.
+ * bridge (optional, createVideoBridge()): a video attaches to it so a transcript can seek it and follow its position.
  */
-export function MaterialView({ m, progress, lessonMin, save }) {
+export function MaterialView({ m, progress, lessonMin, save, bridge }) {
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -331,11 +459,11 @@ export function MaterialView({ m, progress, lessonMin, save }) {
   let body = null;
   if (m.type === 'video') {
     body = videoId
-      ? <YouTubeMaterial key={attempt} m={m} videoId={videoId} progress={progress} save={persist} onFail={onFail} />
-      : stored ? <FileVideo key={attempt} m={m} progress={progress} save={persist} onFail={onFail} />
-        : <SimulatedVideo key={attempt} m={m} progress={progress} lessonMin={lessonMin} save={persist} />;
+      ? <YouTubeMaterial key={attempt} m={m} videoId={videoId} progress={progress} save={persist} onFail={onFail} bridge={bridge} />
+      : stored ? <FileVideo key={attempt} m={m} progress={progress} save={persist} onFail={onFail} bridge={bridge} />
+        : <SimulatedVideo key={attempt} m={m} progress={progress} lessonMin={lessonMin} save={persist} bridge={bridge} />;
   } else if ((m.type === 'pdf' || m.type === 'slide') && stored && /\.pdf$/i.test(decodeURIComponent(m.url))) {
-    body = <>{<iframe className="ln-file-pdf" src={m.url} title={m.title} />}<PdfMaterial key={attempt} m={m} progress={progress} save={persist} /></>;
+    body = <PdfMaterial key={attempt} m={m} progress={progress} save={persist} fileUrl={m.url} />;
   } else if (m.type === 'pdf' || m.type === 'slide') {
     body = <PdfMaterial key={attempt} m={m} progress={progress} save={persist} />;
   } else if (m.url) {

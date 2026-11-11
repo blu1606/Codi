@@ -36,7 +36,7 @@ test('legacy and unknown sort values fall back to "popular"', () => {
 test('typeahead returns suggestions, course then topic top results, and an empty flag', () => {
   const t = typeaheadSuggestions(entries, 'react');
   assert.deepEqual(t.querySuggestions, ['React Fundamentals', 'React']);
-  assert.deepEqual(t.topResults.map((r) => r.type), ['Khóa học', 'Khóa học', 'Chủ đề']);
+  assert.deepEqual(t.topResults.map((r) => r.type), ['Khoá học', 'Khoá học', 'Chủ đề']);
   assert.equal(t.matches.length, 2);
   assert.equal(typeaheadSuggestions(entries, 'zzz').isEmpty, true);
   assert.equal(typeaheadSuggestions(entries, '  ').isEmpty, false);

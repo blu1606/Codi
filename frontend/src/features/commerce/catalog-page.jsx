@@ -1,6 +1,6 @@
 /**
  * S01 Catalog '/courses' (real app/courses/page.tsx) — live search with a three-part typeahead (query suggestions,
- * top results with "Khóa học" / "Chủ đề" badges, "Xem tất cả kết quả"), clear-search button, a category pill row,
+ * top results with "Khoá học" / "Chủ đề" badges, "Xem tất cả kết quả"), clear-search button, a category pill row,
  * a result bar (count + level, price, sort), removable chips + "Xóa bộ lọc", a course card grid, zero results and a
  * load error with retry.
  * Filters live in the URL (replaced, not pushed, like the real app's replaceState). `?course=<id>` deep-links to the
@@ -83,13 +83,13 @@ function SearchBox({ value, entries, onSearch, onOpenCourse }) {
     <div className="field cm-search"><label htmlFor="f-q">Tìm kiếm</label>
       <div className="input-group cm-search-group">
         <div className="cm-search-input">
-          <input id="f-q" name="q" className="input" value={draft} placeholder="Tìm khóa học theo tên, công nghệ (React, Node, AI...)" autoComplete="off"
+          <input id="f-q" name="q" className="input" value={draft} placeholder="Tìm khoá học theo tên, công nghệ (React, Node, AI...)" autoComplete="off"
             role="combobox" aria-autocomplete="list" aria-expanded={shown && items.length > 0} aria-controls="typeahead-suggestions"
             aria-activedescendant={shown && active >= 0 ? `suggestion-${active}` : undefined}
             onChange={(e) => change(e.target.value)} onKeyDown={onKeyDown} onBlur={close}
             onFocus={() => { if (draft.trim()) setOpen(true); }} />
           {draft && (
-            <button type="button" className="cm-search-clear" aria-label="Xóa từ khóa tìm kiếm" onMouseDown={(e) => e.preventDefault()} onClick={() => { change(''); close(); }}>
+            <button type="button" className="cm-search-clear" aria-label="Xóa từ khoá tìm kiếm" onMouseDown={(e) => e.preventDefault()} onClick={() => { change(''); close(); }}>
               <Icon name="x" className="icon-sm" />
             </button>
           )}
@@ -113,7 +113,7 @@ function SearchBox({ value, entries, onSearch, onOpenCourse }) {
                   <div className="cm-typeahead-header">Kết quả hàng đầu</div>
                   {ta.topResults.map((top) => { idx += 1; return (
                     <button key={top.id} {...optionProps(idx)}>
-                      <span className={`badge ${top.type === 'Khóa học' ? 'badge-accent' : 'badge-neutral'}`}>{top.type}</span>
+                      <span className={`badge ${top.type === 'Khoá học' ? 'badge-accent' : 'badge-neutral'}`}>{top.type}</span>
                       <span className="od-fill od-truncate strong">{top.title}</span>
                       <span className="xsmall muted od-nowrap">{top.entry ? levelLabel(top.entry.level) : top.category}</span>
                     </button>
@@ -200,7 +200,7 @@ export default function CatalogPage({ query: q }) {
 
   // The category row carries its own state; chips list only the filters set elsewhere.
   const chips = [];
-  if (f.q.trim()) chips.push(['q', `Từ khóa: "${f.q.trim()}"`]);
+  if (f.q.trim()) chips.push(['q', `Từ khoá: "${f.q.trim()}"`]);
   if (f.level !== 'all') chips.push(['level', `Trình độ: ${label(LEVELS, f.level)}`]);
   if (f.price !== 'all') chips.push(['price', `Giá: ${f.price === 'free' ? 'Miễn phí' : 'Trả phí'}`]);
   const filtering = chips.length > 0 || f.cat !== 'all';
@@ -223,7 +223,7 @@ export default function CatalogPage({ query: q }) {
         <div className="cm-bar-controls">
           <FilterSelect name="level" label="Trình độ" aria="Lọc theo trình độ" value={f.level} options={LEVELS} onChange={(k, v) => update({ [k]: v })} />
           <FilterSelect name="price" label="Giá" aria="Lọc theo học phí" value={f.price} options={PRICES} onChange={(k, v) => update({ [k]: v })} />
-          <FilterSelect name="sort" label="Sắp xếp" aria="Sắp xếp danh sách khóa học" value={f.sort} options={SORTS} onChange={(k, v) => update({ [k]: v })} />
+          <FilterSelect name="sort" label="Sắp xếp" aria="Sắp xếp danh sách khoá học" value={f.sort} options={SORTS} onChange={(k, v) => update({ [k]: v })} />
         </div>
       </div>
       {filtering && (
@@ -236,8 +236,8 @@ export default function CatalogPage({ query: q }) {
       )}
       {!loaded ? <CatalogSkeleton /> : !courses ? (
         <div className="card">
-          <Empty icon="alert-circle" title="Không tải được danh sách khóa học"
-            body={<span role="alert">Không thể tải khóa học. Vui lòng thử lại. Kết nối bị gián đoạn. Bộ lọc của bạn vẫn được giữ.</span>}
+          <Empty icon="alert-circle" title="Không tải được danh sách khoá học"
+            body={<span role="alert">Không thể tải khoá học. Vui lòng thử lại. Kết nối bị gián đoạn. Bộ lọc của bạn vẫn được giữ.</span>}
             actions={<button type="button" className="btn btn-secondary" onClick={() => reload()}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />
         </div>
       ) : list.length ? (
@@ -247,10 +247,10 @@ export default function CatalogPage({ query: q }) {
         </section>
       ) : (
         <div className="card">
-          <Empty icon="search" title="Không tìm thấy khóa học phù hợp" body="Thử bỏ bớt bộ lọc, hoặc mô tả mục tiêu để AI Codi gợi ý khóa học."
+          <Empty icon="search" title="Không tìm thấy khoá học phù hợp" body="Thử bỏ bớt bộ lọc, hoặc mô tả mục tiêu để AI Codi gợi ý khoá học."
             actions={<>
               <button type="button" className="btn btn-secondary" onClick={reset}>Đặt lại bộ lọc</button>
-              <Link className="btn btn-primary" to={`/ai?prompt=${encodeURIComponent('Gợi ý khóa học ' + (f.q.trim() || catName || 'Tất cả'))}`}><Icon name="sparkles" /> Hỏi AI Codi gợi ý khóa học</Link>
+              <Link className="btn btn-primary" to={`/ai?prompt=${encodeURIComponent('Gợi ý khoá học ' + (f.q.trim() || catName || 'Tất cả'))}`}><Icon name="sparkles" /> Hỏi AI Codi gợi ý khoá học</Link>
             </>} />
         </div>
       )}

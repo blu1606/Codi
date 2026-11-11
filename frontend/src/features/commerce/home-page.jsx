@@ -13,10 +13,10 @@ import { levelLabel, useCatalog } from './commerce-api';
 
 const fmt = Codi.fmt;
 
-const STATS = [['Lộ trình', 'Theo mục tiêu học tập'], ['Khóa học', 'Khám phá chủ đề lập trình'], ['Trợ lý AI', 'Hỗ trợ học tập']];
+const STATS = [['Lộ trình', 'Theo mục tiêu học tập'], ['Khoá học', 'Khám phá chủ đề lập trình'], ['Trợ lý AI', 'Hỗ trợ học tập']];
 const FEATURES = [
   { icon: 'route', title: 'Lộ trình cá nhân hóa', text: 'Trực quan hóa kế hoạch học tập độc bản cho riêng trình độ và quỹ thời gian của bạn.', highlighted: true },
-  { icon: 'book-open', title: 'Khóa học chuyên sâu', text: 'Học qua các dự án thực tế được xây dựng bởi đội ngũ chuyên gia công nghệ hàng đầu.' },
+  { icon: 'book-open', title: 'Khoá học chuyên sâu', text: 'Học qua các dự án thực tế được xây dựng bởi đội ngũ chuyên gia công nghệ hàng đầu.' },
   { icon: 'message-circle', title: 'AI Mentor 24/7', text: 'Hỏi đáp lập trình tức thì mọi lúc mọi nơi, giải thích bug chi tiết từng dòng code.' },
   { icon: 'terminal', title: 'Thực hành trực tiếp', text: 'Trình biên dịch tích hợp trên trình duyệt giúp bạn viết code và kiểm thử ngay lập tức.' },
 ];
@@ -25,8 +25,8 @@ const BENEFITS = [
   ['Phát hiện lỗi logic & gợi ý sửa đổi', 'Cùng tìm lỗi, hiểu nguyên nhân và cải thiện cách viết code của bạn.'],
 ];
 const FOOTER_GROUPS = [
-  ['Nền tảng', [['Lộ trình học tập', '/ai'], ['Danh sách khóa học', '/courses'], ['Trang học tập', '/dashboard'], ['AI Mentor', '#home-mentor']]],
-  ['Tài nguyên', [['Khám phá công nghệ', '/courses'], ['Tư vấn chọn khóa học', '/ai'], ['Tính năng Codi', '#home-features-title'], ['Hồ sơ học tập', '/profile']]],
+  ['Nền tảng', [['Lộ trình học tập', '/ai'], ['Danh sách khoá học', '/courses'], ['Trang học tập', '/dashboard'], ['AI Mentor', '#home-mentor']]],
+  ['Tài nguyên', [['Khám phá công nghệ', '/courses'], ['Tư vấn chọn khoá học', '/ai'], ['Tính năng Codi', '#home-features-title'], ['Hồ sơ học tập', '/profile']]],
   ['Hỗ trợ', [['Hỏi đáp cùng AI', '/ai'], ['Quản lý tài khoản', '/profile'], ['Đăng nhập', '/login'], ['Khôi phục mật khẩu', '/forgot-password']]],
 ];
 const FooterLink = ({ to, children }) => (to.startsWith('#') ? <a href={to}>{children}</a> : <Link to={to}>{children}</Link>);
@@ -101,7 +101,7 @@ function PopularCourses({ courses, loading, error, reload }) {
   let body;
   if (!courses && (loading || !error)) {
     body = (
-      <div role="status" aria-label="Đang tải khóa học"><span className="sr-only">Đang tải khóa học…</span>
+      <div role="status" aria-label="Đang tải khoá học"><span className="sr-only">Đang tải khoá học…</span>
         <div className="grid-4" aria-hidden="true">{[1, 2, 3, 4].map((i) => (
           <div key={i} className="card card-body stack-3"><div className="skeleton" style={{ aspectRatio: '16 / 9' }} /><div className="skeleton skeleton-line" style={{ width: '30%' }} /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line" style={{ width: '50%' }} /></div>
         ))}</div>
@@ -110,7 +110,7 @@ function PopularCourses({ courses, loading, error, reload }) {
   } else if (!courses) {
     body = (
       <div className="card card-body cm-home-state">
-        <p role="alert" className="small muted">Không thể tải khóa học. Vui lòng thử lại.</p>
+        <p role="alert" className="small muted">Không thể tải khoá học. Vui lòng thử lại.</p>
         <button type="button" className="btn btn-secondary" onClick={() => reload()}>Thử lại</button>
       </div>
     );
@@ -118,7 +118,7 @@ function PopularCourses({ courses, loading, error, reload }) {
     body = (
       <div className="card card-body cm-home-state">
         <Icon name="book-open" className="icon-lg" />
-        <p role="status" className="small muted">Các khóa học sẽ sớm được cập nhật. Hãy quay lại sau nhé!</p>
+        <p role="status" className="small muted">Các khoá học sẽ sớm được cập nhật. Hãy quay lại sau nhé!</p>
       </div>
     );
   } else {
@@ -128,10 +128,10 @@ function PopularCourses({ courses, loading, error, reload }) {
     <section className="section cm-home-section" aria-labelledby="home-courses-title">
       <div className="cm-home-head">
         <div className="stack-2">
-          <h2 id="home-courses-title">Khóa học phổ biến nhất</h2>
-          <p className="muted">Khám phá các khóa học được nhiều học viên lựa chọn nhất.</p>
+          <h2 id="home-courses-title">Khoá học phổ biến nhất</h2>
+          <p className="muted">Khám phá các khoá học được nhiều học viên lựa chọn nhất.</p>
         </div>
-        <Link className="cm-home-link" to="/courses">Xem tất cả khóa học <Icon name="arrow-right" className="icon-sm" /></Link>
+        <Link className="cm-home-link" to="/courses">Xem tất cả khoá học <Icon name="arrow-right" className="icon-sm" /></Link>
       </div>
       {body}
     </section>
@@ -152,10 +152,10 @@ export default function HomePage() {
         <section className="cm-hero" aria-labelledby="home-hero-title">
           <div className="cm-hero-copy">
             <h1 id="home-hero-title">Học đúng thứ bạn cần, theo thứ tự hợp lý với bạn</h1>
-            <p className="muted cm-lede">Học lập trình thông minh hơn với trợ lý AI, đa dạng các khóa học từ cơ bản đến nâng cao, thực hành code trực tiếp và lộ trình học cá nhân hóa hoàn hảo.</p>
+            <p className="muted cm-lede">Học lập trình thông minh hơn với trợ lý AI, đa dạng các khoá học từ cơ bản đến nâng cao, thực hành code trực tiếp và lộ trình học cá nhân hóa hoàn hảo.</p>
             <div className="cm-hero-actions">
               <Link className="btn btn-primary btn-lg" to="/dashboard">Bắt đầu học ngay</Link>
-              <Link className="btn btn-secondary btn-lg" to="/courses">Khám phá khóa học</Link>
+              <Link className="btn btn-secondary btn-lg" to="/courses">Khám phá khoá học</Link>
             </div>
             <dl className="cm-hero-stats">
               {STATS.map(([v, l]) => <div key={v}><dt>{v}</dt><dd>{l}</dd></div>)}
@@ -198,9 +198,9 @@ export default function HomePage() {
           <img src="/images/hero-learner.webp" width="1200" height="800" alt="" loading="lazy" decoding="async" />
           <div className="stack-3">
             <h2 id="home-close-title">Bắt đầu từ bài học đầu tiên</h2>
-            <p className="muted">Chọn một khóa học, xem đề cương và đăng ký. Lộ trình sẽ bắt đầu từ bài đầu tiên của bạn.</p>
+            <p className="muted">Chọn một khoá học, xem đề cương và đăng ký. Lộ trình sẽ bắt đầu từ bài đầu tiên của bạn.</p>
             <div className="cm-hero-actions">
-              <Link className="btn btn-primary btn-lg" to="/courses">Xem khóa học</Link>
+              <Link className="btn btn-primary btn-lg" to="/courses">Xem khoá học</Link>
               <Link className="btn btn-secondary btn-lg" to="/ai">Hỏi AI Codi</Link>
             </div>
           </div>

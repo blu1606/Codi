@@ -2,7 +2,7 @@
  * /profile — port of the real app's app/profile/page.tsx, profile-view.tsx, profile-tabs.ts and
  * components/profile/profile-card.tsx, avatar-picker.tsx, student-profile-overview.tsx (incl. ProfileStats).
  *
- * Tabs: Tổng quan (activity heatmap with year switch + courses), Khóa học, Giao dịch, Hồ sơ năng lực (learners
+ * Tabs: Tổng quan (activity heatmap with year switch + courses), Khoá học, Giao dịch, Hồ sơ năng lực (learners
  * only; others fall back to the overview).
  *
  * Backend: GET /api/student/profile (enrolments with progress) and GET /api/student/profile/summary?year=
@@ -24,7 +24,7 @@ import { useMounted } from './auth';
 
 const PROFILE_TABS = [
   { id: 'overview', label: 'Tổng quan', learnerOnly: false },
-  { id: 'courses', label: 'Khóa học', learnerOnly: false },
+  { id: 'courses', label: 'Khoá học', learnerOnly: false },
   { id: 'transactions', label: 'Giao dịch', learnerOnly: false },
   { id: 'nang-luc', label: 'Hồ sơ năng lực', learnerOnly: true },
 ];
@@ -228,8 +228,8 @@ function ActivityHeatmap({ currentDays }) {
 function CoursesCard({ courses }) {
   return (
     <div className="card"><div className="card-body stack-4">
-      <h2 className="row" style={{ gap: 8, fontSize: 'var(--text-lg)', margin: 0 }}><Icon name="book-open" className="icon-sm" /> Khóa học của tôi</h2>
-      {!courses.length ? <p className="small muted">Bạn chưa đăng ký khóa học nào.</p> : (
+      <h2 className="row" style={{ gap: 8, fontSize: 'var(--text-lg)', margin: 0 }}><Icon name="book-open" className="icon-sm" /> Khoá học của tôi</h2>
+      {!courses.length ? <p className="small muted">Bạn chưa đăng ký khoá học nào.</p> : (
         <div className="grid-2">
           {courses.map((c) => (
             <div key={c.id} className="shell-course stack-3">

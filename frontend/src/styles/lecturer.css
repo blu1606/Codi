@@ -148,14 +148,14 @@ a.step-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .tc-mat { flex-wrap: wrap; }
 .tc-mat-notes { flex-basis: 100%; color: var(--fg); }
 .tc-mat-notes:empty { display: none; }
-.tc-notes { display: grid; gap: var(--space-2); color: var(--fg); }
-.tc-notes > summary { list-style: none; cursor: pointer; width: fit-content; border-radius: var(--radius-sm); }
-.tc-notes > summary::-webkit-details-marker { display: none; }
-.tc-notes > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.tc-notes[open] > summary { margin-bottom: var(--space-2); }
-.tc-notes-list { gap: var(--space-2); }
-.tc-note.is-focus { box-shadow: var(--focus-ring); }
+.tc-remarks { display: grid; gap: var(--space-2); color: var(--fg); }
+.tc-remarks > summary { list-style: none; cursor: pointer; width: fit-content; border-radius: var(--radius-sm); }
+.tc-remarks > summary::-webkit-details-marker { display: none; }
+.tc-remarks > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tc-remarks[open] > summary { margin-bottom: var(--space-2); }
+.tc-remarks-list { gap: var(--space-2); }
+.tc-remark.is-focus { box-shadow: var(--focus-ring); }
 .tc-lesson-notes { flex-basis: 100%; grid-column: 1 / -1; padding-left: 60px; }
 .tc-lesson-notes:empty { display: none; }
-.tc-lesson-notes .tc-notes-list { max-width: 760px; }
+.tc-lesson-notes .tc-remarks-list { max-width: 760px; }
 @media (max-width: 640px) { .tc-lesson-notes { padding-left: 0; } }

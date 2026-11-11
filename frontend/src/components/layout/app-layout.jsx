@@ -38,10 +38,12 @@ export default function AppLayout({ layout }) {
   return (
     <>
       <a className="sr-only" href="#app-main">Bỏ qua đến nội dung chính</a>
-      <header id="app-header" className="app-header">
-        {layout === 'focus' ? <FocusHeader route={route} /> : <Header />}
-      </header>
-      <main id="app-main" className="app-main" tabIndex={-1}>
+      {layout !== 'reader' && (
+        <header id="app-header" className="app-header">
+          {layout === 'focus' ? <FocusHeader route={route} /> : <Header />}
+        </header>
+      )}
+      <main id="app-main" className={`app-main ${layout === 'reader' ? 'is-reader' : ''}`.trim()} tabIndex={-1}>
         <Outlet />
       </main>
       <OverlayHost />

@@ -66,8 +66,9 @@ export default function App() {
     <>
       <RouterBridge />
       <Routes>
-        {/* Focus layout: header shows only the logo and an exit link (lesson player, onboarding, checkout …) */}
-        {['default', 'focus'].map((layout) => (
+        {/* Focus layout: header shows only the logo and an exit link (onboarding, checkout …).
+            Reader layout: no app header at all; the page draws its own top bar (lesson player). */}
+        {['default', 'focus', 'reader'].map((layout) => (
           <Route key={layout} element={<AppLayout layout={layout} />}>
             {allRoutes.filter((r) => (r.layout || 'default') === layout).map((r) => (
               <Route key={r.path} path={r.path} element={<RouteFrame route={r} />} handle={r} />

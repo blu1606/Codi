@@ -65,7 +65,7 @@ test.describe.serial("Checkout and payment", () => {
     await page.waitForURL(/\/checkout\/success\?order=/, { timeout: 30_000 });
     await expect(page.getByText("Thanh toán thành công!")).toBeVisible();
     await expect(page.getByText(`Đơn ${order} · ${vnd(199000)}`, { exact: false })).toBeVisible();
-    await expect(page.getByText("Bạn đã sở hữu khóa học")).toBeVisible();
+    await expect(page.getByText("Bạn đã sở hữu khoá học")).toBeVisible();
     await evidence(page, testInfo);
     await page.goto(`/courses/${COURSE.git.slug}`);
     await expect(page.getByRole("link", { name: "Tiếp tục học" })).toBeVisible();
@@ -96,7 +96,7 @@ test.describe.serial("Checkout and payment", () => {
     const page = await learnerPage(browser, 3);
     await checkoutGit(page, "Chuyển thừa");
     await page.waitForURL(/\/checkout\/success\?order=/, { timeout: 30_000 });
-    await expect(page.getByText("Bạn đã sở hữu khóa học")).toBeVisible();
+    await expect(page.getByText("Bạn đã sở hữu khoá học")).toBeVisible();
     await evidence(page, testInfo);
   });
 

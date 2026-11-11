@@ -31,6 +31,7 @@ import {
   GENERAL_SYSTEM,
   generalTools,
   lessonTools,
+  retrieveLessonContext,
 } from "@/lib/ai-chat-service";
 import {
   TUTOR_STOPPED_TEXT,
@@ -164,14 +165,16 @@ export async function POST(request: NextRequest) {
     ]
       .filter(Boolean)
       .join("\n");
+    // Lesson answers always start from the course passages closest to the question (RAG); the search tool reaches more.
+    const retrieved = scope ? await retrieveLessonContext(db, scope, question) : null;
     const system = scope
-      ? tutorSystemPrompt({
+      ? [tutorSystemPrompt({
           turn: hint
             ? { type: "hint", level: hint.level }
             : { type: "ask", mode: body.lesson?.mode ?? "simple" },
           lesson: scope.lesson,
           context: attached,
-        })
+        }), retrieved?.note].filter(Boolean).join("\n\n")
       : `${GENERAL_SYSTEM}${session?.user ? `\nHọc viên: ${session.user.name}` : ""}${profile ? `\n${profile}` : ""}\nĐang hỏi về: ${body.context.kind === "general" ? body.context.label : "Codi"}`;
 
     const started = Date.now();
@@ -206,6 +209,7 @@ export async function POST(request: NextRequest) {
           ? {
               createdAt: new Date().toISOString(),
               ...(hint ? { hint: hint.level } : {}),
+              ...(retrieved?.hits.length ? { retrieved: retrieved.hits } : {}),
             }
           : undefined,
       onError: () => UNAVAILABLE,

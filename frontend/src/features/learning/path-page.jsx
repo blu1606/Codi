@@ -16,6 +16,15 @@ import { Departures, LessonTable, LineAlerts, StepDetail, buildLines, kindLabel 
 import { TransitFrame } from './path-transit';
 import './path-transit.css';
 
+// Map or lesson list, remembered per browser (a convenience; it falls back to the map).
+const PATH_LAYOUT_KEY = 'codi-path-layout';
+function readPathLayout() {
+  try { return localStorage.getItem(PATH_LAYOUT_KEY) === 'list' ? 'list' : 'map'; } catch { return 'map'; }
+}
+function writePathLayout(v) {
+  try { localStorage.setItem(PATH_LAYOUT_KEY, v); } catch { /* storage blocked: lasts for this visit */ }
+}
+
 /** Confirms, opens the goal editor on the backend (goal-edit) and goes to the onboarding. */
 export async function editGoal(courseId) {
   const res = await Codi.ui.confirm({ title: 'Chỉnh mục tiêu học tập?', consequence: 'Codi xếp lại thứ tự các bài chưa học. Bài đã hoàn thành và điểm số giữ nguyên.', reversible: 'Bạn có thể chỉnh lại mục tiêu bất cứ lúc nào.', confirmLabel: 'Chỉnh mục tiêu', cancelLabel: 'Để sau' });
@@ -71,6 +80,8 @@ export default function PathPage({ params }) {
   const [moves, setMoves] = useState([]);
   const [picked, setPicked] = useState(null);
   const [retrying, setRetrying] = useState(false);
+  const [layout, setLayoutState] = useState(readPathLayout);
+  const setLayout = (v) => { setLayoutState(v); writePathLayout(v); };
   const acked = useRef(null);
 
   // Highlights show once (real ack-highlights): kept for this visit, acknowledged on the server.
@@ -139,7 +150,7 @@ export default function PathPage({ params }) {
     <div className="page pt-page">
       <div className="row-between pt-crumbs">
         <nav className="small muted" aria-label="Đường dẫn"><Link to="/dashboard">Trang chủ</Link> / <span aria-current="page">{title}</span></nav>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={review}><Icon name="star" className="icon-sm" /> {view.review ? 'Sửa đánh giá' : 'Đánh giá khóa học'}</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={review}><Icon name="star" className="icon-sm" /> {view.review ? 'Sửa đánh giá' : 'Đánh giá khoá học'}</button>
       </div>
 
       <header className="pt-title">
@@ -174,14 +185,22 @@ export default function PathPage({ params }) {
 
       {rows.length ? (
         <>
+          {/* One view of the path at a time: the map or the lesson list; the side panels stay beside either. */}
+          <div className="pt-view-switch">
+            <div className="segmented" role="group" aria-label="Cách xem lộ trình">
+              <button type="button" aria-pressed={layout === 'map'} onClick={() => setLayout('map')}><Icon name="map" className="icon-sm" /> Sơ đồ</button>
+              <button type="button" aria-pressed={layout === 'list'} onClick={() => setLayout('list')}><Icon name="list" className="icon-sm" /> Danh sách bài</button>
+            </div>
+          </div>
           <div className="pt-grid">
-            <TransitFrame lines={lines} rows={rows} currentId={cur} onOpen={setPicked} />
+            {layout === 'map'
+              ? <TransitFrame lines={lines} rows={rows} currentId={cur} onOpen={setPicked} />
+              : <LessonTable c={c} r={r} lines={lines} rows={rows} currentId={cur} highlight={highlight} onOpen={setPicked} />}
             <div className="pt-side">
               <Departures c={c} r={r} rows={rows} lines={lines} currentId={cur} onOpen={setPicked} />
               <LineAlerts c={c} rows={rows} lines={lines} moves={allMoves} onSeen={() => setMoves([])} onOpen={setPicked} />
             </div>
           </div>
-          <LessonTable c={c} r={r} lines={lines} rows={rows} currentId={cur} highlight={highlight} onOpen={setPicked} />
         </>
       ) : <div className="card"><Empty icon="book-open" title="Khoá học chưa có bài học được xuất bản." /></div>}
 

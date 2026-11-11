@@ -20,7 +20,7 @@ const ROLE_VIEW = { lecturer: 'giảng viên', admin: 'quản trị viên' };
 
 /** What the AI path does for a learner of this course (product positioning: ordered, explained, never silent). */
 const AI_STEPS = [
-  ['route', 'Đúng thứ tự tiên quyết', 'Lộ trình sắp xếp các bài theo thứ tự tiên quyết của khóa học.'],
+  ['route', 'Đúng thứ tự tiên quyết', 'Lộ trình sắp xếp các bài theo thứ tự tiên quyết của khoá học.'],
   ['sparkles', 'Có lý do cho từng bước', 'Trợ lý AI nêu lý do cho mỗi bài trong lộ trình, để bạn hiểu vì sao học bài này trước.'],
   ['check', 'Bạn quyết định', 'Lộ trình chỉ đổi khi bạn đồng ý. Mọi điều chỉnh đều được nêu rõ trước khi áp dụng.'],
 ];
@@ -66,8 +66,12 @@ function PurchaseCard({ course: c, own, pendingOrderId }) {
     <div className="card cm-card cm-buy">
       <div className="cm-card-media" aria-hidden="true"><Thumb course={c} /></div>
       <div className="card-body stack-4">
-        <h2 className="h-card">Đăng ký khóa học</h2>
-        <div className="stack-1"><span className="small muted">Học phí khóa học</span><span className="price cm-price-lg">{priceLabel(c)}</span></div>
+        {own === 'owned' && role === 'learner' ? (
+          <h2 className="h-card row" style={{ gap: 8 }}><Icon name="check-circle" className="text-success" /> Bạn đã sở hữu khoá học</h2>
+        ) : (<>
+          <h2 className="h-card">Đăng ký khoá học</h2>
+          <div className="stack-1"><span className="small muted">Học phí khoá học</span><span className="price cm-price-lg">{priceLabel(c)}</span></div>
+        </>)}
         {cta}
         <dl className="cm-facts">
           <div><dt>Trình độ</dt><dd>{levelLabel(c.level)}</dd></div>
@@ -86,7 +90,7 @@ function DetailError({ notFound, onRetry }) {
   return (
     <div className="page page-narrow"><div className="card">
       <Empty icon="book-open" title={notFound ? 'Không tìm thấy khoá học' : 'Chưa thể tải khoá học'}
-        body={<span role="alert">{notFound ? 'Không tìm thấy khóa học.' : 'Không thể tải khóa học. Vui lòng thử lại.'}</span>}
+        body={<span role="alert">{notFound ? 'Không tìm thấy khoá học.' : 'Không thể tải khoá học. Vui lòng thử lại.'}</span>}
         actions={<>
           {!notFound && <button type="button" className="btn btn-primary" onClick={onRetry}><Icon name="refresh" className="icon-sm" /> Thử lại</button>}
           <Link className="btn btn-secondary" to="/courses">Xem danh sách khoá học</Link>
@@ -162,7 +166,7 @@ export default function CourseDetailPage({ params }) {
             <li><Icon name="user" className="icon-sm" /> {lec ? lec.name : ''}</li>
           </ul>
         </header>
-        <aside className="cm-detail-aside" aria-label="Đăng ký khóa học"><PurchaseCard course={c} own={own} pendingOrderId={ownership.pendingOrderId(c.id)} /></aside>
+        <aside className="cm-detail-aside" aria-label="Đăng ký khoá học"><PurchaseCard course={c} own={own} pendingOrderId={ownership.pendingOrderId(c.id)} /></aside>
         <div className="stack-6 cm-detail-main">
           <section className="stack-3" aria-labelledby="detail-outcomes-title">
             <h2 id="detail-outcomes-title">Bạn sẽ học được gì?</h2>
@@ -172,7 +176,7 @@ export default function CourseDetailPage({ params }) {
           </section>
 
           <section className="stack-3" aria-labelledby="detail-ai-title">
-            <h2 id="detail-ai-title">Trợ lý AI làm gì cho khóa học này?</h2>
+            <h2 id="detail-ai-title">Trợ lý AI làm gì cho khoá học này?</h2>
             <ol className="cm-ai-path">{AI_STEPS.map(([icon, t, d], i) => (
               <li key={t}><span className="cm-ai-step" aria-hidden="true">{i + 1}</span><div className="stack-1"><h3 className="cm-ai-title"><Icon name={icon} className="icon-sm" /> {t}</h3><p className="small muted">{d}</p></div></li>
             ))}</ol>
@@ -214,7 +218,7 @@ export default function CourseDetailPage({ params }) {
           </section>
 
           <section className="stack-3" aria-labelledby="detail-curriculum-title">
-            <div className="row-between"><h2 id="detail-curriculum-title">Nội dung khóa học</h2>
+            <div className="row-between"><h2 id="detail-curriculum-title">Nội dung khoá học</h2>
               {c.chapters.length > 0 && (
                 <div className="row">
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => expand(true)}>Mở rộng tất cả</button>
