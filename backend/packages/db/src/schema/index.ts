@@ -17,4 +17,6 @@ export * from "./ai-tutor";
 export * from "./ai-chat";
 export * from "./github-profile";
 export * from "./ai-jobs";
+export * from "./course-knowledge";
+export * from "./classroom";
 export {};

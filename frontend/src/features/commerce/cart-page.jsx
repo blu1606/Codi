@@ -93,7 +93,7 @@ export default function CartPage() {
     setRemoved({ id: c.id, title: c.title }); setUndoLeft(UNDO_SECONDS);
     cart.setData((d) => (d ? { ...d, items: d.items.filter((x) => x.id !== c.id) } : d));
     cart.reload(); cartChanged();
-    Codi.ui.toast(`Đã xoá "${c.title}" khỏi giỏ hàng`, { duration: UNDO_SECONDS * 1000, action: { label: 'Hoàn tác', onClick: () => undo(c.id) } });
+    // The in-page notice above the list carries the undo (with its countdown); no second toast for the same action.
   };
   const applyVoucher = async (e) => {
     e.preventDefault();

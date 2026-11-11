@@ -38,6 +38,7 @@ import {
 } from "./ai-chat-contract";
 import { clip, sanitizeDiff, suggestChangeInput } from "./ai-tutor-contract";
 import type { TutorScope } from "./ai-tutor-service";
+import { searchCourseKnowledge } from "./course-knowledge";
 
 type Row = typeof aiChats.$inferSelect;
 const lessonHref = (courseId: string, lessonId: string) =>
@@ -295,6 +296,31 @@ export function createAiChatService(db: Database) {
 const words = (query: string) =>
   [...new Set(query.toLowerCase().match(/[\p{L}\p{N}+#.]{2,}/gu) ?? [])].slice(0, 6);
 
+/** Course chunks closest to `query` as source hits, or null when the course is not indexed / search is off. */
+async function semanticCourseHits(db: Database, courseId: string, query: string, limit = 5): Promise<MaterialHit[] | null> {
+  const hits = await searchCourseKnowledge(db, courseId, query, limit);
+  return hits?.map((hit) => ({
+    title: hit.sourceTitle,
+    chapter: hit.chapter,
+    href: lessonHref(courseId, hit.lessonId),
+    excerpt: clip(hit.content, 600).text,
+  })) ?? null;
+}
+
+/**
+ * Read before every lesson answer: the course passages closest to the question, for the system prompt (`note`) and
+ * for the answer's "thinking steps" (`hits`, kept in the message metadata).
+ */
+export async function retrieveLessonContext(db: Database, scope: TutorScope, question: string) {
+  const hits = (await semanticCourseHits(db, scope.courseId, question, 4)) ?? [];
+  const note = hits.length
+    ? `Tài liệu liên quan trong học phần (tự động trích theo câu hỏi; dùng khi phù hợp và dẫn nguồn bằng link Markdown):\n${hits
+        .map((hit, i) => `${i + 1}. [${hit.title}](${hit.href})${hit.chapter ? ` — ${hit.chapter}` : ""}\n${hit.excerpt}`)
+        .join("\n\n")}`
+    : "";
+  return { hits, note };
+}
+
 /** In-lesson tutor (S11a): the open lesson is in the prompt; these reach the rest of the enrolled course. */
 export function lessonTools(
   db: Database,
@@ -304,11 +330,14 @@ export function lessonTools(
   const tools = {
     search_course_material: tool({
       description:
-        "Tìm trong các bài đã xuất bản của học phần học viên đang học (tiêu đề, mô tả, nội dung). Dùng khi câu hỏi liên quan bài khác hoặc cần dẫn nguồn.",
+        "Tìm theo ngữ nghĩa trong học phần học viên đang học: nội dung bài, tài liệu PDF/slide (kể cả chữ OCR) và lời giảng video. Dùng khi câu hỏi liên quan bài khác, nội dung trong tài liệu/video, hoặc cần dẫn nguồn.",
       inputSchema: z.object({
-        query: z.string().min(2).max(200).describe("Từ khoá cần tìm, tiếng Việt hoặc thuật ngữ."),
+        query: z.string().min(2).max(200).describe("Câu hỏi hoặc từ khoá cần tìm, tiếng Việt hoặc thuật ngữ."),
       }),
       execute: async ({ query }): Promise<{ hits: MaterialHit[] }> => {
+        const semantic = await semanticCourseHits(db, scope.courseId, query);
+        if (semantic) return { hits: semantic };
+        // Not indexed yet (or no embedding key): keyword search over the lesson text.
         const terms = words(query);
         if (!terms.length) return { hits: [] };
         const match = or(

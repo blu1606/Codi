@@ -169,6 +169,24 @@ function NavDrawer({ open, onClose, adminCounts }) {
   );
 }
 
+/** The avatar + account popover on its own, for pages that draw their own top bar (lesson player). */
+export function AccountMenu() {
+  useCodi();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onClick = (e) => { if (!e.target.closest('.popover-anchor')) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const u = accountUser();
+  return u ? <UserMenu u={u} open={open} onToggle={() => setOpen((v) => !v)} onClose={() => setOpen(false)} /> : null;
+}
+
 export default function Header() {
   useCodi();
   const location = useLocation();

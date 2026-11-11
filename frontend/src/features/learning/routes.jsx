@@ -17,7 +17,7 @@ const routes = [
   { path: '/learn/:courseId/onboarding', element: OnboardingPage, title: 'Thiết lập lộ trình', role: 'learner', layout: 'focus', exit: { href: '/dashboard', label: 'Để sau' } },
   { path: '/learn/:courseId', element: PathPage, title: 'Lộ trình học', role: 'learner' },
   { path: '/learn/:courseId/path-update', element: PathUpdatePage, title: 'Cập nhật lộ trình', role: 'learner' },
-  { path: '/learn/:courseId/:lessonId', element: LessonPlayerPage, title: 'Bài học', role: 'learner' },
+  { path: '/learn/:courseId/:lessonId', element: LessonPlayerPage, title: 'Bài học', role: 'learner', layout: 'reader' },
   { path: '/progress', element: ProgressPage, title: 'Kết quả học tập', role: 'learner' },
   { path: '/insights/stats', element: StatsRedirect, title: 'Kết quả học tập', role: 'learner' },
   { path: '/insights/knowledge-map', element: MapRedirect, title: 'Kết quả học tập', role: 'learner' },

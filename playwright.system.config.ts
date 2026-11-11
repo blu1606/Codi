@@ -6,10 +6,13 @@ import { defineConfig, devices } from "@playwright/test";
 //   npm start                                  (web on http://localhost:3001, demo tools on)
 //   npx playwright test -c playwright.system.config.ts
 // Global setup recreates the loadtest+NNN@codi.test learners, so every run starts from the same state.
+// For a live demo, SLOW_MO=<ms> pauses before every browser action (e.g. SLOW_MO=500 ... --headed); timeouts grow to match.
+const slowMo = Number(process.env.SLOW_MO) || 0;
+
 export default defineConfig({
   testDir: "e2e/system",
   globalSetup: "./e2e/system/global-setup.ts",
-  timeout: 60_000,
+  timeout: slowMo ? 300_000 : 60_000,
   expect: { timeout: 15_000 },
   retries: 0,
   workers: 1,
@@ -21,6 +24,7 @@ export default defineConfig({
     viewport: { width: 1366, height: 900 },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    launchOptions: { slowMo },
   },
   projects: [{ name: "chrome", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 } } }],
 });

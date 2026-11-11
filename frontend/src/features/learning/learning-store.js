@@ -31,7 +31,7 @@ export const TYPE_ICON = { video: 'video', pdf: 'presentation', reading: 'book-o
 export const TYPE_LABEL = { video: 'Video', pdf: 'PDF', reading: 'Bài đọc', tutorial: 'Hướng dẫn code', code: 'Bài code', quiz: 'Quiz', slide: 'Slide', document: 'Tài liệu', link: 'Liên kết' };
 export const GOALS = [
   ['project', 'Làm được dự án', 'Ưu tiên bài thực hành và dự án cuối khoá.'],
-  ['finish', 'Hoàn thành khóa học', 'Học đủ mọi bài theo thứ tự khoá học.'],
+  ['finish', 'Hoàn thành khoá học', 'Học đủ mọi bài theo thứ tự khoá học.'],
   ['interview', 'Chuẩn bị phỏng vấn', 'Ưu tiên khái niệm cốt lõi hay được hỏi.'],
 ];
 export const LEVELS = [

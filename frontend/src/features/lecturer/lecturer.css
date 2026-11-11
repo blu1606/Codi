@@ -7,7 +7,7 @@
 .tc-lessons { padding: var(--space-2); }
 .tc-lesson { display: flex; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); flex-wrap: wrap; }
 .tc-lesson:hover { background: var(--canvas); }
-.tc-grip { cursor: grab; color: var(--faint); display: inline-grid; }
+.tc-drag { cursor: grab; color: var(--faint); display: inline-grid; }
 .tc-type { width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--subtle); display: grid; place-items: center; color: var(--muted); flex: none; }
 .tc-row-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
 /* Lesson rows keep fixed action slots so every row lines up: text links left, icon tools right. */
@@ -18,25 +18,30 @@
 .tc-row-links .btn:hover, .tc-row-tools .btn:hover:not(:disabled), .tc-ch-actions .btn:hover:not(:disabled) { color: var(--fg); }
 .tc-row-tools .tc-del:hover, .tc-ch-actions .tc-del:hover { color: var(--danger); background: var(--danger-soft); }
 .tc-ch-actions { gap: 0; }
-/* Timetable (from 1180 px): one column rhythm for every chapter; below it the same row wraps into stacked cells. */
+/* Timetable: one column rhythm for every chapter once the content column itself is wide enough (container query, so
+   the lecturer sidebar is accounted for); narrower, the same row wraps into stacked cells. */
+.tc-content { container-type: inline-size; }
 .tc-cols, .tc-lesson { column-gap: var(--space-3); align-items: center; }
 .tc-cols { display: none; }
 .tc-cols > span { font-weight: 600; }
 .tc-no { color: var(--muted); font-size: var(--text-sm); }
 .tc-lesson-main { min-width: 0; flex: 1 1 240px; }
+/* basis 0 keeps a long title beside its type icon instead of wrapping below it */
+.tc-title { flex: 1 1 0; min-width: 8ch; }
 .tc-cell { min-width: 0; }
 .tc-dur { white-space: nowrap; }
-.tc-ok { color: var(--success); font-weight: 600; }
+.tc-pass { color: var(--success); font-weight: 600; }
 .tc-mark { justify-self: start; }
+.tc-mark .badge { white-space: normal; }
 .tc-lesson + .tc-lesson { border-top: 1px solid var(--border); }
-@media (min-width: 1180px) {
-  .tc-cols, .tc-lesson { display: grid; grid-template-columns: 16px 44px minmax(0, 1fr) 96px 64px 150px 128px 232px; }
+@container (min-width: 1040px) {
+  .tc-cols, .tc-lesson { display: grid; grid-template-columns: 16px 44px minmax(0, 1fr) 96px 64px 150px 168px 232px; }
   .tc-cols { padding: var(--space-2) calc(var(--space-2) + var(--space-3)); border-bottom: 1px solid var(--border); }
   .tc-lesson { flex-wrap: nowrap; }
   .tc-lesson .tc-row-actions { justify-self: end; }
   .tc-lesson-main { flex: none; }
 }
-@media (max-width: 1179px) {
+@container (max-width: 1039.98px) {
   .tc-lesson .tc-row-actions { flex-basis: 100%; justify-content: space-between; padding-left: calc(16px + 44px + var(--space-3) * 2); }
 }
 .tc-reader.is-blocked { border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
@@ -86,7 +91,7 @@
 .tc-state-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--warn); }
 @media (max-width: 1100px) { .tc-dock { position: static; max-height: none; overflow: visible; } }
 .tc-reply { margin-left: var(--space-4); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--subtle); }
-@media (max-width: 640px) { .tc-chapter .tc-grip, .tc-lesson .tc-grip { display: none; } }
+@media (max-width: 640px) { .tc-chapter .tc-drag, .tc-lesson .tc-drag { display: none; } }
 /* Quiz options: border/padding reset only, so the parent stack still spaces the fieldset. */
 .tc-opts { border: 0; padding: 0; min-width: 0; }
 .tc-opts > legend { padding: 0; }

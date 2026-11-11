@@ -114,7 +114,7 @@ export function QuestionsPage({ query }) {
     const messages = sel.messages || [];
     detail = (
       <section className="card">
-        <div className="card-header"><div className="stack-1" style={{ minWidth: 0 }}><span className="xsmall muted od-truncate">{sel.courseTitle || ''} › {sel.lessonTitle || 'Khóa học'}</span>
+        <div className="card-header"><div className="stack-1" style={{ minWidth: 0 }}><span className="xsmall muted od-truncate">{sel.courseTitle || ''} › {sel.lessonTitle || 'Khoá học'}</span>
           <span className="row"><Avatar user={u} size="sm" /><span className="stack-1"><strong className="small">{u.name}</strong><span className="xsmall muted">{fmt.relative(sel.createdAt)}</span></span></span></div>
           <span className={`badge ${resolved ? 'badge-success' : 'badge-warn'}`}>{resolved ? 'Đã giải quyết' : 'Đang mở'}</span></div>
         <div className="card-body stack-4">

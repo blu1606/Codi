@@ -10,7 +10,7 @@ import { InsightsPage, InsightsDetailPage, FinancePage, FinanceDetailPage } from
 const routes = [
   { path: '/admin', element: DashboardPage, title: 'Quản trị', role: 'admin' },
   { path: '/admin/publication', element: PublicationPage, title: 'Duyệt xuất bản', role: 'admin' },
-  { path: '/admin/courses', element: CoursesPage, title: 'Khóa học đã xuất bản', role: 'admin' },
+  { path: '/admin/courses', element: CoursesPage, title: 'Khoá học đã xuất bản', role: 'admin' },
   { path: '/admin/users', element: UsersPage, title: 'Người dùng', role: 'admin' },
   { path: '/admin/orders', element: OrdersPage, title: 'Đơn hàng & giao dịch', role: 'admin' },
   { path: '/admin/vouchers', element: VouchersPage, title: 'Voucher', role: 'admin' },

@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-11-03T16:05:38.998Z",
         "reason": "agent: HTML email uses the same system font stack as the existing auth OTP emails; web fonts are unreliable in mail clients"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "frontend/src/styles/ai.css"
+        ],
+        "createdAt": "2026-11-11T05:49:51.524Z",
+        "reason": "Claude triage: L141 is the markdown blockquote's 2px neutral (--border-strong) rule, standard quote styling, not a colored card accent; pre-existing, not from this session"
       }
     ]
   }

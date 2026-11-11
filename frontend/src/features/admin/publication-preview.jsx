@@ -56,7 +56,7 @@ function CoursePage({ env, d, onNode }) {
       {at('summary', <p>{c.summary || <span className="muted">Chưa có mô tả.</span>}</p>)}
       {at('outcomes', <div className="stack-2"><h3 className="tc-h">Bạn sẽ học được gì</h3>{d.details.learningOutcomes.length ? <ul className="small">{d.details.learningOutcomes.map((o, i) => <li key={i}>{o}</li>)}</ul> : <p className="small muted">Chưa có.</p>}</div>)}
       {at('requirements', <div className="stack-2"><h3 className="tc-h">Yêu cầu trước khi học</h3><ul className="small">{(d.details.requirements.length ? d.details.requirements : ['Không có yêu cầu đặc biệt.']).map((x, i) => <li key={i}>{x}</li>)}</ul></div>)}
-      <div className="stack-2"><h3 className="tc-h">Nội dung khóa học</h3>
+      <div className="stack-2"><h3 className="tc-h">Nội dung khoá học</h3>
         {c.chapters.map((chp, i) => (
           <Anchor key={chp.id} env={env} target={{ type: 'chapter', itemId: chp.id, label: `Chương ${i + 1}: ${chp.title}` }}
             changed={ch && (ch.chapters.added.includes(chp.id) ? 'Chương mới' : ch.chapters.renamed.includes(chp.id) ? 'Đổi tên' : false)}>

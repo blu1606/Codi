@@ -1,0 +1,1 @@
+ALTER TABLE "lesson_materials" ADD COLUMN "transcript" jsonb;

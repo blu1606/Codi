@@ -78,7 +78,7 @@ const INSIGHTS = {
       { label: 'Đăng ký mới', value: t.signups, prev: p.signups, spark: d.daily.map((x) => x.signups) },
       { label: 'Ghi danh mới', value: t.newEnrolments, prev: p.newEnrolments, spark: d.daily.map((x) => x.newEnrolments) },
       { label: 'Bài học hoàn thành', value: t.lessonsCompleted, prev: p.lessonsCompleted, spark: d.daily.map((x) => x.lessonsCompleted) },
-      { label: 'Khóa đang bán', value: d.publishedCourses, compare: false, note: 'Tại thời điểm hiện tại' },
+      { label: 'Khoá đang bán', value: d.publishedCourses, compare: false, note: 'Tại thời điểm hiện tại' },
     ];
     return {
       code: 'A1', title: 'Chỉ số chính', question: 'Nền tảng đang lớn lên hay chững lại?', wide: true,
@@ -88,7 +88,7 @@ const INSIGHTS = {
         ['Đăng ký mới', fmt.num(t.signups), fmt.num(p.signups)],
         ['Ghi danh mới', fmt.num(t.newEnrolments), fmt.num(p.newEnrolments)],
         ['Bài học hoàn thành', fmt.num(t.lessonsCompleted), fmt.num(p.lessonsCompleted)],
-        ['Khóa đang bán (hiện tại)', fmt.num(d.publishedCourses), '—'],
+        ['Khoá đang bán (hiện tại)', fmt.num(d.publishedCourses), '—'],
       ] },
     };
   },
@@ -115,11 +115,11 @@ const INSIGHTS = {
     const s = d.courseStatus;
     const segs = [{ label: 'Bản nháp', value: s.draft, tone: 'neutral' }, { label: 'Chờ duyệt', value: s.pending, tone: 'warning' }, { label: 'Đã xuất bản', value: s.published, tone: 'accent' }, { label: 'Đã ẩn', value: s.hidden, tone: 'slot-3' }, { label: 'Bị từ chối', value: s.rejected, tone: 'critical' }];
     return {
-      code: 'A7', title: 'Khóa học theo trạng thái', question: 'Có khóa nào đang tắc ở khâu duyệt?',
-      body: html`${ch.stacked({ segments: segs, format: fmt.num, keepZero: true, emptyText: 'Chưa có khóa học nào.' })}
+      code: 'A7', title: 'Khoá học theo trạng thái', question: 'Có khoá nào đang tắc ở khâu duyệt?',
+      body: html`${ch.stacked({ segments: segs, format: fmt.num, keepZero: true, emptyText: 'Chưa có khoá học nào.' })}
         ${s.pending ? html`<a class="btn btn-secondary btn-sm" style="margin-top:12px" href="#/admin/publication?tab=pending">Mở hàng chờ duyệt (${s.pending})</a>` : ''}`,
       note: 'Tại thời điểm hiện tại, không theo kỳ.',
-      table: { headers: ['Trạng thái', 'Số khóa'], rows: segs.map((x) => [x.label, fmt.num(x.value)]) },
+      table: { headers: ['Trạng thái', 'Số khoá'], rows: segs.map((x) => [x.label, fmt.num(x.value)]) },
     };
   },
   a8(d) {
@@ -142,10 +142,10 @@ const INSIGHTS = {
     const rows = d.completion.filter((c) => c.learners > 0);
     const rate = (c) => pct(c.completed, c.learners);
     return {
-      code: 'A5', title: 'Tỉ lệ hoàn thành theo khóa', question: 'Khóa nào học viên học tới cùng?', wide: true,
-      body: ch.hbars({ items: rows.map((c) => ({ label: c.title, value: rate(c), max: 100, text: `${P(rate(c))} (${fmt.num(c.completed)}/${fmt.num(c.learners)})` })), format: (v) => P(v), emptyText: 'Chưa có khóa học xuất bản nào có học viên.' }),
+      code: 'A5', title: 'Tỉ lệ hoàn thành theo khoá', question: 'Khoá nào học viên học tới cùng?', wide: true,
+      body: ch.hbars({ items: rows.map((c) => ({ label: c.title, value: rate(c), max: 100, text: `${P(rate(c))} (${fmt.num(c.completed)}/${fmt.num(c.learners)})` })), format: (v) => P(v), emptyText: 'Chưa có khoá học xuất bản nào có học viên.' }),
       note: 'Snapshot ghi danh hiện tại, không theo kỳ.',
-      table: { headers: ['Khóa học', 'Học viên', 'Hoàn thành', 'Tỉ lệ'], rows: rows.map((c) => [c.title, fmt.num(c.learners), fmt.num(c.completed), P(rate(c))]) },
+      table: { headers: ['Khoá học', 'Học viên', 'Hoàn thành', 'Tỉ lệ'], rows: rows.map((c) => [c.title, fmt.num(c.learners), fmt.num(c.completed), P(rate(c))]) },
     };
   },
   a6: () => unavailable('A6', 'Làm bài kiểm tra đầu vào hay học từ bài 1', 'Bao nhiêu học viên mới chọn tìm điểm bắt đầu?', 'Chưa có số liệu: hệ thống chưa ghi nhận lựa chọn học từ bài 1 hay làm bài đầu vào.'),
@@ -217,10 +217,10 @@ const FIN = {
     const rows = d.courses.filter((c) => c.gross > 0 || c.refunds > 0);
     const max = rows.reduce((m, r) => Math.max(m, r.net), 0);
     return {
-      code: 'B3', title: 'Doanh thu theo khóa học', question: 'Nguồn doanh thu đến từ đâu?', wide: true,
-      body: ch.hbars({ items: rows.map((r) => ({ label: r.title, value: r.net, max: max || 1, text: vnd(r.net) })), sort: false, format: (v) => ch.fmt.compact(v), emptyText: 'Không có khóa học nào có doanh thu trong kỳ này.' }),
-      note: 'Giảm giá được chia theo tỉ trọng giá của từng khóa trong đơn, nên tổng khóa có thể lệch vài đồng so với tổng.',
-      table: { headers: ['Khóa học', 'Đơn', 'Gộp', 'Giảm giá', 'Ròng', 'Hoàn tiền'], rows: rows.map((r) => [r.title, fmt.num(r.paidOrders), vnd(r.gross), vnd(r.discount), vnd(r.net), vnd(r.refunds)]) },
+      code: 'B3', title: 'Doanh thu theo khoá học', question: 'Nguồn doanh thu đến từ đâu?', wide: true,
+      body: ch.hbars({ items: rows.map((r) => ({ label: r.title, value: r.net, max: max || 1, text: vnd(r.net) })), sort: false, format: (v) => ch.fmt.compact(v), emptyText: 'Không có khoá học nào có doanh thu trong kỳ này.' }),
+      note: 'Giảm giá được chia theo tỉ trọng giá của từng khoá trong đơn, nên tổng khoá có thể lệch vài đồng so với tổng.',
+      table: { headers: ['Khoá học', 'Đơn', 'Gộp', 'Giảm giá', 'Ròng', 'Hoàn tiền'], rows: rows.map((r) => [r.title, fmt.num(r.paidOrders), vnd(r.gross), vnd(r.discount), vnd(r.net), vnd(r.refunds)]) },
     };
   },
   b5: () => unavailable('B5', 'Phễu thanh toán', 'Khách bỏ ở bước nào trước khi trả tiền?', 'Chưa có số liệu: hệ thống chưa lưu lịch sử thêm giỏ hàng và mua ngay để dựng phễu từ giỏ tới thanh toán.'),

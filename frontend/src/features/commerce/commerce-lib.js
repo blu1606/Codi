@@ -68,7 +68,7 @@ export function typeaheadSuggestions(entries, query) {
     e.topics.forEach((x) => { if (x.toLowerCase().includes(t)) suggestions.add(x); });
   });
   const topResults = entries.filter((e) => e.title.toLowerCase().includes(t) || e.description.toLowerCase().includes(t)).slice(0, 4)
-    .map((e) => ({ id: `course-${e.id}`, title: e.title, type: 'Khóa học', entry: e, category: e.category }));
+    .map((e) => ({ id: `course-${e.id}`, title: e.title, type: 'Khoá học', entry: e, category: e.category }));
   const seen = new Set();
   entries.forEach((e) => e.topics.forEach((x) => {
     if (x.toLowerCase().includes(t) && !seen.has(x.toLowerCase())) {

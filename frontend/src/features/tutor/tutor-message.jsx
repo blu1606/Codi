@@ -1,7 +1,7 @@
 /**
  * One message of a Tutor chat (port of Codi develop's components/ai-chat/ai-chat-message.tsx): the learner's
- * question as a bubble; an answer as its parts in order — reasoning ("Tutor đang suy nghĩ…" / "Đã suy nghĩ", folded once
- * done), tool steps (expandable; material hits as sources), course cards (search_courses), a comparison table
+ * question as a bubble; an answer as one "thinking steps" dropdown (passages read, reasoning and tool calls with their
+ * input/output, see tutor-thinking.jsx), then its parts in order — course cards (search_courses), a comparison table
  * (compare_courses), the ≤3-line code suggestion (suggest_code_change) with Áp dụng / Bỏ qua / Hoàn tác / Chạy lại
  * test, then the answer text — followed by line jumps, copy, 👍/👎 and a 👎 reason.
  */
@@ -10,62 +10,8 @@ import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
 import TutorMarkdown from './tutor-markdown';
-import { TIcon } from './tutor-ui';
-import { DOWN_REASONS, TOOL_LABELS, formatVnd, messageText } from './tutor-contract';
-
-const isToolPart = (part) => typeof part.type === 'string' && part.type.startsWith('tool-');
-const toolName = (part) => part.type.slice(5);
-const TOOL_ICONS = { search_course_material: 'search', get_my_progress: 'graduation-cap', search_courses: 'search', recommend_courses_for_profile: 'compass', compare_courses: 'layers', get_my_learning: 'graduation-cap', suggest_code_change: 'code' };
-
-/** What the model thought before answering, folded by default once it is done. */
-function Reasoning({ text, live }) {
-  const [open, setOpen] = useState(false);
-  if (!text.trim() && !live) return null;
-  const shown = (open || live) && text.trim();
-  return (
-    <div className="tc-step">
-      <button type="button" className="tc-step-btn" aria-expanded={open || live} onClick={() => setOpen((v) => !v)}>
-        {live ? <Icon name="loader" className="icon-sm tc-spin" /> : <TIcon name="brain" className="icon-sm" />}
-        <span>{live ? 'Tutor đang suy nghĩ…' : 'Đã suy nghĩ'}</span>
-        {!live ? <Icon name="chevron-down" className={`icon-sm tc-chev ${open ? 'is-open' : ''}`.trim()} /> : null}
-      </button>
-      {shown ? <p className="tc-step-detail tc-reasoning">{text}</p> : null}
-    </div>
-  );
-}
-
-/** One tool step ("Đã tìm trong tài liệu của học phần"), expandable to show what was found. */
-function ToolStep({ name, state, input, detail }) {
-  const [open, setOpen] = useState(false);
-  const label = TOOL_LABELS[name] || { running: 'Đang dùng công cụ…', done: 'Đã dùng công cụ' };
-  const running = state === 'input-streaming' || state === 'input-available';
-  const failed = state === 'output-error';
-  const query = input && typeof input === 'object' && typeof input.query === 'string' ? input.query : null;
-  return (
-    <div className="tc-step">
-      <button type="button" className="tc-step-btn" aria-expanded={detail ? open : undefined} disabled={running || !detail} onClick={() => setOpen((v) => !v)}>
-        {running ? <Icon name="loader" className="icon-sm tc-spin" /> : failed ? <Icon name="alert-triangle" className="icon-sm tc-warn" /> : <TIcon name={TOOL_ICONS[name] || 'wrench'} className="icon-sm" />}
-        <span className="tc-step-text">{failed ? 'Công cụ chưa trả về kết quả' : running ? label.running : label.done}{query ? ` · “${query}”` : ''}</span>
-        {!running && detail ? <Icon name="chevron-down" className={`icon-sm tc-chev ${open ? 'is-open' : ''}`.trim()} /> : null}
-      </button>
-      {open && detail ? <div className="tc-step-detail">{detail}</div> : null}
-    </div>
-  );
-}
-
-function Sources({ hits }) {
-  if (!hits.length) return <p>Không tìm thấy bài nào khớp trong học phần.</p>;
-  return (
-    <ul className="tc-sources">
-      {hits.map((hit) => (
-        <li key={hit.href}>
-          <Link to={hit.href}>{hit.title}</Link>{hit.chapter ? <span> · {hit.chapter}</span> : null}
-          <p>{hit.excerpt}</p>
-        </li>
-      ))}
-    </ul>
-  );
-}
+import ThinkingSteps, { isToolPart, toolName } from './tutor-thinking';
+import { DOWN_REASONS, formatVnd, messageText } from './tutor-contract';
 
 function CourseCards({ courses }) {
   if (!courses.length) return null;
@@ -139,16 +85,15 @@ function DiffBlock({ id, diff, actions }) {
   );
 }
 
-function ToolPart({ part, diff }) {
+/** What a finished tool adds to the answer itself; its call and result are listed in the thinking steps. */
+function ToolBlock({ part, diff }) {
   const name = toolName(part);
   const output = part.state === 'output-available' ? part.output : null;
-  let detail = null;
   let block = null;
-  if (output && name === 'search_course_material') detail = <Sources hits={output.hits || []} />;
   if (output && (name === 'search_courses' || name === 'recommend_courses_for_profile')) block = <CourseCards courses={output.courses || []} />;
   if (output && name === 'compare_courses') block = <CompareTable table={output} />;
   if (output && name === 'suggest_code_change' && diff && output.ok) block = <DiffBlock id={part.toolCallId} diff={output.diff} actions={diff} />;
-  return <><ToolStep name={name} state={part.state} input={part.input} detail={detail} />{block}</>;
+  return block;
 }
 
 function CopyButton({ text }) {
@@ -182,10 +127,10 @@ export default function TutorMessage({ message, streaming, diff, actions }) {
   const meta = message.metadata || {};
   return (
     <article className="tc-a" aria-busy={streaming || undefined} aria-label="Câu trả lời của Tutor">
+      <ThinkingSteps message={message} streaming={streaming} />
       {message.parts.map((part, i) => {
-        if (part.type === 'reasoning') return <Reasoning key={i} text={part.text} live={streaming && part.state === 'streaming'} />;
         if (part.type === 'text') return part.text.trim() ? <TutorMarkdown key={i} text={part.text} streaming={streaming && i === last} /> : null;
-        if (isToolPart(part)) return <ToolPart key={part.toolCallId || i} part={part} diff={diff} />;
+        if (isToolPart(part)) return <ToolBlock key={part.toolCallId || i} part={part} diff={diff} />;
         return null;
       })}
       {meta.stopped && text !== 'Bạn đã dừng câu trả lời này.' ? <p className="tc-note">Đã dừng câu trả lời.</p> : null}

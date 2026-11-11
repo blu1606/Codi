@@ -204,7 +204,7 @@ function EmailVerificationCard({ u, displayEmail }) {
   return (
     <div className="card shell-verify-card"><div className="card-body stack-3">
       <div className="row" style={{ gap: 8 }}><span className="text-danger"><ShellIcon name="shield-alert" /></span><strong>Tài khoản chưa xác thực email</strong></div>
-      <p className="small muted">Xác thực địa chỉ email <strong>{displayEmail || u.email}</strong> để bảo vệ tài khoản và mở khóa đầy đủ tính năng.</p>
+      <p className="small muted">Xác thực địa chỉ email <strong>{displayEmail || u.email}</strong> để bảo vệ tài khoản và mở khoá đầy đủ tính năng.</p>
       {!showOtp ? (
         <div><button type="button" className="btn btn-primary btn-sm" onClick={send} disabled={sending}>{sending ? 'Đang gửi mã...' : 'Gửi mã OTP xác thực'}</button></div>
       ) : (

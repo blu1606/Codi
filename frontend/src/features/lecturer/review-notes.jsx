@@ -55,7 +55,7 @@ export async function flagReopen(c, id) {
 export function NoteCard({ c, f, showTarget, link }) {
   const canMark = c.status === 'rejected';
   return (
-    <li id={`tc-flag-${f.id}`} className={`rv-flag tc-note ${f.status !== 'open' ? 'is-closed' : ''}`}>
+    <li id={`tc-flag-${f.id}`} className={`rv-flag tc-remark ${f.status !== 'open' ? 'is-closed' : ''}`}>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <span className={`badge ${f.severity === 'must' ? 'badge-danger' : 'badge-warn'}`}>{SEVERITY[f.severity] || f.severity}</span>
         <span className={`badge ${f.status === 'fixed' ? 'badge-accent' : f.status === 'closed' ? 'badge-success' : 'badge-neutral'}`}>{FLAG_STATUS[f.status] || f.status}</span>
@@ -86,15 +86,15 @@ export function ReviewNotes({ courseId, match, known, questionIds, collapsible, 
   const pending = flags.filter((f) => f.status === 'open');
   const tone = pending.some((f) => f.severity === 'must') ? 'badge-danger' : pending.length ? 'badge-warn' : 'badge-success';
   const list = (
-    <ul className="rv-flags tc-notes-list">{flags.map((f) => (
+    <ul className="rv-flags tc-remarks-list">{flags.map((f) => (
       <NoteCard key={f.id} c={c} f={f} showTarget={!!links} link={links ? <Link className="btn btn-ghost btn-sm" to={flagHref(c, f)}><Icon name="external-link" className="icon-sm" /> Mở để sửa</Link> : null} />
     ))}</ul>
   );
   const head = <span className={`badge ${tone}`}><Icon name="flag" />{pending.length ? `${pending.length}/${flags.length} góp ý cần xử lý` : `${flags.length} góp ý đã xử lý`}</span>;
   if (collapsible) {
-    return <details className="tc-notes" open={open || undefined}><summary className="row" style={{ gap: 8 }}>{head}{title && <span className="xsmall muted">{title}</span>}<span className="sr-only"> — bấm để xem</span></summary>{list}</details>;
+    return <details className="tc-remarks" open={open || undefined}><summary className="row" style={{ gap: 8 }}>{head}{title && <span className="xsmall muted">{title}</span>}<span className="sr-only"> — bấm để xem</span></summary>{list}</details>;
   }
-  return <div className="tc-notes is-inline" role="group" aria-label={title || 'Góp ý từ quản trị'}><div className="row" style={{ gap: 8 }}>{head}{title && <span className="xsmall muted">{title}</span>}</div>{list}</div>;
+  return <div className="tc-remarks is-inline" role="group" aria-label={title || 'Góp ý từ quản trị'}><div className="row" style={{ gap: 8 }}>{head}{title && <span className="xsmall muted">{title}</span>}</div>{list}</div>;
 }
 
 /** Scrolls to the note of ?flag=<id> once it is on screen (the lesson sheet and quiz load asynchronously). */

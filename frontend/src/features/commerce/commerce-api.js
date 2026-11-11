@@ -139,7 +139,7 @@ export function buyNow(course) {
       Codi.go('/checkout?order=' + encodeURIComponent(r.orderCode));
     } catch (e) {
       cartChanged();
-      Codi.ui.toast(e.status === 409 ? 'Bạn đã sở hữu khóa học này.' : e.message || 'Không thể xử lý mua ngay.', { type: e.status === 409 ? 'success' : 'danger' });
+      Codi.ui.toast(e.status === 409 ? 'Bạn đã sở hữu khoá học này.' : e.message || 'Không thể xử lý mua ngay.', { type: e.status === 409 ? 'success' : 'danger' });
     }
   }, { reason: 'Đăng nhập để mua khoá học.', courseTitle: course.title });
 }

@@ -15,7 +15,7 @@ const { fmt, ROLE_LABEL: ROLE } = Codi;
 const ROLE_CHIPS = [['all', 'Tất cả'], ['learner', 'Học viên'], ['lecturer', 'Giảng viên'], ['admin', 'Quản trị viên']];
 const STATUS_CHIPS = [['all', 'Tất cả'], ['active', 'Đang hoạt động'], ['inactive', 'Đã vô hiệu hoá']];
 
-const ROLE_DESC = { learner: 'chỉ học và mua khóa học', lecturer: 'tạo và quản lý khóa học của mình, chấm bài', admin: 'toàn quyền quản trị (người dùng, giá, đơn hàng)' };
+const ROLE_DESC = { learner: 'chỉ học và mua khoá học', lecturer: 'tạo và quản lý khoá học của mình, chấm bài', admin: 'toàn quyền quản trị (người dùng, giá, đơn hàng)' };
 
 /** Real role-select: pick a role, "Lưu" (enabled only when changed) opens the confirm; cancel reverts the draft. */
 function RoleSelect({ u, disabled }) {
@@ -52,9 +52,9 @@ async function deactivate(u) {
       <div className="stack-2">
         <p>{u.email}</p>
         <div className="ad-impact-list">
-          <div className="ad-impact-item"><span className="ad-impact-icon"><Icon name="book-open" className="icon-sm" /></span><span className="ad-impact-text"><strong>{ownedCourses}</strong> khóa học đang sở hữu</span></div>
+          <div className="ad-impact-item"><span className="ad-impact-icon"><Icon name="book-open" className="icon-sm" /></span><span className="ad-impact-text"><strong>{ownedCourses}</strong> khoá học đang sở hữu</span></div>
           <div className="ad-impact-item"><span className="ad-impact-icon"><Icon name="receipt" className="icon-sm" /></span><span className="ad-impact-text"><strong>{pendingOrders}</strong> đơn hàng chờ thanh toán</span></div>
-          <div className="ad-impact-item"><span className="ad-impact-icon"><Icon name="presentation" className="icon-sm" /></span><span className="ad-impact-text">Đang giảng dạy <strong>{taughtCourses}</strong> khóa học</span></div>
+          <div className="ad-impact-item"><span className="ad-impact-icon"><Icon name="presentation" className="icon-sm" /></span><span className="ad-impact-text">Đang giảng dạy <strong>{taughtCourses}</strong> khoá học</span></div>
         </div>
       </div>
     ),
@@ -150,7 +150,7 @@ function UsersView({ q, all, selfId }) {
           })}
         </tbody></table></div>
       ) : (
-        <div className="card"><Empty icon="users" title="Không có người dùng phù hợp" body="Thử thay đổi từ khóa tìm kiếm hoặc bỏ bớt các bộ lọc đang chọn." actions={anyFilter ? <Link className="btn btn-secondary" to="/admin/users">Xoá bộ lọc</Link> : null} /></div>
+        <div className="card"><Empty icon="users" title="Không có người dùng phù hợp" body="Thử thay đổi từ khoá tìm kiếm hoặc bỏ bớt các bộ lọc đang chọn." actions={anyFilter ? <Link className="btn btn-secondary" to="/admin/users">Xoá bộ lọc</Link> : null} /></div>
       )}
     </>
   );
