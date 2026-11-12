@@ -11,7 +11,10 @@ import { Alert, Icon } from '../../components/ui/primitives';
 import { findLesson, locked, lecturerAI, AIThinking, FieldError } from './teach-api';
 import { act, cachedCourse, reloadCourse, reloadMine } from './teach-data';
 import { ReviewNotes, useFlagFocus } from './review-notes';
+import { AiAssist } from './course-ai-write';
 import { ACCEPT, checkFile, fmtClock, fmtSize, uploadLessonFile } from './lesson-media-api';
+import LessonMarkdown from '../learning/lesson-markdown';
+import '../learning/learning.css'; // .ln-md, so the preview matches what the learner reads
 
 const LATE = { accept: 'Vẫn nhận, không trừ điểm', penalty: 'Nhận và trừ điểm', reject: 'Không nhận bài nộp muộn' };
 const newAssignment = () => ({ instructions: '', requiresFile: false, requiresLink: true, acceptedTypes: '', maxScore: 10, passingScore: 50, passScore: 5, dueDays: 7, latePolicy: 'penalty', latePenalty: 20, rubric: [] });
@@ -116,6 +119,30 @@ function AssignmentBuilder({ d, refresh, rubricJob, ro }) {
         {ai === 'limit' && <p className="small text-warn" role="status"><Icon name="alert-triangle" className="icon-sm" /> Đã dùng hết lượt gợi ý bằng AI trong giờ này.</p>}
       </fieldset>
     </fieldset>
+  );
+}
+
+/** Markdown body with a "Soạn" / "Xem trước" switch; the preview uses the learner's renderer. */
+function MarkdownBody({ id, label, required, value, onChange, rows, placeholder, disabled, help, children }) {
+  const [preview, setPreview] = useState(false);
+  return (
+    <div className="field">
+      <div className="row-between" style={{ gap: 8, flexWrap: 'wrap' }}>
+        {preview ? <span className="field-label" id={`${id}-label`}>{label}{required && <> <span className="req">*</span></>}</span>
+          : <label htmlFor={id}>{label}{required && <> <span className="req">*</span></>}</label>}
+        <div className="viz-seg-ctrl" role="group" aria-label={`Chế độ hiển thị ${label.toLowerCase()}`}>
+          <button type="button" aria-pressed={!preview} onClick={() => setPreview(false)}>Soạn</button>
+          <button type="button" aria-pressed={preview} onClick={() => setPreview(true)}>Xem trước</button>
+        </div>
+      </div>
+      {preview ? (
+        <div className="panel" role="region" aria-labelledby={`${id}-label`} style={{ minHeight: `${rows * 1.5}em`, overflowWrap: 'anywhere' }}>
+          {value.trim() ? <LessonMarkdown text={value} /> : <p className="small muted">Chưa có nội dung để xem trước.</p>}
+        </div>
+      ) : <textarea id={id} className="mono" rows={rows} value={value} onChange={onChange} placeholder={placeholder} disabled={disabled} />}
+      {help && <span className="field-help">{help}</span>}
+      {children}
+    </div>
   );
 }
 
@@ -269,14 +296,16 @@ function LessonEditor({ handle, courseId, lessonId, withAssignment, flagId }) {
         {notes((a) => a.type === 'lesson', 'Góp ý cho bài học')}
         <div className="field"><label htmlFor="le-title">Tên bài học <span className="req">*</span></label><input id="le-title" value={d.title} onChange={set('title')} placeholder="Nhập tên bài học..." disabled={ro || saving} /></div>
         <div className="grid-3">
-          <div className="field tc-span-2"><label htmlFor="le-desc">Mô tả tóm tắt bài học</label><input id="le-desc" value={d.description} onChange={set('description')} placeholder="Tóm tắt nội dung chính của bài..." disabled={ro || saving} /></div>
+          <div className="field tc-span-2"><label htmlFor="le-desc">Mô tả tóm tắt bài học</label><input id="le-desc" value={d.description} onChange={set('description')} placeholder="Tóm tắt nội dung chính của bài..." disabled={ro || saving} />
+            {!ro && <AiAssist courseId={courseId} lessonId={lessonId} field="lesson-description" value={d.description} title={d.title} body={d.body} disabled={saving} onApply={(text) => { d.description = text; d.error = null; refresh(); }} />}</div>
           <div className="field"><label htmlFor="le-dur">Thời lượng (phút)</label><input id="le-dur" type="number" min="1" max="360" value={d.durationMin} onChange={(e) => { d.durationMin = num(e.target.value); d.error = null; refresh(); }} disabled={ro || saving} /></div>
         </div>
         <label className="panel row tc-preview-opt" htmlFor="le-preview" style={{ alignItems: 'flex-start', gap: 10 }}>
           <input id="le-preview" type="checkbox" checked={d.isFreePreview} onChange={set('isFreePreview')} disabled={ro || saving} style={{ marginTop: 3 }} />
-          <span className="stack-1"><span className="small strong">Cho phép học thử (Free Preview)</span><span className="xsmall muted">Học viên chưa đăng ký mua khoá học có thể xem trước nội dung bài học này trên trang bán.</span></span>
+          <span className="stack-1"><span className="small strong">Cho phép học thử miễn phí</span><span className="xsmall muted">Học viên chưa đăng ký mua khoá học có thể xem trước nội dung bài học này trên trang bán.</span></span>
         </label>
-        <div className="field"><label htmlFor="le-body">Nội dung bài học / Ghi chú lý thuyết</label><textarea id="le-body" className="mono" rows={6} value={d.body} onChange={set('body')} placeholder="Soạn nội dung chi tiết bài đọc hoặc hướng dẫn thực hành..." disabled={ro || saving} />{notes((a) => a.type === 'reading', 'Góp ý cho bài đọc')}</div>
+        <MarkdownBody id="le-body" label="Nội dung bài học / Ghi chú lý thuyết" rows={6} value={d.body} onChange={set('body')} placeholder="Soạn nội dung chi tiết bài đọc hoặc hướng dẫn thực hành..." disabled={ro || saving}
+          help={'Hỗ trợ Markdown: **in đậm**, `code`, khối ``` và danh sách bắt đầu bằng "- ". Bấm "Xem trước" để thấy bài như học viên đọc.'}>{notes((a) => a.type === 'reading', 'Góp ý cho bài đọc')}</MarkdownBody>
 
         <section className="stack-3 tc-materials" aria-labelledby="le-mat-h">
           <div className="row-between"><strong id="le-mat-h" className="small row" style={{ gap: 6 }}><Icon name="file-text" className="icon-sm" /> Tài liệu bài học ({d.materials.length} tài liệu)</strong>
@@ -344,24 +373,7 @@ async function createLesson(c, chapterId, title) {
     return null;
   }
 }
-/** Creates a lesson of the chosen type, then opens its editor (code kinds open the code editor route). */
-export async function addLesson(c, chapterId, kind) {
-  const isCode = kind === 'code' || kind === 'tutorial';
-  const l = await createLesson(c, chapterId, kind === 'code' ? 'Bài code mới' : kind === 'tutorial' ? 'Hướng dẫn code mới' : undefined);
-  if (!l) return null;
-  if (kind === 'tutorial') {
-    try {
-      await api.put(tutorialUrl(c.id, l.id), { title: l.title, durationMinutes: 20, fileName: 'main.js', steps: [{ title: 'Bước 1', body: '', starter: '' }] });
-    } catch (e) {
-      Codi.ui.toast((e && e.message) || 'Không thể tạo bài hướng dẫn.', { type: 'danger' });
-    }
-  }
-  await reloadCourse(c.id); reloadMine();
-  Codi.ui.toast('Đã thêm bài học mới.', { type: 'success' });
-  if (isCode) Codi.go(`/teach/courses/${c.id}/code/${l.id}`); else openLessonEditor(c.id, l.id);
-  return l;
-}
-// ───────────────────────── new video / reading / slide lesson ─────────────────────────
+// ───────────────────────── new video / reading / slide / code lesson ─────────────────────────
 const NEW_KIND = {
   video: {
     title: 'Thêm bài video', accept: 'video', fileLabel: 'Tải video lên', urlLabel: 'Dán đường dẫn',
@@ -375,13 +387,17 @@ const NEW_KIND = {
     ai: 'Dùng AI đọc tài liệu (trang dạng ảnh được nhận dạng bằng OCR) rồi soạn tóm tắt bài đọc và câu hỏi quiz',
   },
   reading: { title: 'Thêm bài đọc' },
+  // Code kinds ask for the title first, then open the code editor for the task / steps.
+  code: { title: 'Thêm bài code', code: true, duration: 20, placeholder: 'Ví dụ: Viết hàm tính tổng mảng', submit: 'Tạo và mở trình soạn code' },
+  tutorial: { title: 'Thêm bài hướng dẫn code', code: true, duration: 20, placeholder: 'Ví dụ: Dựng trang danh sách việc cần làm', submit: 'Tạo và mở trình soạn hướng dẫn' },
 };
 const baseName = (name) => String(name || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
 
 function NewLessonForm({ handle, courseId, chapterId, kind }) {
   const cfg = NEW_KIND[kind];
   const c = cachedCourse(courseId);
-  const [f, setF] = useState({ title: '', description: '', durationMin: 10, isFreePreview: false, body: '', source: kind === 'reading' ? null : 'file', url: '', ai: true });
+  const hasMedia = kind === 'video' || kind === 'pdf';
+  const [f, setF] = useState({ title: '', description: '', durationMin: cfg.duration || 10, isFreePreview: false, body: '', source: hasMedia ? 'file' : null, url: '', ai: true });
   const [up, setUp] = useState({ state: 'idle', pct: 0, name: '', res: null, error: '' });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -419,6 +435,8 @@ function NewLessonForm({ handle, courseId, chapterId, kind }) {
     let material = null;
     if (kind === 'reading') {
       if (!f.body.trim()) return setErr('Nhập nội dung bài đọc.');
+    } else if (!hasMedia) {
+      // code kinds: no material here; the task or steps are written in the code editor next
     } else if (f.source === 'file') {
       if (up.state === 'uploading') return setErr('Đợi tệp tải lên xong.');
       if (!uploaded) return setErr(kind === 'video' ? 'Chọn video để tải lên.' : 'Chọn tệp PDF/PPTX để tải lên.');
@@ -442,8 +460,21 @@ function NewLessonForm({ handle, courseId, chapterId, kind }) {
       reloadCourse(courseId); reloadMine();
       return;
     }
+    if (kind === 'tutorial') {
+      try {
+        await api.put(tutorialUrl(courseId, l.id), { title, durationMinutes: Math.round(dur), fileName: 'main.js', steps: [{ title: 'Bước 1', body: '', starter: '' }] });
+      } catch (e) {
+        // the lesson exists; the tutorial editor can still create its steps
+        Codi.ui.toast((e && e.message) || 'Đã tạo bài nhưng chưa tạo được bước hướng dẫn đầu tiên.', { type: 'danger' });
+      }
+    }
     await reloadCourse(courseId); reloadMine();
     handle.close();
+    if (cfg.code) {
+      Codi.go(`/teach/courses/${courseId}/code/${l.id}`);
+      Codi.ui.toast(`Đã thêm bài “${title}” vào ${ch ? ch.title : 'khoá học'}.`, { type: 'success' });
+      return;
+    }
     if (useAI && uploaded) {
       const AI = lecturerAI();
       if (AI && AI.openImport) { AI.openImport(courseId, l.id, { upload: { ...uploaded, material: null } }); return; }
@@ -456,8 +487,10 @@ function NewLessonForm({ handle, courseId, chapterId, kind }) {
   return (
     <>
       <div className="sheet-body stack-4">
-        <p className="small muted">Bài được thêm vào <strong>{ch ? ch.title : ''}</strong>. Quiz và bài tập thêm sau ở dòng bài học.</p>
-        {kind !== 'reading' && (
+        <p className="small muted">Bài được thêm vào <strong>{ch ? ch.title : ''}</strong>. {cfg.code
+          ? (kind === 'tutorial' ? 'Sau khi tạo, trình soạn mở để bạn viết từng bước và code chạy thử.' : 'Sau khi tạo, trình soạn mở để bạn viết đề bài, code khởi đầu, lời giải và test.')
+          : 'Quiz và bài tập thêm sau ở dòng bài học.'}</p>
+        {hasMedia && (
           <fieldset className="stack-3"><legend className="field-label">{kind === 'video' ? 'Video bài giảng' : 'Tài liệu bài giảng'} <span className="req">*</span></legend>
             <div className="viz-seg-ctrl" role="group" aria-label="Nguồn">
               {[['file', cfg.fileLabel], ['url', cfg.urlLabel]].map(([k, t]) => <button key={k} type="button" aria-pressed={f.source === k} disabled={saving} onClick={() => set('source', k)}>{t}</button>)}
@@ -489,23 +522,22 @@ function NewLessonForm({ handle, courseId, chapterId, kind }) {
           </fieldset>
         )}
         <div className="field"><label htmlFor="nl-title">Tên bài học <span className="req">*</span></label>
-          <input id="nl-title" value={f.title} onChange={(e) => { touched.current.title = true; set('title', e.target.value); }} placeholder={kind === 'video' ? 'Ví dụ: useEffect và vòng đời component' : 'Nhập tên bài học...'} disabled={saving} /></div>
+          <input id="nl-title" value={f.title} onChange={(e) => { touched.current.title = true; set('title', e.target.value); }} placeholder={cfg.placeholder || (kind === 'video' ? 'Ví dụ: useEffect và vòng đời component' : 'Nhập tên bài học...')} disabled={saving} autoFocus={!hasMedia} /></div>
         <div className="grid-3">
           <div className="field tc-span-2"><label htmlFor="nl-desc">Mô tả ngắn</label><input id="nl-desc" value={f.description} onChange={(e) => set('description', e.target.value)} placeholder="Tóm tắt nội dung chính của bài..." disabled={saving} /></div>
           <div className="field"><label htmlFor="nl-dur">Thời lượng (phút)</label><input id="nl-dur" type="number" min="1" max="360" value={f.durationMin} onChange={(e) => { touched.current.dur = true; set('durationMin', num(e.target.value)); }} disabled={saving} /></div>
         </div>
         {kind === 'reading' && (
-          <div className="field"><label htmlFor="nl-body">Nội dung bài đọc <span className="req">*</span></label>
-            <textarea id="nl-body" className="mono" rows={10} value={f.body} onChange={(e) => set('body', e.target.value)} placeholder={'## Tiêu đề\n\n**Mục tiêu:** ...\n\n- Ý chính 1\n- Ý chính 2'} disabled={saving} />
-            <span className="field-help">Hỗ trợ Markdown: **in đậm**, `code`, khối ``` và danh sách bắt đầu bằng "- ". Có sẵn tài liệu? Dùng "Tạo bằng AI → Từ tài liệu / slide".</span></div>
+          <MarkdownBody id="nl-body" label="Nội dung bài đọc" required rows={10} value={f.body} onChange={(e) => set('body', e.target.value)} placeholder={'## Tiêu đề\n\n**Mục tiêu:** ...\n\n- Ý chính 1\n- Ý chính 2'} disabled={saving}
+            help={'Hỗ trợ Markdown: **in đậm**, `code`, khối ``` và danh sách bắt đầu bằng "- ". Có sẵn tài liệu? Dùng "Tạo bằng AI → Từ tài liệu / video".'} />
         )}
-        <label className="check"><input type="checkbox" checked={f.isFreePreview} onChange={(e) => set('isFreePreview', e.target.checked)} disabled={saving} /> Cho phép học thử (Free Preview)</label>
+        <label className="check"><input type="checkbox" checked={f.isFreePreview} onChange={(e) => set('isFreePreview', e.target.checked)} disabled={saving} /> Cho phép học thử miễn phí</label>
         {err && <p className="field-error" role="alert"><Icon name="alert-circle" className="icon-sm" /><span>{err}</span></p>}
       </div>
       <div className="sheet-footer">
         <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => handle.close()}>Huỷ</button>
         <button type="button" className="btn btn-primary" disabled={saving || up.state === 'uploading'} onClick={submit}>
-          {saving ? <><Icon name="loader" className="icon-sm" /> Đang tạo…</> : useAI && uploaded ? <><Icon name="sparkles" className="icon-sm" /> Tạo bài và soạn bằng AI</> : 'Tạo bài học'}</button>
+          {saving ? <><Icon name="loader" className="icon-sm" /> Đang tạo…</> : useAI && uploaded ? <><Icon name="sparkles" className="icon-sm" /> Tạo bài và soạn bằng AI</> : cfg.submit || 'Tạo bài học'}</button>
       </div>
     </>
   );
@@ -547,7 +579,6 @@ function AddLessonBody({ handle, courseId, chapterId }) {
       // The lesson is created when the reviewed draft is applied, so cancelling leaves no empty lesson behind.
       const AI = lecturerAI(); if (AI && AI.openImport) AI.openImport(c.id, null, { chapterId: ch });
     } else if (NEW_KIND[kind]) openNewLesson(c, ch, kind);
-    else addLesson(c, ch, kind);
   };
   return (
     <div className="stack-4">

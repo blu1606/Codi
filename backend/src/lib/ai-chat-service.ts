@@ -38,7 +38,7 @@ import {
 } from "./ai-chat-contract";
 import { clip, sanitizeDiff, suggestChangeInput } from "./ai-tutor-contract";
 import type { TutorScope } from "./ai-tutor-service";
-import { searchCourseKnowledge } from "./course-knowledge";
+import { courseContext } from "./course-context";
 
 type Row = typeof aiChats.$inferSelect;
 const lessonHref = (courseId: string, lessonId: string) =>
@@ -296,15 +296,11 @@ export function createAiChatService(db: Database) {
 const words = (query: string) =>
   [...new Set(query.toLowerCase().match(/[\p{L}\p{N}+#.]{2,}/gu) ?? [])].slice(0, 6);
 
-/** Course chunks closest to `query` as source hits, or null when the course is not indexed / search is off. */
+/** Course chunks closest to `query` as source hits, or null when there is nothing to show (keyword fallback). */
 async function semanticCourseHits(db: Database, courseId: string, query: string, limit = 5): Promise<MaterialHit[] | null> {
-  const hits = await searchCourseKnowledge(db, courseId, query, limit);
-  return hits?.map((hit) => ({
-    title: hit.sourceTitle,
-    chapter: hit.chapter,
-    href: lessonHref(courseId, hit.lessonId),
-    excerpt: clip(hit.content, 600).text,
-  })) ?? null;
+  const context = await courseContext(db, courseId, query, { limit });
+  if (context.status !== "ok") return null;
+  return context.hits.map((hit) => ({ title: hit.sourceTitle, chapter: hit.chapter, href: hit.href, excerpt: hit.content }));
 }
 
 /**

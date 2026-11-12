@@ -165,7 +165,8 @@ export function Stars({ n, label }) {
   );
 }
 
-export const initials = (name) => String(name || '?').trim().split(/\s+/).slice(-2).map((w) => w[0]).join('').toUpperCase();
+/** Two initials from the name's last two words. Parenthesised suffixes such as "(Lecturer)" are not part of the name. */
+export const initials = (name) => String(name || '?').replace(/\([^)]*\)/g, ' ').trim().split(/\s+/).filter(Boolean).slice(-2).map((w) => w[0]).join('').toUpperCase() || '?';
 export function Avatar({ user, size }) {
   const cls = `avatar ${size ? 'avatar-' + size : ''}`.trim();
   if (user && user.image) {

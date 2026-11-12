@@ -725,6 +725,8 @@ a.stat-tile .stat-go { font-size: var(--text-sm); color: var(--accent); font-wei
 @media (max-width: 400px) { .google-account { flex-wrap: wrap; } .google-account-tag { flex-basis: 100%; padding-left: 44px; } }
 .demo-accounts { background: var(--subtle); border-radius: var(--radius-md); padding: var(--space-3); font-size: var(--text-sm); display: grid; gap: var(--space-1); }
 .demo-accounts button { text-align: left; border: 0; background: none; font: inherit; color: var(--accent); cursor: pointer; padding: 6px 0; text-decoration: underline; text-underline-offset: 3px; }
+.demo-accounts-list { display: flex; flex-wrap: wrap; gap: 0 var(--space-4); }
+.demo-accounts-list button { min-height: 44px; display: inline-flex; align-items: center; }
 
 /* Chat (AI advisor / assistant) */
 .chat-log { display: grid; gap: var(--space-3); }
@@ -1015,6 +1017,9 @@ a.stat-tile .stat-go { font-size: var(--text-sm); color: var(--accent); font-wei
 .dev-drawer .dev-roles button[aria-pressed="true"] { background: #a16207; color: #ffffff; }
 .dev-note { font-size: var(--text-xs); color: #713f12; }
 @media (max-width: 640px) { .dev-drawer { left: 8px; right: 8px; width: auto; } }
+/* Narrow screens: the header keeps only product controls; the scenario drawer opens from the menu instead. */
+@media (max-width: 1024px) { .hd-actions .dev-toggle { display: none; } }
+.dev-menu-item { color: #713f12; border-top: 1px dashed #a16207; margin-top: var(--space-1); }
 
 /* ───────── GitHub connect & analysis ───────── */
 .gh-consent, .gh-google, .gh-perm, .gh-run, .gh-result-sheet { font-size: var(--text-sm); }

@@ -17,7 +17,7 @@
  *
  * SESSION     Codi.session = { user, roles } from GET /api/auth/get-session + /api/user/roles (Better Auth cookie).
  *             Codi.currentUser(), Codi.role(), Codi.signIn(email, password), Codi.signOut(), Codi.refreshSession().
- * NAVIGATION  Codi.go(path) (react-router navigate), Codi.path(), Codi.query()
+ * NAVIGATION  Codi.go(path, { replace }) (react-router navigate), Codi.path(), Codi.query()
  * AUTH        Codi.requireAuth(intentFn, { reason }) runs now or opens the sign-in modal and runs after success.
  * UI          Codi.ui.toast / confirm / modal / sheet … — see src/components/ui/overlay-host.jsx (registered there).
  */
@@ -147,7 +147,7 @@ export const Codi = {
   },
 
   // navigation
-  go(path) { if (nav.navigate) nav.navigate(path); },
+  go(path, opts) { if (nav.navigate) nav.navigate(path, opts); },
   path: () => nav.location.pathname.replace(/\/+$/, '') || '/',
   query: () => Object.fromEntries(new URLSearchParams(nav.location.search)),
   /** Re-render every subscriber without changing state (mockup Codi.rerender). */

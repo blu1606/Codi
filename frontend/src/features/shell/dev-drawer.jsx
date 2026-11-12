@@ -8,6 +8,7 @@
  * only with demo tools) owns Alt+K and the panel. They share the open state below.
  */
 import { useEffect, useSyncExternalStore } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
 import { Icon } from '../../components/ui/primitives';
 import { THEME_OPTIONS } from './theme';
@@ -39,6 +40,16 @@ export function DevToggle() {
   );
 }
 
+/** Same drawer, as a menu row for narrow screens where the header toggle is hidden. */
+export function DevMenuItem({ onOpen }) {
+  if (!Codi.demoTools) return null;
+  return (
+    <button type="button" className="menu-item dev-menu-item" aria-controls="dev-drawer" onClick={() => { onOpen(); setDrawerOpen(true); }}>
+      <span className="od-fill">Kịch bản thử nghiệm (chỉ bản phát triển)</span>
+    </button>
+  );
+}
+
 // Signs in for real as the seeded account of that role (shared demo password), or signs out for "Khách".
 async function switchRole(role) {
   Codi.ui.closeAll();
@@ -52,6 +63,7 @@ async function switchRole(role) {
     Codi.ui.toast('Không đổi được vai trò: ' + (e && e.message ? e.message : e), { type: 'danger' });
     return;
   }
+  setDrawerOpen(false);
   Codi.go(Codi.homeFor(role));
 }
 
@@ -64,6 +76,10 @@ export default function DevDrawer() {
   useCodi();
   const open = useDrawerOpen();
   const setOpen = setDrawerOpen;
+  const location = useLocation();
+
+  // A panel over the page must not outlive the navigation it was opened for (it covered the success page before).
+  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.altKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); setOpen((o) => !o); } };

@@ -215,7 +215,7 @@ function LoginForm({ view }) {
       const msg = e.status === 401 ? 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.'
         : e.status === 429 ? 'Bạn thử quá nhiều lần. Vui lòng đợi một lát rồi thử lại.'
         : e.message || 'Không đăng nhập được. Vui lòng thử lại.';
-      setServerError({ body: msg }); Codi.ui.toast(msg, { type: 'danger' }); return;
+      setServerError({ body: msg }); return; // one message, inline next to the form (no duplicate toast)
     }
     if (!mounted.current) return;
     setBusy(false);
@@ -253,8 +253,10 @@ function LoginForm({ view }) {
       <button type="button" className="btn btn-secondary btn-block" onClick={() => setMode('register')}>Chưa có tài khoản? Tạo tài khoản miễn phí</button>
       {Codi.demoTools && (
         <div className="demo-accounts">
-          <span className="xsmall strong">Tài khoản thử nghiệm · mật khẩu {DEMO_PASSWORD}</span>
-          {DEMO.map(([e, l]) => <button key={e} type="button" onClick={() => fill(e)}>{l}: {e}</button>)}
+          <span className="xsmall strong">Điền nhanh tài khoản thử nghiệm (chỉ có ở bản phát triển)</span>
+          <div className="demo-accounts-list">
+            {DEMO.map(([e, l]) => <button key={e} type="button" title={e} aria-label={`Điền tài khoản ${l}`} onClick={() => fill(e)}>{l}</button>)}
+          </div>
         </div>
       )}
     </form>

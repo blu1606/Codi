@@ -106,3 +106,18 @@ p.lai-empty-run { display: block; }
 .la-q .lai-clamp { white-space: normal; overflow-wrap: anywhere; } /* the reviewer reads the whole explanation */
 .la-q .rv-opts li > span { min-width: 0; overflow-wrap: anywhere; }
 .la-q .rv-opts li.is-correct .xsmall { margin-left: 0; } /* keep the correct option left-aligned like the others */
+
+/* Sources a Q&A or lesson draft was based on: a plain list of published lessons. */
+.ai-sources { margin: 0; padding-left: var(--space-5); display: grid; gap: 2px; }
+
+/* "Kiểm tra bảo mật" above the AI grading draft: the frame takes the worst verdict's tint (full 1px border, no
+   side stripe); each source is a row with its own verdict badge, reasons and the matched snippets. */
+.lai-sec.is-safe { border-color: var(--success); background: var(--success-soft); }
+.lai-sec.is-suspicious { border-color: var(--warn); background: var(--warn-soft); }
+.lai-sec.is-blocked { border-color: var(--danger); background: var(--danger-soft); }
+.lai-sec-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.lai-sec-item { display: grid; gap: var(--space-1); padding: var(--space-2); border-radius: var(--radius-sm); background: var(--surface); min-width: 0; }
+.lai-sec-head { gap: var(--space-2); flex-wrap: wrap; align-items: center; min-width: 0; }
+.lai-sec-head .badge { display: inline-flex; align-items: center; gap: 4px; }
+.lai-sec-source { min-width: 0; overflow-wrap: anywhere; }
+.lai-sec-snippet { display: block; color: var(--muted); overflow-wrap: anywhere; quotes: "\201C" "\201D"; }

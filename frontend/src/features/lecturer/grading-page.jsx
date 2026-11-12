@@ -7,6 +7,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRevealOnSelect } from './reveal-on-select';
+import LessonMarkdown from '../learning/lesson-markdown';
+import '../learning/learning.css'; // .ln-md, the same brief typography the learner sees
 import { Codi, useCodi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon } from '../../components/ui/primitives';
 import { codeBlock } from '../coding/code-api';
@@ -186,7 +188,7 @@ function GradeForm({ sel, nextPendingId, go, filters }) {
         {rb.length ? (
           <fieldset className="stack-2 tc-rubric-grade"><legend className="field-label">Chấm theo thang điểm Rubric <span className="req">*</span></legend>
             {rb.map((k) => (
-              <div key={k.id} className={`tc-rg-row ${calc.errors[k.id] && error ? 'is-invalid' : ''}`}><label className="stack-1 od-fill" htmlFor={`g-r-${k.id}`}><span className="small strong">{k.name}</span>{k.desc && <span className="xsmall muted">{k.desc}</span>}</label>
+              <div key={k.id} className={`tc-rg-row ${calc.errors[k.id] && error ? 'is-invalid' : ''}`}><label className="stack-1 od-fill" htmlFor={`g-r-${k.id}`}><span className="small strong">{k.name}</span>{k.desc && <span className="xsmall muted od-truncate" title={k.desc}>{k.desc}</span>}</label>
                 <span className="row" style={{ gap: 4 }}><input id={`g-r-${k.id}`} className="input mono" type="number" min="0" max={k.points} step="0.5" value={scores[k.id] ?? ''} onChange={(e) => setScores({ ...scores, [k.id]: e.target.value })} /><span className="xsmall muted od-nowrap">/ {k.points}</span></span></div>
             ))}
             <div className="panel row-between small" role="status"><strong>Tổng điểm: <span className="mono text-accent">{decimal(calc.total)}/{sel.maxScore}</span></strong><span className="muted">Ngưỡng đạt: {pct}%</span></div>
@@ -198,16 +200,17 @@ function GradeForm({ sel, nextPendingId, go, filters }) {
         )}
         <div className="field"><span className="row-between"><label className="field-label" htmlFor="g-fb">Nhận xét cho học viên</label>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => openSnippetPicker({ learnerName: u.name, score: Number.isNaN(current) ? '' : current, onInsert: insert })}><Icon name="list" className="icon-sm" /> Mẫu nhận xét</button></span>
-          <textarea id="g-fb" name="feedback" rows={6} placeholder="Điểm làm tốt, điểm cần cải thiện, gợi ý bước tiếp theo..." value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+          <textarea id="g-fb" name="feedback" rows={3} placeholder="Điểm làm tốt, điểm cần cải thiện, gợi ý bước tiếp theo..." value={feedback} onChange={(e) => setFeedback(e.target.value)} />
           <span className="field-help">Bấm <strong>&quot;Mẫu nhận xét&quot;</strong> để chèn mẫu có sẵn kèm tên và điểm số.</span></div>
       </div>
       <div className="tc-grade-actions">
         <p className="xsmall tc-grade-state" role="status" aria-live="polite">{dirty ? <><span className="tc-state-dot" aria-hidden="true" />Có thay đổi chưa lưu</> : 'Không có thay đổi chưa lưu'}</p>
-        <button className="btn btn-primary btn-block" type="submit" disabled={saving}>{saving ? 'Đang lưu...' : sel.status === 'graded' ? 'Cập nhật điểm' : 'Lưu điểm'}</button>
-        {nextPendingId ? <>
-          <button type="button" className="btn btn-secondary btn-block" disabled={saving} onClick={() => save('next')}>Lưu và chấm bài tiếp theo <Icon name="arrow-right" className="icon-sm" /></button>
-          <button type="button" className="btn btn-ghost btn-sm btn-block" disabled={saving} onClick={skip}>Bỏ qua, sang bài tiếp theo</button>
-        </> : <p className="xsmall muted" style={{ textAlign: 'center' }}>Đây là bài chờ chấm cuối cùng.</p>}
+        <div className="tc-grade-buttons">
+          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Đang lưu...' : sel.status === 'graded' ? 'Cập nhật điểm' : 'Lưu điểm'}</button>
+          {nextPendingId && <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => save('next')}>Lưu và chấm bài tiếp theo <Icon name="arrow-right" className="icon-sm" /></button>}
+        </div>
+        {nextPendingId ? <button type="button" className="btn btn-ghost btn-sm btn-block" disabled={saving} onClick={skip}>Bỏ qua, sang bài tiếp theo</button>
+          : <p className="xsmall muted" style={{ textAlign: 'center' }}>Đây là bài chờ chấm cuối cùng.</p>}
         {sel.status === 'graded' && <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={() => openHistory(sel)}><Icon name="clock" className="icon-sm" /> Xem lịch sử điểm ({(sel.history || []).length} lần sửa)</button>}
       </div>
     </form>
@@ -261,7 +264,7 @@ export function GradingPage({ params, query }) {
   const sel = d.selectedSubmission;
   const item = (s) => (
     <Link key={s.id} className="split-list-item" to={`/teach/grading/${s.id}${qs()}`} aria-current={sel && sel.id === s.id ? 'true' : undefined}>
-      <span className="row-between"><strong className="small">{s.studentName || 'Học viên'}</strong>{s.status === 'graded' ? <span className="badge badge-success">{decimal(s.score)}/{s.maxScore}</span> : <span className="xsmall muted">{s.submittedAt ? fmt.relative(s.submittedAt) : ''}</span>}</span>
+      <span className="row-between"><strong className="small">{s.studentName || 'Học viên'}</strong>{s.status === 'graded' ? <span className="badge badge-success">{decimal(s.score)}/{s.maxScore}</span> : <time className="xsmall muted" dateTime={s.submittedAt || undefined} title={s.submittedAt ? fmt.relative(s.submittedAt) : undefined}>{s.submittedAt ? fmt.datetime(s.submittedAt) : ''}</time>}</span>
       <span className="xsmall muted od-truncate">{s.lessonTitle || 'Bài tập'} · {s.courseTitle || ''}</span>
       {Codi.lecturerAI?.gradingBadge?.(s.id)}</Link>
   );
@@ -275,7 +278,7 @@ export function GradingPage({ params, query }) {
         <section className="card tc-stage">
           <div className="card-header"><div className="stack-1"><span className="xsmall muted">{sel.courseTitle || ''}</span><h2 className="tc-h">{sel.lessonTitle || 'Bài tập'}</h2><span className="xsmall muted">{sel.submittedAt ? `Nộp lúc ${fmt.datetime(sel.submittedAt)}` : ''}</span></div></div>
           <div className="card-body stack-4">
-            <div className="stack-1"><strong className="xsmall muted">Yêu cầu bài tập</strong><div className="panel small" style={{ whiteSpace: 'pre-line' }}>{sel.instructions || 'Không có nội dung yêu cầu cụ thể.'}</div></div>
+            <div className="stack-1"><strong className="xsmall muted">Yêu cầu bài tập</strong><div className="panel small">{sel.instructions ? <LessonMarkdown text={sel.instructions} /> : 'Không có nội dung yêu cầu cụ thể.'}</div></div>
             <div className="stack-2"><strong className="xsmall muted">Nội dung bài nộp</strong>
               {sel.codeText && <div className="stack-1"><span className="xsmall muted">Code học viên viết và chạy trong bài ({sel.codeLanguage === 'typescript' ? 'TypeScript' : 'JavaScript'}):</span>{codeBlock(sel.codeText, 'javascript')}</div>}
               {sel.fileName && <div className="panel row-between"><span className="row small" style={{ minWidth: 0 }}><Icon name="file-text" className="icon-sm" /> <span className="mono od-truncate">{sel.fileName}</span></span>
@@ -287,7 +290,7 @@ export function GradingPage({ params, query }) {
             </div>
           </div>
         </section>
-        <aside className="card tc-dock" aria-label="Chấm điểm"><GradeForm key={sel.id + '|' + sel.status + '|' + (sel.viewToken || '')} sel={sel} nextPendingId={sel.nextPendingId || null} go={go} filters={{ course: courseF, assignment: assignF, date: d.selectedDate || 'all' }} /></aside>
+        <aside className="card tc-grade-dock" aria-label="Chấm điểm"><GradeForm key={sel.id + '|' + sel.status + '|' + (sel.viewToken || '')} sel={sel} nextPendingId={sel.nextPendingId || null} go={go} filters={{ course: courseF, assignment: assignF, date: d.selectedDate || 'all' }} /></aside>
       </div>
     );
   }

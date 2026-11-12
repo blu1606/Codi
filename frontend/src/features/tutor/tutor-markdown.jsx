@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { Icon } from '../../components/ui/primitives';
 import { isCitationHref } from './tutor-contract';
 
-const INLINE = /(`+)([^`]+?)\1|\[([^\]\n]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|(?<![\w*])\*([^*\n]+?)\*(?![\w*])|(?<![\w_])_([^_\n]+?)_(?![\w_])/;
+const INLINE = /(`+)([^`]+?)\1|\[([^\]\n]+)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)|\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|(?<![\w*])\*([^*\n]+?)\*(?![\w*])|(?<![\w_])_([^_\n]+?)_(?![\w_])/;
 
 function inline(text, key = 'i') {
   const out = [];

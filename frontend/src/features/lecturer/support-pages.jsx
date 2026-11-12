@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRevealOnSelect } from './reveal-on-select';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { Alert, Avatar, Empty, Icon, Stars } from '../../components/ui/primitives';
 import { shell, FieldError, Loading, LoadError } from './teach-api';
 import { act, reloadMine } from './teach-data';
@@ -33,10 +34,36 @@ function useAction(run, key) {
   return { ...st, reload: load };
 }
 
-function ReplyForm({ id, label, placeholder, help, onSend, extra }) {
+/**
+ * AI draft for a reply: POST /api/lecturer/courses/:courseId/questions/ai-reply. It only fills the reply box and lists
+ * the lessons it used; nothing reaches the learner until the lecturer presses "Gửi trả lời".
+ */
+async function requestReplyDraft(draft) {
+  try {
+    const r = await api.post(`/api/lecturer/courses/${encodeURIComponent(draft.courseId)}/questions/ai-reply`, { kind: draft.kind, id: draft.id });
+    if (r && r.status === 'ok' && typeof r.text === 'string') return { state: 'ok', text: r.text, sources: Array.isArray(r.sources) ? r.sources : [] };
+    return { state: 'info', message: (r && r.message) || 'Không tìm thấy đoạn bài học liên quan. Hãy trả lời thủ công.' };
+  } catch (e) {
+    return { state: 'error', message: (e && e.message) || 'AI chưa gợi ý được. Bạn vẫn trả lời thủ công bình thường.' };
+  }
+}
+
+function ReplyForm({ id, label, placeholder, help, onSend, extra, draft }) {
   const [err, setErr] = useState(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [ai, setAi] = useState({ state: 'idle', message: '', sources: [] });
+  const suggest = async () => {
+    if (ai.state === 'loading') return;
+    if (text.trim()) {
+      const ok = await Codi.ui.confirm({ title: 'Thay nội dung đang soạn?', body: 'Bản nháp AI sẽ thay nội dung bạn đã nhập trong ô trả lời.', confirmLabel: 'Thay bằng gợi ý' });
+      if (!ok.ok) return;
+    }
+    setAi({ state: 'loading', message: '', sources: [] });
+    const r = await requestReplyDraft(draft);
+    if (r.state === 'ok') { setText(r.text); setErr(null); setAi({ state: 'ok', message: '', sources: r.sources }); return; }
+    setAi({ state: r.state, message: r.message, sources: [] });
+  };
   const submit = async (e) => {
     e.preventDefault();
     if (sending) return;
@@ -46,16 +73,29 @@ function ReplyForm({ id, label, placeholder, help, onSend, extra }) {
     const res = await onSend(text.trim());
     setSending(false);
     if (res !== true) { setErr(typeof res === 'string' ? res : 'Không thể gửi câu trả lời.'); return; }
-    setErr(null); setText('');
+    setErr(null); setText(''); setAi({ state: 'idle', message: '', sources: [] });
   };
   return (
     <form className="stack-3 tc-reply-form" onSubmit={submit} noValidate aria-busy={sending}>
       <label className="field-label" htmlFor={id}>{label}</label>
       {err && <Alert type="danger" body={err} />}
+      {ai.state === 'loading' && (
+        <div className="panel row" role="status" aria-live="polite" style={{ gap: 10 }}><span className="typing" aria-hidden="true"><i /><i /><i /></span>
+          <span className="small">AI đang đọc nội dung khoá học để soạn bản nháp. Thường mất 5 đến 15 giây.</span></div>
+      )}
+      {ai.state === 'ok' && (
+        <div className="panel stack-1" role="status"><span className="xsmall row" style={{ gap: 4 }}><Icon name="sparkles" className="icon-sm" /><strong>Bản nháp do AI soạn, chưa gửi.</strong> Đọc và sửa trước khi bấm &quot;Gửi trả lời&quot;.</span>
+          {ai.sources.length > 0 && (
+            <div className="xsmall stack-1"><span className="muted">Dựa trên các bài học đã xuất bản:</span>
+              <ul className="ai-sources">{ai.sources.map((x) => <li key={x.href}><a href={x.href} target="_blank" rel="noopener noreferrer">{x.title}</a></li>)}</ul></div>
+          )}</div>
+      )}
+      {ai.state === 'info' && <Alert type="info" title="Chưa có đoạn bài học phù hợp" body={ai.message} />}
+      {ai.state === 'error' && <Alert type="danger" title="AI chưa soạn được bản nháp" body={ai.message} actions={<button type="button" className="btn btn-secondary btn-sm" onClick={suggest}><Icon name="refresh" className="icon-sm" /> Thử lại</button>} />}
       <textarea id={id} className="textarea" name="text" rows={4} value={text} placeholder={placeholder} maxLength={REPLY_MAX + 500} onChange={(e) => { setText(e.target.value); setErr(null); }} aria-invalid={!!err} />
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 12 }}>
         {help ? <span className="xsmall muted">{help}</span> : <span />}
-        <span className="row" style={{ gap: 8 }}>{extra}<button className="btn btn-primary" type="submit" disabled={sending}><Icon name="send" className="icon-sm" /> {sending ? 'Đang gửi...' : 'Gửi trả lời'}</button></span>
+        <span className="row" style={{ gap: 8, flexWrap: 'wrap' }}>{extra}{draft && <button type="button" className="btn btn-ghost btn-sm" onClick={suggest} disabled={sending || ai.state === 'loading'} aria-busy={ai.state === 'loading'} title="AI soạn bản nháp từ nội dung khoá học; bạn xem lại rồi tự gửi"><Icon name={ai.state === 'loading' ? 'loader' : 'sparkles'} className="icon-sm" /> {ai.state === 'loading' ? 'AI đang soạn…' : 'Gợi ý bằng AI'}</button>}<button className="btn btn-primary" type="submit" disabled={sending}><Icon name="send" className="icon-sm" /> {sending ? 'Đang gửi...' : 'Gửi trả lời'}</button></span>
       </div>
     </form>
   );
@@ -132,7 +172,7 @@ export function QuestionsPage({ query }) {
             <div className="panel row-between" style={{ flexWrap: 'wrap', gap: 12 }}><span className="row small muted" style={{ gap: 6 }}><Icon name="check-circle" className="icon-sm text-success" /> Cuộc hội thoại này đã được đánh dấu giải quyết. Không thể gửi thêm tin nhắn trừ khi mở lại.</span>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConversationStatus('open')}><Icon name="rotate-ccw" className="icon-sm" /> Mở lại cuộc hội thoại</button></div>
           ) : (
-            <ReplyForm key={sel.id} id="private-reply" label={`Trả lời ${u.name}`} placeholder="Nhập câu trả lời riêng cho học viên..." onSend={send}
+            <ReplyForm key={sel.id} id="private-reply" label={`Trả lời ${u.name}`} placeholder="Nhập câu trả lời riêng cho học viên..." onSend={send} draft={{ courseId: sel.courseId, kind: 'conversation', id: sel.id }}
               extra={<button type="button" className="btn btn-secondary btn-sm" onClick={() => setConversationStatus('resolved')}><Icon name="check-circle" className="icon-sm" /> Đánh dấu đã giải quyết</button>} />
           )}
         </div>
@@ -157,7 +197,7 @@ export function QuestionsPage({ query }) {
             {replies.map((r) => (
               <div key={r.id} className={`tc-msg ${r.isLecturer ? 'is-staff' : ''}`}><span className="row-between xsmall"><span className="row" style={{ gap: 6 }}><strong>{r.authorName || ''}</strong>{r.isLecturer && <span className="badge badge-accent">Giảng viên</span>}</span><span className="muted">{fmt.relative(r.createdAt)}</span></span><p className="small" style={{ whiteSpace: 'pre-line' }}>{r.body}</p></div>
             ))}</div>}
-          <ReplyForm key={sel.id} id="public-reply" label={`Trả lời ${u.name}`} placeholder="Nhập câu trả lời để giải đáp thắc mắc cho học viên..." help="Câu trả lời sẽ hiển thị công khai trong phần thảo luận của bài học này." onSend={send} />
+          <ReplyForm key={sel.id} id="public-reply" label={`Trả lời ${u.name}`} placeholder="Nhập câu trả lời để giải đáp thắc mắc cho học viên..." help="Câu trả lời sẽ hiển thị công khai trong phần thảo luận của bài học này." onSend={send} draft={{ courseId: sel.courseId, kind: 'question', id: sel.id }} />
         </div>
       </section>
     );

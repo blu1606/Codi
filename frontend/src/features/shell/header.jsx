@@ -25,7 +25,7 @@ import { useCartCount } from '../commerce/commerce-api';
 import { GlobalSearch, SearchTrigger, openSearch } from './global-search';
 import { accountLinks, primaryNav } from './nav-config';
 import { useAdminNavCounts } from '../admin/admin-data';
-import { DevToggle } from './dev-drawer';
+import { DevMenuItem, DevToggle } from './dev-drawer';
 
 const badgeText = (n) => (n > 99 ? '99+' : String(n));
 const isActive = (item, path) => item.match.test(path);
@@ -158,6 +158,7 @@ function NavDrawer({ open, onClose, adminCounts }) {
         )}
         <hr className="shell-sep" />
         <ThemeGroup idSuffix="-drawer" />
+        <DevMenuItem onOpen={onClose} />
         {u && (
           <>
             <hr className="shell-sep" />
@@ -225,7 +226,6 @@ export default function Header() {
       </nav>
       <div className="hd-search-slot"><SearchTrigger /></div>
       <div className="header-actions hd-actions">
-        <DevToggle />
         <span className="hd-search-compact"><SearchTrigger compact /></span>
         {(role === 'learner' || role === 'guest') && <CartButton role={role} />}
         {u && <NotificationMenu open={openMenu === 'notif'} onToggle={() => toggle('notif')} onClose={close} />}
@@ -238,6 +238,7 @@ export default function Header() {
             <Link className="btn btn-primary hd-register" to="/register">Đăng ký</Link>
           </>
         )}
+        <DevToggle />
       </div>
       <NavDrawer open={drawer} onClose={() => setDrawer(false)} adminCounts={adminCounts} />
       <GlobalSearch />

@@ -1,7 +1,8 @@
 /**
  * Pure review rules the admin review screen runs on the getAdminCourseReview payload, as Codi's
- * publication-review-client does: criterion labels, materialOk and the deterministic AI pre-check. Same logic and
- * copy as backend/src/lib/publication-service.ts (CRITERIA, materialOk, aiPrecheck), which cannot be imported here.
+ * publication-review-client does: criterion labels, materialOk and flag anchors. Same copy as
+ * backend/src/lib/publication-service.ts (CRITERIA, materialOk), which cannot be imported here. The rule pre-check
+ * runs only on the server (getRulePrecheck / runAiPrecheck in dashboard/admin/publication).
  */
 export const ENTRY_MIN = 5;
 
@@ -77,34 +78,3 @@ export function placeAnchor(f, known, questionIds) {
 /** True when anchor a is exactly (type, lessonId, itemId). */
 export const isAt = (a, type, lessonId = null, itemId = null) => a.type === type && (a.lessonId || null) === (lessonId || null)
   && (a.itemId || null) === (itemId == null ? null : String(itemId));
-
-/** Deterministic pre-check: suggested flags { target, severity, comment }. */
-export function aiPrecheck(c) {
-  const out = [];
-  const add = (target, severity, comment) => out.push({ target, severity, comment });
-  const desc = (c.description || c.summary || '').trim();
-  if (desc.length < 60) add({ type: 'course', itemId: 'summary', label: 'Mô tả khoá học' }, 'should', 'Mô tả còn ngắn — nên nêu rõ đối tượng học viên và kết quả đạt được.');
-  const entryQuestions = (c.entryTest && c.entryTest.questions ? c.entryTest.questions.length : 0);
-  if (entryQuestions < ENTRY_MIN) add({ type: 'entry', label: ENTRY_LABEL }, 'must', `Bài kiểm tra đầu vào mới có ${entryQuestions} câu, cần ít nhất ${ENTRY_MIN} câu để xếp lộ trình.`);
-  for (const l of lessonsOf(c)) {
-    const lt = { type: 'lesson', lessonId: l.id, label: `Bài: ${l.title}` };
-    if (!materialOk(l)) add(lt, 'must', `Chưa có tệp ${l.type === 'video' ? 'video' : 'slide/PDF'} — học viên sẽ thấy bài trống.`);
-    if (l.quiz && l.quiz.questions) {
-      if (l.quiz.questions.length < 3) add({ type: 'quiz', lessonId: l.id, label: 'Quiz · ' + l.title }, 'should', `Quiz chỉ có ${l.quiz.questions.length} câu, nên có ít nhất 3 câu.`);
-      l.quiz.questions.forEach((q, i) => {
-        const qt = { type: 'question', lessonId: l.id, itemId: q.id, label: `Câu ${i + 1}: ${q.text.slice(0, 40)}` };
-        if (q.options.length <= 2) add(qt, 'should', 'Câu chỉ có 2 lựa chọn nên dễ đoán — nên thêm lựa chọn sai hợp lý.');
-        if (!q.explanation || q.explanation.trim().length === 0) add(qt, 'should', 'Câu hỏi chưa có phần giải thích đáp án.');
-      });
-    }
-    if (l.code && l.code.kind === 'challenge') {
-      const ct = { type: 'code', lessonId: l.id, label: 'Bài code · ' + l.title };
-      if (!l.code.solutionCheck || !l.code.solutionCheck.ok) add(ct, 'must', 'Lời giải mẫu chưa chạy đạt tất cả test.');
-      if (!l.code.tests || l.code.tests.length < 3 || !l.code.tests.some((t) => t.hidden)) add(ct, 'should', 'Bài code nên có ít nhất 3 test, trong đó có test ẩn cho trường hợp biên.');
-    }
-    if (l.assignment && (!l.assignment.rubric || l.assignment.rubric.length === 0)) {
-      add({ type: 'assignment', lessonId: l.id, label: `Bài tập: ${l.title}` }, 'should', 'Bài tập chưa có thang chấm — học viên không biết được chấm theo tiêu chí nào.');
-    }
-  }
-  return out;
-}

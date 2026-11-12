@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import type { Hono } from "hono";
 import { ForbiddenError } from "@codi-1/auth";
 import { runInRequestContext } from "./next-routes";
+import { refusalResponse } from "../lib/action-error";
 
 type Action = (...args: unknown[]) => unknown;
 export type MountedActionModule = { module: string; file: string; actions: string[] };
@@ -23,6 +24,8 @@ const moduleKey = (dir: string) => dir.replace(/\[(?:\.\.\.)?(\w+)\]/g, "$1");
 
 function errorResponse(error: unknown, label: string) {
   if (error instanceof ForbiddenError) return Response.json({ error: "Bạn không có quyền thực hiện thao tác này." }, { status: 403 });
+  const refused = refusalResponse(error); // a domain "no" (4xx), not a server failure
+  if (refused) return refused;
   const message = error instanceof Error ? error.message : "";
   if (/^unauthori[sz]ed\b/i.test(message) || message === "Vui lòng đăng nhập.") {
     return Response.json({ error: "Vui lòng đăng nhập." }, { status: 401 });

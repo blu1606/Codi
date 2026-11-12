@@ -110,10 +110,31 @@ export default function PathPage({ params }) {
   const title = view.course.title;
 
   if (view.status === 'none') {
+    // Lessons stay locked until a path is set, but the outline and progress are still shown so the page is never empty.
+    const outline = pathRows(view);
+    const studied = outline.filter((r) => r.status === 'done').length;
     return (
-      <div className="page page-narrow stack-4"><h1>{title}</h1><div className="card">
-        <Empty icon="route" title="Hãy thiết lập lộ trình học của bạn" body="Đặt mục tiêu và chọn học từ bài 1 hoặc tìm điểm bắt đầu phù hợp với bạn." actions={<Link className="btn btn-primary" to={`/learn/${courseId}/onboarding`}>Bắt đầu thiết lập</Link>} />
-      </div></div>
+      <div className="page page-narrow stack-4">
+        <h1>{title}</h1>
+        <div className="card"><div className="card-body stack-3">
+          <h2 className="pt-h2">Hãy thiết lập lộ trình học của bạn</h2>
+          <p className="muted">Đặt mục tiêu và làm bài kiểm tra đầu vào để Codi xếp thứ tự học riêng cho bạn. {studied > 0 ? `Bạn đã học ${studied}/${outline.length} bài, tiến độ này vẫn được giữ.` : ''}</p>
+          <div><Link className="btn btn-primary" to={`/learn/${courseId}/onboarding`}>{studied > 0 ? 'Thiết lập lộ trình' : 'Bắt đầu thiết lập'}</Link></div>
+        </div></div>
+        {outline.length > 0 && (
+          <section className="stack-2" aria-labelledby="pt-outline-h">
+            <h2 id="pt-outline-h" className="pt-h2">Các bài trong khoá</h2>
+            <ol className="pt-outline">
+              {outline.map((r) => (
+                <li key={r.id}>
+                  <span className="stack-1"><span className="small muted">{r.chapterTitle}</span><span className="strong">{r.title}</span></span>
+                  {r.status === 'done' ? <span className="small strong">Đã học</span> : <span className="small muted">{Math.round(r.durationMin || 0)} phút</span>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+      </div>
     );
   }
   if (view.status === 'generating') {

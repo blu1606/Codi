@@ -38,7 +38,7 @@ import { db } from "@/services";
 import { canonical, gradeCoding } from "@/lib/coding-contract";
 import { mediaUrl } from "@/lib/lesson-media";
 import { getR2Client, R2_BUCKET } from "@/lib/storage";
-import { aiPrecheck, checkReadiness } from "@/lib/publication-service";
+import { checkReadiness, rulePrecheck } from "@/lib/publication-service";
 import { fetchCourseDataForReview } from "@/lib/publication-course-data";
 import { seedQuizRevision } from "../seed-quiz-revision";
 import { LESSONS, QUIZ_INSTRUCTIONS, QUIZ_MIN, QUIZ_TARGET, type LessonSpec } from "./lesson-content";
@@ -305,7 +305,7 @@ async function main() {
   for (const courseId of courseIds) {
     const { courseData } = await fetchCourseDataForReview(courseId, db);
     const readiness = checkReadiness(courseData);
-    const must = aiPrecheck(courseData).filter((f) => f.severity === "must");
+    const must = rulePrecheck(courseData).filter((f) => f.severity === "must");
     allReady &&= readiness.allOk;
     log(`${courseId}: ${readiness.allOk ? "ALL OK" : "NOT READY"}`);
     for (const item of readiness.items) log(`  ${item.ok ? "ok " : "NO "} ${item.label}${item.ok ? "" : ` — ${item.hint}`}`);

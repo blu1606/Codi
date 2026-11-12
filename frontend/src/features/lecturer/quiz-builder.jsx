@@ -212,7 +212,16 @@ function QuizBuilder({ params, data }) {
     if (ro || qb.saving) return;
     if (!quiz.questions.length) { Codi.ui.toast('Vui lòng thêm ít nhất một câu hỏi.', { type: 'danger' }); return; }
     const v = validateQuiz(quiz);
-    if (v) { qb.errors = v; rerender(); Codi.ui.toast('Quiz chưa hợp lệ — xem các lỗi được đánh dấu.', { type: 'danger' }); return; }
+    if (v) {
+      qb.errors = v; rerender();
+      // Say how much is wrong and move focus to the first invalid field, so the lecturer does not have to hunt for it.
+      const bad = Object.keys(v.questions).map(Number).sort((a, b) => a - b);
+      const n = bad.length + (v.passingScore ? 1 : 0);
+      const firstId = bad.length ? `qt-${bad[0]}` : 'qb-pass';
+      Codi.ui.toast(`Quiz chưa hợp lệ: ${n} mục cần sửa${bad.length ? ` (câu ${bad.map((i) => i + 1).join(', ')})` : ''}.`, { type: 'danger' });
+      setTimeout(() => { const t = document.getElementById(firstId); if (t) t.focus(); }, 0);
+      return;
+    }
     const cur = qb; cur.saving = true; rerender();
     try {
       await act('course', 'saveQuizData', c.id, cur.isEntry ? 'entry' : cur.lessonId, {
@@ -240,7 +249,7 @@ function QuizBuilder({ params, data }) {
   return shell('/teach/courses', <>
     <div className="row-between tc-qb-head" style={{ marginBottom: 16 }}>
       <div className="stack-2"><Link className="small" to={`/teach/courses/${c.id}/content`}><Icon name="arrow-left" className="icon-sm" /> Quay lại khoá học: {c.title}</Link>
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}><h1>{isEntry ? 'Bài kiểm tra đầu vào (Diagnostic Test)' : `Quiz: ${lesson.title || 'Bài học'}`}</h1>
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}><h1>{isEntry ? 'Bài kiểm tra đầu vào' : `Quiz: ${lesson.title || 'Bài học'}`}</h1>
           {isEntry ? <span className="badge badge-accent">Xếp lộ trình đầu vào</span> : <span className="badge badge-neutral">Quiz bài học</span>}
           {ro && <span className="badge badge-warn">Đang chờ duyệt — Chỉ đọc</span>}</div>
         <p className="small muted">{isEntry ? 'Bài kiểm tra giúp hệ thống BKT phân tích kỹ năng và đề xuất lộ trình học thích ứng cho từng học viên.' : 'Kiểm tra kiến thức cốt lõi ngay sau khi học viên hoàn thành nội dung bài học.'}</p></div>
@@ -286,7 +295,7 @@ function QuizBuilder({ params, data }) {
                     {!ro && <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => delOpt(q, k)} aria-label={`Xoá phương án ${letter(k)}`} title="Xoá phương án này"><Icon name="x" className="icon-sm" /></button>}</div>
                 ))}
                 <FieldError>{qe.options || qe.correct}</FieldError>
-                {!ro && q.options.length < MAX_OPT && <button type="button" className="btn btn-ghost btn-sm" style={{ justifySelf: 'start' }} onClick={() => addOpt(q)}><Icon name="plus" className="icon-sm" /> Thêm phương án</button>}
+                {!ro && q.options.length < MAX_OPT && <button type="button" className="btn btn-ghost btn-sm" style={{ justifySelf: 'start' }} onClick={() => addOpt(q)} aria-label={`Thêm phương án cho câu ${i + 1}`}><Icon name="plus" className="icon-sm" /> Thêm phương án</button>}
               </fieldset>
               {showExp ? (
                 <div className="field"><label htmlFor={`qe-${i}`}><Icon name="help-circle" className="icon-sm" /> Giải thích đáp án (học viên sẽ thấy sau khi nộp bài)</label><textarea id={`qe-${i}`} rows={2} value={q.explanation} placeholder="Giải thích vì sao phương án này là đúng..." onChange={(e) => change(() => { q.explanation = e.target.value; })} disabled={ro} /></div>

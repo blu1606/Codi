@@ -5,17 +5,18 @@
  * Queue on the left (getAdminPublicationQueue, counted tabs); on the right the course (getAdminCourseReview) with
  * four views — Tiêu chí (saveCriterionVerdict, applyAutoCriteria), Xem trước (publication-preview.jsx: the course as
  * the learner or the lecturer sees it, with flags anchored in place: addReviewFlag), Cờ (updateFlagStatus,
- * deleteReviewFlag, AI pre-check run on the payload as in Codi), Lịch sử (rounds). Decisions: approvePublication
+ * deleteReviewFlag; rule pre-check getRulePrecheck and the model pass runAiPrecheck, both proposals until accepted), Lịch sử (rounds). Decisions: approvePublication
  * (blocked by the server's blockingReasons), requestChanges, rejectPublication — all with consequence dialogs; the
  * backend notifies the lecturer. S32b: "Xem trước như học viên" opens the preview in learner view.
  */
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi, useCodi } from '../../lib/codi';
+import { api } from '../../lib/api';
 import { Icon, Alert, Empty, SpinnerBlock } from '../../components/ui/primitives';
 import { AdminShell, parsePrice, confirmImpact } from './admin-shell';
 import { useAction, pubAction, attempt, LEVEL_LABEL } from './admin-data';
-import { CRITERIA, ROUND_STATUS as ROUND, aiPrecheck, lessonsOf, anchorOf } from './publication-rules';
+import { CRITERIA, ROUND_STATUS as ROUND, lessonsOf, anchorOf } from './publication-rules';
 import { SevBadge, FlagCard, addFlag } from './review-flags';
 import { PreviewView } from './publication-preview';
 
@@ -24,10 +25,16 @@ const VIEWS = ['criteria', 'content', 'flags', 'history'];
 
 // View state survives navigation between queue items of the same course (mockup module state).
 // node: 'info' | 'entry' | lessonId shown in the preview; mode: 'learner' | 'author'; focus: flag id to scroll to.
-let view = { courseId: null, tab: 'criteria', node: 'info', mode: 'learner', focus: null, ai: null }; // ai: {state:'running'|'done'|'error'|'limit', items, token}
+let view = { courseId: null, tab: 'criteria', node: 'info', mode: 'learner', focus: null, check: null }; // check: {state:'running'|'done'|'error', rules, ai, token}
 const priceDraft = {};
 const rerender = () => Codi.rerender();
-const forCourse = (id) => { if (view.courseId !== id) view = { courseId: id, tab: 'criteria', node: 'info', mode: 'learner', focus: null, ai: null }; return view; };
+const forCourse = (id) => {
+  if (view.courseId !== id) {
+    if (view.check && view.check.ctrl) view.check.ctrl.abort(); // leaving the course stops waiting for its check
+    view = { courseId: id, tab: 'criteria', node: 'info', mode: 'learner', focus: null, check: null };
+  }
+  return view;
+};
 const MAX_PRICE = 2147483647; // real approve bound (int4 column)
 const nodeOf = (f) => { const a = anchorOf(f); return a.type === 'course' || a.type === 'chapter' ? 'info' : a.type === 'entry' || a.entry ? 'entry' : a.lessonId || 'info'; };
 /** Opens the preview at a flag's place and scrolls to it. */
@@ -56,28 +63,40 @@ async function critAuto(ctx) {
   const res = await attempt(() => pubAction('applyAutoCriteria', ctx.requestId, ctx.courseId));
   if (res) Codi.ui.toast(res.appliedCount ? `Đã điền ${res.appliedCount} tiêu chí theo gợi ý. Kiểm tra lại trước khi kết luận.` : 'Không còn tiêu chí nào để điền tự động.');
 }
-// AI pre-check (deterministic, on the review payload; obeys the aiAssistant scenario flag)
-function runAi(course, r) {
+// Pre-check on the server (dashboard/admin/publication): getRulePrecheck runs the fixed rules only; runAiPrecheck also
+// asks the model to check each quiz against its lesson text. Both return proposals; a flag exists only once accepted.
+// Rule proposals are saved as the admin's own flags; only model proposals carry the "AI đề xuất" source.
+// "Dừng" aborts the wait; the server cannot be told to stop, so a stopped AI run still counts against the hourly cap.
+async function runCheck(ctx, withAi) {
+  if (view.check && view.check.ctrl) view.check.ctrl.abort();
   const token = {};
-  const flag = Codi.state.scenario.aiAssistant;
-  if (flag === 'ratelimit') { view.ai = { state: 'limit' }; rerender(); return; }
-  view.ai = { state: 'running', token }; view.tab = 'flags'; rerender();
-  if (flag === 'thinking') return;
-  setTimeout(() => {
-    if (!view.ai || view.ai.token !== token) return;
-    if (flag === 'error') { view.ai = { state: 'error' }; rerender(); return; }
-    const have = new Set(r.flags.map((f) => f.targetLabel + '|' + f.comment));
-    view.ai = { state: 'done', items: aiPrecheck(course).filter((x) => !have.has(x.target.label + '|' + x.comment)) };
-    rerender();
-  }, 1400);
+  const ctrl = new AbortController();
+  view.check = { state: 'running', ai: withAi, token, ctrl }; view.tab = 'flags'; rerender();
+  try {
+    const res = await api.actionWith('dashboard/admin/publication', withAi ? 'runAiPrecheck' : 'getRulePrecheck', [ctx.requestId], { signal: ctrl.signal });
+    // a stopped or replaced run never applies its late result
+    if (ctrl.signal.aborted || !view.check || view.check.token !== token) return;
+    const ai = res.ai && res.ai.status === 'ok' ? { ...res.ai, proposals: res.ai.proposals.map((x) => ({ ...x, source: 'ai' })) } : res.ai;
+    view.check = { state: 'done', ran: withAi, rules: res.rules.map((x) => ({ ...x, source: 'admin' })), ai };
+  } catch (e) {
+    if (ctrl.signal.aborted || !view.check || view.check.token !== token) return;
+    view.check = { state: 'error', message: (e && e.message) || 'Chưa chạy được kiểm tra.' };
+  }
+  rerender();
 }
-function stopAi() { view.ai = null; rerender(); Codi.ui.toast('Đã dừng rà soát.'); }
-function skipAi(i) { const x = view.ai.items[i]; if (x) x.done = true; rerender(); }
-async function acceptAi(ctx, i) {
-  const pick = i === 'all' ? view.ai.items.filter((x) => !x.done) : [view.ai.items[i]].filter(Boolean);
+function stopCheck() {
+  const check = view.check;
+  if (!check || check.state !== 'running') return;
+  check.ctrl.abort();
+  view.check = null; rerender();
+  Codi.ui.toast(check.ai ? 'Đã dừng chờ kết quả. Lượt rà soát AI này vẫn được tính vào giới hạn mỗi giờ.' : 'Đã dừng kiểm tra.');
+}
+const pending = (check) => [...check.rules, ...(check.ai && check.ai.status === 'ok' ? check.ai.proposals : [])].filter((x) => !x.done);
+function skipProposal(x) { x.done = true; rerender(); }
+async function acceptProposals(ctx, pick) {
   let added = 0;
   for (const x of pick) {
-    try { await addFlag(ctx, x.target, x.severity, x.comment, 'ai'); x.done = true; added += 1; } catch (e) { Codi.ui.toast(e.message, { type: 'danger' }); break; }
+    try { await addFlag(ctx, x.target, x.severity, x.comment, x.source); x.done = true; added += 1; } catch (e) { Codi.ui.toast(e.message, { type: 'danger' }); break; }
   }
   if (added) await attempt(() => Promise.resolve(), `Đã thêm ${added} cờ.`);
   rerender();
@@ -106,7 +125,7 @@ async function requestChanges(ctx, c, r) {
   Codi.go('/admin/publication?tab=changes&id=' + c.id);
 }
 async function reject(ctx, c) {
-  const res = await confirmImpact({ title: `Từ chối "${c.title}"?`, body: <p>Dùng khi khoá học không phù hợp chính sách hoặc chất lượng chung chưa đạt. Nếu chỉ cần sửa vài chỗ, hãy dùng &quot;Yêu cầu sửa&quot;.</p>, consequence: 'Khoá học chuyển sang "Bị từ chối" và không được bán. Giảng viên thấy lý do và vẫn có thể sửa rồi gửi lại.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).', reasonLabel: 'Lý do từ chối', danger: true, confirmLabel: 'Từ chối' });
+  const res = await confirmImpact({ title: `Từ chối "${c.title}"?`, body: <p>Dùng khi khoá học không phù hợp chính sách hoặc chất lượng chung chưa đạt. Nếu chỉ cần sửa vài chỗ, hãy dùng &quot;Yêu cầu sửa&quot;.</p>, consequence: 'Khoá học chuyển sang "Bị từ chối" và không được bán. Giảng viên thấy lý do và vẫn có thể sửa rồi gửi lại.', requireReason: true, minReason: 5, reasonError: 'Vui lòng nhập lý do từ chối (ít nhất 5 ký tự).', reasonLabel: 'Lý do từ chối', danger: true, confirmLabel: 'Từ chối và gửi lý do' });
   if (!res.ok) return;
   if (!(await attempt(() => pubAction('rejectPublication', c.id, ctx.requestId, res.reason), 'Đã từ chối và gửi lý do cho giảng viên.'))) return;
   Codi.go('/admin/publication?tab=changes&id=' + c.id);
@@ -140,34 +159,58 @@ function criteriaView({ d, r, ro, ctx }) {
   );
 }
 
-function aiPanel(d, r, ctx, ai) {
-  const c = d.course;
-  if (!ai) {
-    return (
-      <div className="rv-ai"><div><strong className="small"><Icon name="sparkles" className="icon-sm" /> Rà soát bằng AI</strong><p className="xsmall muted">AI đọc toàn bộ nội dung và đề xuất cờ. Bạn chấp nhận hoặc bỏ từng đề xuất.</p></div>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => runAi(c, r)}>Chạy rà soát</button></div>
-    );
-  }
-  if (ai.state === 'running') {
-    const ls = lessonsOf(c);
-    return (
-      <div className="rv-ai" aria-busy="true"><span className="ai-thinking-row"><span className="typing" aria-hidden="true"><i /><i /><i /></span><span>AI đang đọc {ls.length} bài và {ls.reduce((s, l) => s + (l.quiz ? l.quiz.questions.length : 0), 0)} câu hỏi…</span></span>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={stopAi}><Icon name="x" className="icon-sm" /> Dừng</button></div>
-    );
-  }
-  if (ai.state === 'error') return <Alert type="danger" title="AI rà soát chưa chạy được" body="Bạn vẫn duyệt thủ công bình thường." actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => runAi(c, r)}>Thử lại</button>} />;
-  if (ai.state === 'limit') return <Alert type="warn" title="Đã dùng hết lượt rà soát AI trong giờ này" body="Thử lại sau ít phút." />;
-  const items = ai.items.filter((x) => !x.done);
+function ProposalList({ ctx, items }) {
   return (
-    <section className="rv-ai is-done"><div className="row-between"><strong className="small"><Icon name="sparkles" className="icon-sm" /> AI đề xuất {ai.items.length} cờ · còn {items.length} chưa xử lý</strong>
-      {items.length > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => acceptAi(ctx, 'all')}>Thêm tất cả ({items.length})</button>}</div>
-      {items.length ? (
-        <ul className="rv-flags">{ai.items.map((x, i) => (x.done ? null : (
-          <li key={i} className="rv-flag is-suggestion"><div className="row" style={{ gap: 6 }}><SevBadge s={x.severity} /><span className="small strong">{x.target.label}</span></div><p className="small">{x.comment}</p>
-            <div className="row" style={{ gap: 8 }}><button type="button" className="btn btn-primary btn-sm" onClick={() => acceptAi(ctx, i)}>Thêm cờ</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => skipAi(i)}>Bỏ qua</button></div></li>
-        )))}</ul>
-      ) : <p className="xsmall muted">Đã xử lý mọi đề xuất.</p>}
-      <p className="xsmall muted">AI có thể sai — đề xuất chỉ thành cờ khi bạn chấp nhận.</p></section>
+    <ul className="rv-flags">{items.map((x, i) => (x.done ? null : (
+      <li key={i} className="rv-flag is-suggestion"><div className="row" style={{ gap: 6, flexWrap: 'wrap' }}><SevBadge s={x.severity} />{x.source === 'ai' && <span className="badge badge-accent"><Icon name="sparkles" />AI đề xuất</span>}<span className="small strong">{x.target.label}</span></div><p className="small">{x.comment}</p>
+        <div className="row" style={{ gap: 8 }}><button type="button" className="btn btn-primary btn-sm" onClick={() => acceptProposals(ctx, [x])}>Thêm cờ</button><button type="button" className="btn btn-ghost btn-sm" onClick={() => skipProposal(x)}>Bỏ qua</button></div></li>
+    )))}</ul>
+  );
+}
+
+function checkPanel(d, ctx, check) {
+  const ls = lessonsOf(d.course);
+  const quizLessons = ls.filter((l) => l.quiz && l.quiz.questions && l.quiz.questions.length).length;
+  const start = (
+    <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => runCheck(ctx, false)}>Chạy kiểm tra quy tắc</button>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => runCheck(ctx, true)} disabled={!quizLessons} title={quizLessons ? undefined : 'Khoá học chưa có bài nào có quiz'}><Icon name="sparkles" className="icon-sm" /> Rà soát quiz bằng AI</button>
+    </div>
+  );
+  if (!check) {
+    return (
+      <div className="rv-ai stack-2"><div className="stack-1"><strong className="small">Kiểm tra tự động</strong>
+        <p className="xsmall muted"><strong>Kiểm tra theo quy tắc</strong> chạy ngay, không gọi AI: mô tả, bài kiểm tra đầu vào, tệp bài học, quiz, bài code và thang chấm.</p>
+        <p className="xsmall muted"><strong>Rà soát quiz bằng AI</strong> gọi một mô hình ngôn ngữ để đối chiếu từng câu quiz với nội dung chữ của bài. Thường mất 30 đến 60 giây tuỳ số bài có quiz.</p>
+        <p className="xsmall muted">Kết quả chỉ là đề xuất. Chưa có gì thành cờ cho đến khi bạn bấm &quot;Thêm cờ&quot;, và bạn có thể bỏ qua từng đề xuất.</p></div>
+        {start}</div>
+    );
+  }
+  if (check.state === 'running') {
+    return (
+      <div className="rv-ai" aria-busy="true"><span className="ai-thinking-row"><span className="typing" aria-hidden="true"><i /><i /><i /></span><span>{check.ai ? `Đang kiểm tra quy tắc; AI đang đối chiếu quiz của ${quizLessons} bài với nội dung bài. Thường mất 30 đến 60 giây. "Dừng" chỉ ngừng chờ kết quả; lượt rà soát vẫn được tính vào giới hạn mỗi giờ.` : 'Đang kiểm tra theo quy tắc…'}</span></span>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={stopCheck}><Icon name="x" className="icon-sm" /> Dừng</button></div>
+    );
+  }
+  if (check.state === 'error') return <Alert type="danger" title="Chưa chạy được kiểm tra" body={`${check.message} Bạn vẫn duyệt thủ công bình thường.`} actions={start} />;
+  const left = pending(check);
+  const rules = check.rules.filter((x) => !x.done);
+  const ai = check.ai;
+  const aiItems = ai && ai.status === 'ok' ? ai.proposals.filter((x) => !x.done) : [];
+  return (
+    <section className="rv-ai is-done stack-3">
+      <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}><strong className="small">{left.length ? `Kết quả kiểm tra · còn ${left.length} đề xuất chưa xử lý` : 'Kết quả kiểm tra · đã xử lý hết đề xuất'}</strong>
+        <span className="row" style={{ gap: 8 }}>{left.length > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => acceptProposals(ctx, left)}>Thêm tất cả ({left.length})</button>}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { view.check = null; rerender(); }}>Chạy lại</button></span></div>
+      <div className="stack-2"><strong className="xsmall muted">Theo quy tắc ({check.rules.length})</strong>
+        {rules.length ? <ProposalList ctx={ctx} items={check.rules} /> : <p className="xsmall muted">{check.rules.length ? 'Đã xử lý mọi đề xuất theo quy tắc.' : 'Không phát hiện vấn đề theo quy tắc.'}</p>}</div>
+      {check.ran && ai && ai.status === 'ok' && (
+        <div className="stack-2"><strong className="xsmall muted row" style={{ gap: 4 }}><Icon name="sparkles" className="icon-sm" /> AI đối chiếu quiz với bài học ({ai.proposals.length} đề xuất từ {ai.lessonsRead} bài{ai.lessonsSkipped ? `, bỏ qua ${ai.lessonsSkipped} bài không có nội dung chữ` : ''})</strong>
+          {aiItems.length ? <ProposalList ctx={ctx} items={ai.proposals} /> : <p className="xsmall muted">{ai.proposals.length ? 'Đã xử lý mọi đề xuất của AI.' : 'AI không thấy quiz nào lệch với nội dung bài.'}</p>}
+          <p className="xsmall muted">AI có thể sai — đề xuất chỉ thành cờ khi bạn chấp nhận.</p></div>
+      )}
+      {check.ran && ai && ai.status === 'unavailable' && <Alert type={ai.code === 'rate_limited' ? 'warn' : 'danger'} title="Lượt rà soát AI chưa chạy được" body={`${ai.message} Kết quả theo quy tắc ở trên vẫn dùng được.`} actions={ai.code === 'rate_limited' ? null : <button type="button" className="btn btn-secondary btn-sm" onClick={() => runCheck(ctx, true)}><Icon name="sparkles" className="icon-sm" /> Rà soát lại bằng AI</button>} />}
+    </section>
   );
 }
 
@@ -176,8 +219,8 @@ function flagsView({ d, r, ro, ctx, tab }) {
   const live = r.flags;
   return (
     <div className="stack-4">
-      {!ro && aiPanel(d, r, ctx, view.ai)}
-      {!live.length ? <div className="viz-empty">Chưa có cờ nào. Gắn cờ ngay tại chỗ trong thẻ "Xem trước" hoặc chạy "Rà soát bằng AI".</div> : (
+      {!ro && checkPanel(d, ctx, view.check)}
+      {!live.length ? <div className="viz-empty">Chưa có cờ nào. Gắn cờ ngay tại chỗ trong thẻ "Xem trước" hoặc chạy kiểm tra tự động.</div> : (
         <ul className="rv-flags">{live.map((f) => (
           <FlagCard key={f.id} f={f} ctx={ctx} ro={ro} target={<button type="button" className="btn-link rv-flag-target" onClick={() => gotoFlag(tab, f)}><Icon name="map" className="icon-sm" /> {f.targetLabel}</button>} />
         ))}</ul>
@@ -197,17 +240,30 @@ function historyView({ d }) {
   );
 }
 
+/** Thousands separators for the price field ("10000" → "10.000"); parsePrice reads both forms back. */
+const formatPrice = (n) => {
+  if (n == null || n === '') return '';
+  const v = parsePrice(n);
+  return v === null ? String(n) : v.toLocaleString('vi-VN');
+};
+
 function decisionCard(d, item, ctx) {
   const c = d.course; const r = d.round;
   const def = proposed(c, item);
-  const price = priceDraft[c.id] !== undefined ? priceDraft[c.id] : String(def ?? '');
+  const price = priceDraft[c.id] !== undefined ? priceDraft[c.id] : formatPrice(def);
   const why = d.blockingReasons;
+  const onPriceBlur = (e) => {
+    const n = parsePrice(e.target.value);
+    if (n === null) return; // keep what was typed; approve() reports the error
+    e.target.value = formatPrice(n);
+    priceDraft[c.id] = e.target.value;
+  };
   return (
     <section className="card rv-decision"><div className="card-body stack-3">
       <h3 className="tc-h">Kết luận vòng {r.round}</h3>
       <div className={`field ${priceDraft.err ? 'is-invalid' : ''}`} style={{ maxWidth: 320 }}><label htmlFor="pub-price">Giá bán (VND) <span className="req">*</span></label>
-        <input key={c.id} id="pub-price" inputMode="numeric" defaultValue={price} onChange={(e) => { priceDraft[c.id] = e.target.value; }} />
-        <span className="field-help">Giảng viên đề xuất: {c.proposedPrice == null ? 'chưa đề xuất' : fmt.vnd(c.proposedPrice)}. Nhập 0 cho khoá miễn phí.</span>
+        <input key={c.id} id="pub-price" className="mono" inputMode="numeric" defaultValue={price} aria-describedby="pub-price-help" onBlur={onPriceBlur} onChange={(e) => { priceDraft[c.id] = e.target.value; }} />
+        <span id="pub-price-help" className="field-help">Giảng viên đề xuất: {c.proposedPrice == null ? 'chưa đề xuất' : fmt.vnd(c.proposedPrice)}. Nhập 0 cho khoá miễn phí.</span>
         {priceDraft.err && <p className="field-error"><Icon name="alert-circle" className="icon-sm" /><span>{priceDraft.err}</span></p>}</div>
       {why.length
         ? <div className="rv-why"><strong className="small">Chưa thể duyệt:</strong><ul className="small">{why.map((x) => <li key={x}>{x}</li>)}</ul></div>
@@ -216,7 +272,13 @@ function decisionCard(d, item, ctx) {
         <button type="button" className="btn btn-primary" disabled={why.length > 0} onClick={() => approve(ctx, c, item, why)}>Duyệt và xuất bản</button>
         <button type="button" className="btn btn-secondary" onClick={() => requestChanges(ctx, c, r)}>Yêu cầu sửa</button>
         <button type="button" className="btn btn-danger-outline" onClick={() => reject(ctx, c)}>Từ chối</button>
-      </div></div></section>
+      </div>
+      <ul className="rv-decision-hints xsmall muted" aria-label="Hậu quả của từng lựa chọn">
+        <li><strong>Duyệt và xuất bản:</strong> khoá học bán ngay với giá đã nhập. Giảng viên nhận thông báo.</li>
+        <li><strong>Yêu cầu sửa:</strong> giảng viên sửa theo các cờ rồi gửi lại thành vòng mới; khoá học chưa bán trong lúc đó.</li>
+        <li><strong>Từ chối:</strong> chỉ khi khoá học không đạt chính sách hoặc chất lượng chung. Giảng viên thấy lý do và vẫn có thể sửa rồi gửi lại.</li>
+      </ul>
+      </div></section>
   );
 }
 

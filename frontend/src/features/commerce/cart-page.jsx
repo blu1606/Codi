@@ -234,7 +234,7 @@ export default function CartPage() {
           </dl>
           <button type="button" className="btn btn-primary btn-block btn-lg" onClick={checkout} disabled={creating} aria-busy={creating ? 'true' : undefined}>{creating ? 'Đang tạo đơn…' : 'Thanh toán'}</button>
           <Link className="btn btn-ghost btn-block" to="/courses">Tiếp tục xem khoá học</Link>
-          <p className="xsmall muted">Thanh toán bằng chuyển khoản ngân hàng (VietQR). Khoá học được mở ngay khi Codi nhận được tiền.</p>
+          <p className="small muted">Thanh toán bằng chuyển khoản ngân hàng (VietQR). Khoá học được mở ngay khi Codi nhận được tiền.</p>
         </div></div></aside>
       </div>
     </div>

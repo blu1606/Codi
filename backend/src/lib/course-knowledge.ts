@@ -5,7 +5,7 @@
 import { embed, embedMany, type EmbeddingModel } from "ai";
 import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { Database } from "@codi-1/db";
 import { courseKnowledgeChunks, courseKnowledgeSources } from "@codi-1/db/schema/course-knowledge";
 import { ENV } from "@/env";
@@ -190,6 +190,18 @@ export async function indexNextKnowledgeSource(db: Database): Promise<boolean> {
   const source = await nextPendingSource(db, `${config.id}#${INDEX_VERSION}`);
   if (!source) return false;
   try {
+    // The same file or video linked from another lesson is not read (OCR, Whisper, Gemini) or embedded twice.
+    const [twin] = await db.select({ sourceKey: courseKnowledgeSources.sourceKey }).from(courseKnowledgeSources)
+      .where(and(eq(courseKnowledgeSources.contentHash, source.hash), eq(courseKnowledgeSources.status, "ready"),
+        ne(courseKnowledgeSources.sourceKey, source.source_key)))
+      .limit(1);
+    if (twin) {
+      const chunks = await db.select({ content: courseKnowledgeChunks.content, embedding: courseKnowledgeChunks.embedding })
+        .from(courseKnowledgeChunks).where(eq(courseKnowledgeChunks.sourceKey, twin.sourceKey))
+        .orderBy(asc(courseKnowledgeChunks.position));
+      await saveSource(db, source, config.id, { status: "ready", chunks });
+      return true;
+    }
     const read = await readSource(db, source);
     if (read.status === "skipped") {
       await saveSource(db, source, config.id, { status: "skipped", error: read.reason });
@@ -225,13 +237,19 @@ export type KnowledgeHit = {
   score: number;
 };
 
+/** Search result, or why it returned nothing so callers can tell "not indexed yet" from "nothing relevant". */
+export type KnowledgeSearch =
+  | { status: "ok"; hits: KnowledgeHit[] }
+  | { status: "not_configured" | "not_indexed" | "search_failed" | "no_match" };
+
 /**
- * The course chunks closest to `query`, from published lessons only. Returns null when search is unavailable
- * (no embedding key, nothing indexed yet, provider error) so callers can fall back to keyword search.
+ * The course chunks closest to `query`, from published lessons only. There is no similarity threshold, so an
+ * indexed course returns its top `limit` chunks whatever their score; "no_match" means it has indexed sources
+ * but none of them is in a published lesson (or none has chunks).
  */
-export async function searchCourseKnowledge(db: Database, courseId: string, query: string, limit = 5): Promise<KnowledgeHit[] | null> {
+export async function searchCourseKnowledge(db: Database, courseId: string, query: string, limit = 5): Promise<KnowledgeSearch> {
   const config = embeddingConfig();
-  if (!config) return null;
+  if (!config) return { status: "not_configured" };
   try {
     const { embedding } = await embed({ model: config.model, value: query, providerOptions: config.options("RETRIEVAL_QUERY") });
     const vector = `{${normalize(embedding).join(",")}}`;
@@ -246,17 +264,26 @@ export async function searchCourseKnowledge(db: Database, courseId: string, quer
       order by score desc
       limit ${limit}
     `);
-    if (!result.rows.length) return null;
-    return (result.rows as Record<string, unknown>[]).map((row) => ({
-      lessonId: String(row.lesson_id),
-      lessonTitle: String(row.lesson_title),
-      chapter: String(row.chapter),
-      sourceTitle: String(row.source_title),
-      content: String(row.content),
-      score: Number(row.score),
-    }));
+    if (!result.rows.length) {
+      const [indexed] = await db.select({ sourceKey: courseKnowledgeSources.sourceKey }).from(courseKnowledgeSources)
+        .where(and(eq(courseKnowledgeSources.courseId, courseId), eq(courseKnowledgeSources.embeddingModel, config.id),
+          eq(courseKnowledgeSources.status, "ready")))
+        .limit(1);
+      return { status: indexed ? "no_match" : "not_indexed" };
+    }
+    return {
+      status: "ok",
+      hits: (result.rows as Record<string, unknown>[]).map((row) => ({
+        lessonId: String(row.lesson_id),
+        lessonTitle: String(row.lesson_title),
+        chapter: String(row.chapter),
+        sourceTitle: String(row.source_title),
+        content: String(row.content),
+        score: Number(row.score),
+      })),
+    };
   } catch {
     console.error("[course-knowledge] search failed");
-    return null;
+    return { status: "search_failed" };
   }
 }
