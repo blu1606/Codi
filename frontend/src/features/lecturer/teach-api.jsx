@@ -16,7 +16,7 @@ export const me = () => (Codi.session && Codi.session.user) || null;
 export const myCourses = () => mineNow().list || [];
 
 export const TYPE_ICON = { video: 'video', pdf: 'presentation', reading: 'book-open', tutorial: 'terminal', code: 'code' };
-export const TYPE_LABEL = { video: 'Video', pdf: 'Slide/PDF', reading: 'Bài đọc', tutorial: 'Hướng dẫn code', code: 'Bài code' };
+export const TYPE_LABEL = { video: 'Video', pdf: 'Slide / PDF', reading: 'Bài đọc', tutorial: 'Hướng dẫn code', code: 'Bài code' };
 export const ENTRY_MIN = 5; // entry test needs at least this many questions to personalise (A5)
 export const LEVELS = [['Beginner', 'Cơ bản'], ['Intermediate', 'Trung cấp'], ['Advanced', 'Nâng cao']];
 export const levelLabel = (k) => (LEVELS.find(([v]) => v === k) || [k, k])[1];

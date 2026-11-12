@@ -3,7 +3,7 @@
  * accepts a rich body and an acknowledgement checkbox (the shared Codi.ui.confirm renders body inside <p> and has
  * no consent gate, which the deactivate-user dialog needs — PRODUCT S31 / STATE-MACHINES §21).
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
 import { Workspace, Alert, Icon, SpinnerBlock } from '../../components/ui/primitives';
 import { usePendingCount } from './admin-data';
@@ -30,12 +30,41 @@ export function AdminShell({ active, children }) {
     { section: 'Khoá học', href: '/admin/publication', label: 'Duyệt xuất bản', icon: 'clipboard-check', count: pending, match: /^\/admin\/publication/ },
     { section: 'Khoá học', href: '/admin/courses', label: 'Khoá học đã xuất bản', icon: 'book-open' },
     { section: 'Vận hành', href: '/admin/users', label: 'Người dùng', icon: 'users' },
-    { section: 'Vận hành', href: '/admin/orders', label: 'Đơn hàng & giao dịch', icon: 'receipt' },
+    { section: 'Vận hành', href: '/admin/orders', label: 'Đơn hàng', icon: 'receipt' },
     { section: 'Vận hành', href: '/admin/vouchers', label: 'Voucher', icon: 'ticket' },
     { section: 'Phân tích', href: '/admin/insights', label: 'Quan sát hệ thống', icon: 'bar-chart', match: /^\/admin\/insights/ }, // mockup names 'activity', which is not in the icon set
     { section: 'Phân tích', href: '/admin/finance', label: 'Tài chính', icon: 'trending-up', match: /^\/admin\/finance/ },
   ];
   return <Workspace label="Quản trị" active={active} items={items}>{children}</Workspace>;
+}
+
+/**
+ * Search field for admin lists: filters as you type (debounced) and also on Enter or "Tìm". `value` is the
+ * committed query from the URL; the field re-syncs when it changes from outside (e.g. a filter chip clears it), but
+ * not when it is just the trimmed echo of what is being typed, so a trailing space survives. `onSearch(q, { replace })`:
+ * debounced commits ask for replace-navigation so typing does not stack history entries; Enter/"Tìm" pushes.
+ */
+export function SearchField({ id, label, placeholder, value, onSearch, delay = 300 }) {
+  const [text, setText] = useState(value);
+  const [synced, setSynced] = useState(value);
+  const commit = useRef(onSearch);
+  commit.current = onSearch;
+  if (value !== synced) { setSynced(value); if (value !== text.trim()) setText(value); }
+  useEffect(() => {
+    if (text.trim() === value) return undefined;
+    const t = setTimeout(() => commit.current(text.trim(), { replace: true }), delay);
+    return () => clearTimeout(t);
+  }, [text, value, delay]);
+  const submit = (e) => { e.preventDefault(); commit.current(text.trim(), { replace: false }); };
+  return (
+    <form className="field" role="search" onSubmit={submit}>
+      <label htmlFor={id}>{label}</label>
+      <div className="input-group">
+        <input id={id} name="q" type="search" className="input" placeholder={placeholder} value={text} autoComplete="off" onChange={(e) => setText(e.target.value)} />
+        <button className="btn btn-secondary" type="submit"><Icon name="search" className="icon-sm" /> Tìm</button>
+      </div>
+    </form>
+  );
 }
 
 function ConfirmImpactBody({ o, handle, resolve }) {

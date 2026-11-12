@@ -60,6 +60,7 @@ function PurchaseCard({ course: c, own, pendingOrderId }) {
     cta = (<>
       <button type="button" className="btn btn-primary btn-block btn-lg" onClick={() => buyNow(c)}>Mua ngay</button>
       <AddToCartButton course={c} className="btn btn-secondary btn-block" />
+      {Codi.role() === 'guest' && <p className="xsmall muted">Đăng nhập để thêm vào giỏ hoặc mua khoá này.</p>}
     </>);
   }
   return (

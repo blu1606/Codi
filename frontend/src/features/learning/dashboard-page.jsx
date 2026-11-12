@@ -44,7 +44,8 @@ function useLeadPath(courseId) {
 function courseState(c) {
   if (c.hidden) return ['Tạm ẩn', 'badge-neutral'];
   if (c.complete) return ['Đã xong', 'badge-success'];
-  if (c.pathStatus === 'none') return ['Chưa thiết lập', 'badge-warn'];
+  // Lessons are locked until a path is set, but learners who already studied keep their progress: say so, not "not started".
+  if (c.pathStatus === 'none') return c.done > 0 ? ['Chưa cá nhân hoá', 'badge-neutral'] : ['Chưa thiết lập', 'badge-warn'];
   return ['Đang học', 'badge-accent'];
 }
 
@@ -73,8 +74,11 @@ function NextCard({ course, path }) {
   let meta = null;
   let action;
   if (course.pathStatus === 'none') {
-    meta = <p className="hm-next-meta">Đặt mục tiêu và làm bài kiểm tra đầu vào để Codi xếp lộ trình riêng cho bạn.</p>;
-    action = <Link className="btn btn-primary btn-lg" to={`/learn/${course.id}/onboarding`}>Bắt đầu thiết lập</Link>;
+    const started = course.done > 0;
+    meta = <p className="hm-next-meta">{started
+      ? 'Bài học tiếp theo được mở sau khi bạn chọn lộ trình. Tiến độ đã học vẫn được giữ nguyên.'
+      : 'Đặt mục tiêu và làm bài kiểm tra đầu vào để Codi xếp lộ trình riêng cho bạn.'}</p>;
+    action = <Link className="btn btn-primary btn-lg" to={`/learn/${course.id}/onboarding`}>{started ? 'Thiết lập lộ trình' : 'Bắt đầu thiết lập'}</Link>;
   } else if (row) {
     heading = row.title;
     meta = (
@@ -98,15 +102,15 @@ function NextCard({ course, path }) {
         <div className="hm-next-body">
           <h3 className="hm-next-title">{heading}</h3>
           {meta}
-          {course.pathStatus !== 'none' && (
+          {(course.pathStatus !== 'none' || course.done > 0) && (
             <div className="hm-next-progress">
               <Progress pct={course.percent} label={`Tiến độ khoá ${course.title}`} />
-              <span><strong>{course.done}/{course.total}</strong> bài đã học · {goalLabel(course.goal)}</span>
+              <span><strong>{course.done}/{course.total}</strong> bài đã học{course.pathStatus !== 'none' ? ` · ${goalLabel(course.goal)}` : ''}</span>
             </div>
           )}
           <div className="hm-next-actions">
             {action}
-            {course.pathStatus !== 'none' && row && <Link className="btn btn-ghost" to={`/learn/${course.id}`}>Xem lộ trình</Link>}
+            {(course.pathStatus !== 'none' ? row : course.done > 0) && <Link className="btn btn-ghost" to={`/learn/${course.id}`}>Xem lộ trình</Link>}
           </div>
           {update && <p className="hm-next-note"><Icon name="sparkles" className="icon-sm" /><span>Lộ trình vừa được cập nhật: {update.text}</span></p>}
         </div>

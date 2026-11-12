@@ -1,23 +1,27 @@
 /**
  * S31 "Người dùng" — port of the real users page: status chips with counts, search, status select, role chips
- * (active chip removable), role change by select + "Lưu" + confirm dialog (real role-select), deactivate dialog with
- * impact counts + reason + "Tôi hiểu tác động" gate, reactivate. Data: GET /api/admin/users; writes: updateUserRole,
- * toggleUserBan, getUserImpactCounts (dashboard/admin actions).
+ * (active chip removable), role change by select + "Lưu" + confirm dialog (reverts on cancel), deactivate dialog with
+ * impact counts + reason + "Tôi hiểu tác động" gate, reactivate. Data: GET /api/admin/users (all rows, paged here);
+ * writes: updateUserRole, toggleUserBan, getUserImpactCounts (dashboard/admin actions).
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { Icon, Avatar, Empty } from '../../components/ui/primitives';
-import { AdminShell, Loaded, confirmImpact } from './admin-shell';
+import { AdminShell, Loaded, SearchField, confirmImpact } from './admin-shell';
 import { useAdminGet, adminAction, attempt, ROLE_TO_SERVER, ROLE_FROM_SERVER } from './admin-data';
 
 const { fmt, ROLE_LABEL: ROLE } = Codi;
 const ROLE_CHIPS = [['all', 'Tất cả'], ['learner', 'Học viên'], ['lecturer', 'Giảng viên'], ['admin', 'Quản trị viên']];
 const STATUS_CHIPS = [['all', 'Tất cả'], ['active', 'Đang hoạt động'], ['inactive', 'Đã vô hiệu hoá']];
+const PAGE_SIZE = 25;
 
 const ROLE_DESC = { learner: 'chỉ học và mua khoá học', lecturer: 'tạo và quản lý khoá học của mình, chấm bài', admin: 'toàn quyền quản trị (người dùng, giá, đơn hàng)' };
 
-/** Real role-select: pick a role, "Lưu" (enabled only when changed) opens the confirm; cancel reverts the draft. */
+/**
+ * Role select: picking a role only changes the draft (arrowing through options with the keyboard must not open a
+ * dialog, WCAG 3.2.2); "Lưu" (enabled only when changed) opens the confirm. Cancel or a failed write reverts.
+ */
 function RoleSelect({ u, disabled }) {
   const [draft, setDraft] = useState(u.role);
   const [busy, setBusy] = useState(false);
@@ -34,10 +38,10 @@ function RoleSelect({ u, disabled }) {
   return (
     <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
       <label className="sr-only" htmlFor={`role-${u.id}`}>Vai trò của {u.name}</label>
-      <select id={`role-${u.id}`} className="select ad-role" value={draft} disabled={disabled} title={disabled ? 'Không thể đổi vai trò của chính bạn' : undefined} onChange={(e) => setDraft(e.target.value)}>
+      <select id={`role-${u.id}`} className="select ad-role" value={draft} disabled={disabled || busy} title={disabled ? 'Không thể đổi vai trò của chính bạn' : undefined} onChange={(e) => setDraft(e.target.value)}>
         {Object.keys(ROLE).filter((k) => k !== 'guest').map((k) => <option key={k} value={k}>{ROLE[k]}</option>)}
       </select>
-      <button type="button" className="btn btn-secondary btn-sm" disabled={disabled || !changed || busy} onClick={save}>Lưu</button>
+      <button type="button" className="btn btn-secondary btn-sm" disabled={disabled || !changed || busy} onClick={save} aria-label={`Lưu vai trò của ${u.name}`}>Lưu</button>
     </div>
   );
 }
@@ -89,25 +93,32 @@ export function UsersPage({ query: q }) {
 }
 
 function UsersView({ q, all, selfId }) {
-  const role = q.role || 'all'; const status = q.status || 'all'; const term = (q.q || '').toLowerCase();
+  const role = q.role || 'all'; const status = q.status || 'all'; const term = (q.q || '').trim().toLowerCase();
   const list = all.filter((u) => (role === 'all' || u.role === role) && (status === 'all' || u.status === status) && (!term || (u.name + ' ' + u.email).toLowerCase().includes(term)));
-  const link = (patch) => '/admin/users?' + new URLSearchParams({ role, status, q: q.q || '', ...patch }).toString();
-
-  const onSearch = (e) => { e.preventDefault(); Codi.go(link({ q: String(new FormData(e.currentTarget).get('q') || '').trim() })); };
+  const pageCount = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, parseInt(q.page, 10) || 1), pageCount);
+  const shown = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const from = list.length ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const to = Math.min(page * PAGE_SIZE, list.length);
+  // Every filter change drops the page number; only paging keeps it.
+  const link = (patch) => {
+    const p = { role, status, q: q.q || '', page: '', ...patch };
+    Object.keys(p).forEach((k) => { if (!p[k] || p[k] === 'all') delete p[k]; });
+    return '/admin/users?' + new URLSearchParams(p).toString();
+  };
   const anyFilter = role !== 'all' || status !== 'all' || !!term;
 
   return (
     <>
       <div className="page-header"><div><h1>Người dùng</h1><p className="muted">{all.length} tài khoản</p></div></div>
-      <form className="ad-filters" onSubmit={onSearch}>
-        <div className="field"><label htmlFor="u-q">Tìm theo tên hoặc email</label>
-          <div className="input-group"><input id="u-q" name="q" className="input" placeholder="Nhập tên hoặc email..." defaultValue={q.q || ''} key={q.q || ''} /><button className="btn btn-secondary" type="submit"><Icon name="search" className="icon-sm" /> Tìm</button></div></div>
+      <div className="ad-filters">
+        <SearchField id="u-q" label="Tìm theo tên hoặc email" placeholder="Nhập tên hoặc email..." value={q.q || ''} onSearch={(t, opts) => Codi.go(link({ q: t }), opts)} />
         <div className="field"><label htmlFor="u-status">Trạng thái</label>
           <select id="u-status" value={status} onChange={(e) => Codi.go(link({ status: e.target.value }))}>
             <option value="all">Tất cả</option><option value="active">Đang hoạt động</option><option value="inactive">Đã vô hiệu hoá</option>
           </select></div>
         {anyFilter && <div className="field ad-field-end"><Link className="btn btn-secondary btn-sm" to="/admin/users">Xoá bộ lọc</Link></div>}
-      </form>
+      </div>
       <div className="ad-chips" role="group" aria-label="Lọc theo trạng thái">
         {STATUS_CHIPS.map(([k, l]) => (
           <Link key={k} className={`chip chip-btn ${status === k ? 'ad-chip-on' : ''}`} to={link({ status: status === k && k !== 'all' ? 'all' : k })} aria-current={status === k ? 'true' : undefined}>
@@ -130,25 +141,35 @@ function UsersView({ q, all, selfId }) {
       </div>
       {anyFilter && <p className="ad-filter-note small" role="status">{list.length} / {all.length} tài khoản khớp bộ lọc</p>}
       {list.length ? (
-        <div className="table-wrap ad-table-wrap"><table className="table ad-users-table"><thead><tr><th>Họ và tên</th><th>Email</th><th>Ngày tham gia</th><th>Vai trò</th><th>Trạng thái</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>
-          {list.map((u) => {
-            const isSelf = u.id === selfId;
-            return (
-              <tr key={u.id}>
-                <td><div className="row ad-user-cell"><Avatar user={u} size="sm" /><strong className="small">{u.name}{isSelf && <span className="xsmall muted"> (bạn)</span>}</strong></div></td>
-                <td className="small muted">{u.email}</td>
-                <td className="od-nowrap small">{fmt.date(u.createdAt)}</td>
-                <td><RoleSelect key={`${u.id}-${u.role}`} u={u} disabled={isSelf} /></td>
-                <td>{u.status === 'active'
-                  ? <span className="badge badge-success"><span className="status-dot" />Đang hoạt động</span>
-                  : <div className="stack-1"><span className="badge badge-neutral"><span className="status-dot" />Đã vô hiệu hoá</span>{u.banReason && <span className="xsmall muted">Lý do (nội bộ): {u.banReason}</span>}</div>}</td>
-                <td>{isSelf ? <span className="xsmall muted">Tài khoản của bạn</span>
-                  : u.status === 'active' ? <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => deactivate(u)}>Vô hiệu hoá</button>
-                    : <button type="button" className="btn btn-secondary btn-sm" onClick={() => reactivate(u)}>Kích hoạt lại</button>}</td>
-              </tr>
-            );
-          })}
-        </tbody></table></div>
+        <>
+          <div className="table-wrap ad-table-wrap"><table className="table ad-users-table"><thead><tr><th>Họ và tên</th><th>Email</th><th>Ngày tham gia</th><th>Vai trò</th><th>Trạng thái</th><th><span className="sr-only">Thao tác</span></th></tr></thead><tbody>
+            {shown.map((u) => {
+              const isSelf = u.id === selfId;
+              return (
+                <tr key={u.id}>
+                  <td><div className="row ad-user-cell"><Avatar user={u} size="sm" /><strong className="small">{u.name}{isSelf && <span className="xsmall muted"> (bạn)</span>}</strong></div></td>
+                  <td className="small muted ad-email">{u.email}</td>
+                  <td className="od-nowrap small">{fmt.date(u.createdAt)}</td>
+                  <td><RoleSelect key={`${u.id}-${u.role}`} u={u} disabled={isSelf} /></td>
+                  <td>{u.status === 'active'
+                    ? <span className="badge badge-success"><span className="status-dot" />Đang hoạt động</span>
+                    : <div className="stack-1"><span className="badge badge-neutral"><span className="status-dot" />Đã vô hiệu hoá</span>{u.banReason && <span className="xsmall muted">Lý do (nội bộ): {u.banReason}</span>}</div>}</td>
+                  <td>{isSelf ? <span className="xsmall muted">Tài khoản của bạn</span>
+                    : u.status === 'active' ? <button type="button" className="btn btn-danger-outline btn-sm" onClick={() => deactivate(u)}>Vô hiệu hoá</button>
+                      : <button type="button" className="btn btn-secondary btn-sm" onClick={() => reactivate(u)}>Kích hoạt lại</button>}</td>
+                </tr>
+              );
+            })}
+          </tbody></table></div>
+          <nav className="ad-pager" aria-label="Phân trang người dùng">
+            <p className="small muted" role="status">Hiển thị {from}–{to} trong {list.length} tài khoản</p>
+            <div className="ad-pager-controls">
+              <button type="button" className="btn btn-secondary btn-sm" disabled={page <= 1} onClick={() => Codi.go(link({ page: String(page - 1) }))}>← Trước</button>
+              <span className="small muted">Trang {page} / {pageCount}</span>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={page >= pageCount} onClick={() => Codi.go(link({ page: String(page + 1) }))}>Sau →</button>
+            </div>
+          </nav>
+        </>
       ) : (
         <div className="card"><Empty icon="users" title="Không có người dùng phù hợp" body="Thử thay đổi từ khoá tìm kiếm hoặc bỏ bớt các bộ lọc đang chọn." actions={anyFilter ? <Link className="btn btn-secondary" to="/admin/users">Xoá bộ lọc</Link> : null} /></div>
       )}

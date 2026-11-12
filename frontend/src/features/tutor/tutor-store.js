@@ -170,8 +170,8 @@ export const tutorStore = {
     if (taken) { s.request = null; bump(); }
     return taken;
   },
-  /** Navigating to /ai from code (not a link): remember where it was opened from. */
-  rememberOrigin() { s.origin = s.override || pathPage(window.location.pathname); },
+  /** Navigating to /ai from code (not a link): remember the screen it was opened from (default: the current one). */
+  rememberOrigin(pathname = window.location.pathname) { s.origin = s.override || pathPage(pathname); },
   /** Whether the lesson tab of this lesson is mounted (contextual requests go there). */
   hosts(lessonId) { return !!(s.override && s.override.kind === 'lesson' && s.override.lessonId === lessonId); },
 };

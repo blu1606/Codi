@@ -49,4 +49,6 @@ api.patch = (url, body, opts) => api(url, { ...opts, method: 'PATCH', body });
 api.del = (url, body, opts) => api(url, { ...opts, method: 'DELETE', body });
 
 /** Calls a backend server action: POST /api/actions/<module>/<name> with the arguments as a JSON array. */
-api.action = (module, name, ...args) => api(`/api/actions/${module}/${name}`, { method: 'POST', body: args });
+api.action = (module, name, ...args) => api.actionWith(module, name, args);
+/** Same as api.action with the arguments as an array and request options, e.g. `{ signal }` to abort the wait. */
+api.actionWith = (module, name, args = [], opts) => api(`/api/actions/${module}/${name}`, { ...opts, method: 'POST', body: args });

@@ -41,8 +41,8 @@ export function useMedia(query) {
 }
 
 const isCurrentStation = (row, currentId) => row.id === currentId && row.status !== 'done';
-/** "Bài n: title · trạng thái" (plus "Bạn đang ở đây" on the current station). */
-export const stationLabel = (row, number, currentId) => `Bài ${number}: ${row.title} · ${statusLabel(row.status)}${isCurrentStation(row, currentId) ? ' · Bạn đang ở đây' : ''}`;
+/** "Bài n: title · trạng thái" (plus "Tiếp theo" on the current station). */
+export const stationLabel = (row, number, currentId) => `Bài ${number}: ${row.title} · ${statusLabel(row.status)}${isCurrentStation(row, currentId) ? ' · Tiếp theo' : ''}`;
 
 /** Columns, directions, label sides and corridor runs of each chapter row, plus the spacing that fits `avail`. */
 function planRows(lines, oneSide, avail) {
@@ -188,7 +188,7 @@ function StationGlyph({ s, currentId }) {
 
 function NetworkLegend() {
   const items = [
-    ['done', 'Đã học'], ['current', 'Bạn đang ở đây'], ['todo', 'Chưa học'], ['skippable', 'Có thể bỏ qua'], ['locked', 'Chưa đủ tiên quyết'], ['link', 'Chuyển chương'],
+    ['done', 'Đã học'], ['current', 'Tiếp theo'], ['todo', 'Chưa học'], ['skippable', 'Có thể bỏ qua'], ['locked', 'Chưa đủ tiên quyết'], ['link', 'Chuyển chương'],
   ];
   return (
     <ul className="pt-legend" aria-label="Chú giải sơ đồ">{items.map(([k, label]) => (
@@ -304,7 +304,7 @@ function NetworkMap({ lines, currentId, onOpen }) {
                   aria-label={stationLabel(s.row, s.number, currentId)} aria-current={isCur ? 'step' : undefined} aria-haspopup="dialog"
                   title={s.row.title} onClick={() => onOpen(s.row.id)}>
                   <span className="pt-label" aria-hidden="true">
-                    {isCur ? <span className="pt-label-here">Bạn đang ở đây</span>
+                    {isCur ? <span className="pt-label-here">Tiếp theo</span>
                       : <span className="pt-label-meta">Bài {s.number} · <span className="pt-mono">{Codi.fmt.duration(s.row.durationMin)}</span></span>}
                     <span className="pt-label-title">{s.row.title}</span>
                   </span>
@@ -346,7 +346,7 @@ function LineStrip({ lines, currentId, onOpen }) {
                 aria-current={isCur ? 'step' : undefined} aria-haspopup="dialog" onClick={() => onOpen(s.row.id)}>
                 <span className={`pt-strip-dot is-${glyph}`} aria-hidden="true">{glyph === 'locked' && <Icon name="lock" />}</span>
                 <span className="pt-strip-text" aria-hidden="true">
-                  {isCur ? <span className="pt-label-here">Bạn đang ở đây</span> : <span className="pt-label-meta">Bài {s.number} · <span className="pt-mono">{Codi.fmt.duration(s.row.durationMin)}</span></span>}
+                  {isCur ? <span className="pt-label-here">Tiếp theo</span> : <span className="pt-label-meta">Bài {s.number} · <span className="pt-mono">{Codi.fmt.duration(s.row.durationMin)}</span></span>}
                   <span className="pt-strip-title">{s.row.title}</span>
                   <span className="pt-strip-status">{statusLabel(s.row.status)}</span>
                 </span>

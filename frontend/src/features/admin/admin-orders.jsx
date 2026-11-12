@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { Icon, Alert, Empty, OrderStatus, orderStatusLabel, SpinnerBlock } from '../../components/ui/primitives';
-import { AdminShell, Loaded, confirmImpact } from './admin-shell';
+import { AdminShell, Loaded, SearchField, confirmImpact } from './admin-shell';
 import { useAction, adminAction, attempt } from './admin-data';
 
 const { fmt } = Codi;
@@ -168,7 +168,7 @@ function ExportDialog({ handle, query }) {
       </div>
       <div className="dialog-footer">
         <button type="button" className="btn btn-ghost" onClick={() => handle.close()}>Huỷ</button>
-        <button type="button" className="btn btn-primary" disabled={res.loading} onClick={doExport}>Xuất CSV</button>
+        <button type="button" className="btn btn-primary" disabled={res.loading} onClick={doExport}>Tải file CSV</button>
       </div>
     </>
   );
@@ -206,13 +206,12 @@ export function OrdersPage({ query: q }) {
   const anyFilter = f.status !== 'all' || f.range !== '30' || !!f.q || overdue || recon;
   useEffect(() => { if (q.id) openOrder(q.id); }, [q.id]);
 
-  const goWith = (patch) => {
+  const goWith = (patch, opts) => {
     const nq = { range: '30', status: 'all', ...Codi.query(), ...patch };
     delete nq.id;
     Object.keys(nq).forEach((k) => { if (nq[k] === '' || nq[k] == null) delete nq[k]; });
-    Codi.go('/admin/orders?' + new URLSearchParams(nq).toString());
+    Codi.go('/admin/orders?' + new URLSearchParams(nq).toString(), opts);
   };
-  const onSearch = (e) => { e.preventDefault(); goWith({ q: String(new FormData(e.currentTarget).get('q') || '').trim() }); };
   const exportCsv = () => Codi.ui.modal({ size: 'md', title: 'Xuất CSV', raw: true, body: (h) => <ExportDialog handle={h} query={Codi.query()} /> });
   const tile = (v) => (res.data ? v : '…');
 
@@ -235,9 +234,7 @@ export function OrdersPage({ query: q }) {
             <option value="all">Tất cả</option>
             {STATUSES.map((s) => <option key={s} value={s}>{s === 'refunded' ? 'Hoàn tiền' : orderStatusLabel(s)}</option>)}
           </select></div>
-        <div className="field"><label htmlFor="o-method">Phương thức</label><select id="o-method" disabled><option>Chuyển khoản ngân hàng</option></select></div>
-        <form className="field" onSubmit={onSearch}><label htmlFor="o-q">Mã đơn hoặc email</label>
-          <div className="input-group"><input id="o-q" name="q" className="input" placeholder="Tìm mã hoặc người mua..." defaultValue={q.q || ''} key={q.q || ''} /><button className="btn btn-secondary" type="submit"><Icon name="search" className="icon-sm" /><span className="sr-only">Tìm</span></button></div></form>
+        <SearchField id="o-q" label="Mã đơn hoặc email" placeholder="Tìm mã hoặc người mua..." value={q.q || ''} onSearch={(t, opts) => goWith({ q: t }, opts)} />
       </div>
       {overdue && <div style={{ margin: '12px 0' }}><Alert type="warn" title="Đang lọc: đơn chờ thanh toán quá 24 giờ" actions={<button type="button" className="btn btn-secondary btn-sm" onClick={() => goWith({ overdue: '' })}>Bỏ lọc quá hạn</button>} /></div>}
       <div className="ad-toggles" role="group" aria-label="Lọc nhanh">

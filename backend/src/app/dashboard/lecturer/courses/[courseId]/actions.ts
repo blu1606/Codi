@@ -36,6 +36,7 @@ import {
 } from "@codi-1/db";
 import { db } from "@/services";
 import { verifyLecturerSession } from "@/lib/lecturer-auth";
+import { ActionRefusedError } from "@/lib/action-error";
 import { AI_QUIZ_MAX_MATERIAL_CHARS, AI_QUIZ_MAX_QUESTIONS, aiQuizFailure, generateQuizDraft } from "@/lib/quiz-ai-generation";
 import { AI_QUIZ_MAX_COURSE_MATERIAL_CHARS, loadCourseQuizMaterial } from "@/lib/quiz-ai-course-material";
 
@@ -474,7 +475,7 @@ export async function deleteLesson(courseId: string, lessonId: string) {
       .innerJoin(courseChapters, eq(courseLessons.chapterId, courseChapters.id))
       .where(and(eq(courseLessons.id, lessonId), eq(courseChapters.courseId, courseId)))
       .for("update", { of: courseLessons });
-    if (!locked) throw new Error("Không tìm thấy bài học trong khoá học này.");
+    if (!locked) throw new ActionRefusedError("Không tìm thấy bài học trong khoá học này.", 404);
     const deletedLesson = locked.lesson;
 
     const [submissionCheck] = await tx
@@ -484,7 +485,7 @@ export async function deleteLesson(courseId: string, lessonId: string) {
       .where(eq(assessments.lessonId, lessonId));
 
     if (Number(submissionCheck?.count || 0) > 0) {
-      throw new Error(
+      throw new ActionRefusedError(
         "Không thể xoá bài học vì đã có học viên làm bài kiểm tra hoặc nộp bài trong bài học này."
       );
     }
@@ -507,11 +508,29 @@ export async function deleteLesson(courseId: string, lessonId: string) {
       [aiInteractionLogs, aiInteractionLogs.lessonId],
       [aiContentDrafts, aiContentDrafts.lessonId],
     ] as const;
+    // Name the blocking data so the lecturer knows what keeps the lesson (the guard itself is unchanged).
+    const dependencyLabels = new Map<unknown, string>([
+      [assessments, "bài kiểm tra hoặc bài tập"],
+      [lessonProgress, "tiến độ học của học viên"],
+      [pathItems, "lộ trình học cá nhân hoá"],
+      [learningPathCompletions, "lịch sử hoàn thành lộ trình"],
+      [lessonSkills, "kỹ năng gắn với bài học"],
+      [quizQuestions, "câu hỏi quiz"],
+      [learningPathJobs, "tác vụ tạo lộ trình"],
+      [studentEnrollments, "học viên đang học tới bài này"],
+      [studentStudyClocks, "thời gian học của học viên"],
+      [courseDiscussions, "thảo luận của học viên"],
+      [courseConversations, "hội thoại hỏi đáp"],
+      [publicationReviewFlags, "góp ý kiểm duyệt"],
+      [aiInteractionLogs, "nhật ký tương tác AI"],
+      [aiContentDrafts, "bản nháp AI"],
+    ]);
     for (const [table, column] of dependencies) {
       const [dependent] = await tx.select({ lessonId: column }).from(table)
         .where(eq(column, lessonId)).limit(1);
       if (dependent) {
-        throw new Error("Không thể xoá bài học vì có dữ liệu liên kết không thể phục hồi khi Hoàn tác. Hãy giữ lại bài học này.");
+        const blocker = dependencyLabels.get(table) ?? "dữ liệu học tập";
+        throw new ActionRefusedError(`Không thể xoá bài học vì còn ${blocker} gắn với bài này. Dữ liệu đó không thể phục hồi khi Hoàn tác, nên bài học được giữ lại. Hãy giữ bài học và chỉnh nội dung trong trình soạn.`);
       }
     }
 

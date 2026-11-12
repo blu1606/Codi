@@ -7,7 +7,7 @@
  * - 7 criteria for admin review
  * - canApprove guards (no unmarked criteria, no 'fix' criteria, no open 'must' flags)
  * - autoCriteria suggestions
- * - aiPrecheck deterministic inspection
+ * - rulePrecheck deterministic inspection (the model pass is publication-ai-review.ts)
  * - flag carry-over rules
  */
 
@@ -507,9 +507,11 @@ export function canApprove(round: {
 }
 
 /**
- * Deterministic AI pre-check for common course review issues.
+ * Rule-based pre-check for common course review issues (no model involved; the model pass is
+ * publication-ai-review.ts). The admin review screen shows these as proposals; targets use the anchors that
+ * validateReviewTarget accepts, so an accepted proposal becomes a flag at the right place.
  */
-export function aiPrecheck(c: CourseDataForReview): Array<{
+export function rulePrecheck(c: CourseDataForReview): Array<{
   target: ReviewFlagTarget;
   severity: ReviewFlagSeverity;
   comment: string;
@@ -531,7 +533,7 @@ export function aiPrecheck(c: CourseDataForReview): Array<{
   const desc = (c.description || c.summary || "").trim();
   if (desc.length < 60) {
     add(
-      { type: "course", label: "Mô tả khoá học" },
+      { type: "course", itemId: "summary", label: "Mô tả khoá học" },
       "should",
       "Mô tả còn ngắn — nên nêu rõ đối tượng học viên và kết quả đạt được."
     );
@@ -540,7 +542,7 @@ export function aiPrecheck(c: CourseDataForReview): Array<{
   const entryQuestions = c.entryTest?.questions?.length || 0;
   if (entryQuestions < ENTRY_MIN) {
     add(
-      { type: "course", label: "Bài kiểm tra đầu vào" },
+      { type: "entry", label: "Bài kiểm tra đầu vào" },
       "must",
       `Bài kiểm tra đầu vào mới có ${entryQuestions} câu, cần ít nhất ${ENTRY_MIN} câu để xếp lộ trình.`
     );
@@ -565,7 +567,7 @@ export function aiPrecheck(c: CourseDataForReview): Array<{
     if (l.quiz && l.quiz.questions) {
       if (l.quiz.questions.length < 3) {
         add(
-          lt,
+          { type: "quiz", lessonId: l.id, label: `Quiz · ${l.title}` },
           "should",
           `Quiz chỉ có ${l.quiz.questions.length} câu, nên có ít nhất 3 câu.`
         );
@@ -592,8 +594,9 @@ export function aiPrecheck(c: CourseDataForReview): Array<{
     }
 
     if (l.code && l.code.kind === "challenge") {
+      const ct: ReviewFlagTarget = { type: "code", lessonId: l.id, label: `Bài code · ${l.title}` };
       if (!l.code.solutionCheck || !l.code.solutionCheck.ok) {
-        add(lt, "must", "Lời giải mẫu chưa chạy đạt tất cả test.");
+        add(ct, "must", "Lời giải mẫu chưa chạy đạt tất cả test.");
       }
       if (
         !l.code.tests ||
@@ -601,7 +604,7 @@ export function aiPrecheck(c: CourseDataForReview): Array<{
         !l.code.tests.some((t) => t.hidden)
       ) {
         add(
-          lt,
+          ct,
           "should",
           "Bài code nên có ít nhất 3 test, trong đó có test ẩn cho trường hợp biên."
         );

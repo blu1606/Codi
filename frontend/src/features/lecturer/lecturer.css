@@ -84,12 +84,15 @@
 .tc-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 360px); gap: var(--space-4); align-items: start; }
 @media (max-width: 1100px) { .tc-grade { grid-template-columns: minmax(0, 1fr); } }
 .tc-stage > .card-body { gap: var(--space-5); }
-.tc-dock { position: sticky; top: calc(var(--header-h) + var(--space-4)); max-height: calc(100vh - var(--header-h) - var(--space-8)); overflow-y: auto; overscroll-behavior: contain; }
+/* The dock scrolls with the page; only the save footer is pinned, so the feedback field is never trapped in a nested scroll. */
+.tc-grade-dock { align-self: start; }
 .tc-dock-body { padding-bottom: var(--space-4); }
-.tc-grade-actions { position: sticky; bottom: 0; z-index: 2; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--border); background: var(--surface); }
+.tc-grade-actions { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--border); background: var(--surface); }
 .tc-grade-state { margin: 0; display: flex; align-items: center; gap: var(--space-2); color: var(--muted); }
+/* Save buttons share one row (wrapping on narrow docks) so the feedback field stays above the fold. */
+.tc-grade-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tc-grade-buttons > .btn { flex: 1 1 140px; }
 .tc-state-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--warn); }
-@media (max-width: 1100px) { .tc-dock { position: static; max-height: none; overflow: visible; } }
 .tc-reply { margin-left: var(--space-4); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--subtle); }
 @media (max-width: 640px) { .tc-chapter .tc-drag, .tc-lesson .tc-drag { display: none; } }
 /* Quiz options: border/padding reset only, so the parent stack still spaces the fieldset. */
