@@ -22,7 +22,7 @@ svg circle[data-action]:hover { opacity: 0.8; }
 .tc-rubric-pts { flex: none; width: 104px; flex-direction: row; align-items: center; display: flex; }
 .tc-rubric-pts input { width: 64px; }
 .tc-rubric-grade { border: 0; padding: 0; margin: 0; }
-.tc-rg-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.tc-rg-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) 0; border-bottom: 1px solid var(--border); }
 .tc-rg-row input { width: 72px; }
 .ai-draft-note { display: flex; align-items: flex-start; gap: 4px; color: var(--accent-active); }
 
@@ -43,6 +43,8 @@ svg circle[data-action]:hover { opacity: 0.8; }
 @media (max-width: 640px) {
   .tc-rubric-row { flex-wrap: wrap; }
   .la-tests .te-test { grid-template-columns: minmax(0, 1fr); }
+  /* phone: wrap long code lines so comments are not cut off at the edge (the block still scrolls when needed) */
+  .la-code { white-space: pre-wrap; overflow-wrap: anywhere; }
 }
 
 /* ───────── "Tạo bằng AI" (bài giảng / bài code) ───────── */
@@ -110,7 +112,13 @@ svg circle[data-action]:hover { opacity: 0.8; }
 .row.tc-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 960px; }
 .tc-filters .field { min-width: 0; }
 @media (max-width: 640px) { .row.tc-filters { grid-template-columns: minmax(0, 1fr); } }
-.tc-rg-row input.input { width: 80px; text-align: right; }
+/* A fieldset keeps min-content width by default; without min-inline-size: 0 the nowrap criterion text pushed the
+   score inputs past the grading panel's right edge. */
+.tc-rubric-grade { min-inline-size: 0; }
+.tc-rg-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.tc-rg-row > label { flex: 1 1 auto; min-width: 0; }
+.tc-rg-row > .row { flex: none; }
+.tc-rg-row input.input { width: 72px; text-align: right; }
 .tc-rubric-grade > legend { padding: 0; margin-bottom: var(--space-1); }
 .tc-reply-form > label { display: block; }
 .tc-reply-form > textarea { display: block; width: 100%; }

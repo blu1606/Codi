@@ -137,7 +137,7 @@ function StartFork({ busy, send, courseId }) {
           <span className="choice-card-title">Học từ bài 1</span>
           <span className="choice-card-desc">Học theo thứ tự mặc định của giảng viên. Bạn có thể làm bài kiểm tra đầu vào bất cứ lúc nào để Codi cá nhân hoá lộ trình.</span>
           <div className="choice-card-foot">
-            <span className="choice-card-note">Tất cả bài đều mở, cần tiên quyết</span>
+            <span className="choice-card-note">Bạn có thể học theo thứ tự bất kỳ. Bài có điều kiện sẽ hiện khoá để nhắc bạn học bài trước.</span>
             <button type="button" className="btn btn-secondary" onClick={chooseDefault} disabled={busy}>Học từ bài 1</button>
           </div>
         </div>
@@ -145,7 +145,7 @@ function StartFork({ busy, send, courseId }) {
           <span className="badge badge-accent choice-card-badge">Khuyến nghị</span>
           <span className="choice-card-icon"><Icon name="sparkles" /></span>
           <span className="choice-card-title">Tìm điểm bắt đầu của tôi</span>
-          <span className="choice-card-desc">~10 phút, giúp bỏ qua phần bạn đã biết.</span>
+          <span className="choice-card-desc">Làm bài kiểm tra đầu vào khoảng 10 phút. Codi bỏ qua phần bạn đã biết.</span>
           <div className="choice-card-foot">
             <span className="choice-card-note">Codi xếp lộ trình riêng cho bạn</span>
             <button type="button" className="btn btn-primary" onClick={() => send({ type: 'fork-diagnostic' })} disabled={busy}>Tìm điểm bắt đầu của tôi</button>

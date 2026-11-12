@@ -16,7 +16,6 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Codi } from '../../lib/codi';
 import { charts } from '../../lib/charts';
-import { ICON_PATHS } from '../../lib/icon-paths';
 import { Icon, Html, Empty, esc } from '../../components/ui/primitives';
 import { AdminShell } from './admin-shell';
 import { fromOverview, rangeLabel, dayLabel, dayLabelFull, dayKey, BUCKET_LABEL, BUCKET_TONE } from './admin-metrics';
@@ -30,7 +29,6 @@ const safe = (s) => new Safe(String(s == null ? '' : s));
 const part = (v) => (v == null || v === false ? '' : v instanceof Safe ? v.s : Array.isArray(v) ? v.map(part).join('') : esc(v));
 /** Tagged template: interpolated values are escaped unless they are Safe (or arrays of Safe). */
 function html(strings, ...vals) { let o = strings[0]; vals.forEach((v, i) => { o += part(v) + strings[i + 1]; }); return new Safe(o); }
-const iconHtml = (name, cls) => safe(`<svg class="icon ${cls || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name] || ''}</svg>`);
 
 // Chart kit wrapped so its HTML output is treated as trusted inside `html`.
 const ch = {
@@ -243,12 +241,6 @@ const FIN = {
       table: { headers: ['Mã', 'Đơn dùng', 'Tiền giảm', 'Doanh thu ròng'], rows: rows.map((r) => [r.code, fmt.num(r.orders), vnd(r.discount), vnd(r.net)]) },
     };
   },
-  b9() {
-    return {
-      code: 'B9', title: 'Xuất CSV', question: 'Tải số liệu của trang này cho kế toán',
-      body: html`<p class="small" style="margin:0 0 12px">Chọn thẻ cần xuất. File dùng đúng khoảng thời gian đang chọn, giờ theo GMT+7.</p><button type="button" class="btn btn-secondary" data-action="aa-export" data-page="finance">${iconHtml('download', 'icon-sm')} Xuất CSV…</button>`,
-    };
-  },
 };
 
 const PAGES = {
@@ -261,7 +253,7 @@ const PAGES = {
   },
   finance: {
     title: 'Tài chính', lead: 'Doanh thu, đơn hàng và việc cần đối soát.', route: '/admin/finance',
-    cards: FIN, overview: ['b1', 'b2', 'b4', 'b8'], more: ['b3', 'b5', 'b6', 'b7', 'b9'], collapsible: true,
+    cards: FIN, overview: ['b1', 'b2', 'b4', 'b8'], more: ['b3', 'b5', 'b6', 'b7'], collapsible: true,
     error: 'Không tải được số liệu tài chính.',
     basis: 'Gộp = tổng giá gốc của đơn đã thanh toán, tính theo ngày thanh toán. Ròng = gộp − giảm giá. Hoàn tiền = đơn đã hoàn, tính theo ngày cập nhật gần nhất.',
     quiet: (d) => (d.totals.paidOrders === 0 && d.statusDistribution.every((r) => r.orders === 0) ? 'Không có đơn hàng nào được thanh toán trong kỳ này.' : null),
@@ -368,7 +360,8 @@ function AnalyticsPage({ page }) {
   return (
     <AdminShell active={P2.route}>
       <div className="stack-4 ad-analytics" onClick={onClick}>
-        <div className="page-header"><div><h1>{P2.title}</h1><p className="muted">{P2.lead}</p></div></div>
+        <div className="page-header"><div><h1>{P2.title}</h1><p className="muted">{P2.lead}</p></div>
+          <button type="button" className="btn btn-secondary" disabled={!d} onClick={() => handlers['aa-export'](page)}><Icon name="download" className="icon-sm" /> Xuất CSV…</button></div>
         <Toolbar d={d} onPeriod={handlers['aa-period']} />
         {P2.basis && <p className="xsmall muted" style={{ margin: 0 }}>{P2.basis}</p>}
         {failed && <ErrorPanel text={P2.error} onRetry={handlers.retry} />}

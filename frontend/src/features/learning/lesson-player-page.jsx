@@ -681,7 +681,7 @@ export default function LessonPlayerPage({ params }) {
     // the brand and the account menu.
     let body;
     if (error && error.status === 409) {
-      body = <div className="page page-narrow"><Empty icon="route" title="Thiết lập lộ trình trước khi học" body="Chỉ mất vài phút: đặt mục tiêu và làm bài kiểm tra đầu vào." actions={<Link className="btn btn-primary" to={`/learn/${courseId}/onboarding`}>Bắt đầu thiết lập</Link>} /></div>;
+      body = <div className="page page-narrow"><Empty icon="route" title="Thiết lập lộ trình trước khi học" body="Bài học mở sau khi bạn chọn lộ trình, chỉ mất vài phút. Tiến độ bạn đã học vẫn được giữ nguyên." actions={<><Link className="btn btn-primary" to={`/learn/${courseId}/onboarding`}>Thiết lập lộ trình</Link><Link className="btn btn-ghost" to={`/learn/${courseId}`}>Xem danh sách bài</Link></>} /></div>;
     } else if (error && (error.status === 404 || error.status === 400)) {
       body = <div className="page page-narrow"><Empty icon="map" title="Không tìm thấy bài học" actions={<Link className="btn btn-primary" to={`/learn/${courseId}`}>Về lộ trình</Link>} /></div>;
     } else {

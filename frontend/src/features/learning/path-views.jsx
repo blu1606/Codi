@@ -49,7 +49,7 @@ export function StepDetail({ c, row, number, isCurrent }) {
         <h3 className="pt-detail-title">{row.title}</h3>
         <p className="pt-meta-row">
           <span className={`badge ${STATUS[row.status][1]}`}><Icon name={statusIcon(row.status)} className="icon-sm" />{statusLabel(row.status)}</span>
-          {isCurrent && <span className="badge badge-solid">Bạn đang ở đây</span>}
+          {isCurrent && <span className="badge badge-solid">Tiếp theo</span>}
         </p>
       </div>
       <section className="stack-1"><h4 className="small strong">Vì sao bài này</h4><p className="small muted">{row.reason}</p></section>
@@ -99,7 +99,7 @@ export function Departures({ c, r, rows, lines, currentId, onOpen }) {
                 <span>Bài {number}</span><span aria-hidden="true">·</span>
                 <span className="pt-meta-row"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span>
                 {line && <span className="pt-dep-chapter">Chương {line.no}: {row.chapterTitle}</span>}
-                {isCur && <span className="pt-here">Bạn đang ở đây</span>}
+                {isCur && <span className="pt-here">Tiếp theo</span>}
                 {row.status === 'skippable' && <span className="badge badge-neutral">Có thể bỏ qua</span>}
               </p>
               <p className="pt-dep-why small"><span>{row.reason}</span></p>
@@ -195,7 +195,7 @@ function LineTable({ c, line, currentId, highlight, onOpen, collapsible }) {
                 <td className="pt-col-no pt-mono">{number}</td>
                 <td className="pt-col-title">
                   <Link to={lessonUrl(c, row.id)}><span className="sr-only">Bài {number}: </span>{row.title}</Link>
-                  {(isCur || isNew) && <span className="pt-tags">{isCur && <span className="pt-here">Bạn đang ở đây</span>}{isNew && <span className="badge badge-info">Mới cập nhật</span>}</span>}
+                  {(isCur || isNew) && <span className="pt-tags">{isCur && <span className="pt-here">Tiếp theo</span>}{isNew && <span className="badge badge-info">Mới cập nhật</span>}</span>}
                 </td>
                 <td className="pt-col-kind"><span className="pt-meta-row"><Icon name={kindIcon(row)} className="icon-sm" />{kindLabel(row)}</span></td>
                 <td className="pt-col-min pt-mono">{Codi.fmt.duration(row.durationMin)}</td>

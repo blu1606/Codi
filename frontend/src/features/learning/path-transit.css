@@ -307,3 +307,7 @@ html[data-theme="dark"] .pt-frame { box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 
   .pt-legend { flex-wrap: nowrap; justify-content: space-between; gap: var(--space-3); }
   .pt-legend li { white-space: nowrap; }
 }
+/* Read-only lesson outline shown before a path is set (lessons stay locked until then). */
+.pt-outline { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.pt-outline li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+.pt-outline .stack-1 { min-width: 0; }

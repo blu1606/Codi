@@ -20,6 +20,7 @@ import { Alert, Empty, Icon } from '../../components/ui/primitives';
 import { RichText } from './rich-text';
 import { CLASSMATES, CLASSMATE_IDS, ClassmateAvatar } from './avatars';
 import { classroomApi } from './classroom-api';
+import { checkpointToPause } from './checkpoint-trigger';
 import './classroom.css';
 
 const clock = (s) => {
@@ -87,16 +88,18 @@ export function ClassroomPanel({ courseId, lessonId, lessonTitle, videoApi }) {
   dataRef.current = data;
   const openRef = useRef(null);
 
-  // Pause when playback crosses an unfinished checkpoint (a seek or the first tick never triggers one).
+  // Pause when playback crosses a checkpoint the learner has not answered or skipped. On a resume (the first tick
+  // after the lesson opens) one already at or before the resume point was passed without an answer, so it is still
+  // due; answered and skipped ones are stored on the server session and never stop the video again.
   useEffect(() => {
     if (!videoApi || typeof videoApi.onTime !== 'function') return undefined;
     let last = null;
     const unsubscribe = videoApi.onTime((t) => {
+      const d = dataRef.current;
+      if (!d) return;
       const prev = last;
       last = t;
-      const d = dataRef.current;
-      if (!d || prev === null || t < prev || t - prev > 5) return;
-      const hit = d.checkpoints.find((c) => prev < c.timestampSeconds && t >= c.timestampSeconds && !finished(d.sessions[c.id]));
+      const hit = checkpointToPause(d.checkpoints, d.sessions, prev, t);
       if (!hit) return;
       try { videoApi.pause(); } catch { /* the player may already be paused */ }
       if (openRef.current) openRef.current(hit.id);

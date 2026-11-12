@@ -66,6 +66,7 @@ function AuthoringRail({ c, tab }) {
   const next = STEPS.find((s) => missing[s.key] > 0);
   const nextStep = next && STEPS.findIndex((s) => s.key === next.key) + 1;
   const readyToSubmit = readiness(c).every((x) => x.ok) && ['draft', 'rejected'].includes(c.status);
+  const submitted = ['pending', 'published'].includes(c.status);
   return (
     <nav className="authoring-rail" aria-label="Các bước soạn khoá học">
       <ol className="steps">{STEPS.map((s, i) => {
@@ -84,9 +85,10 @@ function AuthoringRail({ c, tab }) {
           </li>
         );
       })}</ol>
-      <p className="small rail-next">{next
+      {/* A submitted course says so in its status banner; the rail only guides a course still being prepared. */}
+      {!submitted && <p className="small rail-next">{next
         ? <>Bước tiếp theo: <Link className="strong" to={`/teach/courses/${c.id}/${next.key}`}>{nextStep}. {next.label}</Link> — {next.hint}.</>
-        : <>{['pending', 'published'].includes(c.status) ? 'Khoá học đã được gửi xuất bản.' : 'Đủ điều kiện. Bấm “Xuất bản” để gửi yêu cầu.'}</>}</p>
+        : <>Đủ điều kiện. Bấm “Xuất bản” để gửi yêu cầu.</>}</p>}
     </nav>
   );
 }
@@ -312,9 +314,10 @@ function ContentTab({ c, query }) {
       {renaming === l.id ? null : (
         <div className="tc-row-actions">
           <div className="tc-row-links">
-            {l.code ? <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/code/${l.id}`}><Icon name="code" className="icon-sm" /> Code</Link>
-              : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id)}><Icon name="file-text" className="icon-sm" /> Chi tiết</button>}
-            <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/quiz/${l.id}`}><Icon name="clipboard-check" className="icon-sm" /> Quiz</Link>
+            {/* One verb for every row: "Soạn" opens the lesson's editor (the code editor for coding lessons); read-only shows "Xem". */}
+            {l.code ? <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/code/${l.id}`} aria-label={`${ro ? 'Xem' : 'Soạn'} bài code ${l.title}`}><Icon name="code" className="icon-sm" /> {ro ? 'Xem' : 'Soạn'}</Link>
+              : <button type="button" className="btn btn-ghost btn-sm" onClick={() => openLessonEditor(c.id, l.id)} aria-label={`${ro ? 'Xem' : 'Soạn'} ${l.title}`}><Icon name="file-text" className="icon-sm" /> {ro ? 'Xem' : 'Soạn'}</button>}
+            <Link className="btn btn-ghost btn-sm" to={`/teach/courses/${c.id}/quiz/${l.id}`} aria-label={`${ro ? 'Xem quiz' : l.quiz ? 'Sửa quiz' : 'Tạo quiz'} cho ${l.title}`}><Icon name="clipboard-check" className="icon-sm" /> {ro ? 'Xem quiz' : l.quiz ? 'Sửa quiz' : 'Tạo quiz'}</Link>
           </div>
           {ro ? null : (
             <RowMenu label={`Thao tác khác với ${l.title}`} items={[
@@ -345,8 +348,8 @@ function ContentTab({ c, query }) {
   return (
     <div className="stack-4 tc-content" onDragStart={dnd.onDragStart} onDragEnd={dnd.onDragEnd} onDragOver={dnd.onDragOver} onDrop={dnd.onDrop}>
       <div className="card"><div className="card-body compact row-between" style={{ flexWrap: 'wrap', gap: 12 }}>
-        <div className="stack-1 small muted"><p>Dùng nút mũi tên để sắp xếp thứ tự chương và bài học. Bấm &quot;Chi tiết&quot; để biên tập nội dung bài và tài liệu.{ro ? '' : ' Bạn cũng có thể kéo thả biểu tượng ⋮⋮ để sắp xếp trong cùng chương.'}</p>
-          <p>Bài kiểm tra đầu vào (Diagnostic Test): {c.entryTest
+        <div className="stack-1 small muted"><p>{ro ? 'Nội dung đang ở chế độ chỉ đọc.' : 'Dùng menu ⋯ của từng dòng để chuyển lên hoặc xuống. Bấm “Soạn” để biên tập nội dung bài và tài liệu. Trên máy tính, có thể kéo biểu tượng ⋮⋮ để sắp xếp bài học trong cùng chương.'}</p>
+          <p>Bài kiểm tra đầu vào: {c.entryTest
             ? <Link className="strong" to={`/teach/courses/${c.id}/quiz/entry`}>Đã có ({c.entryTest.count} câu)</Link>
             : <Link className="strong text-danger" to={`/teach/courses/${c.id}/quiz/entry`}>Chưa có — Tạo bài kiểm tra đầu vào</Link>}</p>
           <ReviewNotes courseId={c.id} collapsible links title="Bài kiểm tra đầu vào" match={(a) => a.type === 'entry' || !!a.entry} />
@@ -459,6 +462,15 @@ function InfoTab({ c, query }) {
 }
 
 // ───────────────────────── Xuất bản ─────────────────────────
+/**
+ * Detail line for a readiness row. A passed price check shows the price the lecturer proposed, so the publish
+ * screen never reads just "Giá" with no value (the admin sees that number).
+ */
+export function readinessDetail(c, x) {
+  if (x.ok && x.label === 'Giá đề xuất') return `Giá đề xuất: ${Number(c.proposedPrice) ? fmt.vnd(c.proposedPrice) : 'Miễn phí'}`;
+  return x.ok ? 'Đã đạt' : x.hint;
+}
+
 /** Advisory notes that never gate submission (real publication-service advisory items). */
 export function readinessAdvice(c) {
   const weak = ls(c).filter((l) => l.code && l.code.kind === 'challenge' && (l.code.tests < 3 || !l.code.hiddenTests));
@@ -559,7 +571,7 @@ function PublishTab({ c }) {
           <div key={name} className="stack-2"><strong className="xsmall muted">{name} · {list.filter((x) => x.ok).length}/{list.length} đạt</strong>
             <ul className="list tc-conditions">{list.map((x) => (
               <li key={x.label} className="list-row"><Icon name={x.ok ? 'check-circle' : 'alert-circle'} className={x.ok ? 'text-success' : 'text-warn'} />
-                <div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{x.ok ? 'Đã đạt' : x.hint}</span></div>
+                <div className="list-main"><strong className="small">{x.label}</strong><span className="xsmall muted">{readinessDetail(c, x)}</span></div>
                 <span className={`badge ${x.ok ? 'badge-success' : 'badge-warn'}`}>{x.ok ? 'Đạt' : 'Chưa đạt'}</span></li>
             ))}</ul></div>
         ))}</div></section>

@@ -112,6 +112,8 @@
 .cm-tile-body { flex: 1; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-5); }
 .cm-tile-title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .cm-tile-title a { color: var(--fg); text-decoration: none; }
+/* The whole catalogue tile is the tap target: the title link stretches over the card (the tile is the positioned box). */
+.cm-tile-title a::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .cm-tile-title a:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 2px; }
 .cm-tile-by { margin: 0; font-size: var(--text-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-tile-facts { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--muted); }

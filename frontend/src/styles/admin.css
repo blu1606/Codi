@@ -338,6 +338,7 @@
 .rv-history li { display: grid; gap: 2px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .rv-why { padding: var(--space-3); border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--fg); }
 .rv-why ul { margin: var(--space-1) 0 0; padding-left: var(--space-5); }
+.rv-decision-hints { margin: 0; padding: var(--space-3) 0 0; border-top: 1px solid var(--border); list-style: none; display: grid; gap: var(--space-1); }
 
 /* In-context review: every flaggable block of the preview (admin) and the lecturer's matching notes. */
 .rv-viewbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--subtle); }
@@ -349,9 +350,9 @@
 .rv-anchor { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: start; padding: var(--space-2) var(--space-3); margin: 0 calc(-1 * var(--space-3)); border: 1px solid transparent; border-radius: var(--radius-md); }
 .rv-anchor-body { grid-column: 1; grid-row: 1; min-width: 0; }
 .rv-anchor:hover, .rv-anchor:focus-within { border-color: var(--border); }
-.rv-anchor.is-should { border-color: var(--warn); border-left-width: 3px; }
-.rv-anchor.is-must { border-color: var(--danger); border-left-width: 3px; }
-.rv-anchor.is-fixed { border-color: var(--accent-soft-border); border-left: 3px solid var(--accent); }
+.rv-anchor.is-should { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 7%, transparent); }
+.rv-anchor.is-must { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.rv-anchor.is-fixed { border-color: var(--accent-soft-border); background: var(--accent-soft); }
 .rv-anchor.is-changed { background: color-mix(in srgb, var(--info-soft) 55%, transparent); }
 .rv-anchor-tools { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
 .rv-pin { opacity: .7; }
@@ -513,4 +514,42 @@ a.stat-tile.ad-todo .stat-go { margin-top: auto; padding-top: var(--space-2); }
 @media (max-width: 768px) {
   .ad-filters-orders { grid-template-columns: 1fr; }
   .ad-analytics > .viz-section-head { margin-top: var(--space-6); }
+}
+
+@media (max-width: 640px) {
+  /* The "Tài chính" entry tile: unit label wraps under the figure instead of pushing past the 390px viewport. */
+  a.stat-tile.ad-entry { flex-direction: column; align-items: flex-start; }
+  .ad-entry .stat-value { text-align: left; }
+  .ad-entry-unit { white-space: normal; }
+}
+
+/* ─────────────────────────── Pagination and wide cells (users) ─────────────────────────── */
+.ad-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.ad-pager p { margin: 0; }
+
+.ad-pager-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ad-email {
+  min-width: 180px;
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+/* Phone width: the joined date is secondary, so the email and role keep the room. */
+@media (max-width: 640px) {
+  .ad-users-table th:nth-child(3),
+  .ad-users-table td:nth-child(3) { display: none; }
+  .ad-users-table .ad-email { min-width: 0; max-width: 160px; }
 }
