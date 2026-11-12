@@ -152,10 +152,11 @@ function CourseTile({ course: c, ownership }) {
   const href = `/courses/${c.slug}`;
   return (
     <li className="cm-tile">
-      <Link className="cm-tile-media" to={href} tabIndex={-1} aria-hidden="true">
+      {/* Not a link: the title link stretches over the whole tile, so the cover is clickable through it. */}
+      <div className="cm-tile-media">
         <Thumb course={c} />
         {c.category && <span className="cm-cover-label">{c.category}</span>}
-      </Link>
+      </div>
       <div className="cm-tile-body">
         <h3 className="cm-tile-title"><Link to={href}>{c.title}</Link></h3>
         <p className="cm-tile-by">{c.lecturerName}</p>

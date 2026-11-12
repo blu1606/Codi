@@ -123,6 +123,8 @@
 .cm-tile-foot { margin-top: auto; padding-top: var(--space-3); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); }
 .cm-tile-price { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .cm-tile-foot .btn { min-height: 40px; }
+/* Buttons and links in the footer sit above the stretched title link, so they keep their own action. */
+.cm-tile-foot .btn, .cm-tile-foot a { position: relative; z-index: 1; }
 .cm-tile-skel-media { aspect-ratio: 16 / 9; border-radius: 0; }
 @media (max-width: 640px) {
   .cm-bar { align-items: stretch; }
