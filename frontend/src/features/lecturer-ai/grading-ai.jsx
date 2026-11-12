@@ -10,8 +10,14 @@
  * lecturer still saves the grade. Suggestions live in memory for this tab only (never stored as domain data).
  *
  * Installs on Codi.lecturerAI:
- *   getAiGradingDraft({ submissionId, viewToken }) → Promise<{ success: true, suggestedScore, rubricScores?, feedback }
- *                                                           | { success: false, error }>
+ *   getAiGradingDraft({ submissionId, viewToken }) → Promise<{ success: true, suggestedScore, rubricScores?, feedback,
+ *                                                             contextUsed?, sources?, warnings? }
+ *                                                           | { success: false, error, warnings? }>
+ *       sources: what the server read besides the typed answer (lesson transcripts and passages, the submitted file
+ *       and link), each { kind, label, status: 'read'|'skipped', detail? }; warnings: files / links it refused to read.
+ *       security: the scan run before the model on every learner-controlled source, each
+ *       { source, kind: 'file'|'link'|'text', verdict: 'safe'|'blocked'|'suspicious', reasons[], snippets[] };
+ *       also present on failures, so the "Kiểm tra bảo mật" block shows even when the AI step fails.
  *   gradingDraft(props) → ReactElement   suggestion card for one submission. Props:
  *       submission: { id, viewToken, maxScore }   assignment?: { rubric?: [{ id, name, points }] }   disabled?: boolean
  *       onApply({ score, scores, feedback }): void   score is set only without a rubric; scores holds only the kept
@@ -37,7 +43,7 @@ export async function getAiGradingDraft(input) {
   try {
     const r = await api.action(GRADING_MODULE, 'getAiGradingDraft', { submissionId, viewToken });
     if (!r || !r.success || typeof r.suggestedScore !== 'number' || typeof r.feedback !== 'string') {
-      return { success: false, error: (r && r.error) || FALLBACK_ERROR };
+      return { success: false, error: (r && r.error) || FALLBACK_ERROR, warnings: r && Array.isArray(r.warnings) ? r.warnings : [], security: r && Array.isArray(r.security) ? r.security : [] };
     }
     return r;
   } catch (e) {
@@ -61,7 +67,7 @@ async function requestDraft(submission) {
   const r = await getAiGradingDraft({ submissionId: id, viewToken: submission.viewToken });
   const cur = drafts.get(id);
   if (!cur || cur.seq !== mine) return; // stopped, or superseded by a newer request
-  setDraft(id, r.success ? { ...cur, status: 'ready', result: r } : { ...cur, status: 'failed', error: r.error || FALLBACK_ERROR });
+  setDraft(id, r.success ? { ...cur, status: 'ready', result: r } : { ...cur, status: 'failed', error: r.error || FALLBACK_ERROR, warnings: r.warnings || [], security: r.security || [] });
 }
 /** "Dừng": forget the pending request; a late answer is ignored (the server keeps nothing either way). */
 const stopDraft = (id) => { drafts.delete(id); bump(); };
@@ -97,6 +103,76 @@ function rowsOf(result, rubric, maxScore) {
       .filter((r) => typeof r.ai === 'number');
   }
   return [{ id: 'overall', name: 'Điểm tổng', max: Number(maxScore) || 10, ai: result.suggestedScore }];
+}
+
+const SOURCE_KIND = { transcript: 'transcript', lesson: 'bài học', file: 'tệp', link: 'đường dẫn' };
+/** What the AI read (and refused to read) besides the typed answer; renders nothing for a text-only draft. */
+function ReadSummary({ result }) {
+  const sources = Array.isArray(result.sources) ? result.sources : [];
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const read = sources.filter((s) => s.status === 'read' && s.kind !== 'lesson');
+  const skipped = sources.filter((s) => s.status === 'skipped' && (s.kind === 'transcript' || s.kind === 'lesson'));
+  if (!result.contextUsed && !read.length && !warnings.length && !skipped.length) return null;
+  return (
+    <div className="stack-1">
+      {(result.contextUsed > 0 || read.length > 0) && (
+        <p className="xsmall muted">
+          {result.contextUsed > 0 && <>Dựa trên {result.contextUsed} đoạn bài học</>}
+          {result.contextUsed > 0 && read.length > 0 && ' · '}
+          {read.length > 0 && <>Đã đọc {read.map((s) => `${SOURCE_KIND[s.kind] || s.kind} ${s.label}`).join(', ')}</>}
+        </p>
+      )}
+      {skipped.length > 0 && <p className="xsmall muted">Không dùng: {skipped.map((s) => `${SOURCE_KIND[s.kind] || s.kind} ${s.label}${s.detail ? ` (${s.detail})` : ''}`).join('; ')}</p>}
+      {warnings.length > 0 && <Alert type="warn" title={`AI không đọc ${warnings.length} phần của bài nộp`} body={<><span className="xsmall">Các mục dưới đây không được đưa vào chấm. Điểm chỉ dựa trên phần AI đọc được; bạn vẫn có thể chấm tay.</span><ul className="ai-sources">{warnings.map((w) => <li key={w}>{w}</li>)}</ul></>} />}
+    </div>
+  );
+}
+
+// ───────────────────────── security scan ─────────────────────────
+const VERDICT = {
+  blocked: { badge: 'badge-danger', label: 'Bị chặn', icon: 'alert-circle' },
+  suspicious: { badge: 'badge-warn', label: 'Nghi chèn lệnh', icon: 'alert-triangle' },
+  safe: { badge: 'badge-success', label: 'An toàn', icon: 'check' },
+};
+const SECURITY_KIND = { file: 'Tệp', link: 'Đường dẫn', text: 'Bài làm' };
+const RANK = { safe: 0, suspicious: 1, blocked: 2 };
+
+/**
+ * "Kiểm tra bảo mật": the scan the server ran on the submitted file, link and typed text before anything reached
+ * the model. Shown above the draft (and above the error when the AI step failed). Blocked sources were never read;
+ * suspicious ones were read, but the model was told not to let them raise the score.
+ */
+function SecurityScan({ checks }) {
+  const list = Array.isArray(checks) ? checks.filter((c) => c && VERDICT[c.verdict]) : [];
+  if (!list.length) return null;
+  const worst = list.reduce((w, c) => (RANK[c.verdict] > RANK[w] ? c.verdict : w), 'safe');
+  const summary = worst === 'blocked' ? 'Có nguồn bị chặn, AI không đọc nguồn đó.'
+    : worst === 'suspicious' ? 'Có nội dung nghi chèn lệnh. AI được dặn chỉ chấm theo bằng chứng và không cộng điểm vì đoạn đó.'
+      : 'Không phát hiện nội dung nguy hiểm hay câu lệnh chèn.';
+  return (
+    <section className={`lai-job lai-sec is-${worst}`} aria-label="Kiểm tra bảo mật">
+      <div className="row-between lai-job-head">
+        <strong className="small row" style={{ gap: 6 }}><Icon name="shield" className="icon-sm" /> Kiểm tra bảo mật</strong>
+        <span className={`badge ${VERDICT[worst].badge}`}>{VERDICT[worst].label}</span>
+      </div>
+      <p className="xsmall muted">{summary}</p>
+      <ul className="lai-sec-list">
+        {list.map((c) => {
+          const v = VERDICT[c.verdict];
+          return (
+            <li key={`${c.kind}:${c.source}`} className="lai-sec-item">
+              <div className="row lai-sec-head">
+                <span className={`badge ${v.badge}`}><Icon name={v.icon} className="icon-sm" /> {v.label}</span>
+                <span className="small lai-sec-source"><span className="muted">{SECURITY_KIND[c.kind] || c.kind}</span> {c.source}</span>
+              </div>
+              {c.reasons && c.reasons.length > 0 && <p className="xsmall">{c.reasons.join('; ')}</p>}
+              {c.snippets && c.snippets.map((snip) => <q key={snip} className="xsmall mono lai-sec-snippet">{snip}</q>)}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 }
 
 function ReviewCard({ submission, rubric, draft, disabled, onApply }) {
@@ -140,6 +216,7 @@ function ReviewCard({ submission, rubric, draft, disabled, onApply }) {
         <span className="badge badge-accent">AI đề xuất</span>
       </div>
       <p className="xsmall muted">Chọn Chấp nhận, Sửa hoặc Bỏ qua cho từng mục. Chỉ các mục bạn giữ lại được điền vào phiếu chấm.</p>
+      <ReadSummary result={result} />
       {rubricWithoutScores ? (
         <Alert type="info" body={`AI gợi ý tổng ${num(result.suggestedScore)}/${num(submission.maxScore)} nhưng chưa chấm từng tiêu chí. Hãy tự chấm theo thang điểm; bạn vẫn có thể dùng nhận xét gợi ý.`} />
       ) : (
@@ -229,26 +306,35 @@ function GradingDraftCard({ submission, assignment, disabled, onApply }) {
           <strong className="small row" style={{ gap: 6 }}><Icon name="loader" className="icon-sm lai-spin" /> AI đang đọc bài nộp…</strong>
           <span className="badge badge-accent">Đang gợi ý</span>
         </div>
-        <p className="xsmall muted row-between"><span>Đọc bài làm dạng văn bản và đối chiếu thang điểm. Thường mất dưới một phút.</span><span className="num">Đã chạy {secs} giây</span></p>
+        <p className="xsmall muted row-between"><span>Kiểm tra bảo mật tệp, đường dẫn và văn bản đã nộp, rồi đọc bài làm, nội dung bài học liên quan và đối chiếu thang điểm. Thường mất dưới một phút.</span><span className="num">Đã chạy {secs} giây</span></p>
         <div className="row"><button type="button" className="btn btn-ghost btn-sm" onClick={() => stopDraft(submission.id)}>Dừng</button></div>
       </section>
     );
   } else if (draft.status === 'failed') {
     body = (
+      <>
+      <SecurityScan checks={draft.security} />
       <section className="lai-job is-error" aria-label="AI gợi ý điểm và nhận xét">
         <div className="row-between lai-job-head">
           <strong className="small row" style={{ gap: 6 }}><Icon name="sparkles" className="icon-sm" /> AI chưa gợi ý được</strong>
           <span className="badge badge-danger">Lỗi</span>
         </div>
         <p className="small row lai-job-msg"><Icon name="alert-circle" className="icon-sm" /><span>{draft.error}</span></p>
+        {draft.warnings && draft.warnings.length > 0 && !draft.error.startsWith('AI không đọc được bài nộp') && <ul className="xsmall muted">{draft.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={start} disabled={disabled}><Icon name="refresh" className="icon-sm" /> Thử lại</button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => dismissDraft(submission.id)}>Bỏ qua</button>
         </div>
       </section>
+      </>
     );
   } else {
-    body = <ReviewCard key={draft.seq} submission={submission} rubric={rubric} draft={draft} disabled={disabled} onApply={onApply} />;
+    body = (
+      <>
+        <SecurityScan checks={draft.result.security} />
+        <ReviewCard key={draft.seq} submission={submission} rubric={rubric} draft={draft} disabled={disabled} onApply={onApply} />
+      </>
+    );
   }
   return <div className="lai-job-slot"><p className="sr-only" aria-live="polite" aria-atomic="true">{live}</p>{body}</div>;
 }

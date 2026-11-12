@@ -27,6 +27,11 @@ import {
 } from "@/lib/grading-service";
 import { createNotificationService } from "@/lib/notification-service";
 import { generateAiGradingDraft } from "@/lib/ai-grading-draft";
+import { gatherGradingMaterial, type GradingSource, type SecurityCheck } from "@/lib/grading-material";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { assignmentFiles } from "@/lib/storage";
+
+const AI_GRADING_DRAFTS_PER_HOUR = 60;
 
 export interface SubmissionListItemDto {
   id: number;
@@ -594,6 +599,11 @@ export async function getAiGradingDraft(input: { submissionId: number; viewToken
   rubricScores?: Record<string, number>;
   feedback?: string;
   error?: string;
+  contextUsed?: number;
+  sources?: GradingSource[];
+  warnings?: string[];
+  /** Security scan of every learner-controlled source (file, link, typed text), shown before the draft. */
+  security?: SecurityCheck[];
 }> {
   const lecturer = await verifyLecturerSession();
   if (!Number.isSafeInteger(input.submissionId) || input.submissionId <= 0 || !input.viewToken) {
@@ -623,6 +633,7 @@ export async function getAiGradingDraft(input: { submissionId: number; viewToken
     rubric: assessments.rubric,
     type: assessments.type,
     courseId: assessments.courseId,
+    lessonId: assessments.lessonId,
   };
   const readOwnedSubmission = () => db.select(selection)
     .from(assessmentSubmissions)
@@ -656,15 +667,31 @@ export async function getAiGradingDraft(input: { submissionId: number; viewToken
     }
   }
 
+  // Each draft is a paid model call (plus file / link reading): an hourly cap per lecturer, in memory like the others.
+  if (!checkRateLimit(`ai-grading-draft:${lecturer.id}`, { windowMs: 60 * 60 * 1000, max: AI_GRADING_DRAFTS_PER_HOUR }).success) {
+    return { success: false, error: "Đã dùng hết lượt AI gợi ý chấm trong giờ này. Thử lại sau ít phút hoặc chấm thủ công." };
+  }
+
+  // The AI reads the learner's note and, for code assignments, the submitted code.
+  const answerText = [
+    row.answerText?.trim() || "",
+    row.codeText?.trim() ? `Code (${row.codeLanguage || "javascript"}):\n\`\`\`\n${row.codeText}\n\`\`\`` : "",
+  ].filter(Boolean).join("\n\n");
+  // Lesson transcripts and passages when the assignment belongs to a lesson; the learner's file and link when given.
+  // Without any of them the draft request is exactly the text-only one.
+  const material = row.lessonId || row.fileUrl || row.linkUrl
+    ? await gatherGradingMaterial(db, {
+      courseId: row.courseId, lessonId: row.lessonId, instructions: row.instructions, answerText,
+      file: row.fileUrl && row.fileName ? { key: row.fileUrl, name: row.fileName } : null,
+      link: row.linkUrl, readFile: (key) => assignmentFiles.get(key),
+    })
+    : undefined;
   const result = await generateAiGradingDraft({
     instructions: row.instructions,
-    // The AI reads the learner's note and, for code assignments, the submitted code.
-    answerText: [
-      row.answerText?.trim() || "",
-      row.codeText?.trim() ? `Code (${row.codeLanguage || "javascript"}):\n\`\`\`\n${row.codeText}\n\`\`\`` : "",
-    ].filter(Boolean).join("\n\n"),
+    answerText,
     rubric,
     maxScore: Number(row.maxScore),
+    material,
   });
   if (result.success) {
     const [current] = await readOwnedSubmission();

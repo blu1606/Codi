@@ -30,6 +30,29 @@ import {
   signUploadTicket,
   verifyUploadTicket,
 } from "./assessment-upload-ticket";
+import { MAX_INSPECT_BYTES, scanSubmissionSecurity } from "./submission-file-safety";
+
+/** Up to `max` bytes of a stored object; the rest of the stream is cancelled. */
+async function readBytes(body: ReadableStream, max: number): Promise<Uint8Array> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (size < max) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = (value as Uint8Array).subarray(0, max - size);
+      chunks.push(chunk);
+      size += chunk.byteLength;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.byteLength; }
+  return out;
+}
 
 type Store = Pick<Database, "select" | "insert" | "update" | "delete" | "execute">;
 type Scope = {
@@ -45,6 +68,26 @@ export type FileStore = {
   delete: (key: string) => Promise<void>;
   get: (key: string) => Promise<{ body: ReadableStream; size?: number }>;
 };
+/**
+ * Copy an uploaded object (If-Match `etag`) to its immutable key, then run the security scan on that copy (the same
+ * scanSubmissionSecurity the grading assistant uses later). Scanning the copy rather than the upload key closes the
+ * window where a still-valid presigned PUT swaps the object between the check and the copy. Returns the Vietnamese
+ * refusal for a blocked file (caller deletes the copy and the upload) or null when it may be kept. Suspicious files
+ * (hidden text) are accepted: the grading step flags them for the lecturer.
+ */
+export async function copyAndScanUpload(
+  files: Pick<FileStore, "copy" | "get">,
+  source: string,
+  key: string,
+  etag: string,
+  name: string,
+): Promise<string | null> {
+  await files.copy(source, key, etag);
+  const bytes = await readBytes((await files.get(key)).body, MAX_INSPECT_BYTES);
+  const scan = scanSubmissionSecurity(name, bytes);
+  if (scan.verdict !== "blocked") return null;
+  return `Tệp bị chặn vì lý do bảo mật: ${scan.reasons.join("; ")}. Hãy nộp tệp tài liệu hoặc mã nguồn thông thường (không chứa chương trình, JavaScript, tệp nhúng hay macro).`;
+}
 const emptyDraft = (): AssignmentDraft => ({
   linkUrl: "",
   answerText: "",
@@ -588,6 +631,13 @@ export function createAssessmentService(
       const obsolete: string[] = [];
       let committed = false;
       try {
+        // Copy with If-Match to an immutable key (reusing a presigned PUT cannot mutate submitted work), then run the
+        // security scan on that copy (programs, active PDF content, macros); the finally below deletes a refused copy.
+        const refused = await copyAndScanUpload(files, ticket.key, key, head.etag, ticket.name);
+        if (refused) {
+          await cleanup([ticket.key]);
+          throw new LearningPathError(refused, 400);
+        }
         const view = await db.transaction(async (tx) => {
           const ctx = await context(tx, scope, true);
           requireFileAssignment(ctx);
@@ -601,8 +651,6 @@ export function createAssessmentService(
             ticket.name,
             assignmentFileLimit(ctx.assessment.maxFileSizeMb),
           );
-          // Copy with If-Match to an immutable key: reusing a presigned PUT cannot mutate submitted work.
-          await files.copy(ticket.key, key, head.etag);
           const before = referencedKeys(ctx);
           ctx.submission = await saveDraft(tx, ctx, {
             ...draftOf(ctx),

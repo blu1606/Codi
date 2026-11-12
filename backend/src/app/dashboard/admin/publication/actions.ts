@@ -18,6 +18,7 @@ import {
   canApprove,
   CRITERIA,
   diffReviewContent,
+  rulePrecheck,
   toReviewFlagDto,
   validateReviewTarget,
   type AutoCriterionResult,
@@ -28,8 +29,11 @@ import {
   type ReviewFlagDto,
   type ReviewFlagSeverity,
   type ReviewFlagStatus,
+  type ReviewFlagTarget,
   type ReviewRoundDto,
 } from "@/lib/publication-service";
+import { reviewQuizAgainstLessons } from "@/lib/publication-ai-review";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { auth, db } from "@/services";
 import { fetchCourseDataForReview } from "@/lib/publication-course-data";
 import { publicationCourseTransaction, publicationRequestTransaction, publicationFlagTransaction, requireActivePublication, requirePublicationClaim } from "@/lib/publication-store";
@@ -409,6 +413,51 @@ export async function addReviewFlag(
   });
   revalidatePath("/dashboard/admin/publication");
   return { success: true, flagId };
+}
+
+export type PrecheckProposal = { target: ReviewFlagTarget; severity: ReviewFlagSeverity; comment: string };
+export type PrecheckResult = {
+  rules: PrecheckProposal[];
+  ai: null | { status: "ok"; proposals: PrecheckProposal[]; lessonsRead: number; lessonsSkipped: number }
+    | { status: "unavailable"; code: string; message: string };
+};
+const AI_REVIEWS_PER_HOUR = 20;
+
+/** The active round's course content and the proposals already turned into flags (label + comment). */
+async function precheckSubject(requestId: number) {
+  if (!Number.isSafeInteger(requestId) || requestId <= 0) throw new Error("Yêu cầu duyệt không hợp lệ.");
+  const [request] = await db.select({ courseId: coursePublicationRequests.courseId, status: coursePublicationRequests.status })
+    .from(coursePublicationRequests).where(eq(coursePublicationRequests.id, requestId));
+  if (!request) throw new Error("Không tìm thấy yêu cầu duyệt.");
+  if (request.status !== "in_review") throw new Error("Vòng duyệt này đã kết luận.");
+  const { courseData } = await fetchCourseDataForReview(request.courseId);
+  const flags = await db.select({ targetLabel: publicationReviewFlags.targetLabel, comment: publicationReviewFlags.comment })
+    .from(publicationReviewFlags).where(eq(publicationReviewFlags.requestId, requestId));
+  const have = new Set(flags.map((f) => `${f.targetLabel}|${f.comment}`));
+  const fresh = (items: PrecheckProposal[]) => items.filter((x) => !have.has(`${x.target.label}|${x.comment}`));
+  return { courseData, fresh };
+}
+
+/** Rule-based pre-check of the active round (no model). Proposals only: a flag is created when the admin accepts it. */
+export async function getRulePrecheck(requestId: number): Promise<PrecheckResult> {
+  await verifyAdminSession();
+  const { courseData, fresh } = await precheckSubject(requestId);
+  return { rules: fresh(rulePrecheck(courseData)), ai: null };
+}
+
+/**
+ * Rules plus a model pass that checks each quiz against its lesson text. Rule results always come back; a model
+ * failure or the hourly cap only sets `ai.status = "unavailable"`.
+ */
+export async function runAiPrecheck(requestId: number): Promise<PrecheckResult> {
+  const admin = await verifyAdminSession();
+  const { courseData, fresh } = await precheckSubject(requestId);
+  const rules = fresh(rulePrecheck(courseData));
+  if (!checkRateLimit(`publication-ai-review:${admin.id}`, { windowMs: 60 * 60 * 1000, max: AI_REVIEWS_PER_HOUR }).success) {
+    return { rules, ai: { status: "unavailable", code: "rate_limited", message: "Đã dùng hết lượt rà soát AI trong giờ này. Thử lại sau ít phút." } };
+  }
+  const ai = await reviewQuizAgainstLessons(courseData);
+  return { rules, ai: ai.status === "ok" ? { ...ai, proposals: fresh(ai.proposals) } : ai };
 }
 
 export async function updateFlagStatus(flagId: number, status: ReviewFlagStatus): Promise<{ success: boolean }> {

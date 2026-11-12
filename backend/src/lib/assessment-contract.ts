@@ -1,3 +1,4 @@
+import { blockedUploadName } from "./submission-file-safety";
 import { z } from "zod";
 import { LearningPathError } from "./learning-path-contract";
 
@@ -384,4 +385,7 @@ export function requireUpload(size: number, name: string, limit: number) {
     /[\u0000-\u001f\u007f/\\]/.test(name)
   )
     throw new LearningPathError("Tên tệp không hợp lệ.", 400);
+  // Programs, scripts and macro-enabled Office files are never an assignment answer.
+  const blocked = blockedUploadName(name);
+  if (blocked) throw new LearningPathError(blocked, 400);
 }
