@@ -13,6 +13,7 @@ import { Alert, Empty, Icon, Mastery, Progress, SpinnerBlock, Thumb } from '../.
 import { errorText, goalLabel, scoreText } from './learning-store';
 import { KnowledgeMap, StatsPanel } from './insights-pages';
 import './results-page.css';
+import MyCertificates from '../certificates/my-certificates';
 
 const TABS = [['scores', 'Sổ điểm'], ['stats', 'Thống kê'], ['map', 'Bản đồ kiến thức']];
 
@@ -202,6 +203,7 @@ export default function ProgressPage({ query }) {
   return (
     <div className="page rs-page">
       <div className="page-header"><div><h1>Kết quả học tập</h1><p className="muted">Điểm từng bài, nhịp học và mức thành thạo của bạn.</p></div></div>
+      <MyCertificates />
       <nav className="tabs rs-tabs" aria-label="Kết quả học tập">
         {TABS.map(([k, l]) => <Link key={k} className="tab" to={resultsHref({ tab: k }, q)} aria-current={tab === k ? 'page' : undefined}>{l}</Link>)}
       </nav>

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "index:knowledge": "tsx --env-file-if-exists=.env scripts/index-course-knowledge.ts",
     "seed:loadtest": "tsx --env-file-if-exists=.env scripts/seed-loadtest-accounts.ts",
-    "seed:system-test": "tsx --env-file-if-exists=.env scripts/seed-system-test-fixtures.ts"
+    "seed:system-test": "tsx --env-file-if-exists=.env scripts/seed-system-test-fixtures.ts",
+    "seed:certificates": "tsx --env-file-if-exists=.env scripts/demo-content/seed-demo-certificates.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.76",

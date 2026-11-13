@@ -32,6 +32,7 @@ import {
   lessonTranscript,
   recordPdfPage,
   requireLessonChecklist,
+  mergeWatched,
   videoPosition,
   videoStudied,
   type LessonPlayerCommand,
@@ -223,7 +224,12 @@ export function createLessonPlayerService(db: Database) {
               material.durationSeconds,
               command.ended,
             );
-            media[String(material.id)] = { seconds };
+            const watched = mergeWatched(
+              media[String(material.id)]?.watched,
+              command.watched,
+              material.durationSeconds,
+            );
+            media[String(material.id)] = { seconds, watched };
             values.lastPositionSeconds = seconds;
             if (videoStudied(seconds, material.durationSeconds, command.ended))
               values.studiedAt = p?.studiedAt ?? now;

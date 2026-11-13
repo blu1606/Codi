@@ -153,6 +153,8 @@ export default function PathPage({ params }) {
   const lines = rows.length ? buildLines(c, rows) : [];
   const cur = view.currentLessonId;
   const complete = view.complete;
+  // Lessons marked "có thể bỏ qua" are not required for the certificate.
+  const requiredLeft = rows.filter((x) => !x.skippable && x.status !== 'done').length;
   const curRow = cur ? rows.find((x) => x.id === cur) : null;
   const r = { pathSource: view.source };
   const retry = async () => {
@@ -182,6 +184,9 @@ export default function PathPage({ params }) {
           <div className="pt-progress">
             <p className="pt-progress-text"><span className="pt-progress-num pt-mono">{view.done}/{view.total}</span> bài đã học <span className="muted">· <span className="pt-mono">{view.percent}%</span></span></p>
             <Progress pct={view.percent} label="Tiến độ khoá học" />
+            {!complete && requiredLeft > 0 && (
+              <p className="small muted row pt-cert-hint"><Icon name="graduation-cap" className="icon-sm" /> Hoàn thành thêm <span className="pt-mono">{requiredLeft}</span> bài bắt buộc để nhận chứng chỉ.</p>
+            )}
           </div>
         </div>
         {curRow && !complete && (

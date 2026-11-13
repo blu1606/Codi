@@ -12,6 +12,8 @@ import { ENV } from "@/env";
 import { fetchStoredMaterial, keyFromMediaUrl, LessonMediaError } from "@/lib/lesson-media";
 import { extractSource } from "@/lib/lesson-source-extraction";
 import { youtubeId, youtubeTranscript } from "@/lib/youtube-transcript";
+import { lessonTranscript } from "./lesson-player-contract";
+import { chunkStartSeconds } from "./video-citation";
 
 const DIMENSIONS = 768;
 const CHUNK_SIZE = 1200;
@@ -235,6 +237,9 @@ export type KnowledgeHit = {
   sourceTitle: string;
   content: string;
   score: number;
+  // A chunk of a video transcript: the video and the second the chunk starts at (null when unknown).
+  materialId: number | null;
+  startSeconds: number | null;
 };
 
 /** Search result, or why it returned nothing so callers can tell "not indexed yet" from "nothing relevant". */
@@ -255,9 +260,11 @@ export async function searchCourseKnowledge(db: Database, courseId: string, quer
     const vector = `{${normalize(embedding).join(",")}}`;
     const result = await db.execute(sql`
       select k.lesson_id, l.title as lesson_title, ch.title as chapter, s.title as source_title, k.content,
-        (select sum(a * b) from unnest(k.embedding, ${vector}::real[]) as t(a, b)) as score
+        (select sum(a * b) from unnest(k.embedding, ${vector}::real[]) as t(a, b)) as score,
+        vm.id as video_id, vm.transcript as video_transcript
       from course_knowledge_chunks k
       join course_knowledge_sources s on s.source_key = k.source_key
+      left join lesson_materials vm on vm.id = s.material_id and vm.type = 'video'
       join course_lessons l on l.id = k.lesson_id
       join course_chapters ch on ch.id = l.chapter_id
       where k.course_id = ${courseId} and s.embedding_model = ${config.id} and ch.is_published and l.is_published
@@ -280,6 +287,10 @@ export async function searchCourseKnowledge(db: Database, courseId: string, quer
         sourceTitle: String(row.source_title),
         content: String(row.content),
         score: Number(row.score),
+        materialId: row.video_id == null ? null : Number(row.video_id),
+        startSeconds: row.video_id == null
+          ? null
+          : chunkStartSeconds(String(row.content), lessonTranscript(row.video_transcript)),
       })),
     };
   } catch {

@@ -9,6 +9,7 @@ import { conversationMessages, courseConversations, courseDiscussions, courseLes
 import { getLlmProvider } from "@/lib/ai";
 import { mapAiQuizError } from "@/lib/quiz-ai-generation";
 import { courseContext, type CourseContextHit } from "@/lib/course-context";
+import { clock } from "@/lib/classroom-contract";
 
 const TIMEOUT_MS = 45_000;
 const MAX_THREAD_ITEMS = 8;
@@ -83,7 +84,10 @@ const outputSchema = z.object({ text: z.string().trim().min(5).max(5000) });
 /** Unique lesson links of the passages, in retrieval order. */
 export function replySources(hits: CourseContextHit[]): QuestionReplySource[] {
   const seen = new Map<string, QuestionReplySource>();
-  for (const hit of hits) if (!seen.has(hit.href)) seen.set(hit.href, { title: hit.lessonTitle, href: hit.href });
+  for (const hit of hits) if (!seen.has(hit.href)) seen.set(hit.href, {
+    title: hit.startSeconds != null ? `${hit.lessonTitle} · ${clock(hit.startSeconds)}` : hit.lessonTitle,
+    href: hit.href,
+  });
   return [...seen.values()];
 }
 

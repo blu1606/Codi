@@ -32,6 +32,7 @@ export function AdminShell({ active, children }) {
     { section: 'Vận hành', href: '/admin/users', label: 'Người dùng', icon: 'users' },
     { section: 'Vận hành', href: '/admin/orders', label: 'Đơn hàng', icon: 'receipt' },
     { section: 'Vận hành', href: '/admin/vouchers', label: 'Voucher', icon: 'ticket' },
+    { section: 'Vận hành', href: '/admin/certificates', label: 'Chứng chỉ', icon: 'graduation-cap' },
     { section: 'Phân tích', href: '/admin/insights', label: 'Quan sát hệ thống', icon: 'bar-chart', match: /^\/admin\/insights/ }, // mockup names 'activity', which is not in the icon set
     { section: 'Phân tích', href: '/admin/finance', label: 'Tài chính', icon: 'trending-up', match: /^\/admin\/finance/ },
   ];

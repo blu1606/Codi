@@ -7,5 +7,6 @@ import coding from './coding/routes';
 import lecturer from './lecturer/routes';
 import lecturerAi from './lecturer-ai/routes';
 import admin from './admin/routes';
+import certificates from './certificates/routes';
 
-export const allRoutes = [...shell, ...commerce, ...learning, ...coding, ...lecturer, ...lecturerAi, ...admin];
+export const allRoutes = [...shell, ...commerce, ...learning, ...coding, ...lecturer, ...lecturerAi, ...admin, ...certificates];

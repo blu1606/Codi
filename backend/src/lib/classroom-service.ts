@@ -98,7 +98,8 @@ export async function actOnSession(userId: string, courseId: string, lessonId: s
   if (!s) throw new ClassroomError("Không tìm thấy phiên tranh luận.", 404);
   if (s.version !== act.version) throw new ClassroomError("Phiên tranh luận vừa được cập nhật ở nơi khác. Tải lại để tiếp tục.", 409, "stale");
   const cp = await requireCheckpoint(lessonId, s.checkpointId);
-  const ctx = contextOf(cp, scope.lesson.title);
+  const { cues } = await lessonVideoSource(lessonId);
+  const ctx = { ...contextOf(cp, scope.lesson.title), excerpt: cues ? chatExcerpt(cues, null, cp.timestampSeconds, 2500) : undefined };
   const added: DebateMessage[] = [];
   let state: DebateState = s.state;
 
@@ -133,7 +134,7 @@ export async function actOnSession(userId: string, courseId: string, lessonId: s
   } else {
     if (state.phase === "closed" || state.phase === "skipped") throw new ClassroomError("Phần tranh luận này đã kết thúc.", 409, "closed");
     // No model call: skipping must work even when the AI is down, and still leaves the key idea behind.
-    added.push(message("colam", "skip", `Không sao, mình xem tiếp nhé. Ý then chốt của đoạn này: ${cp.keyIdea}`));
+    added.push(message("colam", "skip", `Không sao, mình xem tiếp nhé. Ý then chốt của đoạn này${cues ? ` [${clock(cp.timestampSeconds)}]` : ""}: ${cp.keyIdea}`));
     state = { ...state, phase: "skipped" };
   }
 

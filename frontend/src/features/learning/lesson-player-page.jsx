@@ -17,8 +17,8 @@
  * - ≤ 920 px the outline and the Tutor become panels over the content (the outline starts closed).
  * Focused time on this page is credited to the learner's study days on the server (study-time.js).
  */
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Codi } from '../../lib/codi';
 import { Alert, Avatar, Empty, Icon } from '../../components/ui/primitives';
@@ -33,6 +33,8 @@ import { LecturerConversation } from './lecturer-conversation';
 import { PathMap, PrerequisiteAdvice } from './path-views';
 import { ClassroomPanel } from '../classroom/classroom-panel';
 import { useStudyHeartbeat } from './study-time';
+import { VideoSeekContext } from './video-seek';
+import { watchShortfall } from './video-watch';
 
 const OVERLAY_QUERY = '(max-width: 920px)';
 function useMedia(query) {
@@ -412,7 +414,9 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
   const hasStudy = !isCode || mats.length > 0 || !!l.body;
   const parts = (isCode ? ['code', hasStudy && 'study'] : ['study']).concat([quizItem && 'quiz', asItem && 'assignment']).filter(Boolean);
   const partDone = (k) => { const it = items.find((x) => x.key === k); return it ? it.done : view.studied; };
-  const [part, setPartState] = useState(() => parts.find((k) => !partDone(k)) || parts[0]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // A citation link (?t=seconds, optional &m=material) opens the lesson on its video at that second.
+  const [part, setPartState] = useState(() => (searchParams.has('t') && parts.includes('study') ? 'study' : parts.find((k) => !partDone(k)) || parts[0]));
   const [materialId, setMaterialId] = useState(mats[0] ? mats[0].id : null);
   const material = mats.find((x) => x.id === materialId) || mats[0] || null;
 
@@ -494,8 +498,71 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
       return;
     }
   };
+  // ── video citations: "[mm:ss]" in the Tutor / AI classroom and ?t= links seek this lesson's video ──
+  const seekVideo = useCallback((seconds, wantMaterial) => {
+    const target = wantMaterial && mats.some((x) => x.id === wantMaterial) ? wantMaterial : null;
+    if (target) setMaterialId(target);
+    setPartState('study');
+    if (isOverlay()) { setTutorOpen(false); setClassOpen(false); }
+    let tries = 0;
+    const go = () => {
+      const ready = !target || bridge.materialId() === target;
+      if (ready && bridge.seek(seconds)) {
+        const frame = document.querySelector('#lesson-task-study .ln-frame');
+        if (frame) frame.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+      // The video may still be mounting (another material, or the YouTube player loading).
+      if (tries++ < 60) setTimeout(go, 250);
+    };
+    requestAnimationFrame(go);
+  }, [bridge, mats]);
+  const linkSeconds = searchParams.get('t');
+  const linkMaterial = searchParams.get('m');
+  useEffect(() => {
+    if (linkSeconds === null) return;
+    const t = Number(linkSeconds);
+    if (Number.isFinite(t) && t >= 0) seekVideo(t, Number(linkMaterial) || null);
+    // Done once: a reload should resume where the learner is, not jump back to the cited second.
+    setSearchParams((p) => { const n = new URLSearchParams(p); n.delete('t'); n.delete('m'); return n; }, { replace: true });
+  }, [linkSeconds, linkMaterial, seekVideo, setSearchParams]);
+  const videoSeek = useMemo(() => {
+    const videos = mats.filter((x) => x.type === 'video');
+    if (!videos.length) return null;
+    const ends = videos.map((x) => (x.durationSeconds > 0 ? x.durationSeconds
+      : Array.isArray(x.transcript) && x.transcript.length ? (x.transcript[x.transcript.length - 1].end || x.transcript[x.transcript.length - 1].start) + 5 : Infinity));
+    return { courseId, lessonId: l.id, maxSeconds: Math.max(...ends), seek: seekVideo };
+  }, [mats, courseId, l.id, seekVideo]);
+
+  // Skipping ahead in a video never blocks the lesson: before moving on the learner is only asked to confirm.
+  const watchConfirmed = useRef(false);
+  const confirmWatched = async () => {
+    if (done || watchConfirmed.current) return true;
+    const short = watchShortfall(mats, view.media, (id) => bridge.watched(id));
+    if (!short.length) return true;
+    const list = short.map((x) => `“${x.title}” (đã xem ${x.percent}%)`).join(', ');
+    const { ok } = await Codi.ui.confirm({
+      title: 'Bạn chưa xem đủ thời lượng video',
+      body: short.length === 1
+        ? `Bạn mới xem thực tế ${short[0].percent}% video “${short[0].title}”, chưa tới 90% thời lượng. Có vẻ bạn đã tua qua một số đoạn.`
+        : `Chưa video nào của bài được xem tới 90% thời lượng: ${list}. Có vẻ bạn đã tua qua một số đoạn.`,
+      consequence: 'Bạn vẫn có thể tiếp tục, nhưng nên xem lại các đoạn đã bỏ qua để nắm chắc bài.',
+      confirmLabel: 'Vẫn tiếp tục',
+      cancelLabel: 'Xem tiếp video',
+    });
+    if (ok) watchConfirmed.current = true;
+    else if (parts.includes('study')) setPart('study');
+    return ok;
+  };
+  const leaveTo = async (e, to) => {
+    if (done || watchConfirmed.current) return;
+    e.preventDefault();
+    if (await confirmWatched()) navigate(to);
+  };
+
   const complete = async () => {
     if (completing) return;
+    if (!(await confirmWatched())) return;
     setCompleting(true);
     try {
       const res = await send({ type: 'complete' });
@@ -552,11 +619,13 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
     : prev ? <Link className="btn btn-secondary" to={`/learn/${courseId}/${prev}`}><Icon name="chevron-left" className="icon-sm" /> Bài trước</Link>
       : <button type="button" className="btn btn-secondary" disabled><Icon name="chevron-left" className="icon-sm" /> Bài trước</button>;
   let nextBtn = null;
-  if (pi < parts.length - 1) nextBtn = <button type="button" className="btn btn-primary" onClick={() => setPart(parts[pi + 1])}>Tiếp theo: {PART_LABEL[parts[pi + 1]]} <Icon name="chevron-right" className="icon-sm" /></button>;
+  const nextPart = async () => { if (part !== 'study' || await confirmWatched()) setPart(parts[pi + 1]); };
+  if (pi < parts.length - 1) nextBtn = <button type="button" className="btn btn-primary" onClick={nextPart}>Tiếp theo: {PART_LABEL[parts[pi + 1]]} <Icon name="chevron-right" className="icon-sm" /></button>;
   else if (ready) nextBtn = <button type="button" className="btn btn-primary" onClick={complete} disabled={completing} aria-busy={completing || undefined}>Hoàn thành bài học <Icon name="check" className="icon-sm" /></button>;
-  else if (next) nextBtn = <Link className={`btn ${done ? 'btn-primary' : 'btn-secondary'}`} to={`/learn/${courseId}/${next}`}>Bài sau <Icon name="chevron-right" className="icon-sm" /></Link>;
+  else if (next) nextBtn = <Link className={`btn ${done ? 'btn-primary' : 'btn-secondary'}`} to={`/learn/${courseId}/${next}`} onClick={(e) => leaveTo(e, `/learn/${courseId}/${next}`)}>Bài sau <Icon name="chevron-right" className="icon-sm" /></Link>;
 
   return (
+    <VideoSeekContext.Provider value={videoSeek}>
     <div className="rd-shell" ref={shellRef} style={{ '--rd-side-w': `${sideW}px` }}>
       <header className="rd-top">
         <Link className="btn btn-ghost btn-icon rd-back" to={`/learn/${courseId}`} aria-label="Về lộ trình" title="Về lộ trình"><Icon name="arrow-left" /></Link>
@@ -608,6 +677,7 @@ function LessonWorkspace({ courseId, view, send, reload, offer, setOffer, setPat
         </TutorDock>
       </div>
     </div>
+    </VideoSeekContext.Provider>
   );
 }
 

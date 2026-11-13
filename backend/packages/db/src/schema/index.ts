@@ -19,4 +19,5 @@ export * from "./github-profile";
 export * from "./ai-jobs";
 export * from "./course-knowledge";
 export * from "./classroom";
+export * from "./certificates";
 export {};

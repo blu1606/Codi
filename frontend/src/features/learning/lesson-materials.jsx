@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Codi } from '../../lib/codi';
 import { Alert, Icon } from '../../components/ui/primitives';
 import { isStoredMedia } from '../lecturer/lesson-media-api';
+import { coveredSeconds, createWatchTracker } from './video-watch';
 
 // ───────────────────────── video bridge (transcript ↔ player) ─────────────────────────
 /**
@@ -45,7 +46,21 @@ export function createVideoBridge() {
     pause() { if (player && player.pause) { try { player.pause(); } catch { /* player gone */ } } },
     play() { if (player && player.play) { try { player.play(); } catch { /* player gone */ } } },
     subscribe(fn) { subs.add(fn); return () => { subs.delete(fn); }; },
+    /** Stretches the mounted video of material `id` has played but maybe not saved yet ([] otherwise). */
+    watched(id) {
+      if (!player || player.materialId !== id || !player.watched) return [];
+      try { return player.watched(); } catch { return []; }
+    },
+    /** The material whose video is mounted, or null. */
+    materialId() { return player ? player.materialId ?? null : null; },
   };
+}
+
+// "Đã xem thực tế N%": watched stretches only, so seeking ahead does not raise it.
+function watchedNote(m, progress) {
+  if (!(m.durationSeconds > 0) || !progress || !Array.isArray(progress.watched)) return '';
+  const pct = Math.min(100, Math.round((coveredSeconds(progress.watched, m.durationSeconds) / m.durationSeconds) * 100));
+  return ` Đã xem thực tế ${pct}% thời lượng.`;
 }
 const TIME_POLL_MS = 250;
 
@@ -100,7 +115,7 @@ function loadYouTubeApi() {
   return api;
 }
 
-function YouTubeFrame({ videoId, title, startSeconds, bridge, onTracked, onUntracked, onLoaded, onPosition, onError }) {
+function YouTubeFrame({ videoId, title, startSeconds, bridge, tracker, materialId, onTracked, onUntracked, onLoaded, onPosition, onError }) {
   const frame = useRef(null);
   const cb = useRef({ onTracked, onUntracked, onPosition, onError, bridge });
   cb.current = { onTracked, onUntracked, onPosition, onError, bridge };
@@ -113,7 +128,12 @@ function YouTubeFrame({ videoId, title, startSeconds, bridge, onTracked, onUntra
     let poll = null; let detach = null;
     const stopInterval = () => { if (interval) clearInterval(interval); interval = null; };
     // The IFrame API has no time event: while playing, the position is read a few times a second for the transcript.
-    const publish = () => { const b = cb.current.bridge; if (b && player && ready) b.publish(player.getCurrentTime()); };
+    const publish = () => {
+      if (!player || !ready) return;
+      const t = player.getCurrentTime();
+      tracker.tick(t);
+      const b = cb.current.bridge; if (b) b.publish(t);
+    };
     const stopPoll = () => { if (poll) clearInterval(poll); poll = null; };
     const read = () => {
       if (!player || !ready) return null;
@@ -134,10 +154,12 @@ function YouTubeFrame({ videoId, title, startSeconds, bridge, onTracked, onUntra
             const b = cb.current.bridge;
             if (b) {
               detach = b.attach({
-                seek: (seconds) => { player.seekTo(seconds, true); player.playVideo(); b.publish(seconds); return true; },
+                seek: (seconds) => { tracker.reset(); player.seekTo(seconds, true); player.playVideo(); b.publish(seconds); return true; },
                 time: () => player.getCurrentTime(),
                 pause: () => player.pauseVideo(),
                 play: () => player.playVideo(),
+                materialId,
+                watched: () => tracker.ranges(),
               });
             }
             cb.current.onTracked();
@@ -146,11 +168,13 @@ function YouTubeFrame({ videoId, title, startSeconds, bridge, onTracked, onUntra
             if (!ready) return;
             if (data === YT.PlayerState.PLAYING) {
               ended = false;
+              tracker.reset(); tracker.tick(player.getCurrentTime());
               if (!interval) interval = setInterval(savePos, 10000);
               if (!poll) poll = setInterval(publish, TIME_POLL_MS);
-            } else if (data === YT.PlayerState.PAUSED) { stopInterval(); stopPoll(); publish(); savePos(); }
+            } else if (data === YT.PlayerState.PAUSED) { stopInterval(); stopPoll(); publish(); tracker.reset(); savePos(); }
+            else if (data === YT.PlayerState.BUFFERING) { publish(); tracker.reset(); }
             else if (data === YT.PlayerState.ENDED) {
-              stopInterval(); stopPoll(); publish(); ended = true;
+              stopInterval(); stopPoll(); publish(); tracker.reset(); ended = true;
               const duration = player.getDuration();
               cb.current.onPosition(Math.max(player.getCurrentTime(), Number.isFinite(duration) ? duration : 0), true, duration);
             }
@@ -219,10 +243,13 @@ function SimulatedVideo({ m, progress, lessonMin, save, bridge }) {
   posRef.current = pos;
   const startPos = useRef(pos);
   const lastSaved = useRef(Date.now());
+  const [tracker] = useState(() => createWatchTracker(progress && progress.watched));
   useEffect(() => { if (bridge) bridge.publish(pos); }, [bridge, pos]);
   useEffect(() => {
     if (!bridge) return undefined;
     return bridge.attach({
+      materialId: m.id,
+      watched: () => tracker.ranges(),
       seek: (seconds) => {
         const next = Math.max(0, Math.min(total, seconds));
         posRef.current = next; setPos(next);
@@ -234,12 +261,13 @@ function SimulatedVideo({ m, progress, lessonMin, save, bridge }) {
       pause: () => { setPlaying(false); },
       play: () => { if (posRef.current < total) { lastSaved.current = Date.now(); setPlaying(true); } },
     });
-  }, [bridge, total]);
-  const send = useCallback((ended) => save({ type: 'video', materialId: m.id, seconds: Math.floor(posRef.current), ended: !!ended }), [m.id, save]);
+  }, [bridge, total, m.id, tracker]);
+  const send = useCallback((ended) => save({ type: 'video', materialId: m.id, seconds: Math.floor(posRef.current), ended: !!ended, watched: tracker.ranges() }), [m.id, save, tracker]);
   useEffect(() => {
     if (!playing || !total) return undefined;
     const t = setInterval(() => {
       const next = Math.min(total, posRef.current + total * 0.04);
+      tracker.add(posRef.current, next);
       posRef.current = next; setPos(next);
       if (next >= total) { setPlaying(false); send(true); return; }
       if (Date.now() - lastSaved.current >= 10000) { lastSaved.current = Date.now(); send(false); }
@@ -271,7 +299,7 @@ function SimulatedVideo({ m, progress, lessonMin, save, bridge }) {
           </div>
         </div>
       </div>
-      <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{startPos.current > 0 ? ` Tiếp tục từ giây ${Math.floor(startPos.current)}.` : ''}</p>
+      <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{startPos.current > 0 ? ` Tiếp tục từ giây ${Math.floor(startPos.current)}.` : ''}{watchedNote(m, progress)}</p>
     </section>
   );
 }
@@ -282,11 +310,15 @@ function FileVideo({ m, progress, save, onFail, bridge }) {
   const ref = useRef(null);
   const start = useRef(Math.floor((progress && progress.seconds) || 0));
   const lastSaved = useRef(0);
+  const [tracker] = useState(() => createWatchTracker(progress && progress.watched));
   useEffect(() => {
     if (!bridge) return undefined;
     return bridge.attach({
+      materialId: m.id,
+      watched: () => tracker.ranges(),
       seek: (seconds) => {
         const v = ref.current; if (!v) return false;
+        tracker.reset();
         v.currentTime = seconds;
         const played = v.play();
         if (played && typeof played.catch === 'function') played.catch(() => { /* autoplay refused: the position is still set */ });
@@ -301,25 +333,33 @@ function FileVideo({ m, progress, save, onFail, bridge }) {
         if (played && typeof played.catch === 'function') played.catch(() => { /* autoplay refused */ });
       },
     });
-  }, [bridge]);
+  }, [bridge, m.id, tracker]);
   const send = useCallback((ended) => {
     const v = ref.current; if (!v || !Number.isFinite(v.currentTime)) return;
     lastSaved.current = Date.now();
-    save({ type: 'video', materialId: m.id, seconds: Math.floor(ended && Number.isFinite(v.duration) ? v.duration : v.currentTime), ended: !!ended });
-  }, [m.id, save]);
+    save({ type: 'video', materialId: m.id, seconds: Math.floor(ended && Number.isFinite(v.duration) ? v.duration : v.currentTime), ended: !!ended, watched: tracker.ranges() });
+  }, [m.id, save, tracker]);
   useEffect(() => () => { const v = ref.current; if (v && v.currentTime > 0 && !v.ended) send(false); }, [send]);
   return (
     <section className="stack-3" aria-label={m.title}>
       <div className="ln-frame">
         <video ref={ref} className="ln-file-video" src={m.url} controls preload="metadata" playsInline
           onLoadedMetadata={(e) => { const v = e.currentTarget; if (start.current > 0 && start.current < (v.duration || 0) - 2) v.currentTime = start.current; }}
-          onPause={(e) => { if (!e.currentTarget.ended) send(false); }} onEnded={() => send(true)} onError={onFail}
-          onTimeUpdate={(e) => { if (bridge) bridge.publish(e.currentTarget.currentTime); if (Date.now() - lastSaved.current >= 10000) send(false); }}
-          onSeeked={(e) => { if (bridge) bridge.publish(e.currentTarget.currentTime); }}>
+          onPlay={(e) => { tracker.reset(); tracker.tick(e.currentTarget.currentTime); }}
+          onPause={(e) => { tracker.tick(e.currentTarget.currentTime); tracker.reset(); if (!e.currentTarget.ended) send(false); }}
+          onEnded={(e) => { tracker.tick(e.currentTarget.currentTime); tracker.reset(); send(true); }} onError={onFail}
+          onWaiting={() => tracker.reset()} onSeeking={() => tracker.reset()}
+          onTimeUpdate={(e) => {
+            const v = e.currentTarget;
+            if (!v.paused && !v.seeking) tracker.tick(v.currentTime);
+            if (bridge) bridge.publish(v.currentTime);
+            if (Date.now() - lastSaved.current >= 10000) send(false);
+          }}
+          onSeeked={(e) => { tracker.reset(); if (bridge) bridge.publish(e.currentTarget.currentTime); }}>
           Trình duyệt không phát được video này.
         </video>
       </div>
-      <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{start.current > 0 ? ` Tiếp tục từ giây ${start.current}.` : ''}</p>
+      <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{start.current > 0 ? ` Tiếp tục từ giây ${start.current}.` : ''}{watchedNote(m, progress)}</p>
     </section>
   );
 }
@@ -329,6 +369,7 @@ function YouTubeMaterial({ m, videoId, progress, save, onFail, bridge }) {
   const [status, setStatus] = useState('loading');
   const [untracked, setUntracked] = useState(false);
   const saved = useRef(Math.floor((progress && progress.seconds) || 0));
+  const [tracker] = useState(() => createWatchTracker(progress && progress.watched));
   const signature = useRef(null);
   useEffect(() => {
     if (status !== 'loading') return undefined;
@@ -340,20 +381,21 @@ function YouTubeMaterial({ m, videoId, progress, save, onFail, bridge }) {
     let seconds = Math.max(0, Math.floor(position));
     const dur = Number.isFinite(duration) && duration > 0 ? duration : m.durationSeconds;
     if (dur) seconds = Math.min(seconds, Math.floor(dur));
-    const key = `${seconds}:${ended}`;
-    if (signature.current === key || (signature.current === `${seconds}:true` && !ended)) return;
+    const watched = tracker.ranges();
+    const key = `${seconds}:${ended}:${JSON.stringify(watched)}`;
+    if (signature.current === key || (signature.current && signature.current.startsWith(`${seconds}:true:`) && !ended)) return;
     signature.current = key;
-    save({ type: 'video', materialId: m.id, seconds, ended: !!ended });
-  }, [m.id, m.durationSeconds, save]);
+    save({ type: 'video', materialId: m.id, seconds, ended: !!ended, watched });
+  }, [m.id, m.durationSeconds, save, tracker]);
   return (
     <section className="stack-3" aria-label={m.title}>
       {status === 'loading' && <p className="row small muted" role="status"><Icon name="loader" className="icon-sm ln-spin" /> Đang tải video…</p>}
-      <YouTubeFrame videoId={videoId} title={m.title} startSeconds={saved.current} bridge={bridge}
+      <YouTubeFrame videoId={videoId} title={m.title} startSeconds={saved.current} bridge={bridge} tracker={tracker} materialId={m.id}
         onTracked={() => setStatus('ready')} onUntracked={() => { setUntracked(true); setStatus('ready'); }}
         onLoaded={() => setStatus((s) => (s === 'loading' ? 'ready' : s))} onPosition={onPosition} onError={onFail} />
       {untracked
         ? <Alert type="warn" title="Không theo dõi được tiến độ video" body="Video vẫn xem được nhưng vị trí xem sẽ không được lưu. Xem xong, hãy bấm “Đánh dấu đã học xong”." />
-        : <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{saved.current > 0 ? ` Tiếp tục từ giây ${saved.current}.` : ''}</p>}
+        : <p className="small muted">Vị trí xem được lưu tự động khi tạm dừng và mỗi 10 giây.{saved.current > 0 ? ` Tiếp tục từ giây ${saved.current}.` : ''}{watchedNote(m, progress)}</p>}
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { hasExpiredPathClaim, learningPathClaimDisposition } from "./learning-path-worker-claim";
 import { attemptLearningPathGeneration } from "./learning-path-worker-attempt";
+import { enrollmentCertificate, issueCertificate } from "./certificate-service";
 import {
   and,
   asc,
@@ -380,6 +381,7 @@ async function view(store: Store, ctx: Context): Promise<CoursePathView> {
     revertible,
     review: review ?? null,
     recommendation: recommendation ?? null,
+    certificate: selected.complete ? await enrollmentCertificate(store, e.id) : null,
   };
 }
 
@@ -933,6 +935,8 @@ export async function reconcileLearningPath(
         : {}),
     })
     .where(eq(studentEnrollments.id, fresh.enrollment.id));
+  // Every required lesson done: the certificate is issued in this same transaction (once per enrollment).
+  if (progress.complete) await issueCertificate(store, fresh.enrollment.id);
 }
 
 export function createLearningPathService(
