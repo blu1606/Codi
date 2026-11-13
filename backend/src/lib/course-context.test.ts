@@ -4,6 +4,7 @@ import { replySources } from "./question-ai-reply";
 
 const hit = (lessonId: string, content = "Nội dung") => ({
   lessonId, lessonTitle: `Bài ${lessonId}`, chapter: "Chương 1", sourceTitle: `Bài ${lessonId}`, content, score: 0.8,
+  materialId: null as number | null, startSeconds: null as number | null,
 });
 
 describe("toCourseContext", () => {
@@ -21,6 +22,21 @@ describe("toCourseContext", () => {
     expect(toCourseContext("c", { status: "not_indexed" })).toEqual({ status: "unavailable", reason: "not_indexed" });
     expect(toCourseContext("c", { status: "not_configured" })).toEqual({ status: "unavailable", reason: "not_configured" });
     expect(toCourseContext("c", { status: "search_failed" })).toEqual({ status: "unavailable", reason: "search_failed" });
+  });
+});
+
+describe("video passages", () => {
+  it("links a transcript chunk to its second in the video", () => {
+    const ctx = toCourseContext("c", { status: "ok", hits: [{ ...hit("l"), materialId: 7, startSeconds: 95 }] });
+    if (ctx.status !== "ok") throw new Error("expected ok");
+    expect(ctx.hits[0]!.href).toBe("/learn/c/l?m=7&t=95");
+    expect(replySources(ctx.hits)).toEqual([{ title: "Bài l · 1:35", href: "/learn/c/l?m=7&t=95" }]);
+  });
+
+  it("keeps the plain lesson link when the second is unknown", () => {
+    const ctx = toCourseContext("c", { status: "ok", hits: [{ ...hit("l"), materialId: 7, startSeconds: null }] });
+    if (ctx.status !== "ok") throw new Error("expected ok");
+    expect(ctx.hits[0]!.href).toBe("/learn/c/l");
   });
 });
 

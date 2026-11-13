@@ -3,7 +3,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { Database } from "@codi-1/db";
 import { aiChatMessages, aiChats } from "@codi-1/db/schema/ai-chat";
-import { courseChapters, courseLessons } from "@codi-1/db/schema/course-content";
+import { courseChapters, courseLessons, lessonMaterials } from "@codi-1/db/schema/course-content";
 import { courses } from "@codi-1/db/schema/courses";
 import { lessonProgress } from "@codi-1/db/schema/learning";
 import { studentEnrollments } from "@codi-1/db/schema/student-profile";
@@ -39,6 +39,9 @@ import {
 import { clip, sanitizeDiff, suggestChangeInput } from "./ai-tutor-contract";
 import type { TutorScope } from "./ai-tutor-service";
 import { courseContext } from "./course-context";
+import { clock } from "./classroom-contract";
+import { lessonTranscript } from "./lesson-player-contract";
+import { VIDEO_CITE_RULE, relevantTranscript } from "./video-citation";
 
 type Row = typeof aiChats.$inferSelect;
 const lessonHref = (courseId: string, lessonId: string) =>
@@ -300,7 +303,10 @@ const words = (query: string) =>
 async function semanticCourseHits(db: Database, courseId: string, query: string, limit = 5): Promise<MaterialHit[] | null> {
   const context = await courseContext(db, courseId, query, { limit });
   if (context.status !== "ok") return null;
-  return context.hits.map((hit) => ({ title: hit.sourceTitle, chapter: hit.chapter, href: hit.href, excerpt: hit.content }));
+  return context.hits.map((hit) => ({
+    title: hit.startSeconds !== null ? `${hit.sourceTitle} · ${clock(hit.startSeconds)}` : hit.sourceTitle,
+    chapter: hit.chapter, href: hit.href, excerpt: hit.content,
+  }));
 }
 
 /**
@@ -308,13 +314,32 @@ async function semanticCourseHits(db: Database, courseId: string, query: string,
  * for the answer's "thinking steps" (`hits`, kept in the message metadata).
  */
 export async function retrieveLessonContext(db: Database, scope: TutorScope, question: string) {
-  const hits = (await semanticCourseHits(db, scope.courseId, question, 4)) ?? [];
-  const note = hits.length
-    ? `Tài liệu liên quan trong học phần (tự động trích theo câu hỏi; dùng khi phù hợp và dẫn nguồn bằng link Markdown):\n${hits
+  const [hits, transcript] = await Promise.all([
+    semanticCourseHits(db, scope.courseId, question, 4).then((h) => h ?? []),
+    lessonVideoTranscript(db, scope.lessonId, question),
+  ]);
+  const passages = hits.length
+    ? `Tài liệu liên quan trong học phần (tự động trích theo câu hỏi; dùng khi phù hợp và dẫn nguồn bằng link Markdown, giữ nguyên cả phần ?m=…&t=… của link để học viên mở đúng đoạn video):\n${hits
         .map((hit, i) => `${i + 1}. [${hit.title}](${hit.href})${hit.chapter ? ` — ${hit.chapter}` : ""}\n${hit.excerpt}`)
         .join("\n\n")}`
     : "";
-  return { hits, note };
+  const video = transcript
+    ? `Lời giảng video của bài đang mở (transcript có mốc thời gian):\n${transcript}\n${VIDEO_CITE_RULE}`
+    : "";
+  return { hits, note: [video, passages].filter(Boolean).join("\n\n") };
+}
+
+/** The open lesson's video transcript (first video that has one), trimmed to the lines closest to the question. */
+async function lessonVideoTranscript(db: Database, lessonId: string, question: string) {
+  try {
+    const rows = await db.select({ transcript: lessonMaterials.transcript }).from(lessonMaterials)
+      .where(and(eq(lessonMaterials.lessonId, lessonId), eq(lessonMaterials.type, "video")))
+      .orderBy(asc(lessonMaterials.position));
+    const cues = rows.map((r) => lessonTranscript(r.transcript)).find(Boolean) ?? null;
+    return relevantTranscript(cues, question, 5000);
+  } catch {
+    return "";
+  }
 }
 
 /** In-lesson tutor (S11a): the open lesson is in the prompt; these reach the rest of the enrolled course. */
