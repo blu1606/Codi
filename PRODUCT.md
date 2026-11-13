@@ -15,9 +15,10 @@ prototype rebuild of the Codi mockup, not the production app in `../Codi/apps/we
 ## Users
 
 - **Guest** — judges in under a minute whether a programming course fits, then acts without losing context when asked to sign in.
-- **Learner (Học viên)** — buys a course, sets a goal, takes an entry test, studies along an AI-ranked personal path, and tracks progress.
+- **Learner (Học viên)** — buys a course, sets a goal, takes an entry test, studies along an AI-ranked personal path, tracks progress, and earns a verifiable completion certificate.
+- **Verifier (Người xác minh)** — an employer or school with a certificate link or code, no account; needs a yes/no answer they can trust in seconds.
 - **Lecturer (Giảng viên)** — authors courses, reviews the AI-extracted knowledge map, requests publication, and clears a support backlog (grading, questions, reviews).
-- **Admin (Quản trị viên)** — owns users, pricing, publication review, orders and vouchers, and reads business analytics.
+- **Admin (Quản trị viên)** — owns users, pricing, publication review, orders and vouchers, revokes or restores certificates, and reads business analytics.
 
 ## Product Purpose
 
@@ -47,6 +48,16 @@ expired/underpaid/slow/QR fail, AI failure, rate limit, knowledge-map cycle) for
 - Scope: feature parity with the real app for all four actors (AI advisor, tutor, grading drafts and knowledge-map
   generation simulated; analytics computed from seed data).
 - AI responses are simulated from seed content; no real LLM or payment provider is called.
+
+## Certificates
+
+Completing every required lesson of a course issues one certificate per enrollment, automatically, with an in-app
+notice and an email (states and rules: `plans/261113-2141-course-certificates/plan.md`). The certificate keeps a
+snapshot of the course title, lecturer, lesson count and length at issue, so later course edits never change it. Its
+code (`CODI-XXXX-XXXX`) and QR lead to the public `/verify/:code` page, which answers "valid" or "revoked" without
+exposing the holder's email. The holder may correct the printed name once; only an Admin revokes (with a reason) or
+restores. Certificates do not expire. Pattern references from Mobbin: Codecademy (QR, PDF, edit name), Uxcel (public
+credential page), Canva (celebration with credential ID), Skillshare (issue date, length, teacher).
 
 ## Brand Commitments
 

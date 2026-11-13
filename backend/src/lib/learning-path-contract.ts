@@ -401,6 +401,8 @@ export type CoursePathView = {
   revertible: boolean;
   review: null | { rating: number; text: string | null };
   recommendation: null | { title: string; slug: string };
+  /** The course completion certificate, once every required lesson is done. */
+  certificate: null | { code: string; status: "valid" | "revoked" };
 } & ReturnType<typeof selectPath>;
 export type KnowledgeMapView = {
   courses: { id: string; title: string }[];
