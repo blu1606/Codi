@@ -16,6 +16,8 @@ export type CourseContextHit = {
   content: string;
   score: number;
   href: string;
+  // Second of the video this passage is spoken at (the href then opens the lesson there).
+  startSeconds: number | null;
 };
 
 export type CourseContext =
@@ -24,18 +26,23 @@ export type CourseContext =
   | { status: "unavailable"; reason: "not_configured" | "not_indexed" | "search_failed" };
 
 /** Learner lesson link; sources shown to lecturers point where a learner would read them. */
-export const lessonHref = (courseId: string, lessonId: string) =>
-  `/learn/${encodeURIComponent(courseId)}/${encodeURIComponent(lessonId)}`;
+export const lessonHref = (courseId: string, lessonId: string, at?: { materialId: number; seconds: number } | null) =>
+  `/learn/${encodeURIComponent(courseId)}/${encodeURIComponent(lessonId)}${at ? `?m=${at.materialId}&t=${at.seconds}` : ""}`;
 
 /** Maps a raw search result to the shared contract (pure, unit-tested). */
 export function toCourseContext(courseId: string, search: KnowledgeSearch): CourseContext {
   if (search.status === "ok") {
     return {
       status: "ok",
-      hits: search.hits.map((hit) => ({
+      hits: search.hits.map(({ materialId, startSeconds, ...hit }) => ({
         ...hit,
         content: clip(hit.content, EXCERPT_CHARS).text,
-        href: lessonHref(courseId, hit.lessonId),
+        startSeconds: materialId !== null ? startSeconds : null,
+        href: lessonHref(
+          courseId,
+          hit.lessonId,
+          materialId !== null && startSeconds !== null ? { materialId, seconds: startSeconds } : null,
+        ),
       })),
     };
   }

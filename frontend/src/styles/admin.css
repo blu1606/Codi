@@ -553,3 +553,9 @@ a.stat-tile.ad-todo .stat-go { margin-top: auto; padding-top: var(--space-2); }
   .ad-users-table td:nth-child(3) { display: none; }
   .ad-users-table .ad-email { min-width: 0; max-width: 160px; }
 }
+
+/* Admin certificates list: search + status chips */
+.ad-cert-tools { flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
+.ad-cert-search { flex: 1 1 280px; max-width: 460px; }
+.ad-cert-tools .chip { cursor: pointer; padding: 4px 12px; gap: var(--space-2); }
+.ad-cert-tools .chip.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-active); }

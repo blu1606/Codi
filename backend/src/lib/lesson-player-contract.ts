@@ -15,6 +15,11 @@ export const lessonPlayerCommand = z.discriminatedUnion("type", [
       materialId,
       seconds: z.number().int().min(0).max(864000),
       ended: z.boolean(),
+      // Stretches the learner actually played (seconds), so skipping ahead is not counted as watching.
+      watched: z
+        .array(z.tuple([z.number().min(0).max(864000), z.number().min(0).max(864000)]))
+        .max(500)
+        .optional(),
     })
     .strict(),
   z
@@ -30,7 +35,13 @@ export const lessonPlayerCommand = z.discriminatedUnion("type", [
 export type LessonPlayerCommand = z.infer<typeof lessonPlayerCommand>;
 export type MediaProgress = Record<
   string,
-  { seconds?: number; pages?: number[]; pageCount?: number; lastPage?: number }
+  {
+    seconds?: number;
+    watched?: WatchedRange[];
+    pages?: number[];
+    pageCount?: number;
+    lastPage?: number;
+  }
 >;
 export type LessonMaterial = {
   id: number;
@@ -267,6 +278,36 @@ export function videoStudied(
   return duration && duration > 0
     ? seconds >= duration * VIDEO_STUDY_RATIO
     : ended;
+}
+
+export type WatchedRange = [number, number];
+const MAX_WATCHED_RANGES = 200;
+
+/**
+ * Union of the stretches a learner played, clamped to the video, sorted and merged (gaps under 1 s join). Watching is
+ * tracked for the "you have not watched enough" reminder only; it never blocks completion.
+ */
+export function mergeWatched(
+  stored: unknown,
+  added: WatchedRange[] | undefined,
+  duration: number | null,
+): WatchedRange[] {
+  const end = duration && duration > 0 ? duration : Number.POSITIVE_INFINITY;
+  const all = [...(Array.isArray(stored) ? stored : []), ...(added ?? [])]
+    .filter((r): r is WatchedRange => Array.isArray(r) && r.length === 2 && r.every((x) => Number.isFinite(x)))
+    .map(([a, b]) => [Math.max(0, Math.min(a, end)), Math.max(0, Math.min(b, end))] as WatchedRange)
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const out: WatchedRange[] = [];
+  for (const [a, b] of all) {
+    const prev = out[out.length - 1];
+    if (prev && a <= prev[1] + 1) prev[1] = Math.max(prev[1], b);
+    else out.push([a, b]);
+  }
+  // A pathological client cannot grow the row: keep the longest stretches.
+  return out.length > MAX_WATCHED_RANGES
+    ? out.sort((x, y) => y[1] - y[0] - (x[1] - x[0])).slice(0, MAX_WATCHED_RANGES).sort((x, y) => x[0] - y[0])
+    : out.map(([a, b]) => [Math.round(a * 10) / 10, Math.round(b * 10) / 10]);
 }
 
 export function videoPosition(

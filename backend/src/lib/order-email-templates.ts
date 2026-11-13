@@ -28,7 +28,7 @@ export interface OrderEmailData {
   transactionCode: string | null;
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -52,11 +52,11 @@ function formatDateTime(date: Date): string {
   }).format(date);
 }
 
-function appLink(appUrl: string, path: string): string {
+export function appLink(appUrl: string, path: string): string {
   return `${appUrl.replace(/\/+$/, "")}${path}`;
 }
 
-function layout(title: string, body: string): string {
+export function layout(title: string, body: string): string {
   return `
 <!DOCTYPE html>
 <html lang="vi">
@@ -94,7 +94,7 @@ ${body}
   `.trim();
 }
 
-function button(href: string, label: string): string {
+export function button(href: string, label: string): string {
   return `<a href="${escapeHtml(href)}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 10px 18px; border-radius: 8px;">${escapeHtml(label)}</a>`;
 }
 

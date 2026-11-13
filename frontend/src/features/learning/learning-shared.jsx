@@ -134,7 +134,16 @@ export function CompletionCard({ view, onView }) {
   const next = view.recommendation;
   return (
     <section className="card ln-complete"><div className="card-body stack-4">
-      <div className="row"><Icon name="graduation-cap" className="icon-lg text-success" /><div className="stack-1"><h2>Chúc mừng! Bạn đã hoàn thành khoá học</h2><p className="small muted">{c.title}</p></div></div>
+      <div className="row-between ln-complete-head">
+        <div className="row"><Icon name="graduation-cap" className="icon-lg text-success" /><div className="stack-1"><h2>Chúc mừng! Bạn đã hoàn thành khoá học</h2><p className="small muted">{c.title}</p></div></div>
+        {view.certificate && view.certificate.status === 'valid' && (
+          <Link className="btn btn-primary" to={`/verify/${view.certificate.code}`}><Icon name="graduation-cap" className="icon-sm" /> Xem chứng chỉ</Link>
+        )}
+      </div>
+      {view.certificate && view.certificate.status === 'revoked' && (
+        <Alert type="warn" title="Chứng chỉ của khoá này đã bị thu hồi" body="Xem lý do trên trang chứng chỉ, hoặc liên hệ quản trị viên."
+          actions={<Link className="btn btn-secondary btn-sm" to={`/verify/${view.certificate.code}`}>Xem chứng chỉ</Link>} />
+      )}
       <ReviewBlock courseId={c.id} title={c.title} review={view.review} onSaved={onView} />
       {next && <div className="panel row-between"><div className="stack-1"><span className="xsmall muted">Khoá học gợi ý tiếp theo</span><strong>{next.title}</strong></div><Link className="btn btn-secondary" to={`/courses/${next.slug}`}>Xem khoá học</Link></div>}
     </div></section>

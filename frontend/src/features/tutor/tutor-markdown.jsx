@@ -7,8 +7,9 @@
 import { Link } from 'react-router-dom';
 import { Icon } from '../../components/ui/primitives';
 import { isCitationHref } from './tutor-contract';
+import { SeekChip, seekTarget, useVideoSeek } from '../learning/video-seek';
 
-const INLINE = /(`+)([^`]+?)\1|\[([^\]\n]+)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)|\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|(?<![\w*])\*([^*\n]+?)\*(?![\w*])|(?<![\w_])_([^_\n]+?)_(?![\w_])/;
+const INLINE = /(`+)([^`]+?)\1|\[([^\]\n]+)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)|\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|(?<![\w*])\*([^*\n]+?)\*(?![\w*])|(?<![\w_])_([^_\n]+?)_(?![\w_])|\[((?:\d{1,2}:)?\d{1,3}:\d{2})\](?!\()/;
 
 function inline(text, key = 'i') {
   const out = [];
@@ -21,6 +22,7 @@ function inline(text, key = 'i') {
     const k = `${key}-${n++}`;
     if (m[2] !== undefined) out.push(<code key={k}>{m[2]}</code>);
     else if (m[3] !== undefined) out.push(<AnswerLink key={k} href={m[4]}>{inline(m[3], k)}</AnswerLink>);
+    else if (m[9] !== undefined) out.push(<SeekChip key={k} label={m[9]} />);
     else if (m[5] !== undefined || m[6] !== undefined) out.push(<strong key={k}>{inline(m[5] ?? m[6], k)}</strong>);
     else out.push(<em key={k}>{inline(m[7] ?? m[8], k)}</em>);
     rest = rest.slice(m.index + m[0].length);
@@ -29,6 +31,15 @@ function inline(text, key = 'i') {
 }
 
 function AnswerLink({ href, children }) {
+  const video = useVideoSeek();
+  const here = isCitationHref(href) ? seekTarget(href, video) : null;
+  if (here) {
+    return (
+      <button type="button" className="tc-cite" onClick={() => video.seek(here.seconds, here.materialId)} title="Tua video tới đoạn này">
+        <Icon name="play" className="icon-sm" /><span>{children}</span>
+      </button>
+    );
+  }
   if (isCitationHref(href)) {
     return <Link to={href} className="tc-cite"><Icon name="book-open" className="icon-sm" /><span>{children}</span></Link>;
   }
