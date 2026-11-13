@@ -11,6 +11,7 @@ import { shell, notMine, guard, lecturerAI, ENTRY_MIN, FieldError, Loading, Load
 import { rerender, useView } from './view-store';
 import { act, reloadCourse, reloadMine } from './teach-data';
 import { parseQuizImport, DEFAULT_MAX_QUIZ_OPTIONS } from './quiz-import';
+import { csvToQuizText, MAX_QUIZ_CSV_BYTES, QUIZ_CSV_SAMPLE, QUIZ_CSV_TOO_LARGE, QUIZ_CSV_WRONG_TYPE } from './quiz-csv';
 import { ReviewNotes, useFlagFocus } from './review-notes';
 
 let qb = null; // { key, courseId, lessonId, isEntry, quiz, errors, openExplain:Set }
@@ -67,6 +68,29 @@ function ImportBody({ handle, onImport }) {
   const valid = items.filter((x) => !x.errors.length);
   const invalid = items.length - valid.length;
   const add = () => { if (!valid.length) return; onImport(valid.map((x) => x.draft)); handle.close(); };
+  const [csvError, setCsvError] = useState('');
+  const [csvName, setCsvName] = useState('');
+  const csvInput = useRef(null);
+  // A CSV file becomes tab rows in the text box, so the preview, validation and "add" flow below are the same.
+  const onCsvFile = async (e) => {
+    const input = e.currentTarget; const file = input.files && input.files[0];
+    input.value = ''; // picking the same file again must fire change
+    if (!file) return;
+    setCsvError(''); setCsvName('');
+    if (!/\.csv$/i.test(file.name) && file.type !== 'text/csv') { setCsvError(QUIZ_CSV_WRONG_TYPE); return; }
+    if (file.size > MAX_QUIZ_CSV_BYTES) { setCsvError(QUIZ_CSV_TOO_LARGE); return; }
+    try {
+      const rows = csvToQuizText(await file.text());
+      if (!rows.trim()) { setCsvError('Tệp CSV không có dòng câu hỏi nào.'); return; }
+      setText(rows); setTerm('tab'); setQSep('blank'); setCsvName(file.name);
+    } catch { setCsvError('Không đọc được tệp CSV. Hãy lưu lại tệp dưới dạng CSV UTF-8 rồi thử lại.'); }
+  };
+  const downloadSample = () => {
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + QUIZ_CSV_SAMPLE], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = 'mau-cau-hoi-trac-nghiem.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
   return (
     <>
       <div className="dialog-body stack-4">
@@ -74,6 +98,16 @@ function ImportBody({ handle, onImport }) {
         <div className="grid-2">
           <div className="panel stack-1"><strong className="small">Dạng khối</strong><span className="xsmall muted">Mỗi câu một khối, các khối cách nhau bằng dòng trống. Đáp án đúng có dấu * ở đầu.</span><pre className="tc-example mono xsmall">{EXAMPLE_BLOCK}</pre></div>
           <div className="panel stack-1"><strong className="small">Dạng hàng (Excel, Sheets)</strong><span className="xsmall muted">Mỗi dòng một câu: câu hỏi, các phương án, đáp án đúng (A–F hoặc số thứ tự 1–{MAX_OPT}), rồi giải thích nếu có. Các cột cách nhau bằng tab.</span><pre className="tc-example mono xsmall">{EXAMPLE_TABS}</pre></div>
+        </div>
+        <div className="panel stack-1">
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => csvInput.current && csvInput.current.click()}><Icon name="upload" className="icon-sm" /> Chọn tệp CSV</button>
+            <input ref={csvInput} type="file" accept=".csv,text/csv" hidden tabIndex={-1} aria-hidden="true" onChange={onCsvFile} />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={downloadSample}><Icon name="download" className="icon-sm" /> Tải file mẫu</button>
+            {csvName && <span className="xsmall muted">Đã đọc {csvName}</span>}
+          </div>
+          <span className="xsmall muted">Cột CSV: cau_hoi, phuong_an_A, phuong_an_B, [phuong_an_C … phuong_an_F], dap_an (A–F hoặc 1–{MAX_OPT}), [giai_thich]. Dòng tiêu đề không bắt buộc; dấu phân cách là phẩy hoặc chấm phẩy; tối đa 1 MB.</span>
+          {csvError && <p className="xsmall text-danger" role="alert">{csvError}</p>}
         </div>
         <div className="grid-2">
           <div className="field"><label htmlFor="qi-term">Giữa câu và đáp án</label><select id="qi-term" value={termSeparator} onChange={(e) => setTerm(e.target.value)}><option value="auto">Tự động nhận dạng</option><option value="tab">Tab (dạng hàng)</option><option value="line">Dòng mới (dạng khối)</option></select></div>
