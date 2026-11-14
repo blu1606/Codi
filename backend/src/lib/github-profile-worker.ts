@@ -81,7 +81,8 @@ export async function runGithubProfileJob(job: AiJob): Promise<void> {
       },
       getAccessToken: async (accountId, phaseSignal) => {
         phaseSignal.throwIfAborted();
-        if (await isProfileLinkRow(db, accountId)) return readProfileLinkToken(db, job.userId, accountId);
+        if (await isProfileLinkRow(db, accountId))
+          return readProfileLinkToken(db, job.userId, accountId, { clientId: ENV.GITHUB_CLIENT_ID ?? "", clientSecret: ENV.GITHUB_CLIENT_SECRET ?? "" });
         // No session, HTTP request or client-controlled user id: Better Auth verifies
         // the account belongs to this server-owned job's user before returning a token.
         const token = await auth.api.getAccessToken({ body: { userId: job.userId, accountId } });

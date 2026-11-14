@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const gh = await exchangeCode({ clientId: ENV.GITHUB_CLIENT_ID, clientSecret: ENV.GITHUB_CLIENT_SECRET, code, redirectUri });
-    await saveProfileLink(db, { userId: saved.userId, githubUserId: gh.githubUserId, accessToken: gh.accessToken, scope: gh.scope });
+    await saveProfileLink(db, { userId: saved.userId, ...gh });
     return finish("github", "linked");
   } catch (error) {
     console.error("[github-profile] link failed", error instanceof Error ? error.message : "unknown");
