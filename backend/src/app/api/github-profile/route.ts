@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
           phaseSignal.throwIfAborted();
           // A Codi-owned profile link is not a Better Auth provider; its token is read for this user only.
           if (await isProfileLinkRow(db, accountRowId))
-            return readProfileLinkToken(db, userId, accountRowId);
+            return readProfileLinkToken(db, userId, accountRowId, { clientId: ENV.GITHUB_CLIENT_ID ?? "", clientSecret: ENV.GITHUB_CLIENT_SECRET ?? "" });
           const token = await auth.api.getAccessToken({
             headers: request.headers,
             body: { accountId: accountRowId },
